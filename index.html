@@ -1080,15 +1080,22 @@ async function loadFromSupabase(){
       localStorage.setItem('dot_data', JSON.stringify(STATE.dotacoes));
     }
     
-    // Carrega medido do Supabase (sem localStorage — dados grandes demais)
-    const {data: med, error: e2} = await supa.from('medido').select('*');
-    if(!e2 && med && med.length > 0){
+    // Carrega medido do Supabase com paginação (tabela pode ser grande)
+    try {
       var supaMap = {};
-      med.forEach(function(m){ supaMap[m.chave] = parseFloat(m.valor)||0; });
-      // Mantém dados do localStorage (upload recente) para chaves ausentes no Supabase
-      STATE.medido = supaMap;
-      _buildMedidoNormIdx();
-    }
+      var medOffset = 0, medBatch = 1000;
+      while(true){
+        var medRes = await supa.from('medido').select('chave,valor').range(medOffset, medOffset+medBatch-1);
+        if(medRes.error || !medRes.data || medRes.data.length === 0) break;
+        medRes.data.forEach(function(m){ if(m.chave) supaMap[m.chave] = parseFloat(m.valor)||0; });
+        if(medRes.data.length < medBatch) break;
+        medOffset += medBatch;
+      }
+      if(Object.keys(supaMap).length > 0){
+        STATE.medido = supaMap;
+        _buildMedidoNormIdx();
+      }
+    } catch(eMed){ console.warn('Erro ao carregar medido:', eMed); }
     
     // Carrega capex
     const {data: cpx, error: e3} = await supa.from('capex').select('*');
@@ -1124,7 +1131,7 @@ async function loadFromSupabase(){
     }
 
     // Carrega materiais (compartilhado entre todos os usuários)
-    const {data: matCfg, error: e7} = await supa.from('mat_config').select('*').eq('id',1).single();
+    const {data: matCfg, error: e7} = await supa.from('mat_config').select('*').eq('id',1).maybeSingle();
     if(!e7 && matCfg && matCfg.data){
       STATE_MATERIAIS = matCfg.data;
       localStorage.setItem('mat_data', JSON.stringify(matCfg.data));
