@@ -1059,6 +1059,7 @@ function loadState(){
 var STATE_MATERIAIS = JSON.parse(localStorage.getItem('mat_data') || '[]');
 var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], fornecedor:[], squad:[], situacao:[]};
 var MAT_TAB = 'dashboard';
+var RES_TAB = 'dashboard';
 var _matCharts = {};
 
 // ── SUPABASE: CARREGAR DADOS ─────────────────────────────────────
@@ -1423,7 +1424,7 @@ function buildResumo(useFilters=false){
     if(d.STATUS==='Ag. Aprovação') map[k].TOTAL_AG+=d.TOTAL;
   });
   return Object.values(map).map(r=>{
-    const medido=getMedido(r.PEP,r.EMPRESA,2026,fMedMes);
+    const medido=getMedido(r.PEP,r.EMPRESA,r.ANO,fMedMes);
     const total=r.TOTAL_APROV+r.TOTAL_AG;
     return {...r,TOTAL:total,MEDIDO:medido,SALDO:total-medido,FAROL:total>0?medido/total:0};
   });
@@ -1989,48 +1990,137 @@ function safeChart(id, cfg){
 // ─────────────────────────────────────────────────────────────────
 // RESUMO TABLE
 // ─────────────────────────────────────────────────────────────────
+function setResTab(tab){ RES_TAB=tab; render(); }
+
 function renderViewResumo(res){
   const el=document.getElementById('v-resumo');
   const nomesMeses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const mesOpts='<option value="">Todos os meses</option>'+nomesMeses.map((nm,i)=>{const v=String(i+1).padStart(2,'0');return`<option value="${v}"${fMedMes===v?' selected':''}>${nm}</option>`;}).join('');
-  el.innerHTML=`
-  <div class="cc" style="padding:0;overflow:hidden">
-    <div class="tbl-hdr">
-      <div class="tbl-title">Controle por Sub PEP / Empresa</div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <div class="tbl-badge">${res.length} registros</div>
-        <label style="font-size:11px;color:var(--muted);font-weight:600">Mês Medido:</label>
-        <select style="padding:5px 10px;border:1px solid var(--bord);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#fff" onchange="fMedMes=this.value;render()">${mesOpts}</select>
-      </div>
+  const inpSt='padding:6px 10px;border:1px solid var(--bord);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#fff';
+
+  // KPIs
+  const totDotado=res.reduce((s,r)=>s+r.TOTAL,0);
+  const totMedido=res.reduce((s,r)=>s+r.MEDIDO,0);
+  const totSaldo=totDotado-totMedido;
+  const pctGeral=totDotado>0?Math.round(totMedido/totDotado*100):0;
+
+  // Sub-tabs
+  const subTabs=['dashboard','tabela'].map(t=>{
+    const active=RES_TAB===t;
+    const lbl=t==='dashboard'?'📊 Dashboard':'📋 Tabela';
+    return`<button onclick="setResTab('${t}')" style="padding:10px 20px;border:none;border-bottom:${active?'2px solid #7c3aed':'2px solid transparent'};background:transparent;font-size:13px;font-weight:${active?700:500};color:${active?'#7c3aed':'#64748b'};cursor:pointer;font-family:inherit;margin-bottom:-2px">${lbl}</button>`;
+  }).join('');
+
+  const content = RES_TAB==='dashboard' ? _resDashHtml(res,totDotado,totMedido,totSaldo,pctGeral) : _resTabelaHtml(res);
+
+  el.innerHTML=`<div style="padding:24px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Mês do Medido:</label>
+      <select style="${inpSt}" onchange="fMedMes=this.value;render()">${mesOpts}</select>
+      ${fMedMes?`<span style="background:#7c3aed;color:#fff;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700">${nomesMeses[parseInt(fMedMes)-1]}</span>`:''}
+      <span style="margin-left:auto;font-size:11px;color:var(--muted)">${res.length} registros</span>
     </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr>
-          <th>#</th><th>Ano</th><th>PEP</th><th>Sub PEP</th><th>Empresa</th>
-          <th>Aprovado (R$)</th><th>Ag. Aprov. (R$)</th><th>Total Dotado</th>
-          <th>Medido (R$)</th><th>Saldo (R$)</th><th>Comprometimento</th>
-        </tr></thead>
-        <tbody>${res.map((r,i)=>{
-          const pct=R(r.FAROL*100,1);
-          const cls=r.FAROL>=1?'fb-over':r.FAROL>=0.9?'fb-crit':r.FAROL>=0.7?'fb-warn':'fb-ok';
-          const col=r.FAROL>=1?'var(--danger)':r.FAROL>=0.9?'var(--acc)':r.FAROL>=0.7?'var(--warn)':'var(--acc3)';
-          return `<tr>
-            <td class="mono" style="color:var(--muted)">${i+1}</td>
-            <td class="mono">${r.ANO}</td>
-            <td class="mono" style="color:var(--acc2);font-weight:600">${r.PEP}<div style="font-size:9px;color:var(--muted);font-weight:400;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${getPepName(r.PEP)}</div></td>
-            <td class="mono" style="font-size:10px">${r.SUB_PEP||'—'}${r.SUB_PEP?'<div style="font-size:9px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+getSubPepName(r.SUB_PEP)+'</div>':''}</td>
-            <td style="font-size:12px;font-weight:500;max-width:180px">${r.EMPRESA.split('/')[0].trim()}</td>
-            <td class="mono" style="text-align:right;color:var(--acc3);font-weight:600">${fmt(r.TOTAL_APROV)}</td>
-            <td class="mono" style="text-align:right;color:var(--acc2)">${r.TOTAL_AG>0?fmt(r.TOTAL_AG):'—'}</td>
-            <td class="mono" style="text-align:right;font-weight:700">${fmt(r.TOTAL)}</td>
-            <td class="mono" style="text-align:right;color:var(--acc)">${fmt(r.MEDIDO)}</td>
-            <td class="mono" style="text-align:right;color:${r.SALDO<0?'var(--danger)':'var(--acc3)'};font-weight:600">${fmt(r.SALDO)}</td>
-            <td><div class="farol-row"><div class="fb"><div class="fb-fill ${cls}" style="width:${Math.min(r.FAROL*100,100)}%"></div></div><span class="fp" style="color:${col}">${pct}%</span></div></td>
-          </tr>`;}).join('')}
-        </tbody>
-      </table>
+    <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid #e2e8f0">${subTabs}</div>
+    ${content}
+  </div>`;
+
+  if(RES_TAB==='dashboard') setTimeout(()=>buildResCharts(res),50);
+}
+
+function _resDashHtml(res,totDotado,totMedido,totSaldo,pctGeral){
+  // Top 10 empresas por dotado
+  const empMap={};
+  res.forEach(r=>{
+    const k=r.EMPRESA.split('/')[0].trim().substring(0,25);
+    if(!empMap[k])empMap[k]={dotado:0,medido:0};
+    empMap[k].dotado+=r.TOTAL;
+    empMap[k].medido+=r.MEDIDO;
+  });
+  const topEmps=Object.entries(empMap).sort((a,b)=>b[1].dotado-a[1].dotado).slice(0,10);
+
+  // Top PEPs por dotado
+  const pepMap={};
+  res.forEach(r=>{
+    if(!pepMap[r.PEP])pepMap[r.PEP]={dotado:0,medido:0,nome:getPepName(r.PEP)};
+    pepMap[r.PEP].dotado+=r.TOTAL;
+    pepMap[r.PEP].medido+=r.MEDIDO;
+  });
+  const topPeps=Object.entries(pepMap).sort((a,b)=>b[1].dotado-a[1].dotado).slice(0,8);
+
+  const kpiStyle='background:#fff;border-radius:10px;padding:18px 22px;border:1px solid var(--bord);flex:1;min-width:140px';
+  return`
+  <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px">
+    <div style="${kpiStyle}"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.5px">Total Dotado</div><div style="font-size:22px;font-weight:800;color:#1e293b;margin-top:4px">${fmtK(totDotado)}</div></div>
+    <div style="${kpiStyle}"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.5px">Total Medido${fMedMes?' (mês)':''}</div><div style="font-size:22px;font-weight:800;color:#7c3aed;margin-top:4px">${fmtK(totMedido)}</div></div>
+    <div style="${kpiStyle}"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.5px">Saldo</div><div style="font-size:22px;font-weight:800;color:${totSaldo<0?'#dc2626':'#16a34a'};margin-top:4px">${fmtK(totSaldo)}</div></div>
+    <div style="${kpiStyle}"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.5px">% Comprometido</div><div style="font-size:22px;font-weight:800;color:${pctGeral>=100?'#dc2626':pctGeral>=90?'#f59e0b':'#16a34a'};margin-top:4px">${pctGeral}%</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div style="background:#fff;border-radius:10px;padding:18px;border:1px solid var(--bord)">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Top Empresas — Dotado vs Medido</div>
+      <canvas id="res-chart-emp" height="260"></canvas>
+    </div>
+    <div style="background:#fff;border-radius:10px;padding:18px;border:1px solid var(--bord)">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Por PEP — Dotado vs Medido</div>
+      <canvas id="res-chart-pep" height="260"></canvas>
     </div>
   </div>`;
+}
+
+function _resTabelaHtml(res){
+  return`<div class="cc" style="padding:0;overflow:hidden">
+    <div class="tbl-hdr"><div class="tbl-title">Controle por Sub PEP / Empresa</div><div class="tbl-badge">${res.length} registros</div></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr>
+        <th>#</th><th>Ano</th><th>PEP</th><th>Sub PEP</th><th>Empresa</th>
+        <th>Aprovado (R$)</th><th>Ag. Aprov. (R$)</th><th>Total Dotado</th>
+        <th>Medido (R$)</th><th>Saldo (R$)</th><th>Comprometimento</th>
+      </tr></thead>
+      <tbody>${res.map((r,i)=>{
+        const pct=R(r.FAROL*100,1);
+        const cls=r.FAROL>=1?'fb-over':r.FAROL>=0.9?'fb-crit':r.FAROL>=0.7?'fb-warn':'fb-ok';
+        const col=r.FAROL>=1?'var(--danger)':r.FAROL>=0.9?'var(--acc)':r.FAROL>=0.7?'var(--warn)':'var(--acc3)';
+        return`<tr>
+          <td class="mono" style="color:var(--muted)">${i+1}</td>
+          <td class="mono">${r.ANO}</td>
+          <td class="mono" style="color:var(--acc2);font-weight:600">${r.PEP}<div style="font-size:9px;color:var(--muted);font-weight:400;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${getPepName(r.PEP)}</div></td>
+          <td class="mono" style="font-size:10px">${r.SUB_PEP||'—'}${r.SUB_PEP?'<div style="font-size:9px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+getSubPepName(r.SUB_PEP)+'</div>':''}</td>
+          <td style="font-size:12px;font-weight:500;max-width:180px">${r.EMPRESA.split('/')[0].trim()}</td>
+          <td class="mono" style="text-align:right;color:var(--acc3);font-weight:600">${fmt(r.TOTAL_APROV)}</td>
+          <td class="mono" style="text-align:right;color:var(--acc2)">${r.TOTAL_AG>0?fmt(r.TOTAL_AG):'—'}</td>
+          <td class="mono" style="text-align:right;font-weight:700">${fmt(r.TOTAL)}</td>
+          <td class="mono" style="text-align:right;color:var(--acc)">${fmt(r.MEDIDO)}</td>
+          <td class="mono" style="text-align:right;color:${r.SALDO<0?'var(--danger)':'var(--acc3)'};font-weight:600">${fmt(r.SALDO)}</td>
+          <td><div class="farol-row"><div class="fb"><div class="fb-fill ${cls}" style="width:${Math.min(r.FAROL*100,100)}%"></div></div><span class="fp" style="color:${col}">${pct}%</span></div></td>
+        </tr>`;}).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+function buildResCharts(res){
+  const empMap={};
+  res.forEach(r=>{
+    const k=r.EMPRESA.split('/')[0].trim().substring(0,22);
+    if(!empMap[k])empMap[k]={dotado:0,medido:0};
+    empMap[k].dotado+=r.TOTAL; empMap[k].medido+=r.MEDIDO;
+  });
+  const topEmps=Object.entries(empMap).sort((a,b)=>b[1].dotado-a[1].dotado).slice(0,10);
+
+  const pepMap={};
+  res.forEach(r=>{
+    if(!pepMap[r.PEP])pepMap[r.PEP]={dotado:0,medido:0};
+    pepMap[r.PEP].dotado+=r.TOTAL; pepMap[r.PEP].medido+=r.MEDIDO;
+  });
+  const topPeps=Object.entries(pepMap).sort((a,b)=>b[1].dotado-a[1].dotado).slice(0,8);
+
+  const barOpts={responsive:true,plugins:{legend:{position:'top',labels:{font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:ctx=>fmtK(ctx.raw)}}},scales:{x:{ticks:{font:{size:9},maxRotation:35}},y:{ticks:{callback:v=>fmtK(v),font:{size:9}}}}};
+
+  const ceEmp=document.getElementById('res-chart-emp');
+  if(ceEmp){ destroyChart('res-emp'); charts['res-emp']=safeChart('res-chart-emp',{type:'bar',data:{labels:topEmps.map(e=>e[0]),datasets:[{label:'Dotado',data:topEmps.map(e=>e[1].dotado),backgroundColor:'#7c3aed99'},{label:'Medido',data:topEmps.map(e=>e[1].medido),backgroundColor:'#06b6d4bb'}]},options:barOpts}); }
+
+  const cePep=document.getElementById('res-chart-pep');
+  if(cePep){ destroyChart('res-pep'); charts['res-pep']=safeChart('res-chart-pep',{type:'bar',data:{labels:topPeps.map(e=>e[0]),datasets:[{label:'Dotado',data:topPeps.map(e=>e[1].dotado),backgroundColor:'#7c3aed99'},{label:'Medido',data:topPeps.map(e=>e[1].medido),backgroundColor:'#06b6d4bb'}]},options:barOpts}); }
 }
 
 // ─────────────────────────────────────────────────────────────────
