@@ -1295,12 +1295,12 @@ function getMedido(subpep,empresa,ano,mes){
   var normEmp = _normEmpStr(empresa);
   var pepRaiz = String(subpep||'').split('.')[0];
 
-  // 0. Chave PEP+Ano+Mês (quando filtro de mês ativo) ou PEP+Ano (total anual)
+  // 0. Mês selecionado → retorna só aquele mês (0 se não há dado — não acumula)
   if(mes){
     var monStr = String(mes).padStart(2,'0');
-    var kMon = pepRaiz + '|' + anoStr + '|' + monStr;
-    if(STATE.medido[kMon] !== undefined) return STATE.medido[kMon]||0;
+    return STATE.medido[pepRaiz+'|'+anoStr+'|'+monStr]||0;
   }
+  // Sem filtro de mês → total anual acumulado
   var k0 = pepRaiz + '|' + anoStr;
   if(STATE.medido[k0] !== undefined) return STATE.medido[k0]||0;
 
