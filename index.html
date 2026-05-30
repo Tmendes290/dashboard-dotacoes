@@ -1045,10 +1045,9 @@ const INITIAL_MEDIDO = {
 function loadState(){
   // Retorna estado inicial — dados reais vêm do Supabase após login
   const sd=localStorage.getItem('dot_data');
-  const sm=localStorage.getItem('dot_medido');
   return {
     dotacoes: sd ? JSON.parse(sd) : JSON.parse(JSON.stringify(INITIAL_DOT)),
-    medido: sm ? JSON.parse(sm) : JSON.parse(JSON.stringify(INITIAL_MEDIDO)),
+    medido: {}, // medido carregado do Supabase (não localStorage — dados grandes demais)
     obsAlertas: JSON.parse(localStorage.getItem('dot_obs')||'{}'),
     capex: JSON.parse(localStorage.getItem('dot_capex')||'[]'),
     capexPorPep: JSON.parse(localStorage.getItem('dot_capex_pep')||'{}')
@@ -1081,15 +1080,13 @@ async function loadFromSupabase(){
       localStorage.setItem('dot_data', JSON.stringify(STATE.dotacoes));
     }
     
-    // Carrega medido — mescla com localStorage para não perder uploads recentes
+    // Carrega medido do Supabase (sem localStorage — dados grandes demais)
     const {data: med, error: e2} = await supa.from('medido').select('*');
     if(!e2 && med && med.length > 0){
       var supaMap = {};
       med.forEach(function(m){ supaMap[m.chave] = parseFloat(m.valor)||0; });
       // Mantém dados do localStorage (upload recente) para chaves ausentes no Supabase
-      var localMed = JSON.parse(localStorage.getItem('dot_medido')||'{}');
-      STATE.medido = Object.assign({}, localMed, supaMap);
-      localStorage.setItem('dot_medido', JSON.stringify(STATE.medido));
+      STATE.medido = supaMap;
       _buildMedidoNormIdx();
     }
     
@@ -1232,7 +1229,7 @@ async function deleteFromSupabase_dotacao(id){
 }
 function saveState(){
   localStorage.setItem('dot_data',JSON.stringify(STATE.dotacoes));
-  localStorage.setItem('dot_medido',JSON.stringify(STATE.medido));
+  // dot_medido não salvo no localStorage (dados grandes — usa Supabase)
   localStorage.setItem('dot_obs',JSON.stringify(STATE.obsAlertas||{}));
   localStorage.setItem('dot_capex',JSON.stringify(STATE.capex||[]));
   localStorage.setItem('dot_capex_pep',JSON.stringify(STATE.capexPorPep||{}));
@@ -2869,9 +2866,8 @@ function handleFile(file){
       setProgress(90,'Atualizando painel…');
       // Merge with STATE.medido
       Object.assign(STATE.medido,medMap);
-      window._dbgMedMap = medMap; // debug temporário
       _buildMedidoNormIdx();
-      saveState();
+      saveState(); // medido não incluso no saveState (usa Supabase)
       // Save medido to Supabase so all users see the update
       if(supa && CURRENT_USER){
         var medRows=Object.keys(medMap).map(function(k){return {chave:k,valor:medMap[k]};});
