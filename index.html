@@ -1291,8 +1291,13 @@ function _normEmpStr(e){ return String(e||'').replace(/[.,]/g,'').replace(/\s+/g
 function getMedido(subpep,empresa,ano){
   var anoStr = String(ano||'');
   var normEmp = _normEmpStr(empresa);
+  var pepRaiz = String(subpep||'').split('.')[0];
 
-  // 1. Chave exata
+  // 0. Chave nova: PEP raiz + ano (sem empresa — SAP nem sempre popula FORNECEDOR)
+  var k0 = pepRaiz + '|' + anoStr;
+  if(STATE.medido[k0] !== undefined) return STATE.medido[k0]||0;
+
+  // 1. Chave exata (legado)
   var k = getMedidoKey(subpep,empresa,ano);
   if(STATE.medido[k] !== undefined) return STATE.medido[k]||0;
 
@@ -2703,7 +2708,6 @@ function handleFile(file){
         if(!pepRe.test(wbs)) continue;
         // Usa o PEP raiz (ex: C022635 de C022635.01.01) como chave de agrupamento
         var proj=wbs.split('.')[0];
-        var forn=String(row[C_FORN]||'').trim()||'_';
         // Valor: raw:true devolve número direto; fallback para string BRL
         var val=typeof row[C_VAL]==='number' ? row[C_VAL]
                : parseFloat(String(row[C_VAL]||'').replace(/[R$\s]/g,'').replace(/\./g,'').replace(',','.'))||0;
@@ -2711,7 +2715,7 @@ function handleFile(file){
         var yr=typeof row[C_YEAR]==='number' ? Math.round(row[C_YEAR])
               : parseInt(String(row[C_YEAR]||'').trim())||0;
         if(yr<2020||yr>2030) continue; // ignora linhas sem ano válido
-        var k=proj+'|'+forn+'|'+yr;
+        var k=proj+'|'+yr;
         medMap[k]=(medMap[k]||0)+val;
         processed++;
       }
