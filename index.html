@@ -573,7 +573,7 @@ initSupabase();
     if(i>=cdns.length){console.error('Chart.js failed all CDNs');return;}
     var s=document.createElement('script');
     s.src=cdns[i++];
-    s.onload=function(){console.log('Chart.js loaded from',s.src);};
+    s.onload=function(){console.log('Chart.js loaded from',s.src);if(typeof bootApp!=='undefined')bootApp();};
     s.onerror=function(){console.warn('Chart.js failed:',s.src);tryNext();};
     document.head.appendChild(s);
   }
@@ -2933,14 +2933,10 @@ function exportCSV(){
 // INIT — wait for Chart.js to be ready
 // ─────────────────────────────────────────────────────────────────
 var _sc=document.getElementById('s-clock');if(_sc)_sc.textContent=new Date().toLocaleTimeString('pt-BR');
-// Init handled by tryBoot above - but keep fallback
+// Fallback se bootApp não rodou ainda
 setTimeout(function(){
-  if(!window._booted){
-    window._booted = true;
-    populateFilters();
-    setView('overview');
-  }
-}, 1500);
+  if(!window._booted){ window._booted=true; bootApp(); }
+}, 2000);
 
 // ─── ÁREA RESTRITA — SENHA DE ACESSO ─────────────────────────
 let _pwGranted = false;
@@ -3007,7 +3003,7 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 
-// bootApp
+bootApp();
 
 
 function changeStatus(id,newStatus){
@@ -3493,15 +3489,17 @@ function populateMultiSelects(){
 
 let _ba=0;
 function bootApp(){
+  if(window._booted) return; // evita dupla execução
   _ba++;
   if(typeof Chart!=='undefined'){
+    window._booted = true;
     populateFilters();
     setView('overview');
-    // Verifica sessão silenciosamente - só mostra login se não tiver sessão
     checkAuthSession();
   }
-  else if(_ba<40){setTimeout(bootApp,200);}
+  else if(_ba<40){ setTimeout(bootApp,200); }
   else{
+    window._booted = true;
     populateFilters();
     setView('overview');
     checkAuthSession();
