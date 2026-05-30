@@ -2870,7 +2870,11 @@ function handleFile(file){
       saveState(); // medido não incluso no saveState (usa Supabase)
       // Save medido to Supabase so all users see the update
       if(supa && CURRENT_USER){
-        var medRows=Object.keys(medMap).map(function(k){return {chave:k,valor:medMap[k]};});
+        var medRows=Object.keys(medMap).map(function(k){
+          var pts=k.split('|');
+          // chave: PEP|FORN|ANO ou PEP|FORN|ANO|MES
+          return {chave:k, valor:medMap[k], sub_pep:pts[0]||'', empresa:pts[1]||'_', ano:parseInt(pts[2])||0};
+        });
         (function saveBatch(i){
           if(i>=medRows.length) return;
           supa.from('medido').upsert(medRows.slice(i,i+200),{onConflict:'chave'}).then(function(r){
