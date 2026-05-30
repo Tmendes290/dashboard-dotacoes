@@ -2672,23 +2672,23 @@ function handleFile(file){
       const pepRe=/^[A-Z]\d{5}/;
 
       // Colunas confirmadas pelo usuário (BASE DE DADOS SAP):
-      // D=3: Ano fiscal | F=5: Project (PEP) | Q=16: Valor (R$) | BG=58: Fornecedor
-      const C_PROJ=5, C_VAL=16, C_FORN=58, C_YEAR=3;
+      // D=3: Ano fiscal | H=7: WBS Element | Q=16: Valor (R$) | BG=58: Fornecedor
+      const C_WBS=7, C_VAL=16, C_FORN=58, C_YEAR=3;
 
       setProgress(55,'Lendo planilha…');
 
       // Lê como array de arrays com valores brutos (mais preciso para números)
       var allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:true});
 
-      // Encontra primeira linha com Project válido (pula cabeçalhos)
+      // Encontra primeira linha com WBS Element válido (pula cabeçalhos)
       var dataStart=0;
       for(var _r=0;_r<Math.min(allRows.length,100);_r++){
-        if(pepRe.test(String(allRows[_r][C_PROJ]||'').trim())){dataStart=_r;break;}
+        if(pepRe.test(String(allRows[_r][C_WBS]||'').trim())){dataStart=_r;break;}
       }
 
       console.log('[Medido] Iniciando em row='+dataStart+', total rows='+allRows.length);
       console.log('[Medido] Amostra row '+dataStart+':', {
-        proj: allRows[dataStart]&&allRows[dataStart][C_PROJ],
+        wbs:  allRows[dataStart]&&allRows[dataStart][C_WBS],
         val:  allRows[dataStart]&&allRows[dataStart][C_VAL],
         forn: allRows[dataStart]&&allRows[dataStart][C_FORN],
         ano:  allRows[dataStart]&&allRows[dataStart][C_YEAR]
@@ -2699,8 +2699,10 @@ function handleFile(file){
       let processed=0;
       for(var ri=dataStart;ri<allRows.length;ri++){
         var row=allRows[ri];
-        var proj=String(row[C_PROJ]||'').trim();
-        if(!pepRe.test(proj)) continue;
+        var wbs=String(row[C_WBS]||'').trim();
+        if(!pepRe.test(wbs)) continue;
+        // Usa o PEP raiz (ex: C022635 de C022635.01.01) como chave de agrupamento
+        var proj=wbs.split('.')[0];
         var forn=String(row[C_FORN]||'').trim()||'_';
         // Valor: raw:true devolve número direto; fallback para string BRL
         var val=typeof row[C_VAL]==='number' ? row[C_VAL]
