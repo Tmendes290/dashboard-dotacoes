@@ -1062,8 +1062,12 @@ var RES_TAB = 'dashboard';
 var _matCharts = {};
 
 // ── SUPABASE: CARREGAR DADOS ─────────────────────────────────────
+var _syncInProgress = false;
+var _realtimeStarted = false;
 async function loadFromSupabase(){
   if(!supa) return;
+  if(_syncInProgress){ console.log('[Sync] já em progresso, ignorando chamada duplicada'); return; }
+  _syncInProgress = true;
   // helper para salvar no localStorage sem estourar quota
   function _lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){ console.warn('localStorage quota:',k); } }
 
@@ -1136,8 +1140,9 @@ async function loadFromSupabase(){
 
   try { populateFilters(); render(); } catch(eRender){ console.warn('[Sync] render:',eRender); }
   if(CURRENT_PERFIL) updateUserBadge();
+  _syncInProgress = false;
   toast('✔ Dados sincronizados!','green');
-  try { startRealtime(); } catch(eRT){ console.warn('[Sync] realtime:',eRT); }
+  if(!_realtimeStarted){ _realtimeStarted=true; try{ startRealtime(); }catch(eRT){ console.warn('[Sync] realtime:',eRT); } }
 }
 
 // ── SUPABASE: TEMPO REAL ─────────────────────────────────────────
@@ -1183,13 +1188,10 @@ function startRealtime(){
         toast('Dotação removida por outro usuário','red');
       }
     })
-    .on('postgres_changes', {event: '*', schema: 'public', table: 'medido'}, function(payload){
-      console.log('Medido alterado');
-      loadFromSupabase();
-    })
     .subscribe(function(status){
       console.log('Realtime status:', status);
     });
+  // medido NÃO tem listener realtime — só admins atualizam e o reload é manual
 }
 
 // ── SUPABASE: SALVAR DOTAÇÃO ─────────────────────────────────────
