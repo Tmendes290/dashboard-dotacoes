@@ -1083,19 +1083,22 @@ async function loadFromSupabase(){
     // Carrega medido do Supabase com paginação (tabela pode ser grande)
     try {
       var supaMap = {};
-      var medOffset = 0, medBatch = 1000;
-      while(true){
-        var medRes = await supa.from('medido').select('chave,valor').range(medOffset, medOffset+medBatch-1);
-        if(medRes.error || !medRes.data || medRes.data.length === 0) break;
+      var medOffset = 0, medBatch = 500;
+      var medPages = 0;
+      while(medPages < 20){ // máx 20 páginas = 10k linhas
+        var medRes = await supa.from('medido').select('chave,valor').not('chave','is',null).range(medOffset, medOffset+medBatch-1);
+        if(medRes.error){ console.warn('[Medido] erro página '+medPages+':', medRes.error.message); break; }
+        if(!medRes.data || medRes.data.length === 0) break;
         medRes.data.forEach(function(m){ if(m.chave) supaMap[m.chave] = parseFloat(m.valor)||0; });
         if(medRes.data.length < medBatch) break;
         medOffset += medBatch;
+        medPages++;
       }
       if(Object.keys(supaMap).length > 0){
         STATE.medido = supaMap;
         _buildMedidoNormIdx();
       }
-    } catch(eMed){ console.warn('Erro ao carregar medido:', eMed); }
+    } catch(eMed){ console.warn('[Medido] Erro ao carregar:', eMed); }
     
     // Carrega capex
     const {data: cpx, error: e3} = await supa.from('capex').select('*');
@@ -1140,18 +1143,16 @@ async function loadFromSupabase(){
       if(nbMat && STATE_MATERIAIS.length){ nbMat.textContent = STATE_MATERIAIS.length; nbMat.style.display = 'inline-flex'; }
     }
 
-    populateFilters();
-    render();
-    // Re-apply badge after data loads (garante role correto)
+    try { populateFilters(); render(); } catch(eRender){ console.warn('[Sync] Render error:', eRender); }
     if(CURRENT_PERFIL) updateUserBadge();
     toast('✔ Dados sincronizados!','green');
-    
-    // Inicia escuta em tempo real
-    startRealtime();
-    
+    try { startRealtime(); } catch(eRT){ console.warn('[Sync] Realtime error:', eRT); }
+
   } catch(err){
-    console.error('Erro Supabase:', err);
-    toast('Erro ao sincronizar — usando dados locais','red');
+    console.error('[Sync] Erro Supabase:', err.message||err);
+    // Tenta renderizar com dados disponíveis
+    try { populateFilters(); render(); } catch(e2){}
+    toast('⚠ Sincronização parcial — alguns dados podem estar desatualizados','red');
   }
 }
 
