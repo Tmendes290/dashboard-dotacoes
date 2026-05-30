@@ -2607,8 +2607,9 @@ function renderUpload(){
           <div class="prog-bar-wrap"><div class="prog-bar" id="prog-bar" style="width:0%"></div></div>
         </div>
         <div class="upload-info" id="upload-success"></div>
-        <div style="margin-top:10px">
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
           <button onclick="showMedidoDiag()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:7px 14px;font-size:11px;font-weight:600;color:#64748b;cursor:pointer">🔍 Diagnóstico de chaves medido</button>
+          <button onclick="limparMedido()" style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:7px 14px;font-size:11px;font-weight:600;color:#dc2626;cursor:pointer">🗑 Limpar todos os dados de medido</button>
         </div>
       </div>
     </div>
@@ -2801,11 +2802,11 @@ function handleFile(file){
         }
         if(C_PROJ>=0 && C_VAL>=0 && C_YEAR>=0){ dataStart=_h+1; break; }
       }
-      // Fallback: se não achou cabeçalho, usa índices antigos (D=3,H=7,Q=16)
+      // Fallback: se não achou cabeçalho, usa índices conhecidos
       if(C_PROJ<0) C_PROJ=5; // col F = Project
       if(C_VAL<0)  C_VAL=16; // col Q = Value
       if(C_YEAR<0) C_YEAR=3; // col D = Fiscal Year
-      if(C_MON<0)  C_MON=4;  // col E = Month
+      // C_MON fica -1 se não detectado — sem fallback (evita mês errado)
       if(dataStart===0){
         for(var _r2=0;_r2<Math.min(allRows.length,100);_r2++){
           if(pepRe.test(String(allRows[_r2][C_PROJ]||'').trim())){dataStart=_r2;break;}
@@ -2829,17 +2830,18 @@ function handleFile(file){
         var yr=typeof row[C_YEAR]==='number' ? Math.round(row[C_YEAR])
               : parseInt(String(row[C_YEAR]||'').trim())||0;
         if(yr<2020||yr>2030) continue;
-        // Mês
-        var monRaw=String(row[C_MON]||'').trim().toUpperCase();
-        var monNum=typeof row[C_MON]==='number' ? Math.round(row[C_MON])
-                  : (parseInt(monRaw)||ptMeses[monRaw]||ptMeses[monRaw.substring(0,3)]||0);
-        var mon=monNum>0 ? String(monNum).padStart(2,'0') : '00';
-        // Acumula por PEP+Ano (total anual) e PEP+Ano+Mês (total mensal)
+        // Acumula total anual
         var kYear=pepRaizUp+'|'+yr;
         medMap[kYear]=(medMap[kYear]||0)+val;
-        if(mon!=='00'){
-          var kMon=pepRaizUp+'|'+yr+'|'+mon;
-          medMap[kMon]=(medMap[kMon]||0)+val;
+        // Acumula por mês (só se coluna Mês foi detectada)
+        if(C_MON>=0){
+          var monRaw=String(row[C_MON]||'').trim().toUpperCase();
+          var monNum=typeof row[C_MON]==='number' ? Math.round(row[C_MON])
+                    : (parseInt(monRaw)||ptMeses[monRaw]||ptMeses[monRaw.substring(0,3)]||0);
+          if(monNum>=1 && monNum<=12){
+            var kMon=pepRaizUp+'|'+yr+'|'+String(monNum).padStart(2,'0');
+            medMap[kMon]=(medMap[kMon]||0)+val;
+          }
         }
         processed++;
       }
@@ -5785,6 +5787,18 @@ function spClear(){
 // ═════════════════════════════════════════════════════════════════
 // DIAGNÓSTICO DE MEDIDO
 // ═════════════════════════════════════════════════════════════════
+async function limparMedido(){
+  if(!confirm('Isso apagará TODOS os dados de medido do Supabase. Confirma?')) return;
+  if(supa && CURRENT_USER){
+    await supa.from('medido').delete().neq('chave','____');
+  }
+  STATE.medido = {};
+  localStorage.setItem('dot_medido','{}');
+  _buildMedidoNormIdx();
+  render();
+  toast('Dados de medido apagados. Reimporte a planilha.','green');
+}
+
 function showMedidoDiag(){
   var medKeys = Object.keys(STATE.medido||{});
   var normKeys = Object.keys(_medidoNormIdx||{});
