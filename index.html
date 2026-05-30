@@ -1064,96 +1064,80 @@ var _matCharts = {};
 // ── SUPABASE: CARREGAR DADOS ─────────────────────────────────────
 async function loadFromSupabase(){
   if(!supa) return;
+  // helper para salvar no localStorage sem estourar quota
+  function _lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){ console.warn('localStorage quota:',k); } }
+
+  toast('Sincronizando dados...','blue');
+
+  // Dotações
   try {
-    toast('Sincronizando dados...','blue');
-    
-    // Carrega dotações
-    const {data: dots, error: e1} = await supa.from('dotacoes').select('*').order('criado_em', {ascending: true});
-    if(!e1 && dots && dots.length > 0){
-      STATE.dotacoes = dots.map(function(d){ return {
-        id: d.id, DATA_EMISSAO: d.data_emissao||'', ANO: d.ano,
-        PEP: d.pep, SUB_PEP: d.sub_pep||'', COD_CPX: d.cod_cpx||'',
-        EMPRESA: d.empresa, TOTAL: parseFloat(d.total)||0,
-        TIPO: d.tipo||'Execução', DTA_APROVADA: d.dta_aprovada||'',
-        STATUS: d.status, OBS: d.obs||''
-      };});
-      localStorage.setItem('dot_data', JSON.stringify(STATE.dotacoes));
+    const {data:dots,error:e1}=await supa.from('dotacoes').select('*').order('criado_em',{ascending:true});
+    if(!e1&&dots&&dots.length>0){
+      STATE.dotacoes=dots.map(function(d){return{id:d.id,DATA_EMISSAO:d.data_emissao||'',ANO:d.ano,PEP:d.pep,SUB_PEP:d.sub_pep||'',COD_CPX:d.cod_cpx||'',EMPRESA:d.empresa,TOTAL:parseFloat(d.total)||0,TIPO:d.tipo||'Execução',DTA_APROVADA:d.dta_aprovada||'',STATUS:d.status,OBS:d.obs||''};});
+      _lsSet('dot_data',JSON.stringify(STATE.dotacoes));
     }
-    
-    // Carrega medido do Supabase com paginação (tabela pode ser grande)
-    try {
-      var supaMap = {};
-      var medOffset = 0, medBatch = 500;
-      var medPages = 0;
-      while(medPages < 20){ // máx 20 páginas = 10k linhas
-        var medRes = await supa.from('medido').select('chave,valor').not('chave','is',null).range(medOffset, medOffset+medBatch-1);
-        if(medRes.error){ console.warn('[Medido] erro página '+medPages+':', medRes.error.message); break; }
-        if(!medRes.data || medRes.data.length === 0) break;
-        medRes.data.forEach(function(m){ if(m.chave) supaMap[m.chave] = parseFloat(m.valor)||0; });
-        if(medRes.data.length < medBatch) break;
-        medOffset += medBatch;
-        medPages++;
-      }
-      if(Object.keys(supaMap).length > 0){
-        STATE.medido = supaMap;
-        _buildMedidoNormIdx();
-      }
-    } catch(eMed){ console.warn('[Medido] Erro ao carregar:', eMed); }
-    
-    // Carrega capex
-    const {data: cpx, error: e3} = await supa.from('capex').select('*');
-    if(!e3 && cpx && cpx.length > 0){
-      STATE.capex = cpx.map(function(c){ return {
-        pep: c.pep, empresa: c.empresa, grupo: c.grupo||'',
-        capex: parseFloat(c.capex)||0, contratado: parseFloat(c.contratado)||0,
-        pago: parseFloat(c.pago)||0, a_contratar: parseFloat(c.a_contratar)||0,
-        a_pagar: parseFloat(c.a_pagar)||0
-      };});
-      localStorage.setItem('dot_capex', JSON.stringify(STATE.capex));
-    }
-    
-    // Carrega capex_por_pep
-    const {data: cpp, error: e4} = await supa.from('capex_por_pep').select('*');
-    if(!e4 && cpp && cpp.length > 0){
-      STATE.capexPorPep = {};
-      cpp.forEach(function(c){ STATE.capexPorPep[c.pep] = parseFloat(c.valor)||0; });
-      localStorage.setItem('dot_capex_pep', JSON.stringify(STATE.capexPorPep));
-    }
+  } catch(e1){console.warn('[Sync] dotacoes:',e1);}
 
-    // Carrega ref_wbs (PEPs / Sub-PEPs)
-    const {data: rwbs, error: e5} = await supa.from('ref_wbs').select('*');
-    if(!e5 && rwbs && rwbs.length > 0){
-      REF_PEPS = rwbs.map(function(r){ return [r.wbs, r.descricao||'', r.projeto||'']; });
+  // Medido (paginado, sem localStorage)
+  try {
+    var supaMap={},medOffset=0,medBatch=500,medPages=0;
+    while(medPages<20){
+      var medRes=await supa.from('medido').select('chave,valor').not('chave','is',null).range(medOffset,medOffset+medBatch-1);
+      if(medRes.error||!medRes.data||medRes.data.length===0) break;
+      medRes.data.forEach(function(m){if(m.chave)supaMap[m.chave]=parseFloat(m.valor)||0;});
+      if(medRes.data.length<medBatch) break;
+      medOffset+=medBatch; medPages++;
     }
+    if(Object.keys(supaMap).length>0){STATE.medido=supaMap;_buildMedidoNormIdx();}
+  } catch(eMed){console.warn('[Sync] medido:',eMed);}
 
-    // Carrega ref_squads (Squad / Líder / Planejador)
-    const {data: rsq, error: e6} = await supa.from('ref_squads').select('*');
-    if(!e6 && rsq && rsq.length > 0){
-      REF_SQUADS = {};
-      rsq.forEach(function(r){ REF_SQUADS[r.pep] = {squad:r.squad||'',lider:r.lider||'',planejador:r.planejador||''}; });
+  // CAPEX
+  try {
+    const {data:cpx,error:e3}=await supa.from('capex').select('*');
+    if(!e3&&cpx&&cpx.length>0){
+      STATE.capex=cpx.map(function(c){return{pep:c.pep,empresa:c.empresa,grupo:c.grupo||'',capex:parseFloat(c.capex)||0,contratado:parseFloat(c.contratado)||0,pago:parseFloat(c.pago)||0,a_contratar:parseFloat(c.a_contratar)||0,a_pagar:parseFloat(c.a_pagar)||0};});
+      _lsSet('dot_capex',JSON.stringify(STATE.capex));
     }
+  } catch(e3){console.warn('[Sync] capex:',e3);}
 
-    // Carrega materiais (compartilhado entre todos os usuários)
-    const {data: matCfg, error: e7} = await supa.from('mat_config').select('*').eq('id',1).maybeSingle();
-    if(!e7 && matCfg && matCfg.data){
-      STATE_MATERIAIS = matCfg.data;
-      localStorage.setItem('mat_data', JSON.stringify(matCfg.data));
-      localStorage.setItem('mat_import', JSON.stringify({file:matCfg.import_file||'', date:matCfg.import_date||''}));
-      var nbMat = document.getElementById('nb-mat');
-      if(nbMat && STATE_MATERIAIS.length){ nbMat.textContent = STATE_MATERIAIS.length; nbMat.style.display = 'inline-flex'; }
+  // CAPEX por PEP
+  try {
+    const {data:cpp,error:e4}=await supa.from('capex_por_pep').select('*');
+    if(!e4&&cpp&&cpp.length>0){
+      STATE.capexPorPep={};
+      cpp.forEach(function(c){STATE.capexPorPep[c.pep]=parseFloat(c.valor)||0;});
+      _lsSet('dot_capex_pep',JSON.stringify(STATE.capexPorPep));
     }
+  } catch(e4){console.warn('[Sync] capex_por_pep:',e4);}
 
-    try { populateFilters(); render(); } catch(eRender){ console.warn('[Sync] Render error:', eRender); }
-    if(CURRENT_PERFIL) updateUserBadge();
-    toast('✔ Dados sincronizados!','green');
-    try { startRealtime(); } catch(eRT){ console.warn('[Sync] Realtime error:', eRT); }
+  // Ref WBS
+  try {
+    const {data:rwbs,error:e5}=await supa.from('ref_wbs').select('*');
+    if(!e5&&rwbs&&rwbs.length>0) REF_PEPS=rwbs.map(function(r){return[r.wbs,r.descricao||'',r.projeto||''];});
+  } catch(e5){console.warn('[Sync] ref_wbs:',e5);}
 
-  } catch(err){
-    console.error('[Sync] Erro Supabase:', err.message||err);
-    // Tenta renderizar com dados disponíveis
-    try { populateFilters(); render(); } catch(e2){}
-    toast('⚠ Sincronização parcial — alguns dados podem estar desatualizados','red');
-  }
+  // Ref Squads
+  try {
+    const {data:rsq,error:e6}=await supa.from('ref_squads').select('*');
+    if(!e6&&rsq&&rsq.length>0){REF_SQUADS={};rsq.forEach(function(r){REF_SQUADS[r.pep]={squad:r.squad||'',lider:r.lider||'',planejador:r.planejador||''};});}
+  } catch(e6){console.warn('[Sync] ref_squads:',e6);}
+
+  // Materiais
+  try {
+    const {data:matCfg,error:e7}=await supa.from('mat_config').select('*').eq('id',1).maybeSingle();
+    if(!e7&&matCfg&&matCfg.data){
+      STATE_MATERIAIS=matCfg.data;
+      _lsSet('mat_data',JSON.stringify(matCfg.data));
+      _lsSet('mat_import',JSON.stringify({file:matCfg.import_file||'',date:matCfg.import_date||''}));
+      var nbMat=document.getElementById('nb-mat');
+      if(nbMat&&STATE_MATERIAIS.length){nbMat.textContent=STATE_MATERIAIS.length;nbMat.style.display='inline-flex';}
+    }
+  } catch(e7){console.warn('[Sync] mat_config:',e7);}
+
+  try { populateFilters(); render(); } catch(eRender){ console.warn('[Sync] render:',eRender); }
+  if(CURRENT_PERFIL) updateUserBadge();
+  toast('✔ Dados sincronizados!','green');
+  try { startRealtime(); } catch(eRT){ console.warn('[Sync] realtime:',eRT); }
 }
 
 // ── SUPABASE: TEMPO REAL ─────────────────────────────────────────
@@ -1602,7 +1586,7 @@ function updateStatus(dot,res){
   var _nr=document.getElementById('nb-res');if(_nr)_nr.textContent=nbPepsRes;
   var _nd=document.getElementById('nb-det');if(_nd)_nd.textContent=dot.length;
   const na=res.filter(r=>r.FAROL>=0.9).length+getCapexAlerts(res).length;
-  const nb=document.getElementById('nb-alerta');if(nb)nb.textContent=na;nb.className='sb-badge '+(na>0?'red':'green');
+  const nb=document.getElementById('nb-alerta');if(nb){nb.textContent=na;nb.className='sb-badge '+(na>0?'red':'green');}
   var _su=document.getElementById('sb-updated');if(_su)_su.textContent=new Date().toLocaleDateString('pt-BR')+' '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 }
 
