@@ -1295,14 +1295,32 @@ function getMedido(subpep,empresa,ano,mes){
   var normEmp = _normEmpStr(empresa);
   var pepRaiz = String(subpep||'').split('.')[0];
 
-  // 0. Mês selecionado → retorna só aquele mês (0 se não há dado — não acumula)
+  // 0. Busca nas chaves novas: PEP|FORNECEDOR|Ano(|Mes)
+  // Usa matchEmpresa para tolerar nomes truncados do SAP vs nome completo da dotação
+  var medKeys0 = Object.keys(STATE.medido);
   if(mes){
-    var monStr = String(mes).padStart(2,'0');
-    return STATE.medido[pepRaiz+'|'+anoStr+'|'+monStr]||0;
+    var monStr0 = String(mes).padStart(2,'0');
+    var tot0=0;
+    for(var _i0=0;_i0<medKeys0.length;_i0++){
+      var _p0=medKeys0[_i0].split('|');
+      if(_p0.length!==4) continue;
+      if(_p0[0]!==pepRaiz||_p0[2]!==anoStr||_p0[3]!==monStr0) continue;
+      if(_p0[1]==='_'||_normEmpStr(_p0[1])===normEmp||matchEmpresa(_p0[1],empresa)||matchEmpresa(empresa,_p0[1]))
+        tot0+=(STATE.medido[medKeys0[_i0]]||0);
+    }
+    return tot0; // 0 se mês sem dado — não cai para anual
   }
-  // Sem filtro de mês → total anual acumulado
-  var k0 = pepRaiz + '|' + anoStr;
-  if(STATE.medido[k0] !== undefined) return STATE.medido[k0]||0;
+  // Sem filtro de mês → soma anual por FORNECEDOR (chaves de 3 partes)
+  var totA=0, foundA=false;
+  for(var _iA=0;_iA<medKeys0.length;_iA++){
+    var _pA=medKeys0[_iA].split('|');
+    if(_pA.length!==3) continue;
+    if(_pA[0]!==pepRaiz||_pA[2]!==anoStr) continue;
+    if(_pA[1]==='_'||_normEmpStr(_pA[1])===normEmp||matchEmpresa(_pA[1],empresa)||matchEmpresa(empresa,_pA[1])){
+      totA+=(STATE.medido[medKeys0[_iA]]||0); foundA=true;
+    }
+  }
+  if(foundA) return totA;
 
   // 1. Chave exata (legado)
   var k = getMedidoKey(subpep,empresa,ano);
@@ -2788,7 +2806,7 @@ function handleFile(file){
       var allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:true});
 
       // Detecta colunas automaticamente pelo cabeçalho (qualquer ordem de colunas)
-      var C_PROJ=-1, C_VAL=-1, C_YEAR=-1, C_MON=-1;
+      var C_PROJ=-1, C_VAL=-1, C_YEAR=-1, C_MON=-1, C_FORN=-1;
       var dataStart=0;
       var ptMeses={'JAN':1,'FEV':2,'MAR':3,'ABR':4,'MAI':5,'JUN':6,'JUL':7,'AGO':8,'SET':9,'OUT':10,'NOV':11,'DEZ':12,'FEB':2,'APR':4,'MAY':5,'AUG':8,'SEP':9,'OCT':10,'DEC':12};
       for(var _h=0;_h<Math.min(allRows.length,30);_h++){
@@ -2797,23 +2815,24 @@ function handleFile(file){
           var hcell=String(hrow[_c]||'').trim().toUpperCase().replace(/[^A-Z0-9 ]/g,'');
           if(hcell==='PROJECT' || hcell==='PROJETO') C_PROJ=_c;
           if(hcell.includes('VALUE IN OBJECT') || hcell==='VALOR' || hcell==='VALUE') C_VAL=_c;
-          if(hcell==='FISCAL YEAR' || hcell==='FISCAL YEAR' || hcell==='ANO' || hcell==='YEAR') C_YEAR=_c;
+          if(hcell==='FISCAL YEAR' || hcell==='ANO' || hcell==='YEAR') C_YEAR=_c;
           if(hcell==='MONTH' || hcell==='MES' || hcell==='MÊS' || hcell==='PERIODO' || hcell==='MO') C_MON=_c;
+          if(hcell==='FORNECEDOR' || hcell==='VENDOR' || hcell==='VENDOR NAME' || hcell==='FORNECEDOR NAME') C_FORN=_c;
         }
         if(C_PROJ>=0 && C_VAL>=0 && C_YEAR>=0){ dataStart=_h+1; break; }
       }
-      // Fallback: se não achou cabeçalho, usa índices conhecidos
-      if(C_PROJ<0) C_PROJ=5; // col F = Project
-      if(C_VAL<0)  C_VAL=16; // col Q = Value
-      if(C_YEAR<0) C_YEAR=3; // col D = Fiscal Year
-      // C_MON fica -1 se não detectado — sem fallback (evita mês errado)
+      // Fallback para índices conhecidos se cabeçalho não encontrado
+      if(C_PROJ<0) C_PROJ=5;
+      if(C_VAL<0)  C_VAL=16;
+      if(C_YEAR<0) C_YEAR=3;
+      // C_MON e C_FORN ficam -1 se não detectados (sem fallback)
       if(dataStart===0){
         for(var _r2=0;_r2<Math.min(allRows.length,100);_r2++){
           if(pepRe.test(String(allRows[_r2][C_PROJ]||'').trim())){dataStart=_r2;break;}
         }
       }
 
-      console.log('[Medido] Colunas detectadas: PROJ='+C_PROJ+' VAL='+C_VAL+' YEAR='+C_YEAR+' MON='+C_MON+' dataStart='+dataStart);
+      console.log('[Medido] Cols: PROJ='+C_PROJ+' VAL='+C_VAL+' YEAR='+C_YEAR+' MON='+C_MON+' FORN='+C_FORN+' start='+dataStart);
 
       setProgress(65,'Processando '+(allRows.length-dataStart)+' linhas…');
       const medMap={};
@@ -2822,24 +2841,26 @@ function handleFile(file){
         var row=allRows[ri];
         var proj=String(row[C_PROJ]||'').trim();
         if(!pepRe.test(proj)) continue;
-        var pepRaizUp=proj.split('.')[0]; // garante apenas o PEP raiz
+        var pepRaizUp=proj.split('.')[0];
+        var forn=C_FORN>=0 ? String(row[C_FORN]||'').trim() : '_';
+        if(!forn) forn='_';
         // Valor
         var val=typeof row[C_VAL]==='number' ? row[C_VAL]
-               : parseFloat(String(row[C_VAL]||'').replace(/[R$\s]/g,'').replace(/\./g,'').replace(',','.'))||0;
+               : parseFloat(String(row[C_VAL]||'').replace(/[R$\s\-]/g,'').replace(/\./g,'').replace(',','.'))||0;
+        if(!val) continue; // ignora linhas sem valor
         // Ano
         var yr=typeof row[C_YEAR]==='number' ? Math.round(row[C_YEAR])
               : parseInt(String(row[C_YEAR]||'').trim())||0;
         if(yr<2020||yr>2030) continue;
-        // Acumula total anual
-        var kYear=pepRaizUp+'|'+yr;
+        // Chave: PEP|FORNECEDOR|Ano (anual) e PEP|FORNECEDOR|Ano|Mes (mensal)
+        var kYear=pepRaizUp+'|'+forn+'|'+yr;
         medMap[kYear]=(medMap[kYear]||0)+val;
-        // Acumula por mês (só se coluna Mês foi detectada)
         if(C_MON>=0){
           var monRaw=String(row[C_MON]||'').trim().toUpperCase();
           var monNum=typeof row[C_MON]==='number' ? Math.round(row[C_MON])
                     : (parseInt(monRaw)||ptMeses[monRaw]||ptMeses[monRaw.substring(0,3)]||0);
           if(monNum>=1 && monNum<=12){
-            var kMon=pepRaizUp+'|'+yr+'|'+String(monNum).padStart(2,'0');
+            var kMon=pepRaizUp+'|'+forn+'|'+yr+'|'+String(monNum).padStart(2,'0');
             medMap[kMon]=(medMap[kMon]||0)+val;
           }
         }
