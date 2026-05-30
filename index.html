@@ -1242,6 +1242,7 @@ _buildMedidoNormIdx(); // Constrói índice normalizado a partir do medido em ca
 // Filtros globais (compartilhados entre abas)
 let fAno='',fSubpep='',fStatus='';
 let fSquad='',fLider='',fPlanejador='';
+let fMedMes=''; // filtro de mês para o medido no Resumo Sub PEP
 // Filtros com seleção múltipla
 let fPeps=[],fEmps=[],fSquads=[],fLiders=[],fPlanejadores=[];
 let fRegPeps=[],fRegEmps=[],fRegSquads=[],fRegLiders=[],fRegPlanejadores=[];
@@ -1288,12 +1289,17 @@ function _buildMedidoNormIdx(){
 
 function _normEmpStr(e){ return String(e||'').replace(/[.,]/g,'').replace(/\s+/g,' ').trim().toUpperCase(); }
 
-function getMedido(subpep,empresa,ano){
+function getMedido(subpep,empresa,ano,mes){
   var anoStr = String(ano||'');
   var normEmp = _normEmpStr(empresa);
   var pepRaiz = String(subpep||'').split('.')[0];
 
-  // 0. Chave nova: PEP raiz + ano (sem empresa — SAP nem sempre popula FORNECEDOR)
+  // 0. Chave PEP+Ano+Mês (quando filtro de mês ativo) ou PEP+Ano (total anual)
+  if(mes){
+    var monStr = String(mes).padStart(2,'0');
+    var kMon = pepRaiz + '|' + anoStr + '|' + monStr;
+    if(STATE.medido[kMon] !== undefined) return STATE.medido[kMon]||0;
+  }
   var k0 = pepRaiz + '|' + anoStr;
   if(STATE.medido[k0] !== undefined) return STATE.medido[k0]||0;
 
@@ -1417,7 +1423,7 @@ function buildResumo(useFilters=false){
     if(d.STATUS==='Ag. Aprovação') map[k].TOTAL_AG+=d.TOTAL;
   });
   return Object.values(map).map(r=>{
-    const medido=getMedido(r.PEP,r.EMPRESA,2026);
+    const medido=getMedido(r.PEP,r.EMPRESA,2026,fMedMes);
     const total=r.TOTAL_APROV+r.TOTAL_AG;
     return {...r,TOTAL:total,MEDIDO:medido,SALDO:total-medido,FAROL:total>0?medido/total:0};
   });
@@ -1985,9 +1991,18 @@ function safeChart(id, cfg){
 // ─────────────────────────────────────────────────────────────────
 function renderViewResumo(res){
   const el=document.getElementById('v-resumo');
+  const nomesMeses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const mesOpts='<option value="">Todos os meses</option>'+nomesMeses.map((nm,i)=>{const v=String(i+1).padStart(2,'0');return`<option value="${v}"${fMedMes===v?' selected':''}>${nm}</option>`;}).join('');
   el.innerHTML=`
   <div class="cc" style="padding:0;overflow:hidden">
-    <div class="tbl-hdr"><div class="tbl-title">Controle por Sub PEP / Empresa</div><div class="tbl-badge">${res.length} registros</div></div>
+    <div class="tbl-hdr">
+      <div class="tbl-title">Controle por Sub PEP / Empresa</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="tbl-badge">${res.length} registros</div>
+        <label style="font-size:11px;color:var(--muted);font-weight:600">Mês Medido:</label>
+        <select style="padding:5px 10px;border:1px solid var(--bord);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#fff" onchange="fMedMes=this.value;render()">${mesOpts}</select>
+      </div>
+    </div>
     <div class="tbl-wrap">
       <table>
         <thead><tr>
@@ -2676,47 +2691,66 @@ function handleFile(file){
 
       const pepRe=/^[A-Z]\d{5}/;
 
-      // Colunas confirmadas pelo usuário (BASE DE DADOS SAP):
-      // D=3: Ano fiscal | H=7: WBS Element | Q=16: Valor (R$) | BG=58: Fornecedor
-      const C_WBS=7, C_VAL=16, C_FORN=58, C_YEAR=3;
-
       setProgress(55,'Lendo planilha…');
 
-      // Lê como array de arrays com valores brutos (mais preciso para números)
+      // Lê como array de arrays com valores brutos
       var allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:true});
 
-      // Encontra primeira linha com WBS Element válido (pula cabeçalhos)
+      // Detecta colunas automaticamente pelo cabeçalho (qualquer ordem de colunas)
+      var C_PROJ=-1, C_VAL=-1, C_YEAR=-1, C_MON=-1;
       var dataStart=0;
-      for(var _r=0;_r<Math.min(allRows.length,100);_r++){
-        if(pepRe.test(String(allRows[_r][C_WBS]||'').trim())){dataStart=_r;break;}
+      var ptMeses={'JAN':1,'FEV':2,'MAR':3,'ABR':4,'MAI':5,'JUN':6,'JUL':7,'AGO':8,'SET':9,'OUT':10,'NOV':11,'DEZ':12,'FEB':2,'APR':4,'MAY':5,'AUG':8,'SEP':9,'OCT':10,'DEC':12};
+      for(var _h=0;_h<Math.min(allRows.length,30);_h++){
+        var hrow=allRows[_h];
+        for(var _c=0;_c<hrow.length;_c++){
+          var hcell=String(hrow[_c]||'').trim().toUpperCase().replace(/[^A-Z0-9 ]/g,'');
+          if(hcell==='PROJECT' || hcell==='PROJETO') C_PROJ=_c;
+          if(hcell.includes('VALUE IN OBJECT') || hcell==='VALOR' || hcell==='VALUE') C_VAL=_c;
+          if(hcell==='FISCAL YEAR' || hcell==='FISCAL YEAR' || hcell==='ANO' || hcell==='YEAR') C_YEAR=_c;
+          if(hcell==='MONTH' || hcell==='MES' || hcell==='MÊS' || hcell==='PERIODO' || hcell==='MO') C_MON=_c;
+        }
+        if(C_PROJ>=0 && C_VAL>=0 && C_YEAR>=0){ dataStart=_h+1; break; }
+      }
+      // Fallback: se não achou cabeçalho, usa índices antigos (D=3,H=7,Q=16)
+      if(C_PROJ<0) C_PROJ=5; // col F = Project
+      if(C_VAL<0)  C_VAL=16; // col Q = Value
+      if(C_YEAR<0) C_YEAR=3; // col D = Fiscal Year
+      if(C_MON<0)  C_MON=4;  // col E = Month
+      if(dataStart===0){
+        for(var _r2=0;_r2<Math.min(allRows.length,100);_r2++){
+          if(pepRe.test(String(allRows[_r2][C_PROJ]||'').trim())){dataStart=_r2;break;}
+        }
       }
 
-      console.log('[Medido] Iniciando em row='+dataStart+', total rows='+allRows.length);
-      console.log('[Medido] Amostra row '+dataStart+':', {
-        wbs:  allRows[dataStart]&&allRows[dataStart][C_WBS],
-        val:  allRows[dataStart]&&allRows[dataStart][C_VAL],
-        forn: allRows[dataStart]&&allRows[dataStart][C_FORN],
-        ano:  allRows[dataStart]&&allRows[dataStart][C_YEAR]
-      });
+      console.log('[Medido] Colunas detectadas: PROJ='+C_PROJ+' VAL='+C_VAL+' YEAR='+C_YEAR+' MON='+C_MON+' dataStart='+dataStart);
 
       setProgress(65,'Processando '+(allRows.length-dataStart)+' linhas…');
       const medMap={};
       let processed=0;
       for(var ri=dataStart;ri<allRows.length;ri++){
         var row=allRows[ri];
-        var wbs=String(row[C_WBS]||'').trim();
-        if(!pepRe.test(wbs)) continue;
-        // Usa o PEP raiz (ex: C022635 de C022635.01.01) como chave de agrupamento
-        var proj=wbs.split('.')[0];
-        // Valor: raw:true devolve número direto; fallback para string BRL
+        var proj=String(row[C_PROJ]||'').trim();
+        if(!pepRe.test(proj)) continue;
+        var pepRaizUp=proj.split('.')[0]; // garante apenas o PEP raiz
+        // Valor
         var val=typeof row[C_VAL]==='number' ? row[C_VAL]
                : parseFloat(String(row[C_VAL]||'').replace(/[R$\s]/g,'').replace(/\./g,'').replace(',','.'))||0;
-        // Ano: raw:true devolve número; fallback string
+        // Ano
         var yr=typeof row[C_YEAR]==='number' ? Math.round(row[C_YEAR])
               : parseInt(String(row[C_YEAR]||'').trim())||0;
-        if(yr<2020||yr>2030) continue; // ignora linhas sem ano válido
-        var k=proj+'|'+yr;
-        medMap[k]=(medMap[k]||0)+val;
+        if(yr<2020||yr>2030) continue;
+        // Mês
+        var monRaw=String(row[C_MON]||'').trim().toUpperCase();
+        var monNum=typeof row[C_MON]==='number' ? Math.round(row[C_MON])
+                  : (parseInt(monRaw)||ptMeses[monRaw]||ptMeses[monRaw.substring(0,3)]||0);
+        var mon=monNum>0 ? String(monNum).padStart(2,'0') : '00';
+        // Acumula por PEP+Ano (total anual) e PEP+Ano+Mês (total mensal)
+        var kYear=pepRaizUp+'|'+yr;
+        medMap[kYear]=(medMap[kYear]||0)+val;
+        if(mon!=='00'){
+          var kMon=pepRaizUp+'|'+yr+'|'+mon;
+          medMap[kMon]=(medMap[kMon]||0)+val;
+        }
         processed++;
       }
       setProgress(90,'Atualizando painel…');
