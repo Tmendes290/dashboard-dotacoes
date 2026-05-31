@@ -1064,6 +1064,7 @@ var _matCharts = {};
 // ── SUPABASE: CARREGAR DADOS ─────────────────────────────────────
 var _syncInProgress = false;
 var _realtimeStarted = false;
+var _medidoSyncChannel = null;
 async function loadFromSupabase(){
   if(!supa) return;
   if(_syncInProgress){ console.log('[Sync] já em progresso, ignorando chamada duplicada'); return; }
@@ -1194,7 +1195,28 @@ function startRealtime(){
     .subscribe(function(status){
       console.log('Realtime status:', status);
     });
-  // medido NÃO tem listener realtime — só admins atualizam e o reload é manual
+
+  // Medido: broadcast para sincronizar todos os usuários quando admin faz upload
+  _medidoSyncChannel = supa.channel('medido-sync')
+    .on('broadcast', {event: 'medido-updated'}, function(payload){
+      console.log('[Realtime] Medido atualizado por outro usuário');
+      (async function(){
+        var supaMap={},medOffset=0,medBatch=500,medPages=0,medSyncOk=false;
+        while(medPages<20){
+          var medRes=await supa.from('medido').select('chave,valor').not('chave','is',null).range(medOffset,medOffset+medBatch-1);
+          if(medRes.error||!medRes.data) break;
+          medSyncOk=true;
+          if(medRes.data.length===0) break;
+          medRes.data.forEach(function(m){if(m.chave)supaMap[m.chave]=parseFloat(m.valor)||0;});
+          if(medRes.data.length<medBatch) break;
+          medOffset+=medBatch; medPages++;
+        }
+        if(medSyncOk){STATE.medido=supaMap;_buildMedidoNormIdx();render();}
+      })();
+      var quem=(payload.payload&&payload.payload.uploadedBy)||'admin';
+      toast('📊 Medido atualizado por '+quem+' — dados recarregados','blue');
+    })
+    .subscribe(function(s){ console.log('[Realtime] medido-sync:', s); });
 }
 
 // ── SUPABASE: SALVAR DOTAÇÃO ─────────────────────────────────────
@@ -2880,7 +2902,16 @@ function handleFile(file){
           (function saveBatch(i){
             if(i>=medRows.length){
               if(_errCount>0) toast('⚠ '+_errCount+' erros ao salvar medido no Supabase — verifique a tabela','red');
-              else toast('✔ Medido salvo no Supabase: '+_savedCount+' linhas','green');
+              else {
+                toast('✔ Medido salvo no Supabase: '+_savedCount+' linhas','green');
+                // Notifica todos os outros usuários via broadcast
+                if(_medidoSyncChannel){
+                  _medidoSyncChannel.send({
+                    type:'broadcast', event:'medido-updated',
+                    payload:{uploadedBy:CURRENT_USER?CURRENT_USER.email:'admin', linhas:_savedCount}
+                  }).catch(function(e){console.warn('[Broadcast] erro:',e);});
+                }
+              }
               return;
             }
             supa.from('medido').insert(medRows.slice(i,i+200)).then(function(r){
