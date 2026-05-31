@@ -1084,15 +1084,18 @@ async function loadFromSupabase(){
 
   // Medido (paginado, sem localStorage)
   try {
-    var supaMap={},medOffset=0,medBatch=500,medPages=0;
+    var supaMap={},medOffset=0,medBatch=500,medPages=0,medSyncOk=false;
     while(medPages<20){
       var medRes=await supa.from('medido').select('chave,valor').not('chave','is',null).range(medOffset,medOffset+medBatch-1);
-      if(medRes.error||!medRes.data||medRes.data.length===0) break;
+      if(medRes.error||!medRes.data) break;
+      medSyncOk=true;
+      if(medRes.data.length===0) break;
       medRes.data.forEach(function(m){if(m.chave)supaMap[m.chave]=parseFloat(m.valor)||0;});
       if(medRes.data.length<medBatch) break;
       medOffset+=medBatch; medPages++;
     }
-    if(Object.keys(supaMap).length>0){STATE.medido=supaMap;_buildMedidoNormIdx();}
+    // Sempre atualiza STATE.medido quando sync bem-sucedido (mesmo tabela vazia)
+    if(medSyncOk){STATE.medido=supaMap;_buildMedidoNormIdx();}
   } catch(eMed){console.warn('[Sync] medido:',eMed);}
 
   // CAPEX
