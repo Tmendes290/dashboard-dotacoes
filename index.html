@@ -1096,7 +1096,7 @@ async function loadFromSupabase(){
       medOffset+=medBatch; medPages++;
     }
     // Sempre atualiza STATE.medido quando sync bem-sucedido (mesmo tabela vazia)
-    if(medSyncOk){STATE.medido=supaMap;_buildMedidoNormIdx();}
+    if(medSyncOk){STATE.medido=supaMap;_buildMedidoNormIdx();window._medidoLastLoad=Date.now();}
   } catch(eMed){console.warn('[Sync] medido:',eMed);}
 
   // CAPEX
@@ -1211,12 +1211,32 @@ function startRealtime(){
           if(medRes.data.length<medBatch) break;
           medOffset+=medBatch; medPages++;
         }
-        if(medSyncOk){STATE.medido=supaMap;_buildMedidoNormIdx();render();}
+        if(medSyncOk){STATE.medido=supaMap;_buildMedidoNormIdx();window._medidoLastLoad=Date.now();render();}
       })();
       var quem=(payload.payload&&payload.payload.uploadedBy)||'admin';
       toast('📊 Medido atualizado por '+quem+' — dados recarregados','blue');
     })
     .subscribe(function(s){ console.log('[Realtime] medido-sync:', s); });
+
+  // Recarrega medido ao voltar para a aba após 5+ minutos ausente
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden || !supa || !CURRENT_USER) return;
+    var since = window._medidoLastLoad ? Date.now()-window._medidoLastLoad : Infinity;
+    if(since < 5*60*1000) return;
+    (async function(){
+      var supaMap={},medOffset=0,medBatch=500,medPages=0,medSyncOk=false;
+      while(medPages<20){
+        var medRes=await supa.from('medido').select('chave,valor').not('chave','is',null).range(medOffset,medOffset+medBatch-1);
+        if(medRes.error||!medRes.data) break;
+        medSyncOk=true;
+        if(medRes.data.length===0) break;
+        medRes.data.forEach(function(m){if(m.chave)supaMap[m.chave]=parseFloat(m.valor)||0;});
+        if(medRes.data.length<medBatch) break;
+        medOffset+=medBatch; medPages++;
+      }
+      if(medSyncOk){STATE.medido=supaMap;_buildMedidoNormIdx();window._medidoLastLoad=Date.now();render();}
+    })();
+  });
 }
 
 // ── SUPABASE: SALVAR DOTAÇÃO ─────────────────────────────────────
@@ -2888,30 +2908,61 @@ function handleFile(file){
       STATE.medido = medMap;
       _buildMedidoNormIdx();
       saveState(); // medido não incluso no saveState (usa Supabase)
+      const keys=Object.keys(medMap).length;
+      var _uploadFile=file.name, _uploadProcessed=processed;
+      // _finishUpload: chamado APÓS Supabase confirmar (ou sem Supabase)
+      function _finishUpload(savedCount, errCount){
+        setProgress(100,'Concluído!');
+        window._medidoLastLoad = Date.now();
+        setTimeout(function(){
+          prog.style.display='none';
+          var si=document.getElementById('upload-success');
+          si.style.display='block';
+          var now = new Date().toLocaleString('pt-BR');
+          var supaStatus = (supa && CURRENT_USER)
+            ? (errCount>0
+                ? '<br><span style="color:#e74c3c;font-size:12px">⚠ '+errCount+' erros ao salvar no Supabase — reimporte o arquivo</span>'
+                : '<br><span style="color:#27ae60;font-size:12px">✔ '+savedCount+' registros confirmados no Supabase</span>')
+            : '';
+          si.innerHTML='<h4>✅ Medido atualizado com sucesso!</h4>'
+            +'<p><strong>Arquivo:</strong> '+_uploadFile+'<br>'
+            +'<strong>Linhas processadas:</strong> '+_uploadProcessed.toLocaleString()+'<br>'
+            +'<strong>Combinações atualizadas:</strong> '+keys.toLocaleString()+' (Sub PEP / Empresa / Ano)'
+            +supaStatus+'</p>'
+            +'<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'
+            +'<button class="btn btn-green" onclick="refreshDashboard()" style="font-size:13px;padding:9px 20px">🔄 Atualizar Dashboard</button>'
+            +'<button class="btn btn-outline" onclick="handleFile(window._lastUploadedFile)" style="font-size:12px;padding:9px 16px">↺ Reprocessar arquivo</button>'
+            +'</div>';
+          localStorage.setItem('dot_last_import', JSON.stringify({file:_uploadFile, date:now, rows:_uploadProcessed, keys:keys}));
+          showGlobalRefreshBanner(_uploadFile, now);
+          render();
+        },400);
+        // Sempre notifica todos via broadcast (mesmo com erros parciais)
+        if(_medidoSyncChannel){
+          _medidoSyncChannel.send({
+            type:'broadcast', event:'medido-updated',
+            payload:{uploadedBy:CURRENT_USER?CURRENT_USER.email:'admin', linhas:savedCount}
+          }).catch(function(e){console.warn('[Broadcast] erro:',e);});
+        }
+      }
       // Substituição completa no Supabase: apaga tudo e insere novo
       if(supa && CURRENT_USER){
         var medRows=Object.keys(medMap).map(function(k){
           var pts=k.split('|');
-          // chave: PEP|FORN|ANO ou PEP|FORN|ANO|MES
           return {chave:k, valor:medMap[k], sub_pep:pts[0]||'', empresa:pts[1]||'_', ano:parseInt(pts[2])||0};
         });
         var _savedCount=0, _errCount=0;
-        // Apaga tabela inteira antes de inserir para garantir substituição completa
+        setProgress(92,'Salvando no Supabase…');
         supa.from('medido').delete().neq('chave','____').then(function(delRes){
-          if(delRes.error){ console.error('Erro ao limpar medido:',delRes.error); }
+          if(delRes.error){
+            toast('⚠ Erro ao limpar medido no Supabase: '+delRes.error.message,'red');
+            _finishUpload(0,1); return;
+          }
           (function saveBatch(i){
             if(i>=medRows.length){
-              if(_errCount>0) toast('⚠ '+_errCount+' erros ao salvar medido no Supabase — verifique a tabela','red');
-              else {
-                toast('✔ Medido salvo no Supabase: '+_savedCount+' linhas','green');
-                // Notifica todos os outros usuários via broadcast
-                if(_medidoSyncChannel){
-                  _medidoSyncChannel.send({
-                    type:'broadcast', event:'medido-updated',
-                    payload:{uploadedBy:CURRENT_USER?CURRENT_USER.email:'admin', linhas:_savedCount}
-                  }).catch(function(e){console.warn('[Broadcast] erro:',e);});
-                }
-              }
+              if(_errCount>0) toast('⚠ '+_errCount+' erros ao salvar medido no Supabase','red');
+              else toast('✔ Medido salvo no Supabase: '+_savedCount+' linhas','green');
+              _finishUpload(_savedCount,_errCount);
               return;
             }
             supa.from('medido').insert(medRows.slice(i,i+200)).then(function(r){
@@ -2921,36 +2972,9 @@ function handleFile(file){
             });
           })(0);
         });
+      } else {
+        _finishUpload(0,0);
       }
-      const keys=Object.keys(medMap).length;
-      setProgress(100,'Concluído!');
-      setTimeout(()=>{
-        prog.style.display='none';
-        const si=document.getElementById('upload-success');
-        si.style.display='block';
-        const now = new Date().toLocaleString('pt-BR');
-        si.innerHTML=`
-          <h4>✅ Medido atualizado com sucesso!</h4>
-          <p>
-            <strong>Arquivo:</strong> ${file.name}<br>
-            <strong>Linhas processadas:</strong> ${processed.toLocaleString()}<br>
-            <strong>Combinações atualizadas:</strong> ${keys.toLocaleString()} (Sub PEP / Empresa / Ano)<br>
-            <strong>Última atualização:</strong> ${now}
-          </p>
-          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-green" onclick="refreshDashboard()" style="font-size:13px;padding:9px 20px">
-              🔄 Atualizar Dashboard
-            </button>
-            <button class="btn btn-outline" onclick="handleFile(window._lastUploadedFile)" style="font-size:12px;padding:9px 16px">
-              ↺ Reprocessar arquivo
-            </button>
-          </div>`;
-        // Save last import timestamp to localStorage
-        localStorage.setItem('dot_last_import', JSON.stringify({file:file.name, date:now, rows:processed, keys}));
-        showGlobalRefreshBanner(file.name, now);
-        toast('✔ Valores medidos atualizados!','green');
-        render();
-      },400);
     }catch(err){
       toast('Erro ao processar arquivo: '+err.message,'red');
       prog.style.display='none';
