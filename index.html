@@ -1295,18 +1295,19 @@ function getMedido(subpep,empresa,ano,mes){
     for(var _i0=0;_i0<medKeys0.length;_i0++){
       var _p0=medKeys0[_i0].split('|');
       if(_p0.length!==4) continue;
-      if(_p0[0]!==pepRaiz||_p0[2]!==anoStr||_p0[3]!==monStr0) continue;
+      // Não filtra por ano — dotação pode ser 2025 mas medido lançado em 2026
+      if(_p0[0]!==pepRaiz||_p0[3]!==monStr0) continue;
       if(_p0[1]==='_'||_normEmpStr(_p0[1])===normEmp||matchEmpresa(_p0[1],empresa)||matchEmpresa(empresa,_p0[1]))
         tot0+=(STATE.medido[medKeys0[_i0]]||0);
     }
     return tot0; // 0 se mês sem dado — não cai para anual
   }
-  // Sem filtro de mês → soma anual por FORNECEDOR (chaves de 3 partes)
+  // Sem filtro de mês → soma anual por FORNECEDOR (chaves de 3 partes, qualquer ano)
   var totA=0, foundA=false;
   for(var _iA=0;_iA<medKeys0.length;_iA++){
     var _pA=medKeys0[_iA].split('|');
     if(_pA.length!==3) continue;
-    if(_pA[0]!==pepRaiz||_pA[2]!==anoStr) continue;
+    if(_pA[0]!==pepRaiz) continue; // não filtra por ano
     if(_pA[1]==='_'||_normEmpStr(_pA[1])===normEmp||matchEmpresa(_pA[1],empresa)||matchEmpresa(empresa,_pA[1])){
       totA+=(STATE.medido[medKeys0[_iA]]||0); foundA=true;
     }
@@ -2869,10 +2870,16 @@ function handleFile(file){
           // chave: PEP|FORN|ANO ou PEP|FORN|ANO|MES
           return {chave:k, valor:medMap[k], sub_pep:pts[0]||'', empresa:pts[1]||'_', ano:parseInt(pts[2])||0};
         });
+        var _savedCount=0, _errCount=0;
         (function saveBatch(i){
-          if(i>=medRows.length) return;
+          if(i>=medRows.length){
+            if(_errCount>0) toast('⚠ '+_errCount+' erros ao salvar medido no Supabase — verifique a tabela','red');
+            else toast('✔ Medido salvo no Supabase: '+_savedCount+' linhas','green');
+            return;
+          }
           supa.from('medido').upsert(medRows.slice(i,i+200),{onConflict:'chave'}).then(function(r){
-            if(r.error){ console.error('Erro ao salvar medido no Supabase:',r.error); toast('⚠ Erro ao salvar medido no Supabase: '+r.error.message,'red'); }
+            if(r.error){ console.error('Erro ao salvar medido:',r.error); _errCount++; }
+            else _savedCount+=medRows.slice(i,i+200).length;
             saveBatch(i+200);
           });
         })(0);
