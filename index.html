@@ -3577,11 +3577,12 @@ function populateMultiSelects(){
   fEmps = fEmps.filter(function(e){ return emps.indexOf(e) >= 0; });
   buildMsDrop('ms-emp', emps, fEmps, onMsChange);
 
-  // ── Squads: filtrado pelos PEPs selecionados (se houver) ──
-  var allSquads = ['BARRAGEM E DIQUES','BRT+FILTRAGEM','CPF','GEOTECNIA','IGARAPÉ BAHIA','MINA','PAULO FONTELES','SLB III','USINAS I E II'];
+  // ── Squads: derivado dinamicamente do REF_SQUADS (evita divergência com nomes hardcoded) ──
+  var allSquads = [...new Set(Object.values(REF_SQUADS).map(function(r){return r.squad;}).filter(Boolean))].sort();
   var squads = fPeps.length ? allSquads.filter(function(sq){
     return fPeps.some(function(p){ return getSquad(p) === sq; });
   }) : allSquads;
+  fSquads = fSquads.filter(function(s){ return allSquads.indexOf(s) >= 0; });
   buildMsDrop('ms-squad', squads, fSquads, onMsChange);
 
   // ── Líderes: filtrado por Squads ativos ──
@@ -3870,7 +3871,7 @@ function renderRegularizar(){
     }))].sort();
     buildMsDrop('ms-reg-pep', allDivPeps, fRegPeps, function(){ onMsChange('ms-reg-pep'); renderRegularizar(); });
 
-    var squads = ['BARRAGEM E DIQUES','BRT+FILTRAGEM','CPF','GEOTECNIA','IGARAPÉ BAHIA','MINA','PAULO FONTELES','SLB III','USINAS I E II'];
+    var squads = [...new Set(Object.values(REF_SQUADS).map(function(r){return r.squad;}).filter(Boolean))].sort();
     buildMsDrop('ms-reg-squad', squads, fRegSquads, function(){ onMsChange('ms-reg-squad'); fRegPeps=[]; fRegEmps=[]; renderRegularizar(); });
 
     var lids = [...new Set(Object.values(REF_SQUADS).map(function(s){return s.lider;}))].filter(Boolean).sort();
