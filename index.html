@@ -539,6 +539,34 @@ input,select,textarea{font-size:16px!important} /* prevent iOS zoom on focus */
   80%{transform:translateX(6px)}
 }
 
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+
+  /* Esconde tudo que não é conteúdo */
+  .sb, .sb-overlay, .sb-toggle,
+  .topbar-actions, #filter-bar,
+  .statusbar-wrap, #refresh-banner,
+  #login-screen, .toast,
+  .mob-menu-btn, #pw-overlay { display: none !important; }
+
+  /* Remove overflow e height fixo do layout */
+  body { display: block !important; overflow: visible !important; height: auto !important; }
+  .main { display: block !important; overflow: visible !important; width: 100% !important; }
+  .content { overflow: visible !important; padding: 0 !important; }
+
+  /* Topbar simples sem botões */
+  .topbar { border: none !important; box-shadow: none !important; padding: 0 0 6px 0 !important; height: auto !important; }
+  .topbar-title { font-size: 14px !important; }
+
+  /* Tabela ocupa toda a largura */
+  .tbl-wrap { max-height: none !important; overflow: visible !important; }
+  table { width: 100% !important; font-size: 9px !important; }
+  thead th { font-size: 8px !important; padding: 4px 5px !important; }
+  td { padding: 3px 5px !important; font-size: 9px !important; }
+
+  /* Evita cortar linhas entre páginas */
+  tr { page-break-inside: avoid; }
+}
 </style>
 <!-- Supabase SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
