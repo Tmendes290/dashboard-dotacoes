@@ -6363,7 +6363,7 @@ function buildMatCharts(data){
 
 function _diasParaEntrega(prevEntrega, situacao){
   var sit = (situacao||'').toLowerCase();
-  if(sit.includes('entregue') || sit.includes('cancelad') || sit.includes('encerrad'))
+  if(sit.includes('entregue') || sit.includes('cancelad') || sit.includes('encerrad') || sit.includes('antecipado'))
     return {txt:'—', color:'#94a3b8', bg:'transparent', fw:'400'};
   if(!prevEntrega || prevEntrega === '—') return {txt:'—', color:'#94a3b8', bg:'transparent', fw:'400'};
   // Parsear DD/MM/YYYY
