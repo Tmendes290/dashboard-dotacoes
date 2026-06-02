@@ -5619,10 +5619,26 @@ function renderSaudePep(){
     return;
   }
 
+  // ── Pré-indexa medido por PEP raiz (3 partes, uma vez só) ─────
+  var _spMedPepIdx = {};
+  _medidoKeys.forEach(function(k){
+    var p = k.split('|');
+    if(p.length !== 3) return;
+    var root = p[0].split('.')[0];
+    if(!_spMedPepIdx[root]) _spMedPepIdx[root] = [];
+    _spMedPepIdx[root].push({wbs:p[0], emp:p[1], ano:p[2], val:medido[k]||0});
+  });
+
+  // ── Pré-indexa capex por PEP (uma vez só) ─────────────────────
+  var _capexByPep = {};
+  capex.forEach(function(r){
+    if(!_capexByPep[r.pep]) _capexByPep[r.pep] = [];
+    _capexByPep[r.pep].push(r);
+  });
+
   // ── Render each PEP collapsed ──────────────────────────────────
   filteredPeps.forEach(function(activePep){
-    var pepCapex = capex.filter(function(r){
-      if(r.pep !== activePep) return false;
+    var pepCapex = (_capexByPep[activePep]||[]).filter(function(r){
       if(fGr  && (!r.grupo || r.grupo.toUpperCase().indexOf(fGr.toUpperCase())<0)) return false;
       var _rEmp2 = r.empresa.toUpperCase();
       if(fEmp && _rEmp2.indexOf(fEmp)<0 && fEmp.indexOf(_rEmp2)<0) return false;
@@ -5650,14 +5666,12 @@ function renderSaudePep(){
     var bodyId    = 'sp-body-'+activePep.replace(/[^a-zA-Z0-9]/g,'_');
     var arrId     = 'sp-arr-'+activePep.replace(/[^a-zA-Z0-9]/g,'_');
 
-    // Medido FP&N CJI3 total — usa só chaves anuais (3 partes) para evitar dupla contagem com mensais
+    // Medido FP&N CJI3 total — usa índice pré-computado por PEP raiz
+    var _spCandidates = _spMedPepIdx[activePep.split('.')[0]] || [];
     var totMedSis = 0;
-    Object.keys(medido).forEach(function(k){
-      var parts = k.split('|');
-      if(parts.length !== 3) return;
-      var sp = parts[0]||'';
-      if(wbsMatchesPep(sp, activePep)){
-        if(!fAno||parts[2]===fAno) totMedSis+=(medido[k]||0);
+    _spCandidates.forEach(function(m){
+      if(wbsMatchesPep(m.wbs, activePep)){
+        if(!fAno||m.ano===fAno) totMedSis += m.val;
       }
     });
 
@@ -5724,15 +5738,11 @@ function renderSaudePep(){
       // Oculta linhas sem atividade financeira real (apenas ajuste de verba)
       if(row.contratado<=0 && row.pago<=0) return;
       var medEmp = 0;
-      Object.keys(medido).forEach(function(k){
-        var parts = k.split('|');
-        if(parts.length !== 3) return; // só chaves anuais, evita dupla contagem com mensais
-        var kSubpep = parts[0]||'';
-        var pepMatch = wbsMatchesPep(kSubpep, activePep);
-        if(!pepMatch) return;
-        if(parts[1]==='_') return;
-        if(empMatch(row.empresa, parts[1])){
-          if(!fAno||parts[2]===fAno) medEmp+=(medido[k]||0);
+      _spCandidates.forEach(function(m){
+        if(!wbsMatchesPep(m.wbs, activePep)) return;
+        if(m.emp==='_') return;
+        if(empMatch(row.empresa, m.emp)){
+          if(!fAno||m.ano===fAno) medEmp += m.val;
         }
       });
       var saldoR = row.contratado - row.pago;
