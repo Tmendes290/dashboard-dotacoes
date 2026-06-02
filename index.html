@@ -1357,12 +1357,13 @@ function getMedido(subpep,empresa,ano,mes){
     }
     return tot0; // 0 se mês sem dado — não cai para anual
   }
-  // Sem filtro de mês → soma anual por FORNECEDOR (chaves de 3 partes, qualquer ano)
+  // Sem filtro de mês → soma anual por FORNECEDOR (chaves de 3 partes, filtra por ano)
   var totA=0, foundA=false;
   for(var _iA=0;_iA<medKeys0.length;_iA++){
     var _pA=medKeys0[_iA].split('|');
     if(_pA.length!==3) continue;
-    if(_pA[0]!==pepRaiz) continue; // não filtra por ano
+    if(_pA[0]!==pepRaiz) continue;
+    if(anoStr && _pA[2]!==anoStr) continue; // filtra pelo ano da dotação
     if(_pA[1]==='_'||_normEmpStr(_pA[1])===normEmp||matchEmpresa(_pA[1],empresa)||matchEmpresa(empresa,_pA[1])){
       totA+=(STATE.medido[medKeys0[_iA]]||0); foundA=true;
     }
