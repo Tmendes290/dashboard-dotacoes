@@ -500,6 +500,66 @@ td{padding:6px 11px;vertical-align:middle}
   .topbar-title{font-size:13px}
 }
 
+/* ═══════════════════════════════════════════════════
+   MOBILE UX — melhorias adicionais
+═══════════════════════════════════════════════════ */
+@media (max-width:768px){
+  /* Topbar: esconde CSV e Excel (não utilizáveis no celular), mantém PDF pequeno */
+  .topbar-actions .btn-orange,
+  .topbar-actions [style*="1D6F42"]{ display:none!important }
+  .topbar-actions .btn-dark{ font-size:10px;padding:5px 8px }
+
+  /* Status bar: oculta no mobile — libera espaço vertical */
+  .statusbar-wrap{ display:none!important }
+
+  /* Multi-select dropdown como bottom-sheet */
+  .ms-drop{
+    position:fixed!important;
+    left:0!important;right:0!important;
+    bottom:0!important;top:auto!important;
+    max-height:65vh!important;
+    border-radius:16px 16px 0 0!important;
+    box-shadow:0 -8px 30px rgba(0,0,0,.3)!important;
+    border:none!important;
+    z-index:2000!important;
+  }
+  .ms-search{ padding:12px 14px!important }
+  .ms-opt{ padding:10px 14px!important;font-size:13px!important }
+  .ms-footer button{ padding:10px!important;font-size:13px!important }
+
+  /* Filtros: permite quebra de linha em vez de scroll horizontal forçado */
+  .filters{ flex-wrap:wrap!important;overflow-x:visible!important }
+
+  /* Saúde do PEP — KPI grid 2 colunas no mobile */
+  .sp-kpi-grid{ grid-template-columns:repeat(2,1fr)!important }
+  .sp-emp-kpi-grid{ grid-template-columns:repeat(2,1fr)!important }
+
+  /* Ajusta combobox dropdown para tela cheia */
+  .cmb-drop{
+    position:fixed!important;
+    left:0!important;right:0!important;
+    top:auto!important;bottom:0!important;
+    border-radius:16px 16px 0 0!important;
+    box-shadow:0 -8px 30px rgba(0,0,0,.3)!important;
+    max-height:65vh!important;
+    z-index:2000!important;
+  }
+  .cmb-list{ max-height:50vh!important }
+
+  /* Tabelas: destaque de scroll */
+  .tbl-wrap::-webkit-scrollbar{ height:3px }
+  .tbl-wrap::-webkit-scrollbar-thumb{ background:var(--acc);border-radius:2px }
+
+  /* Cards da visão geral mais compactos */
+  .split-kv strong{ font-size:12px!important }
+
+  /* Formulário nova dotação */
+  .form-card{ margin:0!important;border-radius:6px!important }
+
+  /* Materiais — filtros em 2 colunas */
+  #v-materiais .filters{ display:grid!important;grid-template-columns:1fr 1fr!important;overflow:visible!important }
+}
+
 
 /* Touch & interaction fixes */
 button,select,.sb-item,.cmb-input,.cmb-opt,.nav-item{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
@@ -5691,7 +5751,7 @@ function renderSaudePep(){
     // Body (collapsed)
     html += '<div id="'+bodyId+'" style="display:none;padding:16px">';
     // KPIs
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px">';
+    html += '<div class="sp-kpi-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px">';
     [{l:'CAPEX Total',v:fmtCapex(totCapexV),c:'#374151'},{l:'Contratado',v:fmtCapex(totCont),c:'#1e40af'},
      {l:'Pago Acumulado',v:fmtCapex(totPagoCx),c:'#991b1b'},{l:'A Contratar',v:fmtCapex(pepCapex.reduce(function(s,r){return s+(r.a_contratar||0);},0)),c:'#7c3aed'},
      {l:'Med. FP&N CJI3',v:fmtK(totMedSis),c:'#065f46'},{l:'Saldo (Cont-Pago)',v:fmtCapex(totSaldo),c:totSaldo>=0?'#065f46':'#dc2626'}]
@@ -5754,7 +5814,7 @@ function renderSaudePep(){
       html += '<div><div style="font-size:12px;font-weight:700">'+row.empresa+(sobreContr?' <span style="font-size:10px;font-weight:700;color:#b45309;background:#fef3c7;padding:1px 6px;border-radius:10px">⚠️ Sobrecontratado</span>':'')+'</div>';
       if(row.grupo) html += '<div style="font-size:10px;color:var(--muted)">'+row.grupo+'</div>';
       html += '</div><div style="font-size:11px;font-weight:700;color:'+(saldoR>=0?'#16a34a':'#dc2626')+'">Saldo: '+fmtCapex(saldoR)+'</div></div>';
-      html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px">';
+      html += '<div class="sp-emp-kpi-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px">';
       var kpis = [
         {l:'Contratado',v:fmtCapex(row.contratado),c:'#1e40af',bg:'#f8fafc'},
         {l:'Pago Acumulado',v:fmtCapex(row.pago),c:'#991b1b',bg:'#f8fafc'},
