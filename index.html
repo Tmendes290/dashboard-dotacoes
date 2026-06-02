@@ -5650,10 +5650,11 @@ function renderSaudePep(){
     var bodyId    = 'sp-body-'+activePep.replace(/[^a-zA-Z0-9]/g,'_');
     var arrId     = 'sp-arr-'+activePep.replace(/[^a-zA-Z0-9]/g,'_');
 
-    // Medido FP&N CJI3 total
+    // Medido FP&N CJI3 total — usa só chaves anuais (3 partes) para evitar dupla contagem com mensais
     var totMedSis = 0;
     Object.keys(medido).forEach(function(k){
       var parts = k.split('|');
+      if(parts.length !== 3) return;
       var sp = parts[0]||'';
       if(wbsMatchesPep(sp, activePep)){
         if(!fAno||parts[2]===fAno) totMedSis+=(medido[k]||0);
@@ -5725,6 +5726,7 @@ function renderSaudePep(){
       var medEmp = 0;
       Object.keys(medido).forEach(function(k){
         var parts = k.split('|');
+        if(parts.length !== 3) return; // só chaves anuais, evita dupla contagem com mensais
         var kSubpep = parts[0]||'';
         var pepMatch = wbsMatchesPep(kSubpep, activePep);
         if(!pepMatch) return;
