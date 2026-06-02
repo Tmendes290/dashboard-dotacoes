@@ -1304,10 +1304,20 @@ function getMedidoKey(subpep,empresa,ano){return `${subpep}|${empresa}|${ano}`;}
 
 // Índice normalizado: chave sem pontuação/espaços extras para tolerar diferenças de formatação
 var _medidoNormIdx = {};
+var _medidoKeys = [];      // cache de Object.keys(STATE.medido) — evita recriar array a cada chamada
+var _medidoPepIdx = {};    // { pepRaiz: [chaves...] } — busca rápida filtrando só pelo PEP correto
 function _buildMedidoNormIdx(){
   _medidoNormIdx = {};
+  _medidoKeys = Object.keys(STATE.medido||{});
+  _medidoPepIdx = {};
   var normEmp = function(e){ return String(e||'').replace(/[.,]/g,'').replace(/\s+/g,' ').trim().toUpperCase(); };
-  Object.keys(STATE.medido||{}).forEach(function(k){
+  _medidoKeys.forEach(function(k){
+    var firstPipe = k.indexOf('|');
+    if(firstPipe > 0){
+      var pepRoot = k.substring(0, firstPipe).split('.')[0];
+      if(!_medidoPepIdx[pepRoot]) _medidoPepIdx[pepRoot] = [];
+      _medidoPepIdx[pepRoot].push(k);
+    }
     var p = k.split('|');
     if(p.length < 3) return;
     var nk = p[0] + '|' + normEmp(p[1]) + '|' + p[2];
@@ -1333,7 +1343,7 @@ function getMedido(subpep,empresa,ano,mes){
 
   // 0. Busca nas chaves novas: PEP|FORNECEDOR|Ano(|Mes)
   // Usa matchEmpresa para tolerar nomes truncados do SAP vs nome completo da dotação
-  var medKeys0 = Object.keys(STATE.medido);
+  var medKeys0 = _medidoPepIdx[pepRaiz] || _medidoKeys;
   if(mes){
     var monStr0 = String(mes).padStart(2,'0');
     var tot0=0;
@@ -1378,7 +1388,7 @@ function getMedido(subpep,empresa,ano,mes){
   // 4. Tenta filhos do WBS (dotação menos específica que medido, ex: G000386 vs G000386.01.01.01)
   var prefix = String(subpep||'');
   var childTotal = 0, childFound = false;
-  var medKeys = Object.keys(STATE.medido);
+  var medKeys = _medidoPepIdx[pepRaiz] || _medidoKeys;
   for(var i=0;i<medKeys.length;i++){
     var p = medKeys[i].split('|');
     if(p.length < 3 || p[2] !== anoStr) continue;
@@ -1677,7 +1687,12 @@ document.querySelectorAll('.sb-item[data-view]').forEach(el=>{
 // ─────────────────────────────────────────────────────────────────
 // RENDER DISPATCHER
 // ─────────────────────────────────────────────────────────────────
+var _renderTimer = null;
 function render(){
+  clearTimeout(_renderTimer);
+  _renderTimer = setTimeout(_renderNow, 80);
+}
+function _renderNow(){
   const dot=filterDot(), res=filterRes();
   updateStatus(dot,res);
   if(currentView==='overview') renderOverview(dot,res);
