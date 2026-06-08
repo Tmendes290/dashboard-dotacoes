@@ -1416,6 +1416,7 @@ _buildMedidoNormIdx(); // Constrói índice normalizado a partir do medido em ca
 let fAno='',fSubpep='',fStatus='';
 let fSquad='',fLider='',fPlanejador='';
 let fMedMes=''; // filtro de mês para o medido no Resumo Sub PEP
+let fFarol=''; // filtro de comprometimento: '' | '75' | '100'
 // Filtros com seleção múltipla
 let fPeps=[],fEmps=[],fSquads=[],fLiders=[],fPlanejadores=[];
 let fRegPeps=[],fRegEmps=[],fRegSquads=[],fRegLiders=[],fRegPlanejadores=[];
@@ -1753,7 +1754,7 @@ function applyFilterSquad(){
 function resetFilter(){
   fSquad='';fLider='';fPlanejador='';
   if(typeof window !== 'undefined') window._anFarolFilter='';
-  fPeps=[];fEmps=[];fSquads=[];fLiders=[];fPlanejadores=[];fStatus='';fAno='';
+  fPeps=[];fEmps=[];fSquads=[];fLiders=[];fPlanejadores=[];fStatus='';fAno='';fFarol='';
   var anoEl=document.getElementById('f-ano'); if(anoEl) anoEl.value='';
   var stEl=document.getElementById('f-status'); if(stEl) stEl.value='';
   populateFilters();
@@ -2206,6 +2207,10 @@ function renderViewResumo(res){
   const mesOpts='<option value="">Todos os meses</option>'+nomesMeses.map((nm,i)=>{const v=String(i+1).padStart(2,'0');return`<option value="${v}"${fMedMes===v?' selected':''}>${nm}</option>`;}).join('');
   const inpSt='padding:6px 10px;border:1px solid var(--bord);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#fff';
 
+  // Aplica filtro de comprometimento
+  if(fFarol==='75') res=res.filter(r=>r.FAROL>=0.75);
+  else if(fFarol==='100') res=res.filter(r=>r.FAROL>=1);
+
   // KPIs
   const totDotado=res.reduce((s,r)=>s+r.TOTAL,0);
   const totMedido=res.reduce((s,r)=>s+r.MEDIDO,0);
@@ -2219,6 +2224,19 @@ function renderViewResumo(res){
     return`<button onclick="setResTab('${t}')" style="padding:10px 20px;border:none;border-bottom:${active?'2px solid #7c3aed':'2px solid transparent'};background:transparent;font-size:13px;font-weight:${active?700:500};color:${active?'#7c3aed':'#64748b'};cursor:pointer;font-family:inherit;margin-bottom:-2px">${lbl}</button>`;
   }).join('');
 
+  // Chips de filtro por comprometimento
+  const farolChips=[
+    {val:'',lbl:'Todos'},
+    {val:'75',lbl:'Crítico ≥75%'},
+    {val:'100',lbl:'Estourado ≥100%'}
+  ].map(c=>{
+    const active=fFarol===c.val;
+    const bg=active?(c.val==='100'?'#dc2626':c.val==='75'?'#f59e0b':'#7c3aed'):'#f1f5f9';
+    const color=active?'#fff':(c.val==='100'?'#dc2626':c.val==='75'?'#b45309':'#64748b');
+    const border=active?'transparent':(c.val==='100'?'#fca5a5':c.val==='75'?'#fcd34d':'#e2e8f0');
+    return`<button onclick="fFarol='${c.val}';render()" style="padding:4px 12px;border-radius:20px;border:1px solid ${border};background:${bg};color:${color};font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s">${c.lbl}</button>`;
+  }).join('');
+
   const content = RES_TAB==='dashboard' ? _resDashHtml(res,totDotado,totMedido,totSaldo,pctGeral) : _resTabelaHtml(res);
 
   el.innerHTML=`<div style="padding:24px">
@@ -2226,6 +2244,10 @@ function renderViewResumo(res){
       <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Mês do Medido:</label>
       <select style="${inpSt}" onchange="fMedMes=this.value;render()">${mesOpts}</select>
       ${fMedMes?`<span style="background:#7c3aed;color:#fff;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700">${nomesMeses[parseInt(fMedMes)-1]}</span>`:''}
+      <div style="display:flex;gap:6px;align-items:center;margin-left:16px">
+        <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;white-space:nowrap">Comprometimento:</label>
+        ${farolChips}
+      </div>
       <span style="margin-left:auto;font-size:11px;color:var(--muted)">${res.length} registros</span>
     </div>
     <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid #e2e8f0">${subTabs}</div>
