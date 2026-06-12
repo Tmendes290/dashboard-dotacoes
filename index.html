@@ -6589,8 +6589,7 @@ function _diasParaEntrega(prevEntrega, situacao){
 }
 
 function _matTabelaHtml(data){
-  var PAGE_SIZE = 100;
-  var rows = data.slice(0, PAGE_SIZE).map(function(r){
+  var rows = data.map(function(r){
     var sitColor = '#64748b';
     var sit = (r.situacao||'').toLowerCase();
     if(sit.includes('entregue')) sitColor='#16a34a';
@@ -6622,9 +6621,7 @@ function _matTabelaHtml(data){
       +'</tr>';
   }).join('');
 
-  var more = data.length > PAGE_SIZE
-    ? '<div style="padding:12px;text-align:center;font-size:12px;color:#64748b;background:#f8fafc;border-top:1px solid #e2e8f0">Exibindo '+PAGE_SIZE+' de '+data.length+' itens — use os filtros para refinar.</div>'
-    : '';
+  var more = '';
 
   return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden">'
     +'<div style="overflow-x:auto">'
