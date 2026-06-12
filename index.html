@@ -1195,6 +1195,7 @@ var STATE_MATERIAIS = JSON.parse(localStorage.getItem('mat_data') || '[]');
 var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], fornecedor:[], squad:[], situacao:[]};
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
+var SP_FAROL = '';
 var RES_TAB = 'dashboard';
 var _matCharts = {};
 
@@ -5709,6 +5710,19 @@ function renderSaudePep(){
     + '</div>'
     + '<div class="ms-drop" id="ms-sp-plan-drop" style="display:none"></div>'
     + '</div></div>';
+  // Farol chips
+  var farolOpts = [
+    {val:'', lbl:'Todos', color:'#64748b', bg:'#f1f5f9'},
+    {val:'normal',  lbl:'🟢 Normal',  color:'#16a34a', bg:'#dcfce7'},
+    {val:'atencao', lbl:'🟡 Atenção', color:'#d97706', bg:'#fef9c3'},
+    {val:'critico', lbl:'🔴 Crítico', color:'#dc2626', bg:'#fee2e2'}
+  ];
+  html += '<div class="fg" style="flex-direction:column;gap:4px"><label>Status</label><div style="display:flex;gap:5px;flex-wrap:wrap">';
+  farolOpts.forEach(function(o){
+    var active = SP_FAROL === o.val;
+    html += '<button onclick="SP_FAROL=\''+o.val+'\';renderSaudePep()" style="padding:5px 10px;border:1px solid '+(active?o.color:'#e2e8f0')+';border-radius:20px;background:'+(active?o.bg:'#fff')+';color:'+(active?o.color:'#64748b')+';font-size:11px;font-weight:'+(active?'700':'500')+';cursor:pointer;white-space:nowrap">'+o.lbl+'</button>';
+  });
+  html += '</div></div>';
   // Limpar
   html += '<div class="fg"><label style="opacity:0">x</label><button onclick="spClear()" class="btn btn-outline">↺ Limpar</button></div>';
   html += '</div>';
@@ -5751,7 +5765,7 @@ function renderSaudePep(){
   if(!filteredPeps.length){
     html += '<div style="text-align:center;padding:40px;color:var(--muted)">Nenhum projeto encontrado.</div></div>';
     el.innerHTML = html;
-    spInitCombos(fPep, fEmp, allPeps);
+    spInitCombos(fEmp, allPeps);
     return;
   }
 
@@ -5799,6 +5813,8 @@ function renderSaudePep(){
     var farolTxt  = pctUsado<80?'Normal':pctUsado<100?'Atenção':'Crítico';
     var nSobreContr = pepCapex.filter(function(r){return r.contratado>0 && r.a_contratar<0;}).length;
     var hasProb   = totSaldo < 0 || pctUsado >= 80 || nSobreContr > 0;
+    var farolKey  = pctUsado<80?'normal':pctUsado<100?'atencao':'critico';
+    if(SP_FAROL && farolKey !== SP_FAROL) return;
     var bodyId    = 'sp-body-'+activePep.replace(/[^a-zA-Z0-9]/g,'_');
     var arrId     = 'sp-arr-'+activePep.replace(/[^a-zA-Z0-9]/g,'_');
 
@@ -5928,7 +5944,7 @@ function renderSaudePep(){
 
   html += '</div>';
   el.innerHTML = html;
-  spInitCombos(fPep, fEmp, allPeps);
+  spInitCombos(fEmp, allPeps);
 
   // ── Render Charts ──────────────────────────────────────────────
   setTimeout(function(){
@@ -5969,7 +5985,7 @@ function renderSaudePep(){
   }, 100);
 }
 
-function spInitCombos(fPep, fEmp, allPeps){
+function spInitCombos(fEmp, allPeps){
   setTimeout(function(){
     var capex = STATE.capex || [];
     var fGrEl = document.getElementById('sp-grupo');
@@ -6066,6 +6082,7 @@ function spClear(){
   clearMs('ms-sp-lider');
   clearMs('ms-sp-plan');
   fPeps=[]; fSquads=[]; fLiders=[]; fPlanejadores=[];
+  SP_FAROL='';
   renderSaudePep();
 }
 
