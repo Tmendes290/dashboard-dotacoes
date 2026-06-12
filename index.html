@@ -3632,7 +3632,8 @@ function updateMsLabel(id, selected){
     'ms-mat-projeto': 'Todos os Projetos...',
     'ms-mat-fornecedor': 'Todos os Fornecedores...',
     'ms-mat-squad': 'Todos os Squads',
-    'ms-mat-situacao': 'Todas as Situações'
+    'ms-mat-situacao': 'Todas as Situações',
+    'ms-sp-pep': 'Todos os PEPs...'
   };
   if(selected.length === 0){
     label.textContent = defaults[id] || 'Todos';
@@ -5636,7 +5637,6 @@ function renderSaudePep(){
   var fLdEl  = document.getElementById('sp-lider');
   var fPlEl  = document.getElementById('sp-plan');
   var fGrEl  = document.getElementById('sp-grupo');
-  var fPepEl = document.getElementById('sp-pep-cmb-inp');
 
   var fAno = fAnoEl ? fAnoEl.value.trim() : '';
   var fEmp = fEmpEl ? (fEmpEl.dataset && fEmpEl.dataset.val ? fEmpEl.dataset.val.toUpperCase() : fEmpEl.value.toUpperCase()) : '';
@@ -5644,7 +5644,6 @@ function renderSaudePep(){
   var fLd  = '';
   var fPl  = '';
   var fGr  = fGrEl  ? fGrEl.value.trim()  : '';
-  var fPep = fPepEl ? (fPepEl.dataset && fPepEl.dataset.val ? fPepEl.dataset.val.trim() : '') : '';
 
   // ── Build filter bar ───────────────────────────────────────────
   var years = [];
@@ -5667,8 +5666,15 @@ function renderSaudePep(){
   html += '<option value="">Todos</option>';
   years.forEach(function(y){ html += '<option value="'+y+'"'+(fAno===y?' selected':'')+'>'+y+'</option>'; });
   html += '</select></div>';
-  // PEP combobox (same style as other tabs)
-  html += '<div class="fg" style="min-width:180px"><label>PEP</label><div class="cmb-wrap" id="sp-pep-cmb"></div></div>';
+  // PEP multi-select
+  html += '<div class="fg" style="min-width:180px"><label>PEP</label>'
+    + '<div class="ms-wrap" id="ms-sp-pep">'
+    + '<div class="ms-input" onclick="toggleMs(\'ms-sp-pep\')">'
+    + '<span class="ms-label" id="ms-sp-pep-label">Todos os PEPs...</span>'
+    + '<span style="color:var(--muted);font-size:10px">▾</span>'
+    + '</div>'
+    + '<div class="ms-drop" id="ms-sp-pep-drop" style="display:none"></div>'
+    + '</div></div>';
   // Empresa combobox (same style as other tabs)
   html += '<div class="fg" style="min-width:180px"><label>Empresa</label><div class="cmb-wrap" id="sp-emp-cmb"></div></div>';
   // Grupo
@@ -5720,7 +5726,6 @@ function renderSaudePep(){
   var filteredPeps = allPeps.filter(function(p){
     var sq = getSquad(p), ld = getLider(p), pl = getPlanejador(p);
     // Local Saúde do PEP filters
-    if(fPep && p !== fPep) return false;
     if(fSq  && sq !== fSq) return false;
     if(fLd  && ld !== fLd) return false;
     if(fPl  && pl !== fPl) return false;
@@ -5991,13 +5996,15 @@ function spInitCombos(fPep, fEmp, allPeps){
       pepItems.push({value: p, label: p, sub: ref ? ref[1] || '' : ''});
     });
     pepItems.sort(function(a,b){ return a.label.localeCompare(b.label); });
-    initCombo('sp-pep-cmb', pepItems, 'Todos os PEPs...', function(){ renderSaudePep(); }, fPep);
+    var pepVals = pepItems.map(function(p){ return p.value; });
+    buildMsDrop('ms-sp-pep', pepVals, fPeps, function(){ onMsChange('ms-sp-pep'); renderSaudePep(); });
+    updateMsLabel('ms-sp-pep', fPeps);
 
     // ── Empresa list: filtrada por PEP/Squad/Lider/Planejador/Grupo ativos ──
     var empSet = {};
     capex.forEach(function(d){
       if(!d.empresa) return;
-      if(fPep && d.pep !== fPep) return;
+      if(fPeps.length && fPeps.indexOf(d.pep) < 0) return;
       if(fSquads.length || fLiders.length || fPlanejadores.length){
         var sq2 = getSquad(d.pep), ld2 = getLider(d.pep), pl2 = getPlanejador(d.pep);
         if(fSquads.length && fSquads.indexOf(sq2) < 0) return;
@@ -6011,7 +6018,7 @@ function spInitCombos(fPep, fEmp, allPeps){
     initCombo('sp-emp-cmb', empItems, 'Buscar empresa...', function(){ renderSaudePep(); }, fEmp);
 
     // ── Squad/Lider/Planejador: filtrado pelo PEP selecionado (se houver) ──
-    var pepScope = fPep ? [fPep] : allPeps;
+    var pepScope = fPeps.length ? fPeps : allPeps;
     var sqSet = {}, ldSet = {}, plSet = {};
     pepScope.forEach(function(p){
       var sq3 = getSquad(p), ld3 = getLider(p), pl3 = getPlanejador(p);
@@ -6052,14 +6059,13 @@ function spSquadChange(){
 function spClear(){
   var fAnoEl = document.getElementById('sp-ano'); if(fAnoEl) fAnoEl.value = '';
   var fGrEl  = document.getElementById('sp-grupo'); if(fGrEl) fGrEl.value = '';
-  ['sp-pep-cmb-inp','sp-emp-cmb-inp'].forEach(function(id){
-    var inp = document.getElementById(id);
-    if(inp){ inp.value=''; if(inp.dataset){inp.dataset.val='';inp.dataset.lbl='';} }
-  });
+  var empInp = document.getElementById('sp-emp-cmb-inp');
+  if(empInp){ empInp.value=''; if(empInp.dataset){empInp.dataset.val='';empInp.dataset.lbl='';} }
+  clearMs('ms-sp-pep');
   clearMs('ms-sp-squad');
   clearMs('ms-sp-lider');
   clearMs('ms-sp-plan');
-  fSquads=[]; fLiders=[]; fPlanejadores=[];
+  fPeps=[]; fSquads=[]; fLiders=[]; fPlanejadores=[];
   renderSaudePep();
 }
 
