@@ -1194,6 +1194,7 @@ function loadState(){
 var STATE_MATERIAIS = JSON.parse(localStorage.getItem('mat_data') || '[]');
 var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], fornecedor:[], squad:[], situacao:[]};
 var MAT_TAB = 'dashboard';
+var MAT_VALORES_VISIVEIS = true;
 var RES_TAB = 'dashboard';
 var _matCharts = {};
 
@@ -6153,9 +6154,15 @@ function fmtMatDate(val){
 }
 
 function fmtMatCurrency(val){
+  if(!MAT_VALORES_VISIVEIS) return '<span style="letter-spacing:2px;color:#94a3b8">••••••</span>';
   var n = parseFloat(String(val).replace(',','.'));
   if(isNaN(n)) return '—';
   return n.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+}
+
+function toggleMatValores(){
+  MAT_VALORES_VISIVEIS = !MAT_VALORES_VISIVEIS;
+  renderMateriais();
 }
 
 function clearMatFilters(){
@@ -6373,7 +6380,14 @@ function renderMateriais(){
     + msWrap('ms-mat-squad','Squad',150)
     + msWrap('ms-mat-situacao','Situação',160)
     + (hasFilters ? '<button class="btn btn-outline" onclick="clearMatFilters()" style="margin-top:18px">↺ Limpar</button>' : '')
-    + '<div style="margin-left:auto;margin-top:18px;font-size:11px;color:var(--muted)">'+data.length+' de '+all.length+' itens</div>'
+    + '<div style="margin-left:auto;margin-top:18px;display:flex;align-items:center;gap:10px">'
+    +   '<button onclick="toggleMatValores()" title="'+(MAT_VALORES_VISIVEIS?'Ocultar valores':'Exibir valores')+'" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:15px;line-height:1;color:#64748b;display:flex;align-items:center">'
+    +     (MAT_VALORES_VISIVEIS
+          ? '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
+          : '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>')
+    +   '</button>'
+    +   '<span style="font-size:11px;color:var(--muted)">'+data.length+' de '+all.length+' itens</span>'
+    + '</div>'
     + '</div>';
 
   var subTabs =
@@ -6434,7 +6448,7 @@ function _matDashHtml(data){
   var cards = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">'
     + _matCard('🗂','Pedidos',totalPedidos,'#2563eb')
     + _matCard('📋','RCs',totalRCs,'#7c3aed')
-    + _matCard('💰','Valor Total',valorTotal.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),'#16a34a')
+    + _matCard('💰','Valor Total',MAT_VALORES_VISIVEIS ? valorTotal.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : '<span style="letter-spacing:3px;color:#94a3b8">••••••</span>','#16a34a')
     + _matCard('✅','% Entregues',pctEntregue+'%','#0891b2')
     + '</div>';
 
