@@ -6272,6 +6272,14 @@ function setMatTab(tab){ MAT_TAB = tab; MAT_PAGE = 1; renderMateriais(); }
 
 function matGoPage(p){ MAT_PAGE = p; renderMateriais(); }
 
+function matProjetoSearchUpdate(val){
+  MAT_FILTERS.projetoSearch = val;
+  MAT_PAGE = 1;
+  renderMateriais();
+  var inp = document.querySelector('#v-materiais [data-mat-focus="projetoSearch"]');
+  if(inp){ inp.focus(); var l = inp.value.length; inp.setSelectionRange(l, l); }
+}
+
 function _matRowPasses(r, skip){
   if(skip!=='pedido'    && MAT_FILTERS.pedido.length    && MAT_FILTERS.pedido.indexOf(String(r.pedido)) < 0) return false;
   if(skip!=='rc'        && MAT_FILTERS.rc.length        && MAT_FILTERS.rc.indexOf(String(r.rc)) < 0) return false;
@@ -6498,8 +6506,9 @@ function renderMateriais(){
     + msWrap('ms-mat-projeto','Projeto',190)
     + '<div class="fg" style="min-width:180px"><label>🔍 Busca no Projeto</label>'
     +   '<input type="text" placeholder="Ex: LM-0101SA-J-00003..." value="'+escHtml(MAT_FILTERS.projetoSearch||'')+'"'
+    +   ' data-mat-focus="projetoSearch"'
     +   ' style="'+inpSt+'width:100%;box-sizing:border-box"'
-    +   ' oninput="MAT_FILTERS.projetoSearch=this.value;MAT_PAGE=1;renderMateriais()">'
+    +   ' oninput="matProjetoSearchUpdate(this.value)">'
     + '</div>'
     + msWrap('ms-mat-fornecedor','Fornecedor',200)
     + msWrap('ms-mat-squad','Squad',150)
