@@ -1929,14 +1929,12 @@ function renderOverview(dot,res){
   var el=document.getElementById('v-overview');
   if(!STATE_LOADED_AT) STATE_LOADED_AT=new Date();
 
-  // Dotacoes metrics
   var aprov=dot.filter(function(d){return d.STATUS==='Aprovada';});
   var tAprov=aprov.reduce(function(s,d){return s+d.TOTAL;},0);
   var tMedido=res.reduce(function(s,r){return s+r.MEDIDO;},0);
   var over=res.filter(function(r){return r.FAROL>=1;});
   var pctM=tAprov>0?Math.round(tMedido/tAprov*100):0;
 
-  // CAPEX metrics
   var cpx=STATE.capex||[];
   function _isAlert(r){return ((!r.contratado||r.contratado===0)&&r.pago>0.001)||(r.a_pagar<-0.001);}
   var cpxAlertas=cpx.filter(_isAlert);
@@ -1945,28 +1943,22 @@ function renderOverview(dot,res){
   var tAPagar=cpx.reduce(function(s,r){return s+(r.a_pagar>0?r.a_pagar:0);},0);
   var pctPago=tCont>0?Math.round(tPago/tCont*100):0;
 
-  // Sub PEP
   var subSaudavel=res.filter(function(r){return r.FAROL<0.75;}).length;
   var subCrit=res.filter(function(r){return r.FAROL>=0.75&&r.FAROL<1;}).length;
   var subOver=over.length;
   var nSubCrit=subCrit+subOver;
+  var nOver=over.length;
+  var nCpxAlerta=cpxAlertas.length;
 
-  // Materiais
   var mats=STATE_MATERIAIS||[];
   var matPeps=[...new Set(mats.map(function(m){return m.pep;}))].filter(Boolean).length;
   var matFornecs=[...new Set(mats.map(function(m){return m.fornecedor;}))].filter(Boolean).length;
 
-  // Alert counts
-  var nOver=over.length;
-  var nCpxAlerta=cpxAlertas.length;
-
-  // Timestamp
   var upd=STATE_LOADED_AT
     ?STATE_LOADED_AT.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})
      +' '+STATE_LOADED_AT.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
-    :'â€”';
+    :'--';
 
-  // Helpers
   function bar(pct,color){
     return '<div style="height:3px;background:#e2e8f0;border-radius:2px;margin:5px 0 3px;overflow:hidden">'
           +'<div style="height:100%;width:'+Math.min(pct,100)+'%;background:'+color+';border-radius:2px"></div></div>';
@@ -2034,130 +2026,109 @@ function renderOverview(dot,res){
   }
 
   el.innerHTML=
-    // â”€â”€ HEADER â”€â”€
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
       +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;display:flex;align-items:center;gap:8px">'
         +'<span style="display:block;width:3px;height:14px;background:#002F6C;border-radius:2px"></span>Resumo financeiro'
       +'</span>'
-      +'<span style="font-size:10px;color:#94a3b8">Atualizado em tempo real Â· Supabase</span>'
+      +'<span style="font-size:10px;color:#94a3b8">Atualizado em tempo real &middot; Supabase</span>'
     +'</div>'
-    // â”€â”€ KPI STRIP â”€â”€
     +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">'
-      +kpi('DotaÃ§Ãµes','ðŸ“‹','#e0f2fe',fmtK(tAprov),'#002F6C',pctM,'#0ea5e9',pctM+'% medido','#e0f2fe','#0369a1')
-      +kpi('CAPEX Contratado','ðŸ—ï¸','#eef2ff',fmtK(tCont),'#4f46e5',pctPago,'#4f46e5',fmtK(tPago)+' pago','#eef2ff','#4f46e5')
-      +kpi('Medido Total','ðŸ“Š','#f0fdf4',fmtK(tMedido),'#16a34a',pctM,'#16a34a',pctM+'% dotado','#f0fdf4','#16a34a')
-      +kpi('Irregularidades','âš ï¸','#fef2f2',(nOver+nCpxAlerta)+'','#dc2626',Math.min((nOver+nCpxAlerta)*3,100),'#dc2626',nOver+' dotaÃ§Ãµes Â· '+nCpxAlerta+' CAPEX','#fef2f2','#dc2626',(nOver>0||nCpxAlerta>0)?'#fca5a5':undefined)
-      +kpi('Materiais','ðŸ“¦','#fffbeb',mats.length.toLocaleString('pt-BR'),'#d97706',80,'#d97706',matPeps+' PEPs Â· '+matFornecs+' fornec.','#fffbeb','#d97706')
+      +kpi('Dota&ccedil;&otilde;es','&#x1F4CB;','#e0f2fe',fmtK(tAprov),'#002F6C',pctM,'#0ea5e9',pctM+'% medido','#e0f2fe','#0369a1')
+      +kpi('CAPEX Contratado','&#x1F3D7;','#eef2ff',fmtK(tCont),'#4f46e5',pctPago,'#4f46e5',fmtK(tPago)+' pago','#eef2ff','#4f46e5')
+      +kpi('Medido Total','&#x1F4C8;','#f0fdf4',fmtK(tMedido),'#16a34a',pctM,'#16a34a',pctM+'% dotado','#f0fdf4','#16a34a')
+      +kpi('Irregularidades','&#x26A0;','#fef2f2',(nOver+nCpxAlerta)+'','#dc2626',Math.min((nOver+nCpxAlerta)*3,100),'#dc2626',nOver+' dot. &middot; '+nCpxAlerta+' CAPEX','#fef2f2','#dc2626',(nOver>0||nCpxAlerta>0)?'#fca5a5':undefined)
+      +kpi('Materiais','&#x1F4E6;','#fffbeb',mats.length.toLocaleString('pt-BR'),'#d97706',80,'#d97706',matPeps+' PEPs &middot; '+matFornecs+' fornec.','#fffbeb','#d97706')
     +'</div>'
-    // â”€â”€ ALERT STRIP â”€â”€
     +'<div style="background:#fff;border:1px solid #e2e8f0;border-left:3px solid #d97706;border-radius:0 12px 12px 0;padding:12px 18px;margin-bottom:20px;display:flex;align-items:center;gap:14px;box-shadow:0 1px 4px rgba(0,0,0,.04)">'
-      +'<div style="font-size:20px">ðŸ””</div>'
+      +'<div style="font-size:20px">&#x1F514;</div>'
       +'<div>'
-        +'<div style="color:#d97706;font-size:11px;font-weight:700;font-family:\'Share Tech Mono\',monospace;letter-spacing:.3px">AÃ‡Ã•ES NECESSÃRIAS</div>'
-        +'<div style="color:#64748b;font-size:10px;margin-top:1px">Clique para navegar direto Ã  lista filtrada</div>'
+        +'<div style="color:#d97706;font-size:11px;font-weight:700;font-family:\'Share Tech Mono\',monospace;letter-spacing:.3px">A&Ccedil;&Otilde;ES NECESS&Aacute;RIAS</div>'
+        +'<div style="color:#64748b;font-size:10px;margin-top:1px">Clique para navegar direto &agrave; lista filtrada</div>'
       +'</div>'
       +'<div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">'
-        +(nOver>0?chip(nOver,'DotaÃ§Ãµes estouradas','Comprometido â‰¥ 100%','#fef2f2','#fca5a5','#dc2626',"setView('dotacoes')"):'')
-        +(nCpxAlerta>0?chip(nCpxAlerta,'Irregularidades CAPEX','A Pagar negativo Â· Pago &gt; CAPEX','#fffbeb','#fcd34d','#d97706',"CAPEX_TAB='tabela';setView('alertas')"):'')
-        +(nSubCrit>0?chip(nSubCrit,'Sub PEPs crÃ­ticos','Comprometido â‰¥ 75%','#e0f2fe','#7dd3fc','#0369a1',"setView('resumo')"):'')
-        +((nOver===0&&nCpxAlerta===0&&nSubCrit===0)?'<div style="font-size:11px;color:#16a34a;font-weight:600">âœ… Nenhuma irregularidade detectada</div>':'')
+        +(nOver>0?chip(nOver,'Dota&ccedil;&otilde;es estouradas','Comprometido &ge; 100%','#fef2f2','#fca5a5','#dc2626',"setView('dotacoes')"):'')
+        +(nCpxAlerta>0?chip(nCpxAlerta,'Irregularidades CAPEX','A Pagar negativo &middot; Pago &gt; CAPEX','#fffbeb','#fcd34d','#d97706',"CAPEX_TAB='tabela';setView('alertas')"):'')
+        +(nSubCrit>0?chip(nSubCrit,'Sub PEPs cr&iacute;ticos','Comprometido &ge; 75%','#e0f2fe','#7dd3fc','#0369a1',"setView('resumo')"):'')
+        +((nOver===0&&nCpxAlerta===0&&nSubCrit===0)?'<div style="font-size:11px;color:#16a34a;font-weight:600">&#x2705; Nenhuma irregularidade detectada</div>':'')
       +'</div>'
     +'</div>'
-    // â”€â”€ MODULES HEADER â”€â”€
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
       +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;display:flex;align-items:center;gap:8px">'
-        +'<span style="display:block;width:3px;height:14px;background:#002F6C;border-radius:2px"></span>Ferramentas disponÃ­veis'
+        +'<span style="display:block;width:3px;height:14px;background:#002F6C;border-radius:2px"></span>Ferramentas dispon&iacute;veis'
       +'</span>'
       +'<span style="font-size:10px;color:#94a3b8">Clique para acessar</span>'
     +'</div>'
-    // â”€â”€ MODULES GRID â”€â”€
     +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">'
-
-      // 1 Dotacoes
-      +card('#e0f2fe','#0369a1','ðŸ“‹',aprov.length+' registros','#e0f2fe','#0369a1',
-        'DotaÃ§Ãµes','GestÃ£o orÃ§amentÃ¡ria por PEP e empresa com farol de comprometimento.',
+      +card('#e0f2fe','#0369a1','&#x1F4CB;',aprov.length+' registros','#e0f2fe','#0369a1',
+        'Dota&ccedil;&otilde;es','Gest&atilde;o or&ccedil;ament&aacute;ria por PEP e empresa com farol de comprometimento.',
         mrow('Total dotado','<span style="color:#002F6C">'+fmtK(tAprov)+'</span>')
         +bar(pctM,'#0ea5e9')
         +mrow('Medido',fmtK(tMedido)+' <span style="color:#94a3b8;font-size:10px">'+pctM+'%</span>')
         +mrow(dotDot('#ef4444')+' Estouradas','<span style="color:#dc2626">'+nOver+'</span>'),
-        foot(aprov.length+' aprovadas','Acessar â†’','#002F6C',"setView('dotacoes')")
+        foot(aprov.length+' aprovadas','Acessar &rarr;','#002F6C',"setView('dotacoes')")
       )
-
-      // 2 Capex Projetos
-      +card('#eef2ff','#4f46e5','ðŸ—ï¸',
+      +card('#eef2ff','#4f46e5','&#x1F3D7;',
         nCpxAlerta>0?nCpxAlerta+' irregulares':'atualizado',
         nCpxAlerta>0?'#fee2e2':'#eef2ff',
         nCpxAlerta>0?'#dc2626':'#4f46e5',
-        'Capex Projetos','CAPEX por PEP: contratado, pago e desvios com grÃ¡ficos de avanÃ§o.',
+        'Capex Projetos','CAPEX por PEP: contratado, pago e desvios com gr&aacute;ficos de avan&ccedil;o.',
         mrow('Contratado','<span style="color:#4f46e5">'+fmtK(tCont)+'</span>')
         +bar(pctPago,'#4f46e5')
         +mrow('Pago',fmtK(tPago)+' <span style="color:#94a3b8;font-size:10px">'+pctPago+'%</span>')
         +mrow(dotDot('#f59e0b')+' A pagar','<span style="color:#d97706">'+fmtK(tAPagar)+'</span>'),
-        foot(pctPago+'% realizado','Acessar â†’','#4f46e5',"setView('alertas')")
+        foot(pctPago+'% realizado','Acessar &rarr;','#4f46e5',"setView('alertas')")
       )
-
-      // 3 Resumo Sub PEP
-      +card('#f0fdfa','#0d9488','ðŸ“‰',
-        nSubCrit>0?nSubCrit+' crÃ­ticos':'saudÃ¡vel',
+      +card('#f0fdfa','#0d9488','&#x1F4C9;',
+        nSubCrit>0?nSubCrit+' cr&iacute;ticos':'saud&aacute;vel',
         nSubCrit>0?'#fef3c7':'#f0fdfa',
         nSubCrit>0?'#d97706':'#0d9488',
         'Resumo Sub PEP','Comprometimento por Sub PEP com farol de criticidade e filtro por empresa.',
-        mrow(dotDot('#22c55e')+' SaudÃ¡veis','<span style="color:#16a34a">'+subSaudavel+'</span>')
-        +mrow(dotDot('#f59e0b')+' CrÃ­ticos â‰¥75%','<span style="color:#d97706">'+subCrit+'</span>')
-        +mrow(dotDot('#ef4444')+' Estourados â‰¥100%','<span style="color:#dc2626">'+subOver+'</span>'),
-        foot(res.length+' sub PEPs','Acessar â†’','#0d9488',"setView('resumo')")
+        mrow(dotDot('#22c55e')+' Saud&aacute;veis','<span style="color:#16a34a">'+subSaudavel+'</span>')
+        +mrow(dotDot('#f59e0b')+' Cr&iacute;ticos &ge;75%','<span style="color:#d97706">'+subCrit+'</span>')
+        +mrow(dotDot('#ef4444')+' Estourados &ge;100%','<span style="color:#dc2626">'+subOver+'</span>'),
+        foot(res.length+' sub PEPs','Acessar &rarr;','#0d9488',"setView('resumo')")
       )
-
-      // 4 Dashboard Medido
-      +card('#f0fdf4','#16a34a','ðŸ“ˆ','atualizado','#f0fdf4','#16a34a',
-        'Dashboard','Dotado vs medido por empresa e PEP com filtro por mÃªs e comprometimento.',
+      +card('#f0fdf4','#16a34a','&#x1F4C8;','atualizado','#f0fdf4','#16a34a',
+        'Dashboard','Dotado vs medido por empresa e PEP com filtro por m&ecirc;s e comprometimento.',
         mrow('Total dotado','<span style="color:#16a34a">'+fmtK(tAprov)+'</span>')
         +bar(pctM,'#16a34a')
         +mrow('Medido',fmtK(tMedido)+' <span style="color:#94a3b8;font-size:10px">'+pctM+'%</span>')
         +mrow('Registros',dot.length+''),
-        foot(res.length+' linhas','Acessar â†’','#16a34a',"setView('analytics')")
+        foot(res.length+' linhas','Acessar &rarr;','#16a34a',"setView('analytics')")
       )
-
-      // 5 Saude do PEP
-      +card('#f5f3ff','#7c3aed','ðŸ©º','anÃ¡lise CAPEX','#f5f3ff','#7c3aed',
-        'SaÃºde do PEP','Score financeiro por PEP: desvio, distribuiÃ§Ã£o de contratos e nÃ­vel de risco.',
-        mrow(dotDot('#22c55e')+' SaudÃ¡veis','<span style="color:#16a34a">'+Math.round(subSaudavel/Math.max(res.length,1)*100)+'%</span>')
-        +mrow(dotDot('#f59e0b')+' AtenÃ§Ã£o','<span style="color:#d97706">'+Math.round(subCrit/Math.max(res.length,1)*100)+'%</span>')
-        +mrow(dotDot('#ef4444')+' CrÃ­ticos','<span style="color:#dc2626">'+Math.round(subOver/Math.max(res.length,1)*100)+'%</span>'),
-        foot('Por PEP','Acessar â†’','#7c3aed',"setView('saude-pep')")
+      +card('#f5f3ff','#7c3aed','&#x1FA7A;','an&aacute;lise CAPEX','#f5f3ff','#7c3aed',
+        'Sa&uacute;de do PEP','Score financeiro por PEP: desvio, distribui&ccedil;&atilde;o de contratos e n&iacute;vel de risco.',
+        mrow(dotDot('#22c55e')+' Saud&aacute;veis','<span style="color:#16a34a">'+Math.round(subSaudavel/Math.max(res.length,1)*100)+'%</span>')
+        +mrow(dotDot('#f59e0b')+' Aten&ccedil;&atilde;o','<span style="color:#d97706">'+Math.round(subCrit/Math.max(res.length,1)*100)+'%</span>')
+        +mrow(dotDot('#ef4444')+' Cr&iacute;ticos','<span style="color:#dc2626">'+Math.round(subOver/Math.max(res.length,1)*100)+'%</span>'),
+        foot('Por PEP','Acessar &rarr;','#7c3aed',"setView('saude-pep')")
       )
-
-      // 6 Materiais
-      +card('#fffbeb','#d97706','ðŸ“¦',
+      +card('#fffbeb','#d97706','&#x1F4E6;',
         mats.length?mats.length.toLocaleString('pt-BR')+' itens':'sem dados',
         '#fffbeb','#d97706',
-        'Materiais','Controle de materiais e serviÃ§os por empresa, PEP e categoria.',
+        'Materiais','Controle de materiais e servi&ccedil;os por empresa, PEP e categoria.',
         mrow('Total de itens','<span style="color:#d97706">'+mats.length.toLocaleString('pt-BR')+'</span>')
         +bar(mats.length>0?80:0,'#d97706')
         +mrow('PEPs cobertos',matPeps+'')
         +mrow('Fornecedores',matFornecs+''),
-        foot('SAP / Upload','Acessar â†’','#d97706',"setView('materiais')")
+        foot('SAP / Upload','Acessar &rarr;','#d97706',"setView('materiais')")
       )
-
-      // 7 Nova Dotacao
-      +card('#fff1f2','#e11d48','âž•','aÃ§Ã£o rÃ¡pida','#f0fdf4','#16a34a',
-        'Nova DotaÃ§Ã£o','Crie uma nova dotaÃ§Ã£o vinculada a PEP, empresa e sub PEP via formulÃ¡rio guiado.',
+      +card('#fff1f2','#e11d48','&#x2795;','a&ccedil;&atilde;o r&aacute;pida','#f0fdf4','#16a34a',
+        'Nova Dota&ccedil;&atilde;o','Crie uma nova dota&ccedil;&atilde;o vinculada a PEP, empresa e sub PEP via formul&aacute;rio guiado.',
         mrow('Total cadastradas',dot.length+'')
         +mrow('Aprovadas',aprov.length+''),
-        foot('FormulÃ¡rio guiado','+ Criar â†’','#e11d48',"setView('nova')")
+        foot('Formul&aacute;rio guiado','+ Criar &rarr;','#e11d48',"setView('nova')")
       )
-
-      // 8 Gestao
-      +card('#f8fafc','#475569','âš™ï¸','admin','#f1f5f9','#475569',
-        'GestÃ£o & Config','Regularizar saldo, atualizar medido e configuraÃ§Ãµes gerais do sistema.',
+      +card('#f8fafc','#475569','&#x2699;','admin','#f1f5f9','#475569',
+        'Gest&atilde;o &amp; Config','Regularizar saldo, atualizar medido e configura&ccedil;&otilde;es gerais do sistema.',
         mrow('Regularizar saldo','<span style="color:#0ea5e9">Acessar</span>')
         +mrow('Upload medido','<span style="color:#0ea5e9">Acessar</span>')
-        +mrow('UsuÃ¡rios','<span style="color:#0ea5e9">Acessar</span>'),
-        foot('AdministraÃ§Ã£o','Acessar â†’','#64748b',"setView('regularizar')")
+        +mrow('Usu&aacute;rios','<span style="color:#0ea5e9">Acessar</span>'),
+        foot('Administra&ccedil;&atilde;o','Acessar &rarr;','#64748b',"setView('regularizar')")
       )
-
     +'</div>';
 }
+
 
 
 function destroyChart(id){
