@@ -6283,7 +6283,14 @@ function _matRowPasses(r, skip){
     var dm = r.prevEntrega||''; if(dm.length < 5 || dm.substring(3,5) !== MAT_FILTERS.mes) return false;
   }
   if(skip!=='projeto' && MAT_FILTERS.projeto.length){
-    var pepOk = r.pep && MAT_FILTERS.projeto.some(function(fp){ return fp === r.pep || fp.indexOf(r.pep + ' ') === 0; });
+    var rPep = (r.pep && /^[A-Za-z][0-9]/.test(r.pep)) ? r.pep
+             : (r.projeto||'').includes(' — ') ? (r.projeto||'').split(' — ')[0].trim()
+             : (r.projeto||'').includes(' - ')  ? (r.projeto||'').split(' - ')[0].trim()
+             : r.projeto || '';
+    var pepOk = MAT_FILTERS.projeto.some(function(fp){
+      var fpPep = fp.includes(' — ') ? fp.split(' — ')[0].trim() : fp;
+      return fpPep === rPep;
+    });
     if(!pepOk) return false;
   }
   if(skip!=='fornecedor'&& MAT_FILTERS.fornecedor.length&& MAT_FILTERS.fornecedor.indexOf(r.fornecedor) < 0) return false;
@@ -6432,11 +6439,21 @@ function renderMateriais(){
   // Opções em cascata: cada filtro usa o subconjunto com todos os outros ativos, exceto ele mesmo
   var pedidos      = [...new Set(matSubset('pedido').map(function(r){return String(r.pedido);}).filter(Boolean))].sort();
   var rcs          = [...new Set(matSubset('rc').map(function(r){return String(r.rc);}).filter(Boolean))].sort();
+  function _matExtractPep(r){
+    // Prioritize r.pep when it looks like a code (letter + digits)
+    if(r.pep && /^[A-Za-z][0-9]/.test(r.pep)) return r.pep;
+    // Fallback: extract from r.projeto string (either "PEP — name" or "PEP - name")
+    var src = r.projeto || '';
+    if(src.includes(' — ')) return src.split(' — ')[0].trim();
+    if(src.includes(' - '))      return src.split(' - ')[0].trim();
+    return src;
+  }
   var pepProjetoMap = {};
   matSubset('projeto').forEach(function(r){
-    if(!r.pep || pepProjetoMap[r.pep]) return;
-    var nm = typeof getPepName === 'function' ? getPepName(r.pep) : '';
-    pepProjetoMap[r.pep] = nm ? r.pep + ' — ' + nm : r.pep;
+    var pep = _matExtractPep(r);
+    if(!pep || pepProjetoMap[pep]) return;
+    var nm = typeof getPepName === 'function' ? getPepName(pep) : '';
+    pepProjetoMap[pep] = nm ? pep + ' — ' + nm : (r.projeto || pep);
   });
   var projetos = Object.values(pepProjetoMap).sort();
   var descricoes   = [...new Set(matSubset('descricao').map(function(r){return r.descricao;}).filter(Boolean))].sort();
