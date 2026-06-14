@@ -1245,7 +1245,7 @@ function loadState(){
 
 // ─── MATERIAIS STATE ─────────────────────────────────────────────
 var STATE_MATERIAIS = JSON.parse(localStorage.getItem('mat_data') || '[]');
-var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:'', fornecedor:[], squad:[], situacao:[]};
+var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], fornecedor:[], squad:[], situacao:[]};
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
 var MAT_PAGE = 1;
@@ -6263,7 +6263,7 @@ function toggleMatValores(){
 }
 
 function clearMatFilters(){
-  MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:'', fornecedor:[], squad:[], situacao:[]};
+  MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], fornecedor:[], squad:[], situacao:[]};
   MAT_PAGE = 1;
   renderMateriais();
 }
@@ -6282,9 +6282,10 @@ function _matRowPasses(r, skip){
   if(skip!=='mes'       && MAT_FILTERS.mes){
     var dm = r.prevEntrega||''; if(dm.length < 5 || dm.substring(3,5) !== MAT_FILTERS.mes) return false;
   }
-  if(skip!=='projeto' && MAT_FILTERS.projeto){
-    var _q = MAT_FILTERS.projeto.toLowerCase();
-    if(!(r.projeto||'').toLowerCase().includes(_q) && !(r.pep||'').toLowerCase().includes(_q)) return false;
+  if(skip!=='projeto' && MAT_FILTERS.projeto.length){
+    var _rKey = r.pep || r.projeto || '';
+    var _ok = MAT_FILTERS.projeto.some(function(fp){ return fp === _rKey || fp === r.pep || fp === r.projeto; });
+    if(!_ok) return false;
   }
   if(skip!=='fornecedor'&& MAT_FILTERS.fornecedor.length&& MAT_FILTERS.fornecedor.indexOf(r.fornecedor) < 0) return false;
   if(skip!=='squad'     && MAT_FILTERS.squad.length     && MAT_FILTERS.squad.indexOf(r.squad) < 0) return false;
@@ -6433,6 +6434,15 @@ function renderMateriais(){
   // Opções em cascata: cada filtro usa o subconjunto com todos os outros ativos, exceto ele mesmo
   var pedidos      = [...new Set(matSubset('pedido').map(function(r){return String(r.pedido);}).filter(Boolean))].sort();
   var rcs          = [...new Set(matSubset('rc').map(function(r){return String(r.rc);}).filter(Boolean))].sort();
+  // Projetos: todos os valores únicos de r.pep e r.projeto combinados
+  var projetoSet = {};
+  matSubset('projeto').forEach(function(r){
+    var keys = [];
+    if(r.pep) keys.push(r.pep);
+    if(r.projeto && r.projeto !== r.pep) keys.push(r.projeto);
+    keys.forEach(function(k){ if(k && !projetoSet[k]) projetoSet[k] = k; });
+  });
+  var projetos = Object.keys(projetoSet).sort();
   var descricoes   = [...new Set(matSubset('descricao').map(function(r){return r.descricao;}).filter(Boolean))].sort();
   var fornecedores = [...new Set(matSubset('fornecedor').map(function(r){return r.fornecedor;}).filter(Boolean))].sort();
   var squads       = [...new Set(matSubset('squad').map(function(r){return r.squad;}).filter(Boolean))].sort();
@@ -6443,7 +6453,7 @@ function renderMateriais(){
 
   var hasFilters = MAT_FILTERS.pedido.length || MAT_FILTERS.rc.length || MAT_FILTERS.descricao.length
     || MAT_FILTERS.ano || MAT_FILTERS.mes
-    || MAT_FILTERS.projeto || MAT_FILTERS.fornecedor.length
+    || MAT_FILTERS.projeto.length || MAT_FILTERS.fornecedor.length
     || MAT_FILTERS.squad.length || MAT_FILTERS.situacao.length;
 
   var nomesMeses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -6478,11 +6488,7 @@ function renderMateriais(){
     + msWrap('ms-mat-pedido','Nº Pedido',150)
     + msWrap('ms-mat-rc','Nº RC',140)
     + msWrap('ms-mat-descricao','Descrição',200)
-    + '<div class="fg" style="min-width:190px"><label>Projeto</label>'
-    +   '<input type="text" placeholder="Palavra-chave..." value="'+escHtml(MAT_FILTERS.projeto)+'"'
-    +   ' style="'+inpSt+'width:100%;box-sizing:border-box"'
-    +   ' oninput="MAT_FILTERS.projeto=this.value;MAT_PAGE=1;renderMateriais()">'
-    + '</div>'
+    + msWrap('ms-mat-projeto','Projeto',190)
     + msWrap('ms-mat-fornecedor','Fornecedor',200)
     + msWrap('ms-mat-squad','Squad',150)
     + msWrap('ms-mat-situacao','Situação',160)
@@ -6525,6 +6531,7 @@ function renderMateriais(){
   buildMsDrop('ms-mat-pedido', pedidos, MAT_FILTERS.pedido, null);
   buildMsDrop('ms-mat-rc', rcs, MAT_FILTERS.rc, null);
   buildMsDrop('ms-mat-descricao', descricoes, MAT_FILTERS.descricao, null);
+  buildMsDrop('ms-mat-projeto', projetos, MAT_FILTERS.projeto, null);
   buildMsDrop('ms-mat-fornecedor', fornecedores, MAT_FILTERS.fornecedor, null);
   buildMsDrop('ms-mat-squad', squads, MAT_FILTERS.squad, null);
   buildMsDrop('ms-mat-situacao', situacoes, MAT_FILTERS.situacao, null);
@@ -6532,6 +6539,7 @@ function renderMateriais(){
   updateMsLabel('ms-mat-pedido', MAT_FILTERS.pedido);
   updateMsLabel('ms-mat-rc', MAT_FILTERS.rc);
   updateMsLabel('ms-mat-descricao', MAT_FILTERS.descricao);
+  updateMsLabel('ms-mat-projeto', MAT_FILTERS.projeto);
   updateMsLabel('ms-mat-fornecedor', MAT_FILTERS.fornecedor);
   updateMsLabel('ms-mat-squad', MAT_FILTERS.squad);
   updateMsLabel('ms-mat-situacao', MAT_FILTERS.situacao);
