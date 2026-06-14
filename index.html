@@ -1245,7 +1245,7 @@ function loadState(){
 
 // ─── MATERIAIS STATE ─────────────────────────────────────────────
 var STATE_MATERIAIS = JSON.parse(localStorage.getItem('mat_data') || '[]');
-var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], fornecedor:[], squad:[], situacao:[]};
+var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
 var MAT_PAGE = 1;
@@ -6263,7 +6263,7 @@ function toggleMatValores(){
 }
 
 function clearMatFilters(){
-  MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], fornecedor:[], squad:[], situacao:[]};
+  MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
   MAT_PAGE = 1;
   renderMateriais();
 }
@@ -6286,6 +6286,12 @@ function _matRowPasses(r, skip){
     var _rKey = r.pep || r.projeto || '';
     var _ok = MAT_FILTERS.projeto.some(function(fp){ return fp === _rKey || fp === r.pep || fp === r.projeto; });
     if(!_ok) return false;
+  }
+  if(skip!=='projetoSearch' && MAT_FILTERS.projetoSearch){
+    var _qs = MAT_FILTERS.projetoSearch.toLowerCase();
+    var _projetoFull = (r.projetoRaw||r.projeto||'').toLowerCase();
+    var _pepStr = (r.pep||'').toLowerCase();
+    if(!_projetoFull.includes(_qs) && !_pepStr.includes(_qs)) return false;
   }
   if(skip!=='fornecedor'&& MAT_FILTERS.fornecedor.length&& MAT_FILTERS.fornecedor.indexOf(r.fornecedor) < 0) return false;
   if(skip!=='squad'     && MAT_FILTERS.squad.length     && MAT_FILTERS.squad.indexOf(r.squad) < 0) return false;
@@ -6453,7 +6459,8 @@ function renderMateriais(){
 
   var hasFilters = MAT_FILTERS.pedido.length || MAT_FILTERS.rc.length || MAT_FILTERS.descricao.length
     || MAT_FILTERS.ano || MAT_FILTERS.mes
-    || MAT_FILTERS.projeto.length || MAT_FILTERS.fornecedor.length
+    || MAT_FILTERS.projeto.length || MAT_FILTERS.projetoSearch
+    || MAT_FILTERS.fornecedor.length
     || MAT_FILTERS.squad.length || MAT_FILTERS.situacao.length;
 
   var nomesMeses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -6489,6 +6496,11 @@ function renderMateriais(){
     + msWrap('ms-mat-rc','Nº RC',140)
     + msWrap('ms-mat-descricao','Descrição',200)
     + msWrap('ms-mat-projeto','Projeto',190)
+    + '<div class="fg" style="min-width:180px"><label>🔍 Busca no Projeto</label>'
+    +   '<input type="text" placeholder="Ex: LM-0101SA-J-00003..." value="'+escHtml(MAT_FILTERS.projetoSearch||'')+'"'
+    +   ' style="'+inpSt+'width:100%;box-sizing:border-box"'
+    +   ' oninput="MAT_FILTERS.projetoSearch=this.value;MAT_PAGE=1;renderMateriais()">'
+    + '</div>'
     + msWrap('ms-mat-fornecedor','Fornecedor',200)
     + msWrap('ms-mat-squad','Squad',150)
     + msWrap('ms-mat-situacao','Situação',160)
