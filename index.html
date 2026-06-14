@@ -1659,6 +1659,17 @@ function getMedidoCapex(pep, empresa){
   return total;
 }
 
+function getContratadoCapex(pep, empresa){
+  var capex = STATE.capex || [];
+  var total = 0;
+  capex.forEach(function(row){
+    if(row.pep !== pep) return;
+    if(!matchEmpresa(row.empresa, empresa) && !matchEmpresa(empresa, row.empresa)) return;
+    total += (parseFloat(row.contratado) || 0) * 1000000;
+  });
+  return total;
+}
+
 // Build resumo rows from dotações (only Aprovada + Ag. Aprovação)
 function buildResumo(useFilters=false){
   const map={};
@@ -1684,8 +1695,10 @@ function buildResumo(useFilters=false){
   });
   return Object.values(map).map(r=>{
     const medido=getMedido(r.PEP,r.EMPRESA,r.ANO,fMedMes);
+    const medidoCapex=getMedidoCapex(r.PEP,r.EMPRESA);
+    const contratadoCapex=getContratadoCapex(r.PEP,r.EMPRESA);
     const total=r.TOTAL_APROV+r.TOTAL_AG;
-    return {...r,TOTAL:total,MEDIDO:medido,SALDO:total-medido,FAROL:total>0?medido/total:0};
+    return {...r,TOTAL:total,MEDIDO:medido,MEDIDO_CAPEX:medidoCapex,CONTRATADO_CAPEX:contratadoCapex,SALDO:total-medido,FAROL:total>0?medido/total:0};
   });
 }
 
@@ -2359,12 +2372,16 @@ function _resTabelaHtml(res){
       <thead><tr>
         <th>#</th><th>Ano</th><th>PEP</th><th>Sub PEP</th><th>Empresa</th>
         <th>Aprovado (R$)</th><th>Ag. Aprov. (R$)</th><th>Total Dotado</th>
-        <th>Medido (R$)</th><th>Saldo (R$)</th><th>Comprometimento</th>
+        <th style="background:var(--acc2);color:#fff;opacity:.85">Contrato CAPEX</th>
+        <th>Medido CJI3 (R$)</th><th style="background:var(--acc2);color:#fff;opacity:.85">Medido CAPEX</th>
+        <th>Saldo (R$)</th><th>Comprometimento</th>
       </tr></thead>
       <tbody>${res.map((r,i)=>{
         const pct=R(r.FAROL*100,1);
         const cls=r.FAROL>=1?'fb-over':r.FAROL>=0.9?'fb-crit':r.FAROL>=0.7?'fb-warn':'fb-ok';
         const col=r.FAROL>=1?'var(--danger)':r.FAROL>=0.9?'var(--acc)':r.FAROL>=0.7?'var(--warn)':'var(--acc3)';
+        const contCapex=r.CONTRATADO_CAPEX||0;
+        const medCapex=r.MEDIDO_CAPEX||0;
         return`<tr>
           <td class="mono" style="color:var(--muted)">${i+1}</td>
           <td class="mono">${r.ANO}</td>
@@ -2374,7 +2391,9 @@ function _resTabelaHtml(res){
           <td class="mono" style="text-align:right;color:var(--acc3);font-weight:600">${fmt(r.TOTAL_APROV)}</td>
           <td class="mono" style="text-align:right;color:var(--acc2)">${r.TOTAL_AG>0?fmt(r.TOTAL_AG):'—'}</td>
           <td class="mono" style="text-align:right;font-weight:700">${fmt(r.TOTAL)}</td>
+          <td class="mono" style="text-align:right;color:var(--acc2);font-weight:600">${contCapex>0?fmt(contCapex):'—'}</td>
           <td class="mono" style="text-align:right;color:var(--acc)">${fmt(r.MEDIDO)}</td>
+          <td class="mono" style="text-align:right;color:var(--acc2)">${medCapex>0?fmt(medCapex):'—'}</td>
           <td class="mono" style="text-align:right;color:${r.SALDO<0?'var(--danger)':'var(--acc3)'};font-weight:600">${fmt(r.SALDO)}</td>
           <td><div class="farol-row"><div class="fb"><div class="fb-fill ${cls}" style="width:${Math.min(r.FAROL*100,100)}%"></div></div><span class="fp" style="color:${col}">${pct}%</span></div></td>
         </tr>`;}).join('')}
