@@ -1248,6 +1248,7 @@ var STATE_MATERIAIS = JSON.parse(localStorage.getItem('mat_data') || '[]');
 var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], fornecedor:[], squad:[], situacao:[]};
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
+var MAT_PAGE = 1;
 var SP_FAROL = '';
 var RES_TAB = 'dashboard';
 var _matCharts = {};
@@ -3665,6 +3666,7 @@ function onMsChange(id){
   if(id.startsWith('ms-mat-')){
     var matKey = id.replace('ms-mat-','');
     MAT_FILTERS[matKey] = selected;
+    MAT_PAGE = 1;
     if(currentView === 'materiais') renderMateriais();
     return;
   }
@@ -6262,10 +6264,13 @@ function toggleMatValores(){
 
 function clearMatFilters(){
   MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], fornecedor:[], squad:[], situacao:[]};
+  MAT_PAGE = 1;
   renderMateriais();
 }
 
-function setMatTab(tab){ MAT_TAB = tab; renderMateriais(); }
+function setMatTab(tab){ MAT_TAB = tab; MAT_PAGE = 1; renderMateriais(); }
+
+function matGoPage(p){ MAT_PAGE = p; renderMateriais(); }
 
 function _matRowPasses(r, skip){
   if(skip!=='pedido'    && MAT_FILTERS.pedido.length    && MAT_FILTERS.pedido.indexOf(String(r.pedido)) < 0) return false;
@@ -6462,10 +6467,10 @@ function renderMateriais(){
   var filterBar =
     '<div class="filters" style="margin-bottom:16px;overflow:visible;flex-wrap:wrap;gap:8px;align-items:flex-end">'
     + '<div class="fg"><label>Ano</label>'
-    +   '<select style="'+inpSt+'" onchange="MAT_FILTERS.ano=this.value;renderMateriais()">'+anoOpts+'</select>'
+    +   '<select style="'+inpSt+'" onchange="MAT_FILTERS.ano=this.value;MAT_PAGE=1;renderMateriais()">'+anoOpts+'</select>'
     + '</div>'
     + '<div class="fg"><label>Mês (Prev. Entrega)</label>'
-    +   '<select style="'+inpSt+'" onchange="MAT_FILTERS.mes=this.value;renderMateriais()">'+mesOpts+'</select>'
+    +   '<select style="'+inpSt+'" onchange="MAT_FILTERS.mes=this.value;MAT_PAGE=1;renderMateriais()">'+mesOpts+'</select>'
     + '</div>'
     + msWrap('ms-mat-pedido','Nº Pedido',150)
     + msWrap('ms-mat-rc','Nº RC',140)
@@ -6661,7 +6666,15 @@ function _diasParaEntrega(prevEntrega, situacao){
 }
 
 function _matTabelaHtml(data){
-  var rows = data.map(function(r){
+  var MAT_PAGE_SIZE = 500;
+  var totalItems = data.length;
+  var showAll = totalItems <= MAT_PAGE_SIZE;
+  var totalPages = showAll ? 1 : Math.ceil(totalItems / MAT_PAGE_SIZE);
+  if(MAT_PAGE > totalPages) MAT_PAGE = totalPages;
+  if(MAT_PAGE < 1) MAT_PAGE = 1;
+  var pageData = showAll ? data : data.slice((MAT_PAGE-1)*MAT_PAGE_SIZE, MAT_PAGE*MAT_PAGE_SIZE);
+
+  var rows = pageData.map(function(r){
     var sitColor = '#64748b';
     var sit = (r.situacao||'').toLowerCase();
     if(sit.includes('entregue')) sitColor='#16a34a';
@@ -6694,6 +6707,19 @@ function _matTabelaHtml(data){
   }).join('');
 
   var more = '';
+  if(!showAll){
+    var start = (MAT_PAGE-1)*MAT_PAGE_SIZE+1;
+    var end = Math.min(MAT_PAGE*MAT_PAGE_SIZE, totalItems);
+    var btnBase = 'padding:6px 14px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#1e293b;';
+    var btnDisabled = 'padding:6px 14px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:600;cursor:default;background:#f8fafc;color:#94a3b8;';
+    more = '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid #e2e8f0;background:#f8fafc">'
+      + '<span style="font-size:12px;color:#64748b">Exibindo <strong>'+start+'–'+end+'</strong> de <strong>'+totalItems+'</strong> itens</span>'
+      + '<div style="display:flex;gap:8px;align-items:center">'
+      + (MAT_PAGE > 1 ? '<button style="'+btnBase+'" onclick="matGoPage('+( MAT_PAGE-1)+')">← Anterior</button>' : '<button style="'+btnDisabled+'" disabled>← Anterior</button>')
+      + '<span style="font-size:12px;color:#475569;padding:0 4px">Página <strong>'+MAT_PAGE+'</strong> de <strong>'+totalPages+'</strong></span>'
+      + (MAT_PAGE < totalPages ? '<button style="'+btnBase+'" onclick="matGoPage('+(MAT_PAGE+1)+')">Próxima →</button>' : '<button style="'+btnDisabled+'" disabled>Próxima →</button>')
+      + '</div></div>';
+  }
 
   return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden">'
     +'<div style="overflow-x:auto">'
