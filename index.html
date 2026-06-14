@@ -1931,13 +1931,17 @@ function renderOverview(dot,res){
   if(!STATE_LOADED_AT) STATE_LOADED_AT=new Date();
 
   var aprov=dot.filter(function(d){return d.STATUS==='Aprovada';});
+  var ag=dot.filter(function(d){return d.STATUS==='Ag. Aprovação';});
+  var rep=dot.filter(function(d){return d.STATUS==='Reprovada';});
   var tAprov=aprov.reduce(function(s,d){return s+d.TOTAL;},0);
+  var tAg=ag.reduce(function(s,d){return s+d.TOTAL;},0);
+  var tRep=rep.reduce(function(s,d){return s+d.TOTAL;},0);
   var tMedido=res.reduce(function(s,r){return s+r.MEDIDO;},0);
   var over=res.filter(function(r){return r.FAROL>=1;});
   var pctM=tAprov>0?Math.round(tMedido/tAprov*100):0;
 
   var cpx=STATE.capex||[];
-  function _isAlert(r){return ((!r.contratado||r.contratado===0)&&r.pago>0.001)||(r.a_pagar<-0.001);}
+  function _isAlert(r){return((!r.contratado||r.contratado===0)&&r.pago>0.001)||(r.a_pagar<-0.001);}
   var cpxAlertas=cpx.filter(_isAlert);
   var tCont=cpx.reduce(function(s,r){return s+(r.contratado||0);},0);
   var tPago=cpx.reduce(function(s,r){return s+(r.pago||0);},0);
@@ -2025,14 +2029,33 @@ function renderOverview(dot,res){
           +'<div style="font-size:10px;color:#64748b;display:flex;align-items:center;gap:5px;flex-wrap:wrap">'+pill(pillTxt,pillBg,pillCol)+'</div>'
           +'</div>';
   }
+  function cc(id,title,badge,height,extraLeg){
+    return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.04)">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+            +'<span style="font-size:11.5px;font-weight:700;color:#0f172a">'+title+'</span>'
+            +'<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:10px;background:#f1f5f9;color:#64748b;font-family:\'Share Tech Mono\',monospace" id="'+id+'-badge">'+badge+'</span>'
+          +'</div>'
+          +'<div style="position:relative;height:'+height+'px"><canvas id="'+id+'"></canvas></div>'
+          +(extraLeg?'<div id="'+id+'-leg" style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap"></div>':'')
+          +'</div>';
+  }
+  function legHtml(items){
+    return items.map(function(i){
+      return '<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b">'
+            +'<div style="width:12px;height:4px;border-radius:2px;background:'+i[0]+'"></div>'+i[1]
+            +'</div>';
+    }).join('');
+  }
 
   el.innerHTML=
+    // ── RESUMO HEADER ──
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
       +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;display:flex;align-items:center;gap:8px">'
         +'<span style="display:block;width:3px;height:14px;background:#002F6C;border-radius:2px"></span>Resumo financeiro'
       +'</span>'
       +'<span style="font-size:10px;color:#94a3b8">Atualizado em tempo real &middot; Supabase</span>'
     +'</div>'
+    // ── KPI STRIP ──
     +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">'
       +kpi('Dota&ccedil;&otilde;es','&#x1F4CB;','#e0f2fe',fmtK(tAprov),'#002F6C',pctM,'#0ea5e9',pctM+'% medido','#e0f2fe','#0369a1')
       +kpi('CAPEX Contratado','&#x1F3D7;','#eef2ff',fmtK(tCont),'#4f46e5',pctPago,'#4f46e5',fmtK(tPago)+' pago','#eef2ff','#4f46e5')
@@ -2040,6 +2063,7 @@ function renderOverview(dot,res){
       +kpi('Irregularidades','&#x26A0;','#fef2f2',(nOver+nCpxAlerta)+'','#dc2626',Math.min((nOver+nCpxAlerta)*3,100),'#dc2626',nOver+' dot. &middot; '+nCpxAlerta+' CAPEX','#fef2f2','#dc2626',(nOver>0||nCpxAlerta>0)?'#fca5a5':undefined)
       +kpi('Materiais','&#x1F4E6;','#fffbeb',mats.length.toLocaleString('pt-BR'),'#d97706',80,'#d97706',matPeps+' PEPs &middot; '+matFornecs+' fornec.','#fffbeb','#d97706')
     +'</div>'
+    // ── ALERT STRIP ──
     +'<div style="background:#fff;border:1px solid #e2e8f0;border-left:3px solid #d97706;border-radius:0 12px 12px 0;padding:12px 18px;margin-bottom:20px;display:flex;align-items:center;gap:14px;box-shadow:0 1px 4px rgba(0,0,0,.04)">'
       +'<div style="font-size:20px">&#x1F514;</div>'
       +'<div>'
@@ -2053,12 +2077,32 @@ function renderOverview(dot,res){
         +((nOver===0&&nCpxAlerta===0&&nSubCrit===0)?'<div style="font-size:11px;color:#16a34a;font-weight:600">&#x2705; Nenhuma irregularidade detectada</div>':'')
       +'</div>'
     +'</div>'
+    // ── ANÁLISE VISUAL HEADER ──
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+      +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;display:flex;align-items:center;gap:8px">'
+        +'<span style="display:block;width:3px;height:14px;background:#002F6C;border-radius:2px"></span>An&aacute;lise visual'
+      +'</span>'
+      +'<button onclick="render()" style="font-size:10px;font-family:Inter,sans-serif;background:var(--acc,#002F6C);color:#fff;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:600;letter-spacing:.5px">&#x21BA; Recarregar</button>'
+    +'</div>'
+    // ── LINHA 1: donut + PEP bar ──
+    +'<div style="display:grid;grid-template-columns:280px 1fr;gap:12px;margin-bottom:12px">'
+      +cc('ov-status','Status das Dota&ccedil;&otilde;es','3 status',160,true)
+      +cc('ov-pep','Dotado vs Medido por PEP','',200,true)
+    +'</div>'
+    // ── LINHA 2: sub pep + empresa + curva S ──
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">'
+      +cc('ov-subpep','Comprometimento por Sub PEP','% usado',210,false)
+      +cc('ov-emp','Dotado vs Medido por Empresa','',210,true)
+      +cc('ov-scurve','Curva S &mdash; Desembolso','Aprovado vs Medido',210,true)
+    +'</div>'
+    // ── FERRAMENTAS HEADER ──
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
       +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;display:flex;align-items:center;gap:8px">'
         +'<span style="display:block;width:3px;height:14px;background:#002F6C;border-radius:2px"></span>Ferramentas dispon&iacute;veis'
       +'</span>'
       +'<span style="font-size:10px;color:#94a3b8">Clique para acessar</span>'
     +'</div>'
+    // ── MÓDULOS ──
     +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">'
       +card('#e0f2fe','#0369a1','&#x1F4CB;',aprov.length+' registros','#e0f2fe','#0369a1',
         'Dota&ccedil;&otilde;es','Gest&atilde;o or&ccedil;ament&aacute;ria por PEP e empresa com farol de comprometimento.',
@@ -2128,7 +2172,130 @@ function renderOverview(dot,res){
         foot('Administra&ccedil;&atilde;o','Acessar &rarr;','#64748b',"setView('regularizar')")
       )
     +'</div>';
+
+  // ── GRÁFICOS ─────────────────────────────────────────────────────
+  setTimeout(function(){
+    if(typeof Chart==='undefined'){setTimeout(function(){render();},500);return;}
+    var CT={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}};
+    var AXX={ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'rgba(0,0,0,.04)'}};
+    var AXY={ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'rgba(0,0,0,.05)'}};
+    function fK(v){if(!v||v===0)return'R$ 0';var a=Math.abs(v),s=v<0?'-':'';if(a>=1e6)return s+'R$ '+(a/1e6).toFixed(1)+'M';if(a>=1e3)return s+'R$ '+(a/1e3).toFixed(0)+'K';return s+'R$ '+a.toFixed(0);}
+
+    // 1. Donut status
+    (function(){
+      var tTotal=tAprov+tAg+tRep;
+      safeChart('ov-status',{
+        type:'doughnut',
+        data:{labels:['Aprovada','Ag. Aprovação','Reprovada'],datasets:[{data:[tAprov,tAg,tRep],backgroundColor:['#10b981','#0ea5e9','#ef4444'],borderWidth:3,borderColor:'#fff'}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.label+': '+fK(c.raw);}}}},cutout:'65%'}
+      });
+      var leg=document.getElementById('ov-status-leg');
+      if(leg) leg.innerHTML=[['#10b981','Aprovada',tAprov],['#0ea5e9','Ag. Aprov.',tAg],['#ef4444','Reprovada',tRep]].map(function(x){
+        return '<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b">'
+              +'<div style="width:10px;height:10px;border-radius:50%;background:'+x[0]+';flex-shrink:0"></div>'
+              +x[1]+' <strong style="margin-left:auto;font-family:\'Share Tech Mono\',monospace;color:#0f172a">'+fK(x[2])+'</strong>'
+              +'</div>';
+      }).join('');
+      if(leg) leg.style.cssText='display:flex;flex-direction:column;gap:6px;margin-top:10px';
+    })();
+
+    // 2. PEP bar (dotado + medido)
+    (function(){
+      var pepMap={};
+      dot.forEach(function(d){if(!pepMap[d.PEP])pepMap[d.PEP]={d:0};if(d.STATUS!=='Reprovada')pepMap[d.PEP].d+=d.TOTAL;});
+      res.forEach(function(r){var p=r.PEP||r.SUB_PEP.split('.')[0];if(!pepMap[p])pepMap[p]={d:0};pepMap[p].m=(pepMap[p].m||0)+r.MEDIDO;});
+      var pepL=Object.keys(pepMap).sort();
+      var badge=document.getElementById('ov-pep-badge');if(badge)badge.textContent=pepL.length+' PEPs';
+      safeChart('ov-pep',{
+        type:'bar',
+        data:{labels:pepL,datasets:[
+          {label:'Dotado',data:pepL.map(function(p){return pepMap[p].d||0;}),backgroundColor:'rgba(14,165,233,.7)',borderRadius:4},
+          {label:'Medido',data:pepL.map(function(p){return pepMap[p].m||0;}),backgroundColor:'rgba(249,115,22,.7)',borderRadius:4}
+        ]},
+        options:{...CT,plugins:{...CT.plugins,tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+fK(c.raw);}}}},scales:{x:{...AXX},y:{...AXY,ticks:{...AXY.ticks,callback:function(v){return fK(v);}}}}}
+      });
+      var leg=document.getElementById('ov-pep-leg');
+      if(leg){leg.innerHTML='<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:12px;height:4px;border-radius:2px;background:rgba(14,165,233,.7)"></div>Dotado</div>'+'<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:12px;height:4px;border-radius:2px;background:rgba(249,115,22,.7)"></div>Medido</div>';leg.style.cssText='display:flex;gap:12px;margin-top:8px;flex-wrap:wrap';}
+    })();
+
+    // 3. Sub PEP comprometimento horizontal
+    (function(){
+      var subMap={};
+      res.forEach(function(r){if(!subMap[r.SUB_PEP])subMap[r.SUB_PEP]={d:0,m:0};subMap[r.SUB_PEP].d+=r.TOTAL;subMap[r.SUB_PEP].m+=r.MEDIDO;});
+      var subL=Object.keys(subMap).sort(function(a,b){var pa=subMap[a].d>0?subMap[a].m/subMap[a].d:0,pb=subMap[b].d>0?subMap[b].m/subMap[b].d:0;return pb-pa;}).slice(0,12);
+      var subP=subL.map(function(s){return subMap[s].d>0?Math.min(subMap[s].m/subMap[s].d*100,999):0;});
+      var subC=subP.map(function(p){return p>=100?'rgba(239,68,68,.8)':p>=75?'rgba(245,158,11,.8)':'rgba(16,185,129,.8)';});
+      safeChart('ov-subpep',{
+        type:'bar',
+        data:{labels:subL,datasets:[{data:subP,backgroundColor:subC,borderWidth:0,borderRadius:3}]},
+        options:{...CT,indexAxis:'y',plugins:{...CT.plugins,tooltip:{callbacks:{label:function(c){return Math.round(c.raw)+'%';}}}},scales:{x:{...AXX,ticks:{...AXX.ticks,callback:function(v){return v+'%';}},min:0,suggestedMax:Math.max(115,...subP)+20},y:{...AXY,ticks:{...AXY.ticks,font:{size:9}}}}}
+      });
+    })();
+
+    // 4. Empresa bar
+    (function(){
+      var empMap={};
+      res.forEach(function(r){var k=r.EMPRESA.split('/')[0].trim().substring(0,18);if(!empMap[k])empMap[k]={d:0,m:0};empMap[k].d+=r.TOTAL;empMap[k].m+=r.MEDIDO;});
+      var empL=Object.keys(empMap).sort(function(a,b){return (empMap[b].d)-(empMap[a].d);}).slice(0,7);
+      var badge=document.getElementById('ov-emp-badge');if(badge)badge.textContent=Object.keys(empMap).length+' empresas';
+      safeChart('ov-emp',{
+        type:'bar',
+        data:{labels:empL,datasets:[
+          {label:'Dotado',data:empL.map(function(e){return empMap[e].d;}),backgroundColor:'rgba(14,165,233,.7)',borderRadius:3},
+          {label:'Medido',data:empL.map(function(e){return empMap[e].m;}),backgroundColor:'rgba(249,115,22,.7)',borderRadius:3}
+        ]},
+        options:{...CT,plugins:{...CT.plugins,tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+fK(c.raw);}}}},scales:{x:{...AXX,ticks:{...AXX.ticks,maxRotation:35,font:{size:9}}},y:{...AXY,ticks:{...AXY.ticks,callback:function(v){return fK(v);}}}}}
+      });
+      var leg=document.getElementById('ov-emp-leg');
+      if(leg){leg.innerHTML='<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:12px;height:4px;border-radius:2px;background:rgba(14,165,233,.7)"></div>Dotado</div>'+'<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:12px;height:4px;border-radius:2px;background:rgba(249,115,22,.7)"></div>Medido</div>';leg.style.cssText='display:flex;gap:12px;margin-top:8px;flex-wrap:wrap';}
+    })();
+
+    // 5. Curva S
+    (function(){
+      var months={};
+      dot.forEach(function(d){
+        if(d.STATUS==='Reprovada')return;
+        var dt=d.DATA_EMISSAO?d.DATA_EMISSAO.substring(0,7):(d.ANO+'-01');
+        if(!months[dt])months[dt]={aprovado:0,medido:0};
+        months[dt].aprovado+=d.TOTAL;
+      });
+      var medidoByYear={};
+      Object.keys(STATE.medido||{}).forEach(function(k){var yr=k.split('|')[2];if(yr)medidoByYear[yr]=(medidoByYear[yr]||0)+(STATE.medido[k]||0);});
+      Object.keys(medidoByYear).sort().forEach(function(yr){var yrKey=yr+'-12';if(!months[yrKey])months[yrKey]={aprovado:0,medido:0};months[yrKey].medido+=medidoByYear[yr];});
+      var sortedMonths=Object.keys(months).sort();
+      var labels=[],cumAprov=[],cumMed=[],runA=0,runM=0;
+      var mNames=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+      sortedMonths.forEach(function(m){
+        runA+=months[m].aprovado||0;runM+=months[m].medido||0;
+        var p=m.split('-');labels.push(mNames[parseInt(p[1])-1]+'/'+p[0].substring(2));
+        cumAprov.push(runA);cumMed.push(runM);
+      });
+      if(labels.length===0){
+        var anos=Array.from(new Set(dot.map(function(d){return d.ANO;}))).sort();
+        anos.forEach(function(yr){
+          runA+=dot.filter(function(d){return d.ANO===yr&&d.STATUS!=='Reprovada';}).reduce(function(s,d){return s+d.TOTAL;},0);
+          runM+=medidoByYear[yr]||0;
+          labels.push(String(yr));cumAprov.push(runA);cumMed.push(runM);
+        });
+      }
+      var badge=document.getElementById('ov-scurve-badge');
+      if(badge)badge.textContent='R$ '+fK(cumAprov[cumAprov.length-1]||0)+' aprovado';
+      safeChart('ov-scurve',{
+        type:'line',
+        data:{labels:labels,datasets:[
+          {label:'Aprovado Acumulado',data:cumAprov,borderColor:'#009CDE',backgroundColor:'rgba(0,156,222,.07)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#009CDE',fill:true,tension:0.4},
+          {label:'Medido Acumulado',data:cumMed,borderColor:'#f97316',backgroundColor:'rgba(249,115,22,.04)',borderWidth:2.5,pointRadius:4,pointBackgroundColor:'#f97316',borderDash:[6,3],fill:false,tension:0.4}
+        ]},
+        options:{...CT,plugins:{...CT.plugins,tooltip:{callbacks:{label:function(c){return c.dataset.label+': R$ '+fK(c.raw);}}}},scales:{x:{...AXX,ticks:{...AXX.ticks,maxRotation:45}},y:{...AXY,ticks:{...AXY.ticks,callback:function(v){return fK(v);}}}}}
+      });
+      var leg=document.getElementById('ov-scurve-leg');
+      if(leg){leg.innerHTML='<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:16px;height:3px;border-radius:2px;background:#009CDE"></div>Dotado Acum.</div>'+'<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:16px;height:3px;border-top:2px dashed #f97316"></div>Medido Acum.</div>';leg.style.cssText='display:flex;gap:12px;margin-top:8px;flex-wrap:wrap';}
+    })();
+
+  },30);
 }
+
+
 
 
 
