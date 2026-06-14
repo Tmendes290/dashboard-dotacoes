@@ -1255,6 +1255,7 @@ var SP_FAROL = '';
 var RES_TAB = 'dashboard';
 var CAPEX_TAB = 'graficos';
 var _matCharts = {};
+var STATE_LOADED_AT = null;
 
 // ── SUPABASE: CARREGAR DADOS ─────────────────────────────────────
 var _syncInProgress = false;
@@ -1922,332 +1923,240 @@ function _renderNow(){
 // ─────────────────────────────────────────────────────────────────
 // OVERVIEW
 // ─────────────────────────────────────────────────────────────────
+// OVERVIEW
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderOverview(dot,res){
-  const el=document.getElementById('v-overview');
-  const aprov=dot.filter(d=>d.STATUS==='Aprovada');
-  const ag=dot.filter(d=>d.STATUS==='Ag. Aprovação');
-  const rep=dot.filter(d=>d.STATUS==='Reprovada');
-  const tAprov=aprov.reduce((s,d)=>s+d.TOTAL,0);
-  const tAg=ag.reduce((s,d)=>s+d.TOTAL,0);
-  const tRep=rep.reduce((s,d)=>s+d.TOTAL,0);
-  const tMedido=res.reduce((s,r)=>s+r.MEDIDO,0);
-  const tSaldo=res.reduce((s,r)=>s+r.SALDO,0);
-  const alerts=res.filter(r=>r.FAROL>=0.9);
-  const over=res.filter(r=>r.FAROL>1);
-  const pctM=tAprov>0?R(tMedido/tAprov*100,1):0;
+  var el=document.getElementById('v-overview');
+  if(!STATE_LOADED_AT) STATE_LOADED_AT=new Date();
 
-  el.innerHTML=`
-  <div class="sec">Comprometimento por Status</div>
-  <div class="split-row">
-    <div class="split-card orange-left">
-      <div class="split-main">
-        <div class="split-label-top">Dotações Aprovadas</div>
-        <div class="split-num orange">${fmt(tAprov)}</div>
-        <div class="split-label-bot">Status: Aprovada</div>
-        <div class="split-desc">${aprov.length} registros no filtro atual</div>
-        <span class="split-action" onclick="goToDotacoes('Aprovada')">VER DOTAÇÕES →</span>
-      </div>
-      <div class="split-divider"></div>
-      <div class="split-detail">
-        <div class="split-kv"><span>Qtd. Registros</span><strong class="orange">${aprov.length}</strong></div>
-        <div class="split-kv"><span>Total Bruto</span><strong>${fmtK(tAprov)}</strong></div>
-        <div class="split-kv"><span>Ticket Médio</span><strong>${aprov.length?fmtK(tAprov/aprov.length):'—'}</strong></div>
-      </div>
-    </div>
-    <div class="split-card blue-left">
-      <div class="split-main">
-        <div class="split-label-top">Aguardando Aprovação</div>
-        <div class="split-num navy">${fmt(tAg)}</div>
-        <div class="split-label-bot">Status: Ag. Aprovação</div>
-        <div class="split-desc">${ag.length} registro(s) de ${[...new Set(ag.map(d=>d.EMPRESA))].length} empresa(s) aguardando decisão</div>
-        <span class="split-action blue" onclick="goToDotacoes('Ag. Aprovação')">VER DOTAÇÕES →</span>
-      </div>
-      <div class="split-divider"></div>
-      <div class="split-detail" style="min-width:200px">
-        <div class="split-kv"><span>Qtd. Registros</span><strong class="navy">${ag.length}</strong></div>
-        <div class="split-kv"><span>Total Solicitado</span><strong>${fmtK(tAg)}</strong></div>
-        <div style="margin-top:8px;border-top:1px solid var(--bord);padding-top:8px">
-          <div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);font-weight:700;margin-bottom:6px">Empresas aguardando</div>
-          ${(()=>{
-            const empMap={};
-            ag.forEach(d=>{
-              const k=d.EMPRESA.split('/')[0].trim();
-              if(!empMap[k]) empMap[k]={total:0,qtd:0};
-              empMap[k].total+=d.TOTAL;
-              empMap[k].qtd++;
-            });
-            return Object.entries(empMap)
-              .sort((a,b)=>b[1].total-a[1].total)
-              .slice(0,4)
-              .map(([emp,v])=>`
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--bord);gap:8px">
-                  <div style="font-size:11px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px" title="${emp}">${emp.substring(0,22)}${emp.length>22?'…':''}</div>
-                  <div style="display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0">
-                    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--sb)">${fmtK(v.total)}</div>
-                    <div style="font-size:9px;color:var(--muted)">${v.qtd} reg.</div>
-                  </div>
-                </div>`).join('')
-              + (Object.keys(empMap).length>4 ? ('<div style="font-size:10px;color:var(--muted);margin-top:4px">+ '+(Object.keys(empMap).length-4)+' outra(s)</div>') : '');
-          })()}
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="sec">Indicadores Financeiros</div>
-  <div class="kpi-row">
-    <div class="kpi blue">
-      <div class="kpi-lbl">Total Dotado (Aprovado)</div>
-      <div class="kpi-val" style="color:var(--acc2)">${fmtK(tAprov)}</div>
-      <div class="kpi-sub">${aprov.length} registros aprovados</div>
-    </div>
-    <div class="kpi green">
-      <div class="kpi-lbl">Total Medido (Gasto)</div>
-      <div class="kpi-val">${fmtK(tMedido)}</div>
-      <div class="kpi-sub">${pctM}% do dotado aprovado</div>
-      <div class="kpi-prog"><div class="kpi-prog-fill" style="width:${Math.min(pctM,100)}%;background:var(--acc3)"></div></div>
-    </div>
-    <div class="kpi ${tSaldo<0?'red':'orange'}">
-      <div class="kpi-lbl">Saldo Disponível</div>
-      <div class="kpi-val">${fmtK(tSaldo)}</div>
-      <div class="kpi-sub">${tSaldo<0?'⚠ Saldo negativo':'Disponível para uso'}</div>
-    </div>
-    <div class="kpi ${alerts.length>0?'red':'green'}">
-      <div class="kpi-lbl">Alertas ≥ 90%</div>
-      <div class="kpi-val">${alerts.length}</div>
-      <div class="kpi-sub">${over.length} acima de 100% (estouro)</div>
-    </div>
-  </div>
-  <div class="sec">Análise Visual
-  <button onclick="render()" style="margin-left:auto;font-size:10px;font-family:Inter,sans-serif;background:var(--acc);color:#fff;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:600;letter-spacing:.5px" id="reload-charts-btn">↺ Recarregar</button>
-</div>
-  <div class="charts-row">
-    <div class="cc">
-      <div class="cc-hdr"><div class="cc-title">Status das Dotações (por valor)</div></div>
-      <div class="chart-h200" style="position:relative;height:200px"><canvas id="cStatus" style="display:block"></canvas></div>
-      <div class="leg" id="leg-status"></div>
-    </div>
-    <div class="cc">
-      <div class="cc-hdr"><div class="cc-title">Aprovado vs Ag. Aprovação por PEP</div><div class="cc-badge" id="b-pep">—</div></div>
-      <div class="chart-h240"><canvas id="cSplit" style="display:block"></canvas></div>
-    </div>
-  </div>
-  <div class="charts-row" style="margin-top:14px">
-    <div class="cc">
-      <div class="cc-hdr"><div class="cc-title">Dotado vs Medido por Empresa</div><div class="cc-badge" id="b-emp">—</div></div>
-      <div class="chart-h240"><canvas id="cEmp" style="display:block"></canvas></div>
-    </div>
-    <div class="cc">
-      <div class="cc-hdr"><div class="cc-title">Comprometimento por Sub PEP (%)</div></div>
-      <div class="chart-h240"><canvas id="cFarol" style="display:block"></canvas></div>
-    </div>
-  </div>
-  <div class="cc" style="margin-top:14px">
-    <div class="cc-hdr">
-      <div class="cc-title">Curva S — Desembolso Acumulado</div>
-      <div class="cc-badge" id="b-scurve">Aprovado vs Medido</div>
-    </div>
-    <div style="position:relative;height:280px"><canvas id="cScurve" style="display:block"></canvas></div>
-    <div style="display:flex;gap:16px;justify-content:center;padding:6px 0;flex-wrap:wrap" id="leg-scurve"></div>
-  </div>`;
+  // Dotacoes metrics
+  var aprov=dot.filter(function(d){return d.STATUS==='Aprovada';});
+  var tAprov=aprov.reduce(function(s,d){return s+d.TOTAL;},0);
+  var tMedido=res.reduce(function(s,r){return s+r.MEDIDO;},0);
+  var over=res.filter(function(r){return r.FAROL>=1;});
+  var pctM=tAprov>0?Math.round(tMedido/tAprov*100):0;
 
-  // Charts — setTimeout gives browser time to paint canvas before Chart.js runs
-  setTimeout(function(){
-    if(typeof Chart==='undefined'){ setTimeout(function(){render();},500); return; }
+  // CAPEX metrics
+  var cpx=STATE.capex||[];
+  function _isAlert(r){return ((!r.contratado||r.contratado===0)&&r.pago>0.001)||(r.a_pagar<-0.001);}
+  var cpxAlertas=cpx.filter(_isAlert);
+  var tCont=cpx.reduce(function(s,r){return s+(r.contratado||0);},0);
+  var tPago=cpx.reduce(function(s,r){return s+(r.pago||0);},0);
+  var tAPagar=cpx.reduce(function(s,r){return s+(r.a_pagar>0?r.a_pagar:0);},0);
+  var pctPago=tCont>0?Math.round(tPago/tCont*100):0;
 
+  // Sub PEP
+  var subSaudavel=res.filter(function(r){return r.FAROL<0.75;}).length;
+  var subCrit=res.filter(function(r){return r.FAROL>=0.75&&r.FAROL<1;}).length;
+  var subOver=over.length;
+  var nSubCrit=subCrit+subOver;
 
-  // Charts
-  const CT={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}};
-  const AX={x:{ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'rgba(0,0,0,.04)'}},y:{ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'rgba(0,0,0,.05)'}}};
+  // Materiais
+  var mats=STATE_MATERIAIS||[];
+  var matPeps=[...new Set(mats.map(function(m){return m.pep;}))].filter(Boolean).length;
+  var matFornecs=[...new Set(mats.map(function(m){return m.fornecedor;}))].filter(Boolean).length;
 
-  // Status donut
-  charts.cStatus=safeChart('cStatus',{
-    type:'doughnut',
-    data:{labels:['Aprovada','Ag. Aprovação','Reprovada'],datasets:[{data:[tAprov,tAg,tRep],backgroundColor:['#10b981','#0ea5e9','#ef4444'],borderWidth:3,borderColor:'#fff'}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.label+': '+fmtK(c.raw)}}},cutout:'65%'}
-  });
-  const total3=tAprov+tAg+tRep;
-  document.getElementById('leg-status').innerHTML=[['#10b981','Aprovada',tAprov],['#0ea5e9','Ag. Aprov.',tAg],['#ef4444','Reprovada',tRep]].map(([c,l,v])=>`<div class="leg-i"><div class="leg-d" style="background:${c}"></div>${l} <strong>${fmtK(v)}</strong> (${total3>0?Math.round(v/total3*100):0}%)</div>`).join('');
+  // Alert counts
+  var nOver=over.length;
+  var nCpxAlerta=cpxAlertas.length;
 
-  // Split by PEP (Aprovado vs Ag.)
-  const pepM={};
-  dot.forEach(d=>{if(!pepM[d.PEP])pepM[d.PEP]={a:0,ag:0};if(d.STATUS==='Aprovada')pepM[d.PEP].a+=d.TOTAL;if(d.STATUS==='Ag. Aprovação')pepM[d.PEP].ag+=d.TOTAL;});
-  const pepL=Object.keys(pepM);
-  var _bp=document.getElementById('b-pep');if(_bp)_bp.textContent=pepL.length+' PEPs';
-  charts.cSplit=safeChart('cSplit',{
-    type:'bar',
-    data:{labels:pepL,datasets:[
-      {label:'Aprovado',data:pepL.map(p=>pepM[p].a),backgroundColor:'rgba(16,185,129,.75)',borderRadius:3},
-      {label:'Ag. Aprovação',data:pepL.map(p=>pepM[p].ag),backgroundColor:'rgba(14,165,233,.75)',borderRadius:3}
-    ]},
-    options:{...CT,plugins:{...CT.plugins,legend:{display:true,labels:{color:'#64748b',font:{size:11}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtK(c.raw)}}},scales:{...AX,y:{...AX.y,ticks:{...AX.y.ticks,callback:v=>fmtK(v)}}}}
-  });
+  // Timestamp
+  var upd=STATE_LOADED_AT
+    ?STATE_LOADED_AT.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})
+     +' '+STATE_LOADED_AT.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+    :'â€”';
 
-  // Empresa: dotado vs medido
-  const empM={};
-  res.forEach(r=>{const k=r.EMPRESA.split('/')[0].trim().substring(0,20);if(!empM[k])empM[k]={d:0,m:0};empM[k].d+=r.TOTAL;empM[k].m+=r.MEDIDO;});
-  const empL=Object.keys(empM);
-  var _be=document.getElementById('b-emp');if(_be)_be.textContent=empL.length+' empresas';
-  charts.cEmp=safeChart('cEmp',{
-    type:'bar',
-    data:{labels:empL,datasets:[
-      {label:'Dotado',data:empL.map(e=>empM[e].d),backgroundColor:'rgba(14,165,233,.7)',borderRadius:3},
-      {label:'Medido',data:empL.map(e=>empM[e].m),backgroundColor:'rgba(232,97,10,.7)',borderRadius:3}
-    ]},
-    options:{...CT,plugins:{...CT.plugins,legend:{display:true,labels:{color:'#64748b',font:{size:11}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtK(c.raw)}}},scales:{...AX,x:{...AX.x,ticks:{...AX.x.ticks,maxRotation:35}},y:{...AX.y,ticks:{...AX.y.ticks,callback:v=>fmtK(v)}}}}
-  });
+  // Helpers
+  function bar(pct,color){
+    return '<div style="height:3px;background:#e2e8f0;border-radius:2px;margin:5px 0 3px;overflow:hidden">'
+          +'<div style="height:100%;width:'+Math.min(pct,100)+'%;background:'+color+';border-radius:2px"></div></div>';
+  }
+  function pill(txt,bg,col){
+    return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:'+bg+';color:'+col+';white-space:nowrap">'+txt+'</span>';
+  }
+  function dotDot(color){
+    return '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+color+';flex-shrink:0"></span>';
+  }
+  function mrow(lbl,val){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0">'
+          +'<span style="font-size:10px;color:#64748b;display:flex;align-items:center;gap:5px">'+lbl+'</span>'
+          +'<span style="font-size:11.5px;font-weight:700;font-family:\'Share Tech Mono\',monospace;color:#0f172a">'+val+'</span>'
+          +'</div>';
+  }
+  function foot(meta,btnTxt,btnColor,onclick){
+    return '<div style="padding:10px 16px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;margin-top:auto">'
+          +'<div style="display:flex;flex-direction:column;gap:1px">'
+            +'<span style="font-size:10px;color:#94a3b8">'+meta+'</span>'
+            +'<span style="font-size:9px;color:#cbd5e1;font-family:\'Share Tech Mono\',monospace">Atualizado '+upd+'</span>'
+          +'</div>'
+          +'<button onclick="'+onclick+'" style="border:none;border-radius:7px;padding:7px 16px;font-size:10.5px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.3px;background:'+btnColor+';color:#fff">'+btnTxt+'</button>'
+          +'</div>';
+  }
+  function card(iB,iC,ico,tag,tB,tC,title,desc,metrics,footHtml){
+    return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,.04)" '
+          +'onmouseenter="this.style.boxShadow=\'0 6px 24px rgba(0,0,0,.09)\';this.style.transform=\'translateY(-2px)\'" '
+          +'onmouseleave="this.style.boxShadow=\'0 1px 3px rgba(0,0,0,.04)\';this.style.transform=\'none\'">'
+          +'<div style="padding:16px 16px 0;display:flex;align-items:flex-start;justify-content:space-between">'
+            +'<div style="width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px;background:'+iB+';color:'+iC+'">'+ico+'</div>'
+            +'<span style="font-size:9px;font-weight:700;padding:3px 9px;border-radius:10px;background:'+tB+';color:'+tC+';font-family:\'Share Tech Mono\',monospace">'+tag+'</span>'
+          +'</div>'
+          +'<div style="padding:12px 16px 10px;flex:1">'
+            +'<div style="font-size:13.5px;font-weight:800;color:#0f172a;margin-bottom:3px;letter-spacing:-.2px">'+title+'</div>'
+            +'<div style="font-size:10px;color:#64748b;line-height:1.6;margin-bottom:11px">'+desc+'</div>'
+            +'<div style="display:flex;flex-direction:column;gap:4px">'+metrics+'</div>'
+          +'</div>'
+          +footHtml
+          +'</div>';
+  }
+  function chip(n,lbl,sub,bg,border,color,onclick){
+    return '<div onclick="'+onclick+'" style="display:inline-flex;align-items:center;gap:8px;border-radius:9px;padding:8px 16px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid '+border+';background:'+bg+';color:'+color+';white-space:nowrap;transition:all .15s" '
+          +'onmouseenter="this.style.transform=\'translateY(-1px)\';this.style.boxShadow=\'0 4px 14px rgba(0,0,0,.1)\'" '
+          +'onmouseleave="this.style.transform=\'none\';this.style.boxShadow=\'none\'">'
+          +'<span style="font-size:17px;font-weight:900;font-family:\'Share Tech Mono\',monospace;line-height:1">'+n+'</span>'
+          +'<div style="width:1px;height:20px;background:'+color+';opacity:.25"></div>'
+          +'<div>'
+            +'<div style="font-size:10.5px;font-weight:600;line-height:1.3">'+lbl+'</div>'
+            +'<div style="font-size:9px;opacity:.6;font-family:monospace">'+sub+'</div>'
+          +'</div>'
+          +'<span style="font-size:12px;opacity:.5;margin-left:2px">&#8599;</span>'
+          +'</div>';
+  }
+  function kpi(lbl,ico,icoBg,val,valColor,pct,barColor,pillTxt,pillBg,pillCol,extraBorder){
+    return '<div style="background:#fff;border:1px solid '+(extraBorder||'#e2e8f0')+';border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:4px">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between">'
+            +'<span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b">'+lbl+'</span>'
+            +'<div style="width:28px;height:28px;border-radius:8px;background:'+icoBg+';display:flex;align-items:center;justify-content:center;font-size:14px">'+ico+'</div>'
+          +'</div>'
+          +'<div style="font-size:22px;font-weight:900;line-height:1.1;letter-spacing:-1px;font-family:\'Share Tech Mono\',monospace;color:'+valColor+'">'+val+'</div>'
+          +bar(pct,barColor)
+          +'<div style="font-size:10px;color:#64748b;display:flex;align-items:center;gap:5px;flex-wrap:wrap">'+pill(pillTxt,pillBg,pillCol)+'</div>'
+          +'</div>';
+  }
 
-  // Farol sub pep
-  const subM={};
-  res.forEach(r=>{if(!subM[r.SUB_PEP])subM[r.SUB_PEP]={d:0,m:0};subM[r.SUB_PEP].d+=r.TOTAL;subM[r.SUB_PEP].m+=r.MEDIDO;});
-  const subL=Object.keys(subM);
-  const subP=subL.map(s=>subM[s].d>0?Math.min(subM[s].m/subM[s].d*100,999):0);
-  const subC=subP.map(p=>p>=100?'rgba(239,68,68,.8)':p>=90?'rgba(232,97,10,.8)':p>=70?'rgba(245,158,11,.8)':'rgba(16,185,129,.8)');
-  charts.cFarol=safeChart('cFarol',{
-    type:'bar',
-    data:{labels:subL,datasets:[{data:subP,backgroundColor:subC,borderWidth:0,borderRadius:3}]},
-    options:{...CT,indexAxis:'y',plugins:{...CT.plugins,tooltip:{callbacks:{label:c=>Math.round(c.raw)+'%'}}},scales:{x:{...AX.x,ticks:{...AX.x.ticks,callback:v=>v+'%'},min:0,suggestedMax:Math.max(115,...subP)+20},y:AX.y}}
-  });
+  el.innerHTML=
+    // â”€â”€ HEADER â”€â”€
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+      +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;display:flex;align-items:center;gap:8px">'
+        +'<span style="display:block;width:3px;height:14px;background:#002F6C;border-radius:2px"></span>Resumo financeiro'
+      +'</span>'
+      +'<span style="font-size:10px;color:#94a3b8">Atualizado em tempo real Â· Supabase</span>'
+    +'</div>'
+    // â”€â”€ KPI STRIP â”€â”€
+    +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">'
+      +kpi('DotaÃ§Ãµes','ðŸ“‹','#e0f2fe',fmtK(tAprov),'#002F6C',pctM,'#0ea5e9',pctM+'% medido','#e0f2fe','#0369a1')
+      +kpi('CAPEX Contratado','ðŸ—ï¸','#eef2ff',fmtK(tCont),'#4f46e5',pctPago,'#4f46e5',fmtK(tPago)+' pago','#eef2ff','#4f46e5')
+      +kpi('Medido Total','ðŸ“Š','#f0fdf4',fmtK(tMedido),'#16a34a',pctM,'#16a34a',pctM+'% dotado','#f0fdf4','#16a34a')
+      +kpi('Irregularidades','âš ï¸','#fef2f2',(nOver+nCpxAlerta)+'','#dc2626',Math.min((nOver+nCpxAlerta)*3,100),'#dc2626',nOver+' dotaÃ§Ãµes Â· '+nCpxAlerta+' CAPEX','#fef2f2','#dc2626',(nOver>0||nCpxAlerta>0)?'#fca5a5':undefined)
+      +kpi('Materiais','ðŸ“¦','#fffbeb',mats.length.toLocaleString('pt-BR'),'#d97706',80,'#d97706',matPeps+' PEPs Â· '+matFornecs+' fornec.','#fffbeb','#d97706')
+    +'</div>'
+    // â”€â”€ ALERT STRIP â”€â”€
+    +'<div style="background:#fff;border:1px solid #e2e8f0;border-left:3px solid #d97706;border-radius:0 12px 12px 0;padding:12px 18px;margin-bottom:20px;display:flex;align-items:center;gap:14px;box-shadow:0 1px 4px rgba(0,0,0,.04)">'
+      +'<div style="font-size:20px">ðŸ””</div>'
+      +'<div>'
+        +'<div style="color:#d97706;font-size:11px;font-weight:700;font-family:\'Share Tech Mono\',monospace;letter-spacing:.3px">AÃ‡Ã•ES NECESSÃRIAS</div>'
+        +'<div style="color:#64748b;font-size:10px;margin-top:1px">Clique para navegar direto Ã  lista filtrada</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">'
+        +(nOver>0?chip(nOver,'DotaÃ§Ãµes estouradas','Comprometido â‰¥ 100%','#fef2f2','#fca5a5','#dc2626',"setView('dotacoes')"):'')
+        +(nCpxAlerta>0?chip(nCpxAlerta,'Irregularidades CAPEX','A Pagar negativo Â· Pago &gt; CAPEX','#fffbeb','#fcd34d','#d97706',"CAPEX_TAB='tabela';setView('alertas')"):'')
+        +(nSubCrit>0?chip(nSubCrit,'Sub PEPs crÃ­ticos','Comprometido â‰¥ 75%','#e0f2fe','#7dd3fc','#0369a1',"setView('resumo')"):'')
+        +((nOver===0&&nCpxAlerta===0&&nSubCrit===0)?'<div style="font-size:11px;color:#16a34a;font-weight:600">âœ… Nenhuma irregularidade detectada</div>':'')
+      +'</div>'
+    +'</div>'
+    // â”€â”€ MODULES HEADER â”€â”€
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+      +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;display:flex;align-items:center;gap:8px">'
+        +'<span style="display:block;width:3px;height:14px;background:#002F6C;border-radius:2px"></span>Ferramentas disponÃ­veis'
+      +'</span>'
+      +'<span style="font-size:10px;color:#94a3b8">Clique para acessar</span>'
+    +'</div>'
+    // â”€â”€ MODULES GRID â”€â”€
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">'
 
-  // ── CURVA S ──────────────────────────────────────────────────
-  (function(){
-    // Build monthly time series from dotacoes
-    var months = {};
-    dot.forEach(function(d){
-      if(d.STATUS === 'Reprovada') return;
-      var dt = d.DATA_EMISSAO ? d.DATA_EMISSAO.substring(0,7) : (d.ANO+'-01');
-      if(!months[dt]) months[dt]={aprovado:0,medido:0};
-      if(d.STATUS === 'Aprovada') months[dt].aprovado += d.TOTAL;
-      else months[dt].aprovado += d.TOTAL; // Ag. Aprovação counts too
-    });
+      // 1 Dotacoes
+      +card('#e0f2fe','#0369a1','ðŸ“‹',aprov.length+' registros','#e0f2fe','#0369a1',
+        'DotaÃ§Ãµes','GestÃ£o orÃ§amentÃ¡ria por PEP e empresa com farol de comprometimento.',
+        mrow('Total dotado','<span style="color:#002F6C">'+fmtK(tAprov)+'</span>')
+        +bar(pctM,'#0ea5e9')
+        +mrow('Medido',fmtK(tMedido)+' <span style="color:#94a3b8;font-size:10px">'+pctM+'%</span>')
+        +mrow(dotDot('#ef4444')+' Estouradas','<span style="color:#dc2626">'+nOver+'</span>'),
+        foot(aprov.length+' aprovadas','Acessar â†’','#002F6C',"setView('dotacoes')")
+      )
 
-    // Add medido by year (annual data)
-    var medidoByYear = {};
-    Object.keys(STATE.medido||{}).forEach(function(k){
-      var yr = k.split('|')[2];
-      if(yr) medidoByYear[yr] = (medidoByYear[yr]||0) + (STATE.medido[k]||0);
-    });
+      // 2 Capex Projetos
+      +card('#eef2ff','#4f46e5','ðŸ—ï¸',
+        nCpxAlerta>0?nCpxAlerta+' irregulares':'atualizado',
+        nCpxAlerta>0?'#fee2e2':'#eef2ff',
+        nCpxAlerta>0?'#dc2626':'#4f46e5',
+        'Capex Projetos','CAPEX por PEP: contratado, pago e desvios com grÃ¡ficos de avanÃ§o.',
+        mrow('Contratado','<span style="color:#4f46e5">'+fmtK(tCont)+'</span>')
+        +bar(pctPago,'#4f46e5')
+        +mrow('Pago',fmtK(tPago)+' <span style="color:#94a3b8;font-size:10px">'+pctPago+'%</span>')
+        +mrow(dotDot('#f59e0b')+' A pagar','<span style="color:#d97706">'+fmtK(tAPagar)+'</span>'),
+        foot(pctPago+'% realizado','Acessar â†’','#4f46e5',"setView('alertas')")
+      )
 
-    // Sort months
-    var sortedMonths = Object.keys(months).sort();
-    if(sortedMonths.length < 2) sortedMonths = [];
+      // 3 Resumo Sub PEP
+      +card('#f0fdfa','#0d9488','ðŸ“‰',
+        nSubCrit>0?nSubCrit+' crÃ­ticos':'saudÃ¡vel',
+        nSubCrit>0?'#fef3c7':'#f0fdfa',
+        nSubCrit>0?'#d97706':'#0d9488',
+        'Resumo Sub PEP','Comprometimento por Sub PEP com farol de criticidade e filtro por empresa.',
+        mrow(dotDot('#22c55e')+' SaudÃ¡veis','<span style="color:#16a34a">'+subSaudavel+'</span>')
+        +mrow(dotDot('#f59e0b')+' CrÃ­ticos â‰¥75%','<span style="color:#d97706">'+subCrit+'</span>')
+        +mrow(dotDot('#ef4444')+' Estourados â‰¥100%','<span style="color:#dc2626">'+subOver+'</span>'),
+        foot(res.length+' sub PEPs','Acessar â†’','#0d9488',"setView('resumo')")
+      )
 
-    // Also add year-end medido points
-    var allYears = Object.keys(medidoByYear).sort();
-    allYears.forEach(function(yr){
-      var yrKey = yr+'-12';
-      if(!months[yrKey]) months[yrKey]={aprovado:0,medido:0};
-      months[yrKey].medido += medidoByYear[yr];
-    });
+      // 4 Dashboard Medido
+      +card('#f0fdf4','#16a34a','ðŸ“ˆ','atualizado','#f0fdf4','#16a34a',
+        'Dashboard','Dotado vs medido por empresa e PEP com filtro por mÃªs e comprometimento.',
+        mrow('Total dotado','<span style="color:#16a34a">'+fmtK(tAprov)+'</span>')
+        +bar(pctM,'#16a34a')
+        +mrow('Medido',fmtK(tMedido)+' <span style="color:#94a3b8;font-size:10px">'+pctM+'%</span>')
+        +mrow('Registros',dot.length+''),
+        foot(res.length+' linhas','Acessar â†’','#16a34a',"setView('analytics')")
+      )
 
-    // Re-sort after adding medido months
-    sortedMonths = Object.keys(months).sort();
+      // 5 Saude do PEP
+      +card('#f5f3ff','#7c3aed','ðŸ©º','anÃ¡lise CAPEX','#f5f3ff','#7c3aed',
+        'SaÃºde do PEP','Score financeiro por PEP: desvio, distribuiÃ§Ã£o de contratos e nÃ­vel de risco.',
+        mrow(dotDot('#22c55e')+' SaudÃ¡veis','<span style="color:#16a34a">'+Math.round(subSaudavel/Math.max(res.length,1)*100)+'%</span>')
+        +mrow(dotDot('#f59e0b')+' AtenÃ§Ã£o','<span style="color:#d97706">'+Math.round(subCrit/Math.max(res.length,1)*100)+'%</span>')
+        +mrow(dotDot('#ef4444')+' CrÃ­ticos','<span style="color:#dc2626">'+Math.round(subOver/Math.max(res.length,1)*100)+'%</span>'),
+        foot('Por PEP','Acessar â†’','#7c3aed',"setView('saude-pep')")
+      )
 
-    // Compute cumulative values
-    var labels = [];
-    var cumAprov = [];
-    var cumMed = [];
-    var runAprov = 0, runMed = 0;
-    sortedMonths.forEach(function(m){
-      runAprov += months[m].aprovado;
-      runMed   += months[m].medido;
-      // Format label as MMM/YY
-      var parts = m.split('-');
-      var monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-      var lbl = monthNames[parseInt(parts[1])-1]+'/'+parts[0].substring(2);
-      labels.push(lbl);
-      cumAprov.push(runAprov);
-      cumMed.push(runMed);
-    });
+      // 6 Materiais
+      +card('#fffbeb','#d97706','ðŸ“¦',
+        mats.length?mats.length.toLocaleString('pt-BR')+' itens':'sem dados',
+        '#fffbeb','#d97706',
+        'Materiais','Controle de materiais e serviÃ§os por empresa, PEP e categoria.',
+        mrow('Total de itens','<span style="color:#d97706">'+mats.length.toLocaleString('pt-BR')+'</span>')
+        +bar(mats.length>0?80:0,'#d97706')
+        +mrow('PEPs cobertos',matPeps+'')
+        +mrow('Fornecedores',matFornecs+''),
+        foot('SAP / Upload','Acessar â†’','#d97706',"setView('materiais')")
+      )
 
-    if(labels.length === 0){
-      // Fallback: use year data only
-      var anos = Array.from(new Set(dot.map(function(d){return d.ANO;}))).sort();
-      var runA=0, runM=0;
-      anos.forEach(function(yr){
-        runA += dot.filter(function(d){return d.ANO===yr&&d.STATUS!=='Reprovada';}).reduce(function(s,d){return s+d.TOTAL;},0);
-        runM += medidoByYear[yr]||0;
-        labels.push(String(yr));
-        cumAprov.push(runA);
-        cumMed.push(runM);
-      });
-    }
+      // 7 Nova Dotacao
+      +card('#fff1f2','#e11d48','âž•','aÃ§Ã£o rÃ¡pida','#f0fdf4','#16a34a',
+        'Nova DotaÃ§Ã£o','Crie uma nova dotaÃ§Ã£o vinculada a PEP, empresa e sub PEP via formulÃ¡rio guiado.',
+        mrow('Total cadastradas',dot.length+'')
+        +mrow('Aprovadas',aprov.length+''),
+        foot('FormulÃ¡rio guiado','+ Criar â†’','#e11d48',"setView('nova')")
+      )
 
-    // Update badge
-    var badge = document.getElementById('b-scurve');
-    if(badge) badge.textContent = 'R$ '+fmtK(cumAprov[cumAprov.length-1]||0)+' aprovado';
+      // 8 Gestao
+      +card('#f8fafc','#475569','âš™ï¸','admin','#f1f5f9','#475569',
+        'GestÃ£o & Config','Regularizar saldo, atualizar medido e configuraÃ§Ãµes gerais do sistema.',
+        mrow('Regularizar saldo','<span style="color:#0ea5e9">Acessar</span>')
+        +mrow('Upload medido','<span style="color:#0ea5e9">Acessar</span>')
+        +mrow('UsuÃ¡rios','<span style="color:#0ea5e9">Acessar</span>'),
+        foot('AdministraÃ§Ã£o','Acessar â†’','#64748b',"setView('regularizar')")
+      )
 
-    // Legend
-    var legEl = document.getElementById('leg-scurve');
-    if(legEl) legEl.innerHTML =
-      '<div style="display:flex;align-items:center;gap:6px;font-size:11px"><div style="width:20px;height:3px;background:#009CDE;border-radius:2px"></div>Dotado Acumulado</div>'
-     +'<div style="display:flex;align-items:center;gap:6px;font-size:11px"><div style="width:20px;height:3px;background:#f97316;border-radius:2px;border-top:2px dashed #f97316"></div>Medido Acumulado</div>';
-
-    // Create chart
-    var canv = document.getElementById('cScurve');
-    if(!canv) return;
-    if(charts.cScurve){ try{charts.cScurve.destroy();}catch(e){} delete charts.cScurve; }
-    charts.cScurve = new Chart(canv.getContext('2d'),{
-      type:'line',
-      data:{
-        labels:labels,
-        datasets:[
-          {
-            label:'Dotado Acumulado',
-            data:cumAprov,
-            borderColor:'#009CDE',
-            backgroundColor:'rgba(0,156,222,0.08)',
-            borderWidth:2.5,
-            pointRadius:3,
-            pointBackgroundColor:'#009CDE',
-            fill:true,
-            tension:0.4
-          },
-          {
-            label:'Medido Acumulado',
-            data:cumMed,
-            borderColor:'#f97316',
-            backgroundColor:'rgba(249,115,22,0.05)',
-            borderWidth:2.5,
-            pointRadius:4,
-            pointBackgroundColor:'#f97316',
-            borderDash:[6,3],
-            fill:false,
-            tension:0.4
-          }
-        ]
-      },
-      options:{
-        responsive:true,
-        maintainAspectRatio:false,
-        plugins:{
-          legend:{display:false},
-          tooltip:{
-            callbacks:{
-              label:function(c){
-                return c.dataset.label+': R$ '+fmtK(c.raw);
-              }
-            }
-          }
-        },
-        scales:{
-          x:{
-            ticks:{color:'#94a3b8',font:{size:10},maxRotation:45},
-            grid:{color:'rgba(0,0,0,.04)'}
-          },
-          y:{
-            ticks:{
-              color:'#94a3b8',
-              font:{size:10},
-              callback:function(v){return fmtK(v);}
-            },
-            grid:{color:'rgba(0,0,0,.05)'}
-          }
-        }
-      }
-    });
-  })();
-
-  }, 30);
+    +'</div>';
 }
 
 
