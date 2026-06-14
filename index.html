@@ -6703,7 +6703,7 @@ function _matTabelaHtml(data){
     return '<tr style="border-bottom:1px solid #f1f5f9">'
       +'<td style="padding:8px 10px;font-size:11px;font-weight:600;color:#1e293b;white-space:nowrap">'+escHtml(r.pedido||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;white-space:nowrap">'+escHtml(r.rc||'—')+'</td>'
-      +'<td style="padding:8px 10px;font-size:11px;color:#475569;max-width:200px;word-break:break-word" title="'+escHtml(r.projeto)+'">'+escHtml(r.projeto||'—')+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:#475569;max-width:220px;word-break:break-word" title="'+escHtml(r.projetoRaw||r.projeto)+'">'+escHtml(r.projetoRaw||r.projeto||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#1e293b;max-width:220px;overflow:hidden;text-overflow:ellipsis" title="'+escHtml(r.descricao)+'">'+escHtml(r.descricao||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;text-align:center">'+escHtml(String(r.qtde||'—'))+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;max-width:160px;overflow:hidden;text-overflow:ellipsis" title="'+escHtml(r.fornecedor)+'">'+escHtml(r.fornecedor||'—')+'</td>'
