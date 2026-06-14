@@ -4797,15 +4797,12 @@ function fetchMarketData(){
     })
     .catch(function(){ _mktData.petr = null; updateMarketTicker(); });
 
-  // Cobre — Stooq (hg.f = Copper futures USD/lb)
-  fetch('https://stooq.com/q/l/?s=hg.f&f=sd2t2ohlcv&h&e=json')
+  // Cobre — proxy server-side /api/copper (Yahoo Finance HG=F, sem CORS)
+  fetch('/api/copper')
     .then(function(r){ return r.json(); })
     .then(function(d){
-      var sym = d.symbols && d.symbols[0];
-      if(sym && sym.close){
-        var prev = sym.open || sym.close;
-        var chg = prev > 0 ? ((sym.close - prev) / prev * 100) : 0;
-        _mktData.copper = { price: parseFloat(sym.close), change: chg };
+      if(d.price){
+        _mktData.copper = { price: d.price, change: d.change || 0 };
         updateMarketTicker();
       }
     })

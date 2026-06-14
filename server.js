@@ -69,6 +69,29 @@ app.post('/api/save-medido', async (req, res) => {
   }
 });
 
+// ── COPPER PRICE PROXY ─────────────────────────────────────────
+// Busca cotação do cobre (HG=F) server-side para evitar CORS do browser
+app.get('/api/copper', async (req, res) => {
+  try {
+    const r = await fetch(
+      'https://query1.finance.yahoo.com/v8/finance/chart/HG%3DF?interval=1d&range=1d',
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+    const data = await r.json();
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta || !meta.regularMarketPrice) {
+      return res.status(502).json({ error: 'no data from upstream' });
+    }
+    const price  = meta.regularMarketPrice;
+    const prev   = meta.previousClose || meta.chartPreviousClose || price;
+    const change = prev > 0 ? ((price - prev) / prev * 100) : 0;
+    res.json({ price, change });
+  } catch (e) {
+    console.error('[copper] fetch error:', e.message);
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // Serve index.html from root (no subfolder needed)
 app.use(express.static(__dirname));
 
