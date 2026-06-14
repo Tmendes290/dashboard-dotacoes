@@ -6283,10 +6283,18 @@ function _matRowPasses(r, skip){
     var dm = r.prevEntrega||''; if(dm.length < 5 || dm.substring(3,5) !== MAT_FILTERS.mes) return false;
   }
   if(skip!=='projeto' && MAT_FILTERS.projeto.length){
-    var rowKey = r.pep || r.projeto || '';
+    // Extract project code from this row's projeto string
+    var rSrc = r.projeto || '';
+    var rCode = '';
+    var rParts = rSrc.split(/ — | - /);
+    for(var _i = 0; _i < rParts.length; _i++){
+      var _p = rParts[_i].trim();
+      if(/^[A-Za-z][0-9]/.test(_p)){ rCode = _p; break; }
+    }
+    var rPepVal = r.pep || '';
     var pepOk = MAT_FILTERS.projeto.some(function(fp){
-      var fpKey = fp.includes(' — ') ? fp.split(' — ')[0].trim() : fp;
-      return fpKey === rowKey || fp === rowKey;
+      var fpCode = fp.includes(' — ') ? fp.split(' — ')[0].trim() : fp;
+      return fpCode === rCode || fpCode === rPepVal;
     });
     if(!pepOk) return false;
   }
@@ -6439,10 +6447,27 @@ function renderMateriais(){
   var rcs          = [...new Set(matSubset('rc').map(function(r){return String(r.rc);}).filter(Boolean))].sort();
   var pepProjetoMap = {};
   matSubset('projeto').forEach(function(r){
-    var key = r.pep || r.projeto || '';
-    if(!key || pepProjetoMap[key]) return;
-    var nm = r.pep && typeof getPepName === 'function' ? getPepName(r.pep) : '';
-    pepProjetoMap[key] = nm ? r.pep + ' — ' + nm : (r.projeto || key);
+    // Extract project code from r.projeto (e.g. "C015127" from "C015127 - Fabricação...")
+    var src = r.projeto || '';
+    var parts = src.split(/ — | - /);
+    var extracted = '';
+    for(var i = 0; i < parts.length; i++){
+      var p = parts[i].trim();
+      if(/^[A-Za-z][0-9]/.test(p)){ extracted = p; break; }
+    }
+    // Add extracted project code
+    if(extracted && !pepProjetoMap[extracted]){
+      var nm = typeof getPepName === 'function' ? getPepName(extracted) : '';
+      pepProjetoMap[extracted] = nm ? extracted + ' — ' + nm : extracted;
+    }
+    // Also add r.pep (SAP WBS element) if different, so user can search by it
+    if(r.pep && r.pep !== extracted && !pepProjetoMap[r.pep]){
+      pepProjetoMap[r.pep] = r.pep;
+    }
+    // Fallback when nothing was extracted and no pep
+    if(!extracted && !r.pep && src && !pepProjetoMap[src]){
+      pepProjetoMap[src] = src;
+    }
   });
   var projetos = Object.values(pepProjetoMap).sort();
   var descricoes   = [...new Set(matSubset('descricao').map(function(r){return r.descricao;}).filter(Boolean))].sort();
