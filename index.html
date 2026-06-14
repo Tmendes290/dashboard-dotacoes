@@ -2550,7 +2550,7 @@ function renderViewAlertas(res){
   // 1) Contratado = 0 mas pago > 0
   // 2) Pago > Contratado  →  a_pagar < 0
   function isAlertRow(r){
-    return ((!r.contratado||r.contratado===0)&&r.pago>0) || (r.a_pagar<0);
+    return ((!r.contratado||r.contratado===0)&&r.pago>0.001) || (r.a_pagar<-0.001);
   }
   function alertReason(r){
     if((!r.contratado||r.contratado===0)&&r.pago>0) return 'Sem contrato com pagamento';
