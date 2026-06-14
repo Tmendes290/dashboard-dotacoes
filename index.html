@@ -1253,6 +1253,7 @@ var MAT_VALORES_VISIVEIS = true;
 var MAT_PAGE = 1;
 var SP_FAROL = '';
 var RES_TAB = 'dashboard';
+var CAPEX_TAB = 'graficos';
 var _matCharts = {};
 
 // ── SUPABASE: CARREGAR DADOS ─────────────────────────────────────
@@ -2271,6 +2272,7 @@ function safeChart(id, cfg){
 // RESUMO TABLE
 // ─────────────────────────────────────────────────────────────────
 function setResTab(tab){ RES_TAB=tab; render(); }
+function setCapexTab(tab){ CAPEX_TAB=tab; render(); }
 
 function renderViewResumo(res){
   const el=document.getElementById('v-resumo');
@@ -2740,6 +2742,15 @@ function renderViewAlertas(res){
 
   // ── Montar HTML final ─────────────────────────────────────────
   var alertPct=totalLinhas>0?Math.round(totalAlertas/totalLinhas*100):0;
+  var _subTabs=['graficos','tabela'].map(function(t){
+    var active=CAPEX_TAB===t;
+    var lbl=t==='graficos'?'📊 Gráficos':'📋 Tabela';
+    var brd=active?'2px solid #002F6C':'2px solid transparent';
+    var fw=active?700:500;
+    var col=active?'#002F6C':'#64748b';
+    var btn='<button onclick="setCapexTab(\''+t+'\')" style="padding:10px 20px;border:none;border-bottom:'+brd+';background:transparent;font-size:13px;font-weight:'+fw+';color:'+col+';cursor:pointer;font-family:inherit;margin-bottom:-2px">'+lbl+'</button>';
+    return btn;
+  }).join('');
   el.innerHTML=
     // Cards resumo
     '<div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">'
@@ -2769,8 +2780,10 @@ function renderViewAlertas(res){
         +'<div class="kpi-sub">'+pctFmt(gtPctDesv)+' do CAPEX</div>'
       +'</div>':'')
     +'</div>'
+    +'<div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid #e2e8f0">'+_subTabs+'</div>'
+    +(CAPEX_TAB==='graficos'?
         // Gráficos Visão Geral
-    +'<div style="font-size:11px;font-weight:700;color:#002F6C;letter-spacing:.6px;text-transform:uppercase;margin:4px 0 10px;padding-bottom:6px;border-bottom:2px solid #002F6C">📊 Visão Geral — CAPEX por Projeto <span style="font-size:10px;color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0">azul claro = contratado · azul escuro = pago</span></div>'
+    '<div style="font-size:11px;font-weight:700;color:#002F6C;letter-spacing:.6px;text-transform:uppercase;margin:4px 0 10px;padding-bottom:6px;border-bottom:2px solid #002F6C">📊 Visão Geral — CAPEX por Projeto <span style="font-size:10px;color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0">azul claro = contratado · azul escuro = pago</span></div>'
     +'<div style="display:grid;grid-template-columns:1fr 260px;gap:14px;margin-bottom:16px">'
       +'<div style="background:#fff;border-radius:10px;padding:16px;border:1px solid #e2e8f0">'
         +'<div style="font-size:10px;font-weight:700;color:#002F6C;text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px">Avanço por PEP</div>'
@@ -2788,9 +2801,10 @@ function renderViewAlertas(res){
         +'<div id="cpx-donut-legend" style="width:100%;display:flex;flex-direction:column;gap:6px"></div>'
       +'</div>'
     +'</div>'
+    :
 
         // Separador secao tabela
-    +'<div style="font-size:12px;font-weight:700;color:#002F6C;letter-spacing:.6px;text-transform:uppercase;margin:20px 0 10px;padding-bottom:6px;border-bottom:2px solid #e2e8f0;border-top:2px solid #e2e8f0;padding-top:14px">📋 Detalhamento CAPEX por Projeto</div>'
+    '<div style="font-size:12px;font-weight:700;color:#002F6C;letter-spacing:.6px;text-transform:uppercase;margin:20px 0 10px;padding-bottom:6px;border-bottom:2px solid #e2e8f0;border-top:2px solid #e2e8f0;padding-top:14px">📋 Detalhamento CAPEX por Projeto</div>'
     // Legenda
     +'<div style="display:flex;gap:16px;margin-bottom:10px;font-size:11px;flex-wrap:wrap">'
       +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:14px;background:#fefce8;border:1px solid #f59e0b;border-radius:2px;display:inline-block"></span> Irregularidade — precisa regularizar</span>'
@@ -2829,7 +2843,8 @@ function renderViewAlertas(res){
           +'</tr>'
         +'</tbody>'
       +'</table>'
-    +'</div>';
+    +'</div>');
+  if(CAPEX_TAB==='graficos'){
   // ── Gráficos CAPEX ──────────────────────────────────────────
   var _pepBars=[];
   Object.keys(byPep).forEach(function(pep){
@@ -2906,6 +2921,7 @@ function renderViewAlertas(res){
     }
   }
 
+  }  // end graficos tab
 }
 
 // Colapsar/expandir linhas de um PEP
