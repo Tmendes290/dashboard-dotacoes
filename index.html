@@ -1872,7 +1872,8 @@ const VIEW_META={
   nova:{title:'Nova Dotação',sub:'Cadastrar nova dotação no sistema'},
   upload:{title:'Atualizar Bases',sub:'Importe as planilhas de Medido, CAPEX e PEP/Sub-PEP/Planejadores'},
   'saude-pep':{title:'Saúde do PEP',sub:'Visão financeira consolidada por projeto'},
-  materiais:{title:'Materiais',sub:'Acompanhamento de pedidos, RCs e diligenciamento'}
+  materiais:{title:'Materiais',sub:'Acompanhamento de pedidos, RCs e diligenciamento'},
+  analytics:{title:'Dashboard',sub:'Dotado vs Medido por empresa e PEP'}
 };
 function setView(id){
   currentView=id;
@@ -2046,9 +2047,9 @@ function renderOverview(dot,res){
         +'<div style="color:#64748b;font-size:10px;margin-top:1px">Clique para navegar direto &agrave; lista filtrada</div>'
       +'</div>'
       +'<div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">'
-        +(nOver>0?chip(nOver,'Dota&ccedil;&otilde;es estouradas','Comprometido &ge; 100%','#fef2f2','#fca5a5','#dc2626',"setView('dotacoes')"):'')
+        +(nOver>0?chip(nOver,'Dota&ccedil;&otilde;es estouradas','Comprometido &ge; 100%','#fef2f2','#fca5a5','#dc2626',"fFarol='100';setView('resumo')"):'')
         +(nCpxAlerta>0?chip(nCpxAlerta,'Irregularidades CAPEX','A Pagar negativo &middot; Pago &gt; CAPEX','#fffbeb','#fcd34d','#d97706',"CAPEX_TAB='tabela';setView('alertas')"):'')
-        +(nSubCrit>0?chip(nSubCrit,'Sub PEPs cr&iacute;ticos','Comprometido &ge; 75%','#e0f2fe','#7dd3fc','#0369a1',"setView('resumo')"):'')
+        +(nSubCrit>0?chip(nSubCrit,'Sub PEPs cr&iacute;ticos','Comprometido &ge; 75%','#e0f2fe','#7dd3fc','#0369a1',"fFarol='75';setView('resumo')"):'')
         +((nOver===0&&nCpxAlerta===0&&nSubCrit===0)?'<div style="font-size:11px;color:#16a34a;font-weight:600">&#x2705; Nenhuma irregularidade detectada</div>':'')
       +'</div>'
     +'</div>'
