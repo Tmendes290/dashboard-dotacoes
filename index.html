@@ -272,7 +272,7 @@ body.is-admin .sb-item.admin-only{display:flex!important}
 .ms-input{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border:1px solid var(--bord);border-radius:6px;background:var(--card);cursor:pointer;font-size:12px;min-width:120px;gap:6px;white-space:nowrap}
 .ms-input:hover{border-color:var(--acc)}
 .ms-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;color:var(--text)}
-.ms-drop{position:absolute;top:calc(100% + 4px);left:0;min-width:100%;max-width:280px;background:var(--card);border:1px solid var(--bord);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.12);z-index:9999;max-height:220px;overflow-y:auto}
+.ms-drop{position:absolute;top:calc(100% + 4px);left:0;min-width:100%;max-width:340px;background:var(--card);border:1px solid var(--bord);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.12);z-index:9999;max-height:340px;overflow-y:auto}
 .ms-search{padding:8px 10px;border-bottom:1px solid var(--bord);position:sticky;top:0;background:var(--card)}
 .ms-search input{width:100%;padding:5px 8px;border:1px solid var(--bord);border-radius:5px;font-size:12px;font-family:inherit;box-sizing:border-box;outline:none}
 .ms-search input:focus{border-color:var(--acc)}
@@ -6282,7 +6282,10 @@ function _matRowPasses(r, skip){
   if(skip!=='mes'       && MAT_FILTERS.mes){
     var dm = r.prevEntrega||''; if(dm.length < 5 || dm.substring(3,5) !== MAT_FILTERS.mes) return false;
   }
-  if(skip!=='projeto'   && MAT_FILTERS.projeto.length   && MAT_FILTERS.projeto.indexOf(r.projeto) < 0) return false;
+  if(skip!=='projeto' && MAT_FILTERS.projeto.length){
+    var pepOk = r.pep && MAT_FILTERS.projeto.some(function(fp){ return fp === r.pep || fp.indexOf(r.pep + ' ') === 0; });
+    if(!pepOk) return false;
+  }
   if(skip!=='fornecedor'&& MAT_FILTERS.fornecedor.length&& MAT_FILTERS.fornecedor.indexOf(r.fornecedor) < 0) return false;
   if(skip!=='squad'     && MAT_FILTERS.squad.length     && MAT_FILTERS.squad.indexOf(r.squad) < 0) return false;
   if(skip!=='situacao'  && MAT_FILTERS.situacao.length  && MAT_FILTERS.situacao.indexOf(r.situacao) < 0) return false;
@@ -6429,7 +6432,13 @@ function renderMateriais(){
   // Opções em cascata: cada filtro usa o subconjunto com todos os outros ativos, exceto ele mesmo
   var pedidos      = [...new Set(matSubset('pedido').map(function(r){return String(r.pedido);}).filter(Boolean))].sort();
   var rcs          = [...new Set(matSubset('rc').map(function(r){return String(r.rc);}).filter(Boolean))].sort();
-  var projetos     = [...new Set(matSubset('projeto').map(function(r){return r.projeto;}).filter(Boolean))].sort();
+  var pepProjetoMap = {};
+  matSubset('projeto').forEach(function(r){
+    if(!r.pep || pepProjetoMap[r.pep]) return;
+    var nm = typeof getPepName === 'function' ? getPepName(r.pep) : '';
+    pepProjetoMap[r.pep] = nm ? r.pep + ' — ' + nm : r.pep;
+  });
+  var projetos = Object.values(pepProjetoMap).sort();
   var descricoes   = [...new Set(matSubset('descricao').map(function(r){return r.descricao;}).filter(Boolean))].sort();
   var fornecedores = [...new Set(matSubset('fornecedor').map(function(r){return r.fornecedor;}).filter(Boolean))].sort();
   var squads       = [...new Set(matSubset('squad').map(function(r){return r.squad;}).filter(Boolean))].sort();
@@ -6690,7 +6699,7 @@ function _matTabelaHtml(data){
     return '<tr style="border-bottom:1px solid #f1f5f9">'
       +'<td style="padding:8px 10px;font-size:11px;font-weight:600;color:#1e293b;white-space:nowrap">'+escHtml(r.pedido||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;white-space:nowrap">'+escHtml(r.rc||'—')+'</td>'
-      +'<td style="padding:8px 10px;font-size:11px;color:#475569;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis" title="'+escHtml(r.projeto)+'">'+escHtml(r.projeto||'—')+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:#475569;max-width:200px;word-break:break-word" title="'+escHtml(r.projeto)+'">'+escHtml(r.projeto||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#1e293b;max-width:220px;overflow:hidden;text-overflow:ellipsis" title="'+escHtml(r.descricao)+'">'+escHtml(r.descricao||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;text-align:center">'+escHtml(String(r.qtde||'—'))+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;max-width:160px;overflow:hidden;text-overflow:ellipsis" title="'+escHtml(r.fornecedor)+'">'+escHtml(r.fornecedor||'—')+'</td>'
