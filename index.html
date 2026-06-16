@@ -7347,6 +7347,7 @@ function _matTabelaHtml(data){
       +'<td style="padding:8px 10px;font-size:11px;font-weight:600;color:#1e293b;text-align:right;white-space:nowrap">'+fmtMatCurrency(r.valorTotal)+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#7c3aed;white-space:nowrap">'+escHtml(r.squad||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;white-space:nowrap">'+escHtml(r.lider||'—')+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:'+(r.observacao?'#374151':'#cbd5e1')+';max-width:240px;white-space:normal;line-height:1.4">'+escHtml(r.observacao||'—')+'</td>'
       +'</tr>';
   }).join('');
 
@@ -7372,9 +7373,9 @@ function _matTabelaHtml(data){
     +_matTh('Pedido')+_matTh('RC')+_matTh('Projeto')+_matTh('Descrição')
     +_matTh('Qtde')+_matTh('Fornecedor')+_matTh('Situação')
     +_matTh('Prev. Entrega')+_matTh('Prazo')+_matTh('Dt. Remessa')+_matTh('Dt. Faturamento')
-    +_matTh('Vl. Unit.')+_matTh('Vl. Total')+_matTh('Squad')+_matTh('Líder')
+    +_matTh('Vl. Unit.')+_matTh('Vl. Total')+_matTh('Squad')+_matTh('Líder')+_matTh('Comentário')
     +'</tr></thead>'
-    +'<tbody>'+(rows||'<tr><td colspan="15" style="text-align:center;padding:32px;color:#94a3b8">Nenhum item encontrado com os filtros aplicados</td></tr>')+'</tbody>'
+    +'<tbody>'+(rows||'<tr><td colspan="16" style="text-align:center;padding:32px;color:#94a3b8">Nenhum item encontrado com os filtros aplicados</td></tr>')+'</tbody>'
     +'</table></div>'+more+'</div>'
     +(CURRENT_PERFIL && CURRENT_PERFIL.role === 'admin'
       ? '<div style="margin-top:12px;text-align:right"><label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#7c3aed;color:#fff;border-radius:7px;font-size:11px;font-weight:700"><input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleMateriaisUpload(this.files[0])">📂 Importar novo arquivo</label></div>'
