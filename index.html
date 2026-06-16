@@ -2985,6 +2985,8 @@ function toggleCapexGrp(cls){
 }
 
 
+function escQ(s){ return (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
 function initCombo(wrapperId, items, placeholder, onSelect, renderFn, filterFn){
   const wrap = document.getElementById(wrapperId);
   if(!wrap) return;
