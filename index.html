@@ -2987,6 +2987,16 @@ function toggleCapexGrp(cls){
 
 function escQ(s){ return (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
 
+// Estado do combobox aberto + fecha ao clicar fora dele
+var _openCombo = null;
+document.addEventListener('click', function(e){
+  if(_openCombo && !_openCombo.contains(e.target)){
+    var od = _openCombo.querySelector('.cmb-drop');
+    if(od) od.classList.remove('open');
+    _openCombo = null;
+  }
+});
+
 function initCombo(wrapperId, items, placeholder, onSelect, renderFn, filterFn){
   const wrap = document.getElementById(wrapperId);
   if(!wrap) return;
