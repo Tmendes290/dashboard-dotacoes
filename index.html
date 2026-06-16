@@ -4828,9 +4828,11 @@ function handleCapexUpload(file){
       saveState();
 
       // Persiste no Supabase para sobreviver a reinício/recarregamento e sincronizar entre usuários
+      var _cpxSyncErr = null;
       if(supa && CURRENT_USER){
         try{
-          await supa.from('capex').delete().neq('id',0);
+          var {error:delErr} = await supa.from('capex').delete().neq('id',0);
+          if(delErr) _cpxSyncErr = 'delete capex: '+delErr.message;
           var cpxRows = capexData.map(function(c){ return {
             pep:c.pep, empresa:c.empresa, grupo:c.grupo,
             capex:c.capex, contratado:c.contratado, pago:c.pago,
@@ -4838,26 +4840,32 @@ function handleCapexUpload(file){
           };});
           for(var bi=0; bi<cpxRows.length; bi+=200){
             var {error:cpxErr} = await supa.from('capex').insert(cpxRows.slice(bi,bi+200));
-            if(cpxErr) console.warn('Erro ao salvar capex:',cpxErr.message);
+            if(cpxErr){ console.warn('Erro ao salvar capex:',cpxErr.message); _cpxSyncErr = 'insert capex: '+cpxErr.message; }
           }
-          await supa.from('capex_por_pep').delete().neq('pep','__none__');
+          var {error:delPepErr} = await supa.from('capex_por_pep').delete().neq('pep','__none__');
+          if(delPepErr) _cpxSyncErr = 'delete capex_por_pep: '+delPepErr.message;
           var pepRows = Object.keys(capexPorPep).map(function(p){ return {pep:p, valor:capexPorPep[p]}; });
           if(pepRows.length>0){
             var {error:pepErr} = await supa.from('capex_por_pep').insert(pepRows);
-            if(pepErr) console.warn('Erro ao salvar capex_por_pep:',pepErr.message);
+            if(pepErr){ console.warn('Erro ao salvar capex_por_pep:',pepErr.message); _cpxSyncErr = 'insert capex_por_pep: '+pepErr.message; }
           }
         }catch(syncErr){
           console.warn('Erro ao sincronizar CAPEX com Supabase:',syncErr);
-          toast('CAPEX salvo localmente, mas falhou ao sincronizar com o servidor.','red');
+          _cpxSyncErr = syncErr.message||String(syncErr);
         }
       } else {
-        console.warn('CAPEX importado sem sessão Supabase ativa — dados não serão persistidos após reiniciar.');
+        _cpxSyncErr = 'sem sessão Supabase ativa (supa='+(!!supa)+', logado='+(!!CURRENT_USER)+')';
       }
+      if(_cpxSyncErr) console.error('[CAPEX] Falha ao sincronizar com Supabase:', _cpxSyncErr);
 
       var divs = calcDivergencias();
       var nb = document.getElementById('nb-reg');
       if(nb){ nb.textContent=divs.length; nb.style.display=divs.length>0?'':'none'; }
-      toast('CAPEX importado! '+capexData.length+' contratos. '+divs.length+' divergência(s).', divs.length>0?'red':'green');
+      if(_cpxSyncErr){
+        toast('⚠ CAPEX importado mas NÃO sincronizado com o servidor ('+_cpxSyncErr+'). Vai reverter ao recarregar a página!','red');
+      } else {
+        toast('CAPEX importado e sincronizado! '+capexData.length+' contratos. '+divs.length+' divergência(s).', divs.length>0?'red':'green');
+      }
       setView('regularizar');
     }catch(err){
       toast('Erro ao processar: '+err.message,'red');
