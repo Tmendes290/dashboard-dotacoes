@@ -2438,8 +2438,8 @@ function _resTabelaHtml(res){
         return`<tr>
           <td class="mono" style="color:var(--muted)">${i+1}</td>
           <td class="mono">${r.ANO}</td>
-          <td class="mono" style="color:var(--acc2);font-weight:600">${r.PEP}<div style="font-size:9px;color:var(--muted);font-weight:400;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${getPepName(r.PEP)}</div></td>
-          <td class="mono" style="font-size:10px">${r.SUB_PEP||'—'}${r.SUB_PEP?'<div style="font-size:9px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+getSubPepName(r.SUB_PEP)+'</div>':''}</td>
+          <td class="mono" style="color:var(--acc2);font-weight:600">${r.PEP}<div style="font-size:9px;color:var(--muted);font-weight:400;max-width:160px;white-space:normal;line-height:1.3">${getPepName(r.PEP)}</div></td>
+          <td class="mono" style="font-size:10px">${r.SUB_PEP||'—'}${r.SUB_PEP?'<div style="font-size:9px;color:var(--muted);max-width:160px;white-space:normal;line-height:1.3">'+getSubPepName(r.SUB_PEP)+'</div>':''}</td>
           <td style="font-size:12px;font-weight:500;max-width:180px">${r.EMPRESA.split('/')[0].trim()}</td>
           <td class="mono" style="text-align:right;color:var(--acc3);font-weight:600">${fmt(r.TOTAL_APROV)}</td>
           <td class="mono" style="text-align:right;color:var(--acc2)">${r.TOTAL_AG>0?fmt(r.TOTAL_AG):'—'}</td>
