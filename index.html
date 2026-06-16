@@ -320,6 +320,20 @@ select{min-width:130px}
 .split-action.blue{color:var(--sb)}
 /* KPI GRID */
 .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+/* GRID HELPERS — colapsam em telas pequenas (usado em cards de módulos, KPIs e gráficos) */
+.g5{display:grid;grid-template-columns:repeat(5,1fr)}
+.g4{display:grid;grid-template-columns:repeat(4,1fr)}
+.g3{display:grid;grid-template-columns:repeat(3,1fr)}
+.g-280{display:grid;grid-template-columns:280px 1fr}
+.g-260{display:grid;grid-template-columns:1fr 260px}
+@media(max-width:768px){
+  .g5,.g4{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:1fr 1fr}
+  .g-280,.g-260{grid-template-columns:1fr}
+}
+@media(max-width:400px){
+  .g5,.g4,.g3{grid-template-columns:1fr}
+}
 .kpi{background:var(--card);border-radius:6px;border:1px solid var(--bord);padding:15px 18px;position:relative;overflow:hidden}
 .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
 .kpi.blue::before{background:var(--acc2)}.kpi.green::before{background:var(--acc3)}.kpi.orange::before{background:var(--acc)}.kpi.red::before{background:var(--danger)}.kpi.purple::before{background:var(--purple)}
@@ -563,7 +577,14 @@ td{padding:6px 11px;vertical-align:middle}
 
   /* SIDEBAR BADGES */
   .sb-badge{font-size:9px;padding:1px 5px}
+
+  /* GESTÃO DE USUÁRIOS — 1 card por linha, sem forçar largura mínima maior que a tela */
+  .users-grid{grid-template-columns:1fr!important}
+
+  /* "Quem está online" — a barra de status fica oculta no mobile, então mostra no topo */
+  .topbar-online-mobile{display:flex!important}
 }
+.topbar-online-mobile{display:none}
 
 /* TABLET (768–1024px) */
 @media (min-width:769px) and (max-width:1024px){
@@ -866,6 +887,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
       <div class="topbar-sub" id="page-sub">Panorama completo das dotações</div>
     </div>
     <div class="topbar-actions">
+      <div class="topbar-online-mobile" id="s-online-wrap-m" style="position:relative;cursor:pointer;align-items:center;gap:4px;font-size:11px;color:var(--muted)" onclick="toggleOnlinePanel(event)" title="Quem está conectado agora">🟢 <strong id="s-online-count-m">1</strong></div>
       <button class="btn btn-outline" id="btn-theme" onclick="toggleTheme()" title="Alternar tema escuro/claro" style="font-size:15px;padding:5px 9px">🌙</button>
       <button class="btn btn-dark" onclick="window.print()">🖨 PDF</button>
       <button class="btn btn-orange" onclick="exportCSV()">⬇ Exportar CSV</button>
@@ -2062,7 +2084,7 @@ function renderOverview(dot,res){
       +'<span style="font-size:10px;color:#94a3b8">Atualizado em tempo real &middot; Supabase</span>'
     +'</div>'
     // ── KPI STRIP ──
-    +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">'
+    +'<div class="g5" style="gap:10px;margin-bottom:16px">'
       +kpi('Dota&ccedil;&otilde;es','&#x1F4CB;','#e0f2fe',fmtK(tAprov),'#002F6C',pctM,'#0ea5e9',pctM+'% medido','#e0f2fe','#0369a1')
       +kpi('CAPEX Contratado','&#x1F3D7;','#eef2ff',fmtK(tCont),'#4f46e5',pctPago,'#4f46e5',fmtK(tPago)+' pago','#eef2ff','#4f46e5')
       +kpi('Medido Total','&#x1F4C8;','#f0fdf4',fmtK(tMedido),'#16a34a',pctM,'#16a34a',pctM+'% dotado','#f0fdf4','#16a34a')
@@ -2091,12 +2113,12 @@ function renderOverview(dot,res){
       +'<button onclick="render()" style="font-size:10px;font-family:Inter,sans-serif;background:var(--acc,#002F6C);color:#fff;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:600;letter-spacing:.5px">&#x21BA; Recarregar</button>'
     +'</div>'
     // ── LINHA 1: donut + PEP bar ──
-    +'<div style="display:grid;grid-template-columns:280px 1fr;gap:12px;margin-bottom:12px">'
+    +'<div class="g-280" style="gap:12px;margin-bottom:12px">'
       +cc('ov-status','Status das Dota&ccedil;&otilde;es','3 status',160,true)
       +cc('ov-pep','Dotado vs Medido por PEP','',200,true)
     +'</div>'
     // ── LINHA 2: sub pep + empresa + curva S ──
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">'
+    +'<div class="g3" style="gap:12px;margin-bottom:20px">'
       +cc('ov-subpep','Comprometimento por Sub PEP','% usado',210,false)
       +cc('ov-emp','Dotado vs Medido por Empresa','',210,true)
       +cc('ov-scurve','Curva S &mdash; Desembolso','Aprovado vs Medido',210,true)
@@ -2109,7 +2131,7 @@ function renderOverview(dot,res){
       +'<span style="font-size:10px;color:#94a3b8">Clique para acessar</span>'
     +'</div>'
     // ── MÓDULOS ──
-    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">'
+    +'<div class="g4" style="gap:12px">'
       +card('#e0f2fe','#0369a1','&#x1F4CB;',aprov.length+' registros','#e0f2fe','#0369a1',
         'Dota&ccedil;&otilde;es','Gest&atilde;o or&ccedil;ament&aacute;ria por PEP e empresa com farol de comprometimento.',
         mrow('Total dotado','<span style="color:#002F6C">'+fmtK(tAprov)+'</span>')
@@ -2678,7 +2700,7 @@ function renderViewAlertas(res){
         html+='</select>';
         html+='<button onclick="deleteObsAlerta(\''+key+'\','+oi+')" style="margin-left:auto;background:none;color:#dc2626;border:1px solid #fecaca;border-radius:3px;padding:3px 10px;font-size:11px;cursor:pointer">Apagar</button>';
         html+='</div>';
-        html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;font-size:12px">';
+        html+='<div class="g4" style="gap:8px;font-size:12px">';
         html+='<div><strong style="font-size:10px;color:var(--muted)">Motivo:</strong><div style="color:#374151;margin-top:2px;line-height:1.4">'+(ob.motivo||'—')+'</div></div>';
         html+='<div><strong style="font-size:10px;color:var(--muted)">Causa:</strong><div style="color:#374151;margin-top:2px;line-height:1.4">'+(ob.causa||'—')+'</div></div>';
         html+='<div><strong style="font-size:10px;color:var(--muted)">Solução:</strong><div style="color:#374151;margin-top:2px;line-height:1.4">'+(ob.solucao||'—')+'</div></div>';
@@ -2690,7 +2712,7 @@ function renderViewAlertas(res){
     // Form
     html+='<div style="padding:12px 16px;background:#f1f5f9">';
     html+='<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">+ Adicionar Análise</div>';
-    html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px">';
+    html+='<div class="g4" style="gap:10px;margin-bottom:10px">';
     html+='<div><label style="font-size:10px;font-weight:700;display:block;margin-bottom:3px">Motivo</label><textarea id="new-mot-'+key+'" placeholder="Descreva o motivo..." style="width:100%;border:1px solid var(--bord);border-radius:4px;padding:6px 8px;font-size:12px;outline:none;resize:vertical;min-height:56px;background:#fff;box-sizing:border-box"></textarea></div>';
     html+='<div><label style="font-size:10px;font-weight:700;display:block;margin-bottom:3px">Causa</label><textarea id="new-cau-'+key+'" placeholder="Identifique a causa..." style="width:100%;border:1px solid var(--bord);border-radius:4px;padding:6px 8px;font-size:12px;outline:none;resize:vertical;min-height:56px;background:#fff;box-sizing:border-box"></textarea></div>';
     html+='<div><label style="font-size:10px;font-weight:700;display:block;margin-bottom:3px">Solução / Plano</label><textarea id="new-sol-'+key+'" placeholder="Plano de ação..." style="width:100%;border:1px solid var(--bord);border-radius:4px;padding:6px 8px;font-size:12px;outline:none;resize:vertical;min-height:56px;background:#fff;box-sizing:border-box"></textarea></div>';
@@ -2850,7 +2872,7 @@ function renderViewAlertas(res){
     +(CAPEX_TAB==='graficos'?
         // Gráficos Visão Geral
     '<div style="font-size:11px;font-weight:700;color:#002F6C;letter-spacing:.6px;text-transform:uppercase;margin:4px 0 10px;padding-bottom:6px;border-bottom:2px solid #002F6C">📊 Visão Geral — CAPEX por Projeto <span style="font-size:10px;color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0">azul claro = contratado · azul escuro = pago</span></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 260px;gap:14px;margin-bottom:16px">'
+    +'<div class="g-260" style="gap:14px;margin-bottom:16px">'
       +'<div style="background:#fff;border-radius:10px;padding:16px;border:1px solid #e2e8f0">'
         +'<div style="font-size:10px;font-weight:700;color:#002F6C;text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px">Avanço por PEP</div>'
         +'<div style="font-size:10px;color:#94a3b8;margin-bottom:12px">Contratado e Pago como % do CAPEX aprovado</div>'
@@ -3990,6 +4012,8 @@ function renderOnlineUsers(state){
   });
   var countEl = document.getElementById('s-online-count');
   if(countEl) countEl.textContent = uniq.length;
+  var countElM = document.getElementById('s-online-count-m');
+  if(countElM) countElM.textContent = uniq.length;
   var panel = document.getElementById('online-panel');
   if(!panel) return;
   panel.innerHTML = uniq.length ? uniq.map(function(u){
@@ -4003,15 +4027,17 @@ function renderOnlineUsers(state){
 function toggleOnlinePanel(e){
   if(e) e.stopPropagation();
   var panel = document.getElementById('online-panel');
-  var wrap = document.getElementById('s-online-wrap');
+  var wrap = (e && e.currentTarget) || document.getElementById('s-online-wrap');
   if(!panel || !wrap) return;
   // Move o painel pra fora de qualquer container com overflow:hidden (ex: barra de status)
   if(panel.parentElement !== document.body) document.body.appendChild(panel);
   var abrindo = panel.style.display !== 'block';
   if(abrindo){
     var r = wrap.getBoundingClientRect();
+    var panelW = 190; // min-width do .online-panel
+    var left = Math.min(r.left, window.innerWidth - panelW - 10);
     panel.style.top = (r.bottom + 6) + 'px';
-    panel.style.left = r.left + 'px';
+    panel.style.left = Math.max(10, left) + 'px';
   }
   panel.style.display = abrindo ? 'block' : 'none';
 }
@@ -5711,7 +5737,7 @@ function renderUsuariosHTML(el, usuarios){
   html += '<button onclick="renderUsuarios()" style="background:var(--acc);color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">&#8635; Atualizar</button>';
   html += '</div>';
 
-  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px">';
+  html += '<div class="users-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px">';
 
   usuarios.forEach(function(u, idx){
     var inicial = (u.nome||u.email||'U').charAt(0).toUpperCase();
@@ -5753,7 +5779,7 @@ function renderUsuariosHTML(el, usuarios){
       html += '</div>';
 
       // Status toggle
-      html += '<div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between">';
+      html += '<div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">';
       html += '<span style="font-size:11px;color:#64748b">Status: <strong style="color:' + (ativo?'#007E7A':'#ef4444') + '">' + (ativo?'Ativo':'Inativo') + '</strong></span>';
       html += '<div style="display:flex;gap:6px">';
       html += '<button data-uid="' + u.id + '" data-ativo="' + (ativo?'1':'0') + '" data-email="' + u.email + '" onclick="toggleUsuarioAtivo(this.dataset.uid, this.dataset.ativo==String(1), this.dataset.email)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;font-family:inherit;color:#64748b">' + (ativo?'Desativar':'Reativar') + '</button>';
@@ -5946,6 +5972,7 @@ function renderAnalytics(){
   html+='.an-chip.filtered{background:'+VALE_GREEN+'}';
   html+='.an-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}';
   html+='@media(max-width:900px){.an-kpis{grid-template-columns:repeat(3,1fr)}}';
+  html+='@media(max-width:480px){.an-kpis{grid-template-columns:repeat(2,1fr)}}';
   html+='.an-kpi{background:#fff;border-radius:10px;padding:16px 18px;border-top:4px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.06)}';
   html+='.an-kpi.c1{border-top-color:'+NAVY+'}.an-kpi.c2{border-top-color:'+VALE_BLUE+'}.an-kpi.c3{border-top-color:'+VALE_GREEN+'}.an-kpi.c4{border-top-color:'+VALE_GRAY+'}.an-kpi.c5{border-top-color:'+NAVY+'}';
   html+='.an-kpi-lbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-weight:600}';
@@ -6765,7 +6792,7 @@ function showMedidoDiag(){
     +'<strong style="font-size:14px">🔍 Diagnóstico — Chaves Medido</strong>'
     +'<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#64748b">✕</button>'
     +'</div>'
-    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">'
+    +'<div class="g3" style="gap:12px;margin-bottom:16px">'
     +'<div style="background:#f0fdf4;border-radius:8px;padding:12px"><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase">Chaves no medido</div><div style="font-size:22px;font-weight:800;color:#16a34a">'+medKeys.length+'</div></div>'
     +'<div style="background:#f5f3ff;border-radius:8px;padding:12px"><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase">Chaves normIdx</div><div style="font-size:22px;font-weight:800;color:#7c3aed">'+normKeys.length+'</div></div>'
     +'<div style="background:#fef2f2;border-radius:8px;padding:12px"><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase">Linhas sem medido</div><div style="font-size:22px;font-weight:800;color:#dc2626">'+semMedido.length+'</div></div>'
@@ -7130,7 +7157,7 @@ function _matDashHtml(data){
   }).length;
   var pctEntregue  = data.length ? Math.round(entregues/data.length*100) : 0;
 
-  var cards = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">'
+  var cards = '<div class="g4" style="gap:14px;margin-bottom:20px">'
     + _matCard('🗂','Pedidos',totalPedidos,'#2563eb')
     + _matCard('📋','RCs',totalRCs,'#7c3aed')
     + _matCard('💰','Valor Total',MAT_VALORES_VISIVEIS ? valorTotal.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : '<span style="letter-spacing:3px;color:#94a3b8">••••••</span>','#16a34a')
