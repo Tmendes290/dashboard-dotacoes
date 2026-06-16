@@ -265,7 +265,7 @@ body.is-admin .sb-item.admin-only{display:flex!important}
 .s-sep{width:1px;height:18px;background:var(--bord)}
 .s-item{display:flex;align-items:center;gap:4px;color:var(--muted)}
 .s-item strong{color:var(--text);font-weight:600}
-.online-panel{position:absolute;top:calc(100% + 6px);left:0;background:var(--card);border:1px solid var(--bord);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:190px;max-height:260px;overflow-y:auto;z-index:600;padding:4px 0}
+.online-panel{position:fixed;background:var(--card);border:1px solid var(--bord);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:190px;max-height:260px;overflow-y:auto;z-index:9000;padding:4px 0}
 .s-right{margin-left:auto;font-size:10px;font-weight:700;color:var(--acc3)}
 /* CONTENT */
 .content{flex:1;overflow-y:auto;overflow-x:hidden;padding:18px 26px;display:flex;flex-direction:column;gap:14px;width:100%}
@@ -4003,7 +4003,17 @@ function renderOnlineUsers(state){
 function toggleOnlinePanel(e){
   if(e) e.stopPropagation();
   var panel = document.getElementById('online-panel');
-  if(panel) panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
+  var wrap = document.getElementById('s-online-wrap');
+  if(!panel || !wrap) return;
+  // Move o painel pra fora de qualquer container com overflow:hidden (ex: barra de status)
+  if(panel.parentElement !== document.body) document.body.appendChild(panel);
+  var abrindo = panel.style.display !== 'block';
+  if(abrindo){
+    var r = wrap.getBoundingClientRect();
+    panel.style.top = (r.bottom + 6) + 'px';
+    panel.style.left = r.left + 'px';
+  }
+  panel.style.display = abrindo ? 'block' : 'none';
 }
 document.addEventListener('click', function(){
   var panel = document.getElementById('online-panel');
