@@ -265,6 +265,7 @@ body.is-admin .sb-item.admin-only{display:flex!important}
 .s-sep{width:1px;height:18px;background:var(--bord)}
 .s-item{display:flex;align-items:center;gap:4px;color:var(--muted)}
 .s-item strong{color:var(--text);font-weight:600}
+.online-panel{position:absolute;top:calc(100% + 6px);left:0;background:var(--card);border:1px solid var(--bord);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:190px;max-height:260px;overflow-y:auto;z-index:600;padding:4px 0}
 .s-right{margin-left:auto;font-size:10px;font-weight:700;color:var(--acc3)}
 /* CONTENT */
 .content{flex:1;overflow-y:auto;overflow-x:hidden;padding:18px 26px;display:flex;flex-direction:column;gap:14px;width:100%}
@@ -881,6 +882,11 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
       <div class="s-item">📋 <strong id="s-total">56</strong> dotações</div>
       <div class="s-sep"></div>
       <div class="s-item" id="s-filter-tag" style="color:var(--acc3);font-weight:600;font-size:10px">✅ Sem filtros</div>
+      <div class="s-sep"></div>
+      <div class="s-item" id="s-online-wrap" style="position:relative;cursor:pointer" onclick="toggleOnlinePanel(event)" title="Quem está conectado agora">
+        🟢 <strong id="s-online-count">1</strong> online
+        <div id="online-panel" class="online-panel" style="display:none"></div>
+      </div>
     </div>
     <!-- Scrolling ticker -->
     <div class="sb-ticker-mask">
@@ -3799,11 +3805,19 @@ async function loginUser(){
     document.getElementById('login-btn').disabled=false;
   } else {
     CURRENT_USER = result.data.user;
-    await loadPerfil();
+    var perfilOk = await loadPerfil();
+    if(!perfilOk){
+      errEl.textContent = 'Sua conta foi desativada. Contate o administrador.';
+      errEl.style.display='block';
+      btn.textContent='Entrar';
+      document.getElementById('login-btn').disabled=false;
+      return;
+    }
     hideLoginScreen();
     updateUserBadge();
     setTimeout(updateUserBadge, 300);
     loadFromSupabase();
+    startPresence();
   }
 }
 
@@ -3818,12 +3832,23 @@ async function registerUser(){
   if(senha.length < 6){ errEl.textContent='Senha deve ter pelo menos 6 caracteres.'; errEl.style.display='block'; return; }
   
   errEl.style.display='none';
-  
+
+  // Verifica se o e-mail foi excluído pelo admin (bloqueio real fica no trigger do banco;
+  // esse check aqui é só pra mostrar uma mensagem amigável mais rápido)
+  try{
+    var bloq = await supa.from('emails_excluidos').select('email').eq('email', email).maybeSingle();
+    if(bloq.data){
+      errEl.textContent = 'Este e-mail foi removido pelo administrador e não pode se cadastrar novamente.';
+      errEl.style.display='block';
+      return;
+    }
+  }catch(eChk){ console.warn('Check emails_excluidos:', eChk); }
+
   var result = await supa.auth.signUp({
     email: email, password: senha,
     options: { data: { nome: nome, role: 'planejador' }, emailRedirectTo: window.location.origin + '/confirmado' }
   });
-  
+
   if(result.error){
     errEl.textContent = result.error.message;
     errEl.style.display='block';
@@ -3835,6 +3860,7 @@ async function registerUser(){
 
 async function logoutUser(){
   if(!supa) return;
+  stopPresence();
   await supa.auth.signOut();
   CURRENT_USER = null;
   CURRENT_PERFIL = null;
@@ -3843,21 +3869,29 @@ async function logoutUser(){
 }
 
 async function loadPerfil(){
-  if(!supa || !CURRENT_USER) return;
+  if(!supa || !CURRENT_USER) return false;
   var result = await supa.from('perfis').select('*').eq('id', CURRENT_USER.id).single();
   if(!result.error && result.data){
     CURRENT_PERFIL = result.data;
   } else {
     // Cria perfil se não existir
-    var nome = (CURRENT_USER.user_metadata && CURRENT_USER.user_metadata.nome) 
-      ? CURRENT_USER.user_metadata.nome 
+    var nome = (CURRENT_USER.user_metadata && CURRENT_USER.user_metadata.nome)
+      ? CURRENT_USER.user_metadata.nome
       : CURRENT_USER.email.split('@')[0];
     await supa.from('perfis').upsert({
-      id: CURRENT_USER.id, nome: nome, 
+      id: CURRENT_USER.id, nome: nome,
       email: CURRENT_USER.email, role: 'planejador'
     });
     CURRENT_PERFIL = {id: CURRENT_USER.id, nome: nome, email: CURRENT_USER.email, role: 'planejador'};
   }
+  // Bloqueia acesso de usuário desativado pelo admin
+  if(CURRENT_PERFIL && CURRENT_PERFIL.ativo === false){
+    await supa.auth.signOut();
+    CURRENT_USER = null;
+    CURRENT_PERFIL = null;
+    return false;
+  }
+  return true;
 }
 
 function updateUserBadge(){
@@ -3906,11 +3940,20 @@ async function checkAuthSession(){
     var result = await supa.auth.getSession();
     if(result.data && result.data.session && result.data.session.user){
       CURRENT_USER = result.data.session.user;
-      await loadPerfil();
+      var perfilOk = await loadPerfil();
+      if(!perfilOk){
+        if(ls){
+          ls.style.display='flex';
+          var errEl=document.getElementById('login-error');
+          if(errEl){ errEl.textContent='Sua conta foi desativada. Contate o administrador.'; errEl.style.display='block'; }
+        }
+        return;
+      }
       if(ls) ls.style.display='none';
       updateUserBadge();
       setTimeout(updateUserBadge, 500); // garante que DOM está pronto
       loadFromSupabase();
+      startPresence();
     } else {
       // Sem sessão - mostra login
       if(ls) ls.style.display='flex';
@@ -3921,6 +3964,51 @@ async function checkAuthSession(){
   }
 }
 
+// ── PRESENÇA: QUEM ESTÁ ONLINE AGORA ───────────────────────────────
+var _presenceChannel = null;
+function startPresence(){
+  if(!supa || !CURRENT_USER || !CURRENT_PERFIL) return;
+  if(_presenceChannel) return; // já iniciado nessa sessão
+  _presenceChannel = supa.channel('usuarios-online', { config: { presence: { key: CURRENT_USER.id } } });
+  _presenceChannel.on('presence', { event: 'sync' }, function(){
+    renderOnlineUsers(_presenceChannel.presenceState());
+  });
+  _presenceChannel.subscribe(function(status){
+    if(status === 'SUBSCRIBED'){
+      _presenceChannel.track({ nome: CURRENT_PERFIL.nome || CURRENT_PERFIL.email, email: CURRENT_PERFIL.email });
+    }
+  });
+}
+function stopPresence(){
+  if(_presenceChannel){ supa.removeChannel(_presenceChannel); _presenceChannel = null; }
+}
+function renderOnlineUsers(state){
+  var seen = {}, uniq = [];
+  Object.keys(state||{}).forEach(function(key){
+    var p = state[key] && state[key][0];
+    if(p && p.email && !seen[p.email]){ seen[p.email] = true; uniq.push(p); }
+  });
+  var countEl = document.getElementById('s-online-count');
+  if(countEl) countEl.textContent = uniq.length;
+  var panel = document.getElementById('online-panel');
+  if(!panel) return;
+  panel.innerHTML = uniq.length ? uniq.map(function(u){
+    var inicial = (u.nome || u.email || 'U').charAt(0).toUpperCase();
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 12px">'
+      + '<div style="width:22px;height:22px;border-radius:50%;background:#002F6C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0">' + inicial + '</div>'
+      + '<div style="font-size:11.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">' + (u.nome || u.email) + '</div>'
+      + '</div>';
+  }).join('') : '<div style="padding:8px 12px;font-size:11px;color:var(--muted)">Nenhum outro usuário online</div>';
+}
+function toggleOnlinePanel(e){
+  if(e) e.stopPropagation();
+  var panel = document.getElementById('online-panel');
+  if(panel) panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
+}
+document.addEventListener('click', function(){
+  var panel = document.getElementById('online-panel');
+  if(panel) panel.style.display = 'none';
+});
 
 // ── EDITAR DOTAÇÃO ────────────────────────────────────────────────
 var _editDotId = null;
@@ -5657,7 +5745,10 @@ function renderUsuariosHTML(el, usuarios){
       // Status toggle
       html += '<div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between">';
       html += '<span style="font-size:11px;color:#64748b">Status: <strong style="color:' + (ativo?'#007E7A':'#ef4444') + '">' + (ativo?'Ativo':'Inativo') + '</strong></span>';
+      html += '<div style="display:flex;gap:6px">';
       html += '<button data-uid="' + u.id + '" data-ativo="' + (ativo?'1':'0') + '" data-email="' + u.email + '" onclick="toggleUsuarioAtivo(this.dataset.uid, this.dataset.ativo==String(1), this.dataset.email)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;font-family:inherit;color:#64748b">' + (ativo?'Desativar':'Reativar') + '</button>';
+      html += '<button data-uid="' + u.id + '" data-email="' + u.email + '" onclick="excluirUsuarioReal(this.dataset.uid, this.dataset.email)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #fecaca;background:#fef2f2;cursor:pointer;font-family:inherit;color:#dc2626;font-weight:600">Excluir</button>';
+      html += '</div>';
       html += '</div>';
     } else {
       html += '<div style="font-size:11px;color:#94a3b8;text-align:center;padding:8px 0">Sua própria conta</div>';
@@ -5707,6 +5798,27 @@ async function toggleUsuarioAtivo(userId, currentAtivo, email){
   if(result.error){ toast('Erro: '+result.error.message,'red'); return; }
   toast((currentAtivo?'Usuário desativado':'Usuário reativado')+'!', currentAtivo?'red':'green');
   renderUsuarios();
+}
+
+async function excluirUsuarioReal(userId, email){
+  if(!supa) return;
+  if(!confirm('⚠ EXCLUIR PERMANENTEMENTE a conta de '+email+'?\n\nEla não vai mais conseguir entrar nem se cadastrar de novo com esse e-mail. Essa ação não pode ser desfeita.')) return;
+  var sessionRes = await supa.auth.getSession();
+  var token = sessionRes.data && sessionRes.data.session ? sessionRes.data.session.access_token : null;
+  if(!token){ toast('Sessão inválida. Faça login novamente.','red'); return; }
+  try{
+    var resp = await fetch('/api/admin/delete-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ targetUserId: userId, targetEmail: email })
+    });
+    var data = await resp.json();
+    if(!resp.ok){ toast('Erro ao excluir: ' + (data.error || resp.statusText), 'red'); return; }
+    toast('✔ Usuário excluído permanentemente.', 'green');
+    renderUsuarios();
+  }catch(e){
+    toast('Erro ao excluir: ' + e.message, 'red');
+  }
 }
 
 

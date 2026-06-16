@@ -69,6 +69,78 @@ app.post('/api/save-medido', async (req, res) => {
   }
 });
 
+// ── ADMIN: EXCLUIR USUARIO DE VERDADE (Auth + perfil + bloqueio de email) ──────
+app.post('/api/admin/delete-user', async (req, res) => {
+  if (!SUPA_SERVICE_KEY) {
+    return res.status(500).json({ error: 'SUPA_SERVICE_KEY não configurado no servidor.' });
+  }
+
+  const { targetUserId, targetEmail } = req.body;
+  const authHeader = req.headers.authorization || '';
+  const callerToken = authHeader.replace(/^Bearer\s+/i, '');
+
+  if (!callerToken) return res.status(401).json({ error: 'Não autenticado.' });
+  if (!targetUserId) return res.status(400).json({ error: 'targetUserId obrigatório.' });
+
+  const svcHeaders = {
+    'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
+    'apikey': SUPA_SERVICE_KEY,
+    'Content-Type': 'application/json'
+  };
+
+  try {
+    // 1. Identifica quem está chamando, a partir do token dele
+    const meRes = await fetch(`${SUPA_URL}/auth/v1/user`, {
+      headers: { 'Authorization': `Bearer ${callerToken}`, 'apikey': SUPA_SERVICE_KEY }
+    });
+    if (!meRes.ok) return res.status(401).json({ error: 'Sessão inválida.' });
+    const me = await meRes.json();
+
+    if (me.id === targetUserId) {
+      return res.status(400).json({ error: 'Você não pode excluir a sua própria conta.' });
+    }
+
+    // 2. Confirma que quem está chamando é admin
+    const perfilRes = await fetch(`${SUPA_URL}/rest/v1/perfis?id=eq.${me.id}&select=role`, { headers: svcHeaders });
+    const perfilData = await perfilRes.json();
+    if (!perfilRes.ok || !perfilData[0] || perfilData[0].role !== 'admin') {
+      return res.status(403).json({ error: 'Apenas administradores podem excluir usuários.' });
+    }
+
+    // 3. Apaga a conta de login de verdade (Supabase Auth Admin API)
+    const delAuthRes = await fetch(`${SUPA_URL}/auth/v1/admin/users/${targetUserId}`, {
+      method: 'DELETE',
+      headers: svcHeaders
+    });
+    if (!delAuthRes.ok) {
+      const errText = await delAuthRes.text();
+      console.error('[delete-user] auth delete failed:', errText);
+      return res.status(500).json({ error: 'Erro ao excluir conta de login: ' + errText });
+    }
+
+    // 4. Apaga o perfil (caso não tenha cascata automática)
+    await fetch(`${SUPA_URL}/rest/v1/perfis?id=eq.${targetUserId}`, {
+      method: 'DELETE',
+      headers: svcHeaders
+    });
+
+    // 5. Bloqueia o e-mail pra não recadastrar
+    if (targetEmail) {
+      await fetch(`${SUPA_URL}/rest/v1/emails_excluidos`, {
+        method: 'POST',
+        headers: { ...svcHeaders, 'Prefer': 'resolution=merge-duplicates' },
+        body: JSON.stringify([{ email: targetEmail, excluido_por: me.email }])
+      });
+    }
+
+    console.log(`[delete-user] ${targetEmail || targetUserId} excluído por ${me.email}`);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[delete-user] exception:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── COPPER PRICE PROXY ─────────────────────────────────────────
 // Busca cotação do cobre (HG=F) server-side para evitar CORS do browser
 app.get('/api/copper', async (req, res) => {
