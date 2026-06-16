@@ -7272,10 +7272,21 @@ function _matTabelaHtml(data){
       +'<span style="font-size:10px;font-weight:'+dp.fw+';color:'+dp.color+';background:'+dp.bg+';padding:3px 8px;border-radius:20px">'+dp.txt+'</span>'
       +'</td>';
 
+    // Projeto: código do PEP em destaque + descrição completa abaixo (sem cortar)
+    var projFull = r.projetoRaw || r.projeto || '';
+    var pepCodeMat = r.pep || (projFull.includes(' - ') ? projFull.split(' - ')[0].trim() : projFull);
+    var descMat = (pepCodeMat && projFull.indexOf(pepCodeMat) === 0)
+      ? projFull.slice(pepCodeMat.length).replace(/^[\s\-–]+/, '')
+      : projFull;
+    var projCell = '<td style="padding:8px 10px;max-width:180px">'
+      + '<div style="font-size:11px;font-weight:700;color:#2563eb;font-family:monospace">' + escHtml(pepCodeMat||'—') + '</div>'
+      + (descMat ? '<div style="font-size:10px;color:#94a3b8;white-space:normal;line-height:1.35;margin-top:2px">' + escHtml(descMat) + '</div>' : '')
+      + '</td>';
+
     return '<tr style="border-bottom:1px solid #f1f5f9">'
       +'<td style="padding:8px 10px;font-size:11px;font-weight:600;color:#1e293b;white-space:nowrap">'+escHtml(r.pedido||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;white-space:nowrap">'+escHtml(r.rc||'—')+'</td>'
-      +'<td style="padding:8px 10px;font-size:11px;color:#475569;max-width:220px;word-break:break-word" title="'+escHtml(r.projetoRaw||r.projeto)+'">'+escHtml(r.projetoRaw||r.projeto||'—')+'</td>'
+      + projCell
       +'<td style="padding:8px 10px;font-size:11px;color:#1e293b;max-width:220px;overflow:hidden;text-overflow:ellipsis" title="'+escHtml(r.descricao)+'">'+escHtml(r.descricao||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;text-align:center">'+escHtml(String(r.qtde||'—'))+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;max-width:160px;overflow:hidden;text-overflow:ellipsis" title="'+escHtml(r.fornecedor)+'">'+escHtml(r.fornecedor||'—')+'</td>'
