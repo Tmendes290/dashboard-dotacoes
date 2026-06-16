@@ -2421,7 +2421,7 @@ function _resDashHtml(res,totDotado,totMedido,totSaldo,pctGeral){
 function _resTabelaHtml(res){
   return`<div class="cc" style="padding:0;overflow:hidden">
     <div class="tbl-hdr"><div class="tbl-title">Controle por Sub PEP / Empresa</div><div class="tbl-badge">${res.length} registros</div></div>
-    <div class="tbl-wrap"><table>
+    <div class="tbl-wrap" style="max-height:none;overflow-y:visible"><table>
       <thead><tr>
         <th>#</th><th>Ano</th><th>PEP</th><th>Sub PEP</th><th>Empresa</th>
         <th>Aprovado (R$)</th><th>Ag. Aprov. (R$)</th><th>Total Dotado</th>
