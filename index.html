@@ -7495,6 +7495,7 @@ function impProcessData(rows){
   IMP_F_EMPS=[]; IMP_F_SAPS=[]; IMP_F_SQUADS=[];
   var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
   IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
+  try{ localStorage.setItem('imp_data',JSON.stringify(IMP_DATA)); }catch(e){}
   var ini=document.getElementById('imp-dt-ini'); if(ini) ini.value=IMP_DT_MIN;
   var fim=document.getElementById('imp-dt-fim'); if(fim) fim.value=IMP_DT_MAX;
   impRebuildMs();
@@ -7755,6 +7756,12 @@ function impShowTab(tab,el){
 // ── Render view principal ─────────────────────────────────────────
 function renderViewImprodutividade(){
   var el=document.getElementById('v-improdutividade'); if(!el) return;
+  if(IMP_DATA.length===0){
+    try{
+      var _saved=localStorage.getItem('imp_data');
+      if(_saved){ IMP_DATA=JSON.parse(_saved); var _ds=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort(); IMP_DT_MIN=_ds[0]||''; IMP_DT_MAX=_ds[_ds.length-1]||''; }
+    }catch(e){}
+  }
   var jaDados=IMP_DATA.length>0;
 
   el.innerHTML='<div style="padding:16px 20px;max-width:1500px;margin:0 auto">'
