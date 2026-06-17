@@ -222,6 +222,9 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);displ
 .admin-only{display:none!important}
 body.is-admin .admin-only{display:block!important}
 body.is-admin .sb-item.admin-only{display:flex!important}
+.imp-only{display:none!important}
+body.is-imp .imp-only{display:block!important}
+body.is-imp .sb-item.imp-only{display:flex!important}
 .sb-toggle{position:absolute;right:-11px;top:20px;width:22px;height:22px;background:var(--acc);border-radius:50%;border:2px solid #fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;z-index:200;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:transform .2s}
 .sb.collapsed .sb-toggle{transform:rotate(180deg)}
 .sb-logo{padding:18px 18px 14px;border-bottom:1px solid rgba(255,255,255,.07)}
@@ -856,6 +859,9 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <!-- MATERIAIS -->
     <div class="sb-nav-sec">Materiais</div>
     <div class="sb-item" data-view="materiais" data-label="Materiais"><span class="ico">📦</span><span class="sb-label">Materiais<span class="sb-badge" id="nb-mat" style="display:none;background:#7c3aed"></span></span></div>
+    <!-- IMPRODUTIVIDADE -->
+    <div class="sb-nav-sec imp-only">Fiscalização</div>
+    <div class="sb-item imp-only" data-view="improdutividade" data-label="Improdutividade"><span class="ico">⏱</span><span class="sb-label">Improdutividade</span></div>
     <!-- CONFIGURAÇÕES (admin only) -->
     <div class="sb-nav-sec admin-only" id="nav-admin-sec">Configurações</div>
     <div class="sb-item admin-only" data-view="upload" data-label="Atualizar Medido" onclick="event.stopPropagation();openPwModal()"><span class="ico">🔒</span><span class="sb-label">Atualizar Medido</span></div>
@@ -1132,6 +1138,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="v-usuarios" class="hidden"></div>
     <div id="v-upload" class="hidden"></div>
     <div id="v-materiais" class="hidden"></div>
+    <div id="v-improdutividade" class="hidden"></div>
   </div>
 </div>
 
@@ -1923,9 +1930,10 @@ const VIEW_META={
 };
 function setView(id){
   currentView=id;
-  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais'].forEach(v=>document.getElementById(v).classList.add('hidden'));
+  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade'].forEach(v=>document.getElementById(v).classList.add('hidden'));
   document.getElementById('v-'+id).classList.remove('hidden');
-  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais'].includes(id));
+  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade'].includes(id));
+  if(id==='improdutividade'){ renderViewImprodutividade(); return; }
   document.querySelectorAll('.sb-item').forEach(el=>{el.classList.toggle('active',el.dataset.view===id);});
   const m=VIEW_META[id];
   var _pt=document.getElementById('page-title');if(_pt)_pt.textContent=m.title;
@@ -3943,6 +3951,7 @@ function updateUserBadge(){
   // Set body class for CSS-based admin visibility
   document.body.classList.toggle("is-admin", CURRENT_PERFIL.role === "admin");
   document.body.classList.toggle("is-lider", CURRENT_PERFIL.role === "lider");
+  document.body.classList.toggle("is-imp", CURRENT_PERFIL.role === "admin" || (CURRENT_PERFIL.email||'').toLowerCase() === 'tm0133929@gmail.com');
   var isAdmin = CURRENT_PERFIL.role === 'admin';
   var isLider = CURRENT_PERFIL.role === 'lider';
   var nome = CURRENT_PERFIL.nome || CURRENT_PERFIL.email || 'Usuário';
@@ -7393,6 +7402,516 @@ function _matCard(ico, label, val, color){
 function _matTh(txt){
   return '<th style="padding:10px;text-align:left;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+txt+'</th>';
 }
+
+// ══════════════════════════════════════════════════════════════════
+// IMPRODUTIVIDADE DE HORAS
+// ══════════════════════════════════════════════════════════════════
+var IMP_DATA=[], IMP_FILTERED=[];
+var IMP_F_EMPS=[], IMP_F_SAPS=[], IMP_F_SQUADS=[];
+var IMP_DT_MIN='', IMP_DT_MAX='';
+var IMP_TAB='dashboard';
+var _impCharts={};
+
+// ── Utilitários ─────────────────────────────────────────────────
+function impTimeToMin(val){
+  if(val===null||val===undefined||val==='') return null;
+  if(typeof val==='number'){ return Math.round((val%1)*24*60); }
+  if(typeof val==='string'){ var m=val.match(/^(\d{1,2}):(\d{2})/); if(m) return parseInt(m[1])*60+parseInt(m[2]); }
+  return null;
+}
+function impToHHMM(min){ if(min===null||min===undefined) return '—'; return String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0'); }
+function impFmtDelay(min){ if(!min||min<=0) return '—'; if(min<60) return min+' min'; var h=Math.floor(min/60),m=min%60; return h+'h'+(m>0?String(m).padStart(2,'0'):''); }
+function impEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function impGetSquad(sap){
+  if(!sap) return{squad:'',lider:'',planejador:''};
+  var r=REF_SQUADS[sap]; if(r) return r;
+  var pep=sap.split('.')[0];
+  return REF_SQUADS[pep]||{squad:'',lider:'',planejador:''};
+}
+
+// ── Destroy / Safe chart ─────────────────────────────────────────
+function impDestroyChart(id){ try{if(_impCharts[id]){_impCharts[id].destroy();delete _impCharts[id];}}catch(e){} }
+function impSafeChart(id,cfg){
+  impDestroyChart(id);
+  var el=document.getElementById(id); if(!el) return;
+  try{ _impCharts[id]=new Chart(el.getContext('2d'),cfg); }catch(e){}
+}
+var _impCT={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}};
+var _impAXX={ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'rgba(0,0,0,.04)'}};
+var _impAXY={ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'rgba(0,0,0,.05)'}};
+
+// ── Multiselect callbacks para IMP ───────────────────────────────
+function impOnMs(id){
+  document.querySelectorAll('#'+id+'-opts .ms-opt').forEach(function(o){o.classList.toggle('selected',o.querySelector('input').checked);});
+  var sel=getMsSelected(id);
+  if(id==='ms-imp-emp'){IMP_F_EMPS=sel;updateMsLabel(id,sel,'Todas');}
+  if(id==='ms-imp-sap'){IMP_F_SAPS=sel;updateMsLabel(id,sel,'Todas');}
+  if(id==='ms-imp-squad'){IMP_F_SQUADS=sel;updateMsLabel(id,sel,'Todos');}
+  impApplyFilters();
+}
+
+function impRebuildMs(){
+  var empresas=[...new Set(IMP_DATA.map(function(d){return d.empresa;}))].sort();
+  var saps=[...new Set(IMP_DATA.map(function(d){return d.sap;}))].sort();
+  var squads=[...new Set(IMP_DATA.map(function(d){return impGetSquad(d.sap).squad;}).filter(Boolean))].sort();
+  buildMsDrop('ms-imp-emp',empresas,IMP_F_EMPS,'impOnMs');
+  buildMsDrop('ms-imp-sap',saps,IMP_F_SAPS,'impOnMs');
+  buildMsDrop('ms-imp-squad',squads,IMP_F_SQUADS,'impOnMs');
+}
+
+// ── File handling ────────────────────────────────────────────────
+function impHandleFile(file){
+  if(!file||!file.name.match(/\.xlsx?$/i)){ toast('Use um arquivo .xlsx','red'); return; }
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    if(typeof XLSX==='undefined'){ toast('Aguarde a biblioteca carregar...','orange'); return; }
+    var wb=XLSX.read(ev.target.result,{type:'array'});
+    impProcessData(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{raw:true,defval:null}));
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function impProcessData(rows){
+  IMP_DATA=[];
+  rows.forEach(function(row){
+    var chegada=impTimeToMin(row['Chegada']);
+    var pts=impTimeToMin(row['PTS']);
+    var inicio=impTimeToMin(row['Inicio']);
+    if(chegada===null&&pts===null) return;
+    var dv=row['Data'],dataObj=null,dataStr='—',dataSortKey='';
+    if(typeof dv==='number'){
+      var _t=new Date(Math.round((dv-25569)*86400*1000));
+      dataObj=new Date(_t.getUTCFullYear(),_t.getUTCMonth(),_t.getUTCDate());
+    } else if(dv instanceof Date){ dataObj=dv; }
+    if(dataObj){
+      var _y=dataObj.getFullYear(),_m=dataObj.getMonth()+1,_d=dataObj.getDate();
+      dataSortKey=_y+'-'+String(_m).padStart(2,'0')+'-'+String(_d).padStart(2,'0');
+      dataStr=String(_d).padStart(2,'0')+'/'+String(_m).padStart(2,'0')+'/'+_y;
+    }
+    var sap=String(row['Nº Sap']||row['Nº SAP']||row['N° Sap']||'—').trim();
+    IMP_DATA.push({dataStr:dataStr,dataSortKey:dataSortKey,empresa:String(row['Empresa']||'—').trim(),sap:sap,descricao:String(row['Descrição']||row['Descricao']||'').trim(),chegadaMin:chegada,ptsMin:pts,inicioMin:inicio});
+  });
+  IMP_F_EMPS=[]; IMP_F_SAPS=[]; IMP_F_SQUADS=[];
+  var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
+  IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
+  var ini=document.getElementById('imp-dt-ini'); if(ini) ini.value=IMP_DT_MIN;
+  var fim=document.getElementById('imp-dt-fim'); if(fim) fim.value=IMP_DT_MAX;
+  impRebuildMs();
+  // Mostrar conteúdo, esconder upload zone
+  var uz=document.getElementById('imp-upload-zone'); if(uz) uz.style.display='none';
+  var btn=document.getElementById('imp-update-btn');
+  if(btn){ btn.style.display='flex'; btn.querySelector('span').textContent=IMP_DATA.length+' registros · Atualizar planilha'; }
+  var ct=document.getElementById('imp-content'); if(ct) ct.style.display='block';
+  impApplyFilters();
+}
+
+// ── Filtros ──────────────────────────────────────────────────────
+function impApplyFilters(){
+  var dtIni=(document.getElementById('imp-dt-ini')||{}).value||'';
+  var dtFim=(document.getElementById('imp-dt-fim')||{}).value||'';
+  var refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
+  var rp=refStr.split(':');
+  var refMin=parseInt(rp[0])*60+parseInt(rp[1]||0);
+
+  IMP_FILTERED=IMP_DATA.filter(function(d){
+    if(dtIni&&d.dataSortKey<dtIni) return false;
+    if(dtFim&&d.dataSortKey>dtFim) return false;
+    if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0) return false;
+    if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0) return false;
+    var sq=impGetSquad(d.sap).squad;
+    if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0) return false;
+    return true;
+  });
+  IMP_FILTERED.forEach(function(d){
+    var base=null,bu='';
+    if(d.chegadaMin!==null){base=d.chegadaMin;bu='Chegada';}
+    else if(d.ptsMin!==null){base=d.ptsMin;bu='PTS';}
+    d.baseUsada=bu; d.delayMin=base!==null?Math.max(0,base-refMin):0;
+    d.squadInfo=impGetSquad(d.sap);
+  });
+  IMP_FILTERED.sort(function(a,b){return b.delayMin-a.delayMin;});
+
+  // Hint filtros ativos
+  var ativos=[];
+  if(IMP_F_EMPS.length) ativos.push(IMP_F_EMPS.length+' empresa'+(IMP_F_EMPS.length>1?'s':''));
+  if(IMP_F_SAPS.length) ativos.push(IMP_F_SAPS.length+' SAP'+(IMP_F_SAPS.length>1?'s':''));
+  if(IMP_F_SQUADS.length) ativos.push(IMP_F_SQUADS.length+' squad'+(IMP_F_SQUADS.length>1?'s':''));
+  var hint=document.getElementById('imp-filter-hint');
+  if(hint){ hint.textContent=ativos.length?'Filtrando: '+ativos.join(', '):''; hint.style.display=ativos.length?'':'none'; }
+
+  impRenderCards(refMin);
+  impRenderDashboard();
+  impRenderRegistros();
+  impRenderEmpresas();
+  impRenderObras();
+  impRenderSquads();
+}
+
+function impLimpar(){
+  IMP_F_EMPS=[]; IMP_F_SAPS=[]; IMP_F_SQUADS=[];
+  var ini=document.getElementById('imp-dt-ini'); if(ini) ini.value=IMP_DT_MIN;
+  var fim=document.getElementById('imp-dt-fim'); if(fim) fim.value=IMP_DT_MAX;
+  var ref=document.getElementById('imp-ref-time'); if(ref) ref.value='08:00';
+  impRebuildMs();
+  updateMsLabel('ms-imp-emp',[],'Todas');
+  updateMsLabel('ms-imp-sap',[],'Todas');
+  updateMsLabel('ms-imp-squad',[],'Todos');
+  impApplyFilters();
+}
+
+// ── Render Cards ─────────────────────────────────────────────────
+function impRenderCards(refMin){
+  var total=IMP_FILTERED.length;
+  var at=IMP_FILTERED.filter(function(d){return d.delayMin>0;});
+  var totalMin=IMP_FILTERED.reduce(function(s,d){return s+d.delayMin;},0);
+  var empAfet=new Set(at.map(function(d){return d.empresa;})).size;
+  var sqAfet=new Set(at.map(function(d){return d.squadInfo&&d.squadInfo.squad;}).filter(Boolean)).size;
+  var sqTotal=new Set(IMP_FILTERED.map(function(d){return d.squadInfo&&d.squadInfo.squad;}).filter(Boolean)).size;
+  var el=document.getElementById('imp-cards'); if(!el) return;
+  el.innerHTML=
+    impCard('var(--acc)',total,'Registros com horário','Chegada ou PTS preenchidos')+
+    impCard('#ef4444',at.length,'Com atraso',(total>0?Math.round(at.length/total*100):0)+'% do total')+
+    impCard('#f59e0b',impFmtDelay(totalMin)||'0 min','Total improdutivo','Ref: '+impToHHMM(refMin)+' — '+totalMin+' min')+
+    impCard('#10b981',empAfet,'Empresas com atraso','de '+new Set(IMP_FILTERED.map(function(d){return d.empresa;})).size+' no período')+
+    impCard('#7c3aed',sqAfet,'Squads afetados','de '+sqTotal+' no período');
+}
+function impCard(cor,val,lbl,sub){
+  return'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px;border-top:3px solid '+cor+'">'
+    +'<div style="font-size:26px;font-weight:800;line-height:1">'+val+'</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:4px;font-weight:500">'+lbl+'</div>'
+    +'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+sub+'</div>'
+    +'</div>';
+}
+
+// ── Dashboard Charts ──────────────────────────────────────────────
+function impSetBadge(id,txt){ var el=document.getElementById(id); if(el) el.textContent=txt; }
+
+function impRenderDashboard(){
+  if(IMP_TAB!=='dashboard') return;
+  impChartTimeline();
+  impChartStatus();
+  impChartEmpresas();
+  impChartSquads();
+  impChartFaixa();
+  impChartObras();
+}
+
+function impChartTimeline(){
+  var byDay={};
+  IMP_FILTERED.forEach(function(d){ if(!d.dataSortKey) return; if(!byDay[d.dataSortKey]) byDay[d.dataSortKey]={at:0,min:0}; if(d.delayMin>0){byDay[d.dataSortKey].at++;byDay[d.dataSortKey].min+=d.delayMin;} });
+  var dias=Object.keys(byDay).sort();
+  impSetBadge('imp-badge-timeline',dias.length+' dias');
+  if(!dias.length){impDestroyChart('imp-chart-timeline');return;}
+  impSafeChart('imp-chart-timeline',{type:'bar',data:{
+    labels:dias.map(function(d){return new Date(d+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});}),
+    datasets:[
+      {label:'Min. improdutivos',data:dias.map(function(d){return byDay[d].min;}),backgroundColor:'rgba(249,115,22,.7)',borderRadius:4,yAxisID:'y',order:1},
+      {label:'Qtd. atrasos',data:dias.map(function(d){return byDay[d].at;}),type:'line',borderColor:'#009CDE',backgroundColor:'rgba(0,156,222,.08)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#009CDE',fill:true,tension:0.4,yAxisID:'y2',order:0}
+    ]},
+    options:Object.assign({},_impCT,{interaction:{mode:'index',intersect:false},scales:{
+      x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{maxRotation:45})}),
+      y:Object.assign({},_impAXY,{position:'left',ticks:Object.assign({},_impAXY.ticks,{callback:function(v){return v+' min';}})}),
+      y2:{position:'right',ticks:{color:'#94a3b8',font:{size:10}},grid:{drawOnChartArea:false}}
+    }})
+  });
+}
+
+function impChartStatus(){
+  var ok=IMP_FILTERED.filter(function(d){return d.delayMin===0;}).length;
+  var leve=IMP_FILTERED.filter(function(d){return d.delayMin>0&&d.delayMin<=60;}).length;
+  var grave=IMP_FILTERED.filter(function(d){return d.delayMin>60;}).length;
+  impSetBadge('imp-badge-status',IMP_FILTERED.length+' registros');
+  var leg=document.getElementById('imp-leg-status');
+  if(leg) leg.innerHTML=[['#10b981','No prazo',ok],['#f59e0b','Leve (≤1h)',leve],['#ef4444','Grave (>1h)',grave]].map(function(x){return'<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:'+x[0]+';flex-shrink:0"></div>'+x[1]+' <strong style="margin-left:auto;color:#0f172a">'+x[2]+'</strong></div>';}).join('');
+  if(!IMP_FILTERED.length){impDestroyChart('imp-chart-status');return;}
+  impSafeChart('imp-chart-status',{type:'doughnut',data:{labels:['No prazo','Leve','Grave'],datasets:[{data:[ok,leve,grave],backgroundColor:['#10b981','#f59e0b','#ef4444'],borderWidth:3,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.label+': '+c.raw;}}}}}});
+}
+
+function impChartEmpresas(){
+  var byE={};
+  IMP_FILTERED.forEach(function(d){if(d.delayMin<=0)return;if(!byE[d.empresa])byE[d.empresa]=0;byE[d.empresa]+=d.delayMin;});
+  var list=Object.entries(byE).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
+  impSetBadge('imp-badge-emp',list.length+' empresas');
+  if(!list.length){impDestroyChart('imp-chart-emp');return;}
+  impSafeChart('imp-chart-emp',{type:'bar',data:{labels:list.map(function(e){var n=e[0];return n.length>24?n.slice(0,24)+'…':n;}),datasets:[{data:list.map(function(e){return e[1];}),backgroundColor:'rgba(14,165,233,.7)',borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+' min';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+' min';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:9}})})}})});
+}
+
+function impChartSquads(){
+  var bySq={};
+  IMP_FILTERED.forEach(function(d){if(d.delayMin<=0)return;var sq=d.squadInfo&&d.squadInfo.squad?d.squadInfo.squad:'(sem squad)';if(!bySq[sq])bySq[sq]=0;bySq[sq]+=d.delayMin;});
+  var list=Object.entries(bySq).sort(function(a,b){return b[1]-a[1];});
+  impSetBadge('imp-badge-sq',list.length+' squads');
+  if(!list.length){impDestroyChart('imp-chart-sq');return;}
+  var cores=['rgba(124,58,237,.75)','rgba(109,40,217,.75)','rgba(139,92,246,.75)','rgba(167,139,250,.75)','rgba(91,33,182,.75)'];
+  impSafeChart('imp-chart-sq',{type:'bar',data:{labels:list.map(function(s){return s[0];}),datasets:[{data:list.map(function(s){return s[1];}),backgroundColor:list.map(function(s,i){return cores[i%cores.length];}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+' min';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+' min';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
+}
+
+function impChartFaixa(){
+  var faixas=[{l:'< 07:00',min:-Infinity,max:420,c:'#10b981'},{l:'07:00–07:30',min:420,max:450,c:'#10b981'},{l:'07:30–08:00',min:450,max:480,c:'#10b981'},{l:'08:00–08:30',min:480,max:510,c:'#f59e0b'},{l:'08:30–09:00',min:510,max:540,c:'#ef4444'},{l:'> 09:00',min:540,max:Infinity,c:'#ef4444'}];
+  faixas.forEach(function(f){f.n=0;});
+  IMP_FILTERED.forEach(function(d){var b=d.chegadaMin!==null?d.chegadaMin:d.ptsMin;if(b===null)return;var f=faixas.find(function(fx){return b>=fx.min&&b<fx.max;});if(f)f.n++;});
+  impSetBadge('imp-badge-faixa',IMP_FILTERED.length+' registros');
+  impSafeChart('imp-chart-faixa',{type:'bar',data:{labels:faixas.map(function(f){return f.l;}),datasets:[{data:faixas.map(function(f){return f.n;}),backgroundColor:faixas.map(function(f){return f.c;}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+' chegadas';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{font:{size:9}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{stepSize:1})})}})});
+}
+
+function impChartObras(){
+  var byO={};
+  IMP_FILTERED.forEach(function(d){if(d.delayMin<=0)return;if(!byO[d.sap])byO[d.sap]=0;byO[d.sap]+=d.delayMin;});
+  var list=Object.entries(byO).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
+  impSetBadge('imp-badge-obras',list.length+' obras');
+  if(!list.length){impDestroyChart('imp-chart-obras');return;}
+  impSafeChart('imp-chart-obras',{type:'bar',data:{labels:list.map(function(o){return o[0];}),datasets:[{data:list.map(function(o){return o[1];}),backgroundColor:'rgba(14,165,233,.7)',borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+' min';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+' min';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10,family:"'Courier New',monospace"}})})}})});
+}
+
+// ── Registros ────────────────────────────────────────────────────
+function impToggleDesc(i){
+  var s=document.getElementById('imp-ds'+i),f=document.getElementById('imp-df'+i),b=document.getElementById('imp-db'+i);
+  var exp=f.style.display!=='none';
+  s.style.display=exp?'':'none'; f.style.display=exp?'none':''; b.textContent=exp?'ver mais ▾':'ver menos ▴';
+}
+
+function impRenderRegistros(){
+  var el=document.getElementById('imp-lbl-count'); if(el) el.textContent=IMP_FILTERED.length+' registros';
+  var tbody=document.getElementById('imp-tbody-reg'); if(!tbody) return;
+  if(!IMP_FILTERED.length){
+    tbody.innerHTML='<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted)">Nenhum registro para os filtros selecionados</td></tr>';
+    var sr=document.getElementById('imp-stats-reg'); if(sr) sr.style.display='none'; return;
+  }
+  var at=IMP_FILTERED.filter(function(d){return d.delayMin>0;});
+  var sr=document.getElementById('imp-stats-reg');
+  if(sr){ sr.style.display='flex'; sr.innerHTML='<div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">Com atraso: <b style="color:var(--acc)">'+at.length+'</b></div><div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">No prazo: <b style="color:var(--acc)">'+(IMP_FILTERED.length-at.length)+'</b></div><div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">Total improdutivo: <b style="color:var(--acc)">'+at.reduce(function(s,d){return s+d.delayMin;},0)+' min</b></div>'; }
+  tbody.innerHTML=IMP_FILTERED.map(function(d,i){
+    var dl=d.delayMin;
+    var atrasoCell=dl>60?'<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">▲ '+impFmtDelay(dl)+'</span>':dl>0?'<span style="background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">▲ '+impFmtDelay(dl)+'</span>':'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">—</span>';
+    var statusBadge=dl>60?'<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">Atrasado</span>':dl>0?'<span style="background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">Leve</span>':'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">✓ Ok</span>';
+    var ch=d.chegadaMin!==null?impToHHMM(d.chegadaMin):'<span style="color:#ccc">—</span>';
+    var pt=d.ptsMin!==null?impToHHMM(d.ptsMin):'<span style="color:#ccc">—</span>';
+    var ini=d.inicioMin!==null?impToHHMM(d.inicioMin):'<span style="color:#ccc">—</span>';
+    var baseChip=d.baseUsada==='PTS'?'<span style="font-size:9px;background:#fffbeb;color:#92400e;padding:1px 5px;border-radius:3px;font-weight:700">PTS</span>':'<span style="font-size:9px;background:#eff6ff;color:#1d4ed8;padding:1px 5px;border-radius:3px;font-weight:700">Chegada</span>';
+    var sq=d.squadInfo;
+    var sqCell=sq&&sq.squad?'<div style="font-weight:600;font-size:11px">'+impEsc(sq.squad)+'</div><div style="font-size:10px;color:var(--muted)">'+impEsc(sq.lider)+'</div>':'<span style="color:#ccc;font-size:11px">—</span>';
+    var desc=d.descricao||'',LIM=80,descCell;
+    if(desc.length<=LIM){descCell='<span style="color:var(--muted);font-size:11px;line-height:1.4">'+impEsc(desc||'—')+'</span>';}
+    else{descCell='<span style="color:var(--muted);font-size:11px;line-height:1.4" id="imp-ds'+i+'">'+impEsc(desc.slice(0,LIM))+'…</span><span style="color:var(--muted);font-size:11px;line-height:1.4;white-space:pre-wrap;word-break:break-word" id="imp-df'+i+'" style="display:none">'+impEsc(desc)+'</span><button style="background:none;border:none;color:var(--acc);font-size:10px;font-weight:700;cursor:pointer;padding:0;margin-top:2px;display:block;font-family:inherit" id="imp-db'+i+'" onclick="impToggleDesc('+i+')">ver mais ▾</button>';}
+    return'<tr><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-family:\'Courier New\',monospace;font-size:11px;color:var(--acc2);vertical-align:middle;white-space:nowrap">'+impEsc(d.sap)+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="max-width:180px;vertical-align:top">'+descCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td></tr>';
+  }).join('');
+}
+
+// ── Empresas ─────────────────────────────────────────────────────
+function impRenderEmpresas(){
+  var byE={};
+  IMP_FILTERED.forEach(function(d){if(!byE[d.empresa])byE[d.empresa]={empresa:d.empresa,total:0,at:0,min:0,max:0};byE[d.empresa].total++;if(d.delayMin>0){byE[d.empresa].at++;byE[d.empresa].min+=d.delayMin;if(d.delayMin>byE[d.empresa].max)byE[d.empresa].max=d.delayMin;}});
+  var list=Object.values(byE).sort(function(a,b){return b.min-a.min;});
+  var maxM=list.length?list[0].min:1;
+  var el=document.getElementById('imp-lbl-emp'); if(el) el.textContent=list.length+' empresas';
+  var tbody=document.getElementById('imp-tbody-emp'); if(!tbody) return;
+  tbody.innerHTML=list.length?list.map(function(e){
+    var pct=e.total>0?Math.round(e.at/e.total*100):0;
+    var bw=maxM>0?Math.round(e.min/maxM*100):0;
+    var pc=pct>50?'color:#b91c1c;font-weight:700':pct>20?'color:#d97706;font-weight:600':'color:#15803d';
+    return'<tr><td style="font-weight:600;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+impEsc(e.empresa)+'">'+impEsc(e.empresa)+'</td><td style="text-align:center">'+e.total+'</td><td style="text-align:center;font-weight:700;color:'+(e.at>0?'#b91c1c':'#15803d')+'">'+e.at+'</td><td style="text-align:center;'+pc+'">'+pct+'%</td><td style="text-align:right;font-family:monospace;font-weight:700">'+(e.min>0?e.min+' min':'—')+'</td><td style="text-align:right;font-family:monospace">'+(e.max>0?impFmtDelay(e.max):'—')+'</td><td><div style="background:#e8f4fd;border-radius:4px;height:6px;min-width:60px;margin-top:4px"><div style="background:'+(pct>50?'#ef4444':'var(--acc)')+';border-radius:4px;height:6px;width:'+bw+'%"></div></div></td></tr>';
+  }).join(''):'<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">Sem dados</td></tr>';
+}
+
+// ── Obras ─────────────────────────────────────────────────────────
+function impRenderObras(){
+  var byO={};
+  IMP_FILTERED.forEach(function(d){if(!byO[d.sap])byO[d.sap]={sap:d.sap,sq:d.squadInfo&&d.squadInfo.squad||'',desc:d.descricao,total:0,at:0,min:0,max:0};byO[d.sap].total++;if(d.delayMin>0){byO[d.sap].at++;byO[d.sap].min+=d.delayMin;if(d.delayMin>byO[d.sap].max)byO[d.sap].max=d.delayMin;}});
+  var list=Object.values(byO).sort(function(a,b){return b.min-a.min;});
+  var el=document.getElementById('imp-lbl-obras'); if(el) el.textContent=list.length+' obras';
+  var tbody=document.getElementById('imp-tbody-obra'); if(!tbody) return;
+  tbody.innerHTML=list.length?list.map(function(o){
+    var sqBadge=o.sq?'<span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">'+impEsc(o.sq)+'</span>':'<span style="color:#ccc">—</span>';
+    return'<tr><td style="font-family:\'Courier New\',monospace;font-size:11px;color:var(--acc2);font-weight:700;vertical-align:middle;white-space:nowrap">'+impEsc(o.sap)+'</td><td>'+sqBadge+'</td><td style="font-size:11px;color:var(--muted);max-width:220px;white-space:normal;line-height:1.4">'+impEsc(o.desc||'—')+'</td><td style="text-align:center">'+o.total+'</td><td style="text-align:center;font-weight:700;color:'+(o.at>0?'#b91c1c':'#15803d')+'">'+o.at+'</td><td style="text-align:right;font-family:monospace;font-weight:700">'+(o.min>0?o.min+' min':'—')+'</td><td style="text-align:right;font-family:monospace">'+(o.max>0?impFmtDelay(o.max):'—')+'</td></tr>';
+  }).join(''):'<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">Sem dados</td></tr>';
+}
+
+// ── Squads ────────────────────────────────────────────────────────
+function impRenderSquads(){
+  var bySq={};
+  IMP_FILTERED.forEach(function(d){var sq=d.squadInfo&&d.squadInfo.squad?d.squadInfo.squad:'(sem squad)';var ld=d.squadInfo&&d.squadInfo.lider?d.squadInfo.lider:'';if(!bySq[sq])bySq[sq]={squad:sq,lider:ld,total:0,at:0,min:0,max:0};bySq[sq].total++;if(d.delayMin>0){bySq[sq].at++;bySq[sq].min+=d.delayMin;if(d.delayMin>bySq[sq].max)bySq[sq].max=d.delayMin;}});
+  var list=Object.values(bySq).sort(function(a,b){return b.min-a.min;});
+  var maxM=list.length?list[0].min:1;
+  var el=document.getElementById('imp-lbl-squads'); if(el) el.textContent=list.length+' squads';
+  var tbody=document.getElementById('imp-tbody-squad'); if(!tbody) return;
+  tbody.innerHTML=list.length?list.map(function(s){
+    var pct=s.total>0?Math.round(s.at/s.total*100):0;
+    var bw=maxM>0?Math.round(s.min/maxM*100):0;
+    var pc=pct>50?'color:#b91c1c;font-weight:700':pct>20?'color:#d97706;font-weight:600':'color:#15803d';
+    return'<tr><td style="font-weight:700">'+impEsc(s.squad)+'</td><td style="font-size:11px;color:var(--muted)">'+impEsc(s.lider)+'</td><td style="text-align:center">'+s.total+'</td><td style="text-align:center;font-weight:700;color:'+(s.at>0?'#b91c1c':'#15803d')+'">'+s.at+'</td><td style="text-align:center;'+pc+'">'+pct+'%</td><td style="text-align:right;font-family:monospace;font-weight:700">'+(s.min>0?s.min+' min':'—')+'</td><td style="text-align:right;font-family:monospace">'+(s.max>0?impFmtDelay(s.max):'—')+'</td><td><div style="background:#e8f4fd;border-radius:4px;height:6px;min-width:60px;margin-top:4px"><div style="background:'+(pct>50?'#ef4444':'#7c3aed')+';border-radius:4px;height:6px;width:'+bw+'%"></div></div></td></tr>';
+  }).join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">Squads não mapeados para os SAPs deste período</td></tr>';
+}
+
+// ── Tab control ───────────────────────────────────────────────────
+function impShowTab(tab,el){
+  IMP_TAB=tab;
+  document.querySelectorAll('.imp-tab').forEach(function(t){t.classList.remove('active');});
+  el.classList.add('active');
+  ['dashboard','registros','empresas','obras','squads'].forEach(function(t){var d=document.getElementById('imp-tab-'+t);if(d)d.style.display=t===tab?'':'none';});
+  if(tab==='dashboard') impRenderDashboard();
+}
+
+// ── Render view principal ─────────────────────────────────────────
+function renderViewImprodutividade(){
+  var el=document.getElementById('v-improdutividade'); if(!el) return;
+  var jaDados=IMP_DATA.length>0;
+
+  el.innerHTML='<div style="padding:16px 20px;max-width:1500px;margin:0 auto">'
+
+  // Upload zone (só se sem dados) ou botão minimalista
+  +(jaDados
+    ? '<label id="imp-update-btn" style="display:inline-flex;align-items:center;gap:8px;margin-bottom:16px;padding:7px 16px;background:var(--card);border:1px solid var(--bord);border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--acc)\'" onmouseout="this.style.borderColor=\'var(--bord)\'">'
+      +'<input type="file" accept=".xlsx,.xls" style="display:none" onchange="impHandleFile(this.files[0])">'
+      +'<span>📂 Atualizar planilha</span> <span style="font-size:10px;background:var(--bg);padding:2px 7px;border-radius:10px">'+IMP_DATA.length+' registros</span>'
+      +'</label>'
+    : '<div id="imp-upload-zone" style="background:var(--card);border:2px dashed var(--bord);border-radius:10px;padding:32px;text-align:center;cursor:pointer;margin-bottom:20px;transition:all .2s" onclick="document.getElementById(\'imp-file\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--acc)\'" ondragleave="this.style.borderColor=\'var(--bord)\'" ondrop="event.preventDefault();impHandleFile(event.dataTransfer.files[0])">'
+      +'<div style="font-size:36px;margin-bottom:8px">📂</div>'
+      +'<div style="font-size:14px;font-weight:700;margin-bottom:4px">Importar planilha de improdutividade</div>'
+      +'<div style="font-size:12px;color:var(--muted)">Arraste o arquivo .xlsx aqui ou clique para selecionar</div>'
+      +'<label style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:8px 20px;background:var(--acc);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer"><input type="file" id="imp-file" accept=".xlsx,.xls" style="display:none" onchange="impHandleFile(this.files[0])">Selecionar arquivo .xlsx</label>'
+      +'</div>'
+  )
+
+  // Content (sempre presente, oculto se sem dados)
+  +'<div id="imp-content" style="display:'+(jaDados?'block':'none')+'">'
+
+  // Controls bar
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">'
+  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">De</label><input type="date" id="imp-dt-ini" value="'+IMP_DT_MIN+'" onchange="impApplyFilters()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"></div>'
+  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Até</label><input type="date" id="imp-dt-fim" value="'+IMP_DT_MAX+'" onchange="impApplyFilters()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"></div>'
+  +'<div style="width:1px;height:32px;background:var(--bord);align-self:center;flex-shrink:0"></div>'
+  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Empresa</label><div class="ms-wrap" id="ms-imp-emp"><div class="ms-input" onclick="toggleMs(\'ms-imp-emp\')"><span class="ms-label" id="ms-imp-emp-label">Todas</span><span>▾</span></div><div class="ms-drop" id="ms-imp-emp-drop" style="display:none"></div></div></div>'
+  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Obra (SAP)</label><div class="ms-wrap" id="ms-imp-sap"><div class="ms-input" onclick="toggleMs(\'ms-imp-sap\')"><span class="ms-label" id="ms-imp-sap-label">Todas</span><span>▾</span></div><div class="ms-drop" id="ms-imp-sap-drop" style="display:none"></div></div></div>'
+  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Squad</label><div class="ms-wrap" id="ms-imp-squad"><div class="ms-input" onclick="toggleMs(\'ms-imp-squad\')"><span class="ms-label" id="ms-imp-squad-label">Todos</span><span>▾</span></div><div class="ms-drop" id="ms-imp-squad-drop" style="display:none"></div></div></div>'
+  +'<div style="width:1px;height:32px;background:var(--bord);align-self:center;flex-shrink:0"></div>'
+  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Horário ref.</label><input type="time" id="imp-ref-time" value="08:00" onchange="impApplyFilters()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;width:90px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"></div>'
+  +'<button onclick="impLimpar()" style="padding:7px 14px;border:1px solid #fca5a5;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;background:#fff;color:#dc2626;align-self:flex-end;font-family:inherit">✕ Limpar filtros</button>'
+  +'<span id="imp-filter-hint" style="font-size:10px;color:var(--acc);font-weight:600;align-self:center;display:none"></span>'
+  +'</div>'
+
+  // Cards
+  +'<div id="imp-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin-bottom:20px"></div>'
+
+  // Tabs
+  +'<div style="display:flex;border-bottom:2px solid var(--bord);margin-bottom:16px">'
+  +'<div class="imp-tab active" onclick="impShowTab(\'dashboard\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--acc);border-bottom:2px solid var(--acc);margin-bottom:-2px;white-space:nowrap">📊 Dashboard</div>'
+  +'<div class="imp-tab" onclick="impShowTab(\'registros\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">Registros</div>'
+  +'<div class="imp-tab" onclick="impShowTab(\'empresas\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">Por Empresa</div>'
+  +'<div class="imp-tab" onclick="impShowTab(\'obras\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">Por Obra</div>'
+  +'<div class="imp-tab" onclick="impShowTab(\'squads\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">Por Squad</div>'
+  +'</div>'
+
+  // Tab Dashboard
+  +'<div id="imp-tab-dashboard">'
+  +'<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Improdutividade por dia</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-timeline"></span></div><div style="position:relative;height:200px"><canvas id="imp-chart-timeline"></canvas></div><div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:16px;height:4px;border-radius:2px;background:rgba(249,115,22,.7)"></div>Min. improdutivos</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:16px;height:3px;border-radius:2px;background:#009CDE"></div>Qtd. atrasos</div></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Distribuição de status</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-status"></span></div><div style="position:relative;height:160px;display:flex;align-items:center;justify-content:center"><canvas id="imp-chart-status"></canvas></div><div id="imp-leg-status" style="display:flex;flex-direction:column;gap:5px;margin-top:10px"></div></div>'
+  +'</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Top empresas — minutos improdutivos</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-emp"></span></div><div style="position:relative;height:240px"><canvas id="imp-chart-emp"></canvas></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Por squad — minutos improdutivos</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-sq"></span></div><div style="position:relative;height:240px"><canvas id="imp-chart-sq"></canvas></div></div>'
+  +'</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Distribuição por faixa de chegada</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-faixa"></span></div><div style="position:relative;height:190px"><canvas id="imp-chart-faixa"></canvas></div><div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#10b981;flex-shrink:0"></div>No prazo (≤08:00)</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#f59e0b;flex-shrink:0"></div>Leve atraso</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>Atrasado</div></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Top obras (SAP) — minutos improdutivos</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-obras"></span></div><div style="position:relative;height:220px"><canvas id="imp-chart-obras"></canvas></div></div>'
+  +'</div>'
+  +'</div>'
+
+  // Tab Registros
+  +'<div id="imp-tab-registros" style="display:none"><div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden">'
+  +'<div style="padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700">Registros de chegada</span><span style="font-size:11px;color:var(--muted)" id="imp-lbl-count"></span></div>'
+  +'<div id="imp-stats-reg" style="display:none;gap:12px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--bord)"></div>'
+  +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap">Data</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap">Empresa</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap">SAP</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap">Squad / Líder</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap">Descrição</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Chegada</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">PTS</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Início</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Base</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Atraso</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Status</th>'
+  +'</tr></thead><tbody id="imp-tbody-reg"></tbody></table></div></div></div>'
+
+  // Tab Empresas
+  +'<div id="imp-tab-empresas" style="display:none"><div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700">Por Empresa</span><span style="font-size:11px;color:var(--muted)" id="imp-lbl-emp"></span></div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left">Empresa</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center">Registros</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center">Com atraso</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center">% atraso</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:right">Total min.</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:right">Maior atraso</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);min-width:90px">Distribuição</th>'
+  +'</tr></thead><tbody id="imp-tbody-emp"></tbody></table></div></div></div>'
+
+  // Tab Obras
+  +'<div id="imp-tab-obras" style="display:none"><div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700">Por Obra (SAP)</span><span style="font-size:11px;color:var(--muted)" id="imp-lbl-obras"></span></div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left">SAP</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left">Squad</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left">Descrição</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center">Registros</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center">Com atraso</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:right">Total min.</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:right">Maior atraso</th>'
+  +'</tr></thead><tbody id="imp-tbody-obra"></tbody></table></div></div></div>'
+
+  // Tab Squads
+  +'<div id="imp-tab-squads" style="display:none"><div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700">Por Squad</span><span style="font-size:11px;color:var(--muted)" id="imp-lbl-squads"></span></div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left">Squad</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left">Líder</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center">Registros</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center">Com atraso</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center">% atraso</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:right">Total min.</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:right">Maior atraso</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);min-width:90px">Distribuição</th>'
+  +'</tr></thead><tbody id="imp-tbody-squad"></tbody></table></div></div></div>'
+
+  +'</div>' // imp-content
+  +'</div>'; // padding wrapper
+
+  // Rebuilds e filtros se já tiver dados
+  if(jaDados){
+    impRebuildMs();
+    IMP_TAB='dashboard';
+    impApplyFilters();
+  }
+}
+
+// Patch buildMsDrop para suportar callback customizado
+var _origBuildMsDrop = buildMsDrop;
+buildMsDrop = function(id, options, selected, callbackName){
+  var cb = callbackName || 'onMsChange';
+  var drop=document.getElementById(id+'-drop'); if(!drop) return;
+  var html='<div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMsOpts(this,\''+id+'\')" onclick="event.stopPropagation()"></div>';
+  html+='<div class="ms-opts" id="'+id+'-opts">';
+  options.forEach(function(opt){
+    var chk=selected.indexOf(opt)>=0;
+    html+='<label class="ms-opt'+(chk?' selected':'')+'"><input type="checkbox" value="'+opt.replace(/"/g,'&quot;')+'"'+(chk?' checked':'')+' onclick="'+cb+'(\''+id+'\')"><span>'+opt+'</span></label>';
+  });
+  html+='</div><div class="ms-footer"><button class="ms-btn-all" onclick="selectAllMs(\''+id+'\',\''+cb+'\')">Todos</button><button class="ms-btn-none" onclick="clearMs(\''+id+'\',\''+cb+'\')">Limpar</button></div>';
+  drop.innerHTML=html;
+};
+
+var _origSelectAllMs = selectAllMs;
+selectAllMs = function(id, cb){
+  if(!cb){ _origSelectAllMs(id); return; }
+  document.querySelectorAll('#'+id+'-opts input[type=checkbox]').forEach(function(c){c.checked=true;c.closest('.ms-opt').classList.add('selected');});
+  window[cb](id);
+};
+
+var _origClearMs = clearMs;
+clearMs = function(id, cb){
+  if(!cb){ _origClearMs(id); return; }
+  document.querySelectorAll('#'+id+'-opts input[type=checkbox]').forEach(function(c){c.checked=false;c.closest('.ms-opt').classList.remove('selected');});
+  window[cb](id);
+};
+// ══════════════════════════════════════════════════════════════════
+// FIM IMPRODUTIVIDADE
+// ══════════════════════════════════════════════════════════════════
 
 </script>
   <!-- CREDIT FOOTER -->
