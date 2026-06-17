@@ -7451,13 +7451,33 @@ function impOnMs(id){
   impApplyFilters();
 }
 
+function impGetPepNome(sap){
+  if(!sap||!REF_PEPS||!REF_PEPS.length) return '';
+  var r=REF_PEPS.find(function(p){return p[0]===sap;});
+  if(r) return r[1]||'';
+  var pep=String(sap).split('.')[0];
+  r=REF_PEPS.find(function(p){return p[0]===pep;});
+  return r?r[1]||'':'';
+}
+
 function impRebuildMs(){
   var empresas=[...new Set(IMP_DATA.map(function(d){return d.empresa;}))].sort();
   var saps=[...new Set(IMP_DATA.map(function(d){return d.sap;}))].sort();
   var squads=[...new Set(IMP_DATA.map(function(d){return impGetSquad(d.sap).squad;}).filter(Boolean))].sort();
   buildMsDrop('ms-imp-emp',empresas,IMP_F_EMPS,'impOnMs');
-  buildMsDrop('ms-imp-sap',saps,IMP_F_SAPS,'impOnMs');
   buildMsDrop('ms-imp-squad',squads,IMP_F_SQUADS,'impOnMs');
+  // SAP dropdown: value = código, label = "CÓDIGO — Nome do PEP"
+  var drop=document.getElementById('ms-imp-sap-drop'); if(!drop) return;
+  var html='<div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMsOpts(this,\'ms-imp-sap\')" onclick="event.stopPropagation()"></div>';
+  html+='<div class="ms-opts" id="ms-imp-sap-opts">';
+  saps.forEach(function(sap){
+    var chk=IMP_F_SAPS.indexOf(sap)>=0;
+    var nome=impGetPepNome(sap);
+    var label=nome?sap+' <span style="color:#94a3b8;font-weight:400">— '+nome+'</span>':sap;
+    html+='<label class="ms-opt'+(chk?' selected':'')+'"><input type="checkbox" value="'+sap.replace(/"/g,'&quot;')+'"'+(chk?' checked':'')+' onclick="impOnMs(\'ms-imp-sap\')"><span>'+label+'</span></label>';
+  });
+  html+='</div><div class="ms-footer"><button class="ms-btn-all" onclick="selectAllMs(\'ms-imp-sap\',\'impOnMs\')">Todos</button><button class="ms-btn-none" onclick="clearMs(\'ms-imp-sap\',\'impOnMs\')">Limpar</button></div>';
+  drop.innerHTML=html;
 }
 
 // ── File handling ────────────────────────────────────────────────
