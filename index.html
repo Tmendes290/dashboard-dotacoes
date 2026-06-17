@@ -7517,10 +7517,15 @@ async function impSaveToSupabase(){
 }
 
 async function impLoadFromSupabase(){
-  if(!supa) return;
+  // Aguarda até 3s pelo Supabase client inicializar (CDN lento)
+  if(!supa){
+    for(var _w=0;_w<10&&!supa;_w++) await new Promise(function(r){setTimeout(r,300);});
+    if(!supa){ console.warn('impLoadFromSupabase: supa ainda null'); return; }
+  }
   try{
     var {data,error}=await supa.from('improdutividade').select('*').order('data_sort_key',{ascending:true});
-    if(error||!data||!data.length) return;
+    if(error){ console.error('impLoadFromSupabase erro:', error); return; }
+    if(!data||!data.length) return;
     IMP_DATA=data.map(function(r){return{supaId:r.id,dataStr:r.data_str,dataSortKey:r.data_sort_key,empresa:r.empresa||'',sap:r.sap||'',produto:r.produto||'',descricao:r.descricao||'',chegadaMin:r.chegada_min,ptsMin:r.pts_min,inicioMin:r.inicio_min,almIniMin:r.alm_ini_min,almFimMin:r.alm_fim_min,terminoMin:r.termino_min,justificativa:r.justificativa||'',acao:r.acao||''};});
     var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
     IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
@@ -7967,8 +7972,17 @@ async function renderViewImprodutividade(){
       if(_saved){ IMP_DATA=JSON.parse(_saved); var _ds=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort(); IMP_DT_MIN=_ds[0]||''; IMP_DT_MAX=_ds[_ds.length-1]||''; impBuildSapNomes(); }
     }catch(e){}
     if(IMP_DATA.length===0){
-      el.innerHTML='<div style="padding:60px;text-align:center;color:var(--muted);font-size:13px">⏳ Carregando dados...</div>';
+      el.innerHTML='<div style="padding:60px;text-align:center;color:var(--muted);font-size:13px">⏳ Carregando dados do servidor...</div>';
       await impLoadFromSupabase();
+      if(IMP_DATA.length===0){
+        // Supabase não retornou dados — mostra botão de retry + importar
+        el.innerHTML='<div style="padding:60px;text-align:center">'
+          +'<p style="color:var(--muted);font-size:13px;margin-bottom:20px">Nenhum dado encontrado no servidor.</p>'
+          +'<button onclick="renderViewImprodutividade()" style="background:var(--acc);color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">↺ Tentar novamente</button>'
+          +'<label style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:10px 22px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer">📂 Importar planilha<input type="file" accept=".xlsx,.xls" style="display:none" onchange="impHandleFile(this.files[0])"></label>'
+          +'</div>';
+        return;
+      }
     }
   }
   var jaDados=IMP_DATA.length>0;
