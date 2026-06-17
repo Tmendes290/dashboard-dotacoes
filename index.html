@@ -7451,13 +7451,15 @@ function impOnMs(id){
   impApplyFilters();
 }
 
+var _IMP_SAP_NOMES={};
 function impGetPepNome(sap){
-  if(!sap||!REF_PEPS||!REF_PEPS.length) return '';
-  var r=REF_PEPS.find(function(p){return p[0]===sap;});
-  if(r) return r[1]||'';
-  var pep=String(sap).split('.')[0];
-  r=REF_PEPS.find(function(p){return p[0]===pep;});
-  return r?r[1]||'':'';
+  return _IMP_SAP_NOMES[sap]||'';
+}
+function impBuildSapNomes(){
+  _IMP_SAP_NOMES={};
+  IMP_DATA.forEach(function(d){
+    if(d.sap&&d.produto&&!_IMP_SAP_NOMES[d.sap]) _IMP_SAP_NOMES[d.sap]=d.produto;
+  });
 }
 
 function impRebuildMs(){
@@ -7510,11 +7512,13 @@ function impProcessData(rows){
       dataStr=String(_d).padStart(2,'0')+'/'+String(_m).padStart(2,'0')+'/'+_y;
     }
     var sap=String(row['Nº Sap']||row['Nº SAP']||row['N° Sap']||'—').trim();
-    IMP_DATA.push({dataStr:dataStr,dataSortKey:dataSortKey,empresa:String(row['Empresa']||'—').trim(),sap:sap,descricao:String(row['Descrição']||row['Descricao']||'').trim(),chegadaMin:chegada,ptsMin:pts,inicioMin:inicio});
+    var produto=String(row['Produto']||row['produto']||'').trim();
+    IMP_DATA.push({dataStr:dataStr,dataSortKey:dataSortKey,empresa:String(row['Empresa']||'—').trim(),sap:sap,produto:produto,descricao:String(row['Descrição']||row['Descricao']||'').trim(),chegadaMin:chegada,ptsMin:pts,inicioMin:inicio});
   });
   IMP_F_EMPS=[]; IMP_F_SAPS=[]; IMP_F_SQUADS=[];
   var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
   IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
+  impBuildSapNomes();
   try{ localStorage.setItem('imp_data',JSON.stringify(IMP_DATA)); }catch(e){}
   var ini=document.getElementById('imp-dt-ini'); if(ini) ini.value=IMP_DT_MIN;
   var fim=document.getElementById('imp-dt-fim'); if(fim) fim.value=IMP_DT_MAX;
@@ -7779,7 +7783,7 @@ function renderViewImprodutividade(){
   if(IMP_DATA.length===0){
     try{
       var _saved=localStorage.getItem('imp_data');
-      if(_saved){ IMP_DATA=JSON.parse(_saved); var _ds=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort(); IMP_DT_MIN=_ds[0]||''; IMP_DT_MAX=_ds[_ds.length-1]||''; }
+      if(_saved){ IMP_DATA=JSON.parse(_saved); var _ds=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort(); IMP_DT_MIN=_ds[0]||''; IMP_DT_MAX=_ds[_ds.length-1]||''; impBuildSapNomes(); }
     }catch(e){}
   }
   var jaDados=IMP_DATA.length>0;
