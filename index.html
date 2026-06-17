@@ -7489,12 +7489,22 @@ function impRebuildMs(){
 }
 
 // ── Supabase sync ────────────────────────────────────────────────
+function impRowKey(d){return(d.dataSortKey||'')+'|'+(d.empresa||'')+'|'+(d.sap||'')+'|'+(d.chegadaMin!=null?d.chegadaMin:'');}
+
 async function impSaveToSupabase(){
   if(!supa) return;
   try{
+    // Preserve justificativas existentes em memória
+    var justMap={};
+    IMP_DATA.forEach(function(d){if(d.justificativa) justMap[impRowKey(d)]=d.justificativa;});
     await supa.from('improdutividade').delete().neq('id',0);
-    var rows=IMP_DATA.map(function(d){return{data_sort_key:d.dataSortKey,data_str:d.dataStr,empresa:d.empresa,sap:d.sap,produto:d.produto,descricao:d.descricao,chegada_min:d.chegadaMin,pts_min:d.ptsMin,inicio_min:d.inicioMin,alm_ini_min:d.almIniMin,alm_fim_min:d.almFimMin,termino_min:d.terminoMin};});
-    for(var i=0;i<rows.length;i+=500){var res=await supa.from('improdutividade').insert(rows.slice(i,i+500));if(res.error)throw res.error;}
+    var rows=IMP_DATA.map(function(d){return{data_sort_key:d.dataSortKey,data_str:d.dataStr,empresa:d.empresa,sap:d.sap,produto:d.produto,descricao:d.descricao,chegada_min:d.chegadaMin,pts_min:d.ptsMin,inicio_min:d.inicioMin,alm_ini_min:d.almIniMin,alm_fim_min:d.almFimMin,termino_min:d.terminoMin,justificativa:justMap[impRowKey(d)]||null};});
+    var allInserted=[];
+    for(var i=0;i<rows.length;i+=500){var res=await supa.from('improdutividade').insert(rows.slice(i,i+500)).select('id,data_sort_key,empresa,sap,chegada_min');if(res.error)throw res.error;if(res.data)allInserted=allInserted.concat(res.data);}
+    // Mapear IDs de volta ao IMP_DATA
+    var idMap={};
+    allInserted.forEach(function(r){idMap[(r.data_sort_key||'')+'|'+(r.empresa||'')+'|'+(r.sap||'')+'|'+(r.chegada_min!=null?r.chegada_min:'')]=r.id;});
+    IMP_DATA.forEach(function(d){d.supaId=idMap[impRowKey(d)]||null;});
     toast(IMP_DATA.length+' registros salvos no servidor','#15803d');
   }catch(e){console.error('impSaveToSupabase',e);toast('Erro ao salvar no servidor','red');}
 }
@@ -7504,12 +7514,21 @@ async function impLoadFromSupabase(){
   try{
     var {data,error}=await supa.from('improdutividade').select('*').order('data_sort_key',{ascending:true});
     if(error||!data||!data.length) return;
-    IMP_DATA=data.map(function(r){return{dataStr:r.data_str,dataSortKey:r.data_sort_key,empresa:r.empresa||'',sap:r.sap||'',produto:r.produto||'',descricao:r.descricao||'',chegadaMin:r.chegada_min,ptsMin:r.pts_min,inicioMin:r.inicio_min,almIniMin:r.alm_ini_min,almFimMin:r.alm_fim_min,terminoMin:r.termino_min};});
+    IMP_DATA=data.map(function(r){return{supaId:r.id,dataStr:r.data_str,dataSortKey:r.data_sort_key,empresa:r.empresa||'',sap:r.sap||'',produto:r.produto||'',descricao:r.descricao||'',chegadaMin:r.chegada_min,ptsMin:r.pts_min,inicioMin:r.inicio_min,almIniMin:r.alm_ini_min,almFimMin:r.alm_fim_min,terminoMin:r.termino_min,justificativa:r.justificativa||''};});
     var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
     IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
     impBuildSapNomes();
     try{localStorage.setItem('imp_data',JSON.stringify(IMP_DATA));}catch(e){}
   }catch(e){console.error('impLoadFromSupabase',e);}
+}
+
+function impSaveJust(supaId,filtIdx,el){
+  var texto=el.value.trim();
+  if(IMP_FILTERED[filtIdx]) IMP_FILTERED[filtIdx].justificativa=texto;
+  var orig=IMP_DATA.find(function(d){return d.supaId===supaId;});
+  if(orig) orig.justificativa=texto;
+  try{localStorage.setItem('imp_data',JSON.stringify(IMP_DATA));}catch(e){}
+  if(supaId&&supa) supa.from('improdutividade').update({justificativa:texto}).eq('id',supaId).then(function(r){if(r.error)console.error('just save',r.error);});
 }
 
 // ── File handling ────────────────────────────────────────────────
@@ -7525,6 +7544,8 @@ function impHandleFile(file){
 }
 
 function impProcessData(rows){
+  var oldJustMap={};
+  IMP_DATA.forEach(function(d){if(d.justificativa) oldJustMap[impRowKey(d)]=d.justificativa;});
   IMP_DATA=[];
   rows.forEach(function(row){
     var chegada=impTimeToMin(row['Chegada']);
@@ -7546,7 +7567,9 @@ function impProcessData(rows){
     var almIni=impTimeToMin(row['Alm_ini']||row['Alm_Ini']||row['alm_ini']||null);
     var almFim=impTimeToMin(row['Alm_fim']||row['Alm_Fim']||row['alm_fim']||null);
     var termino=impTimeToMin(row['Termino']||row['Término']||row['termino']||null);
-    IMP_DATA.push({dataStr:dataStr,dataSortKey:dataSortKey,empresa:String(row['Empresa']||'—').trim(),sap:sap,produto:produto,descricao:String(row['Descrição']||row['Descricao']||'').trim(),chegadaMin:chegada,ptsMin:pts,inicioMin:inicio,almIniMin:almIni,almFimMin:almFim,terminoMin:termino});
+    var _item={supaId:null,dataStr:dataStr,dataSortKey:dataSortKey,empresa:String(row['Empresa']||'—').trim(),sap:sap,produto:produto,descricao:String(row['Descrição']||row['Descricao']||'').trim(),chegadaMin:chegada,ptsMin:pts,inicioMin:inicio,almIniMin:almIni,almFimMin:almFim,terminoMin:termino,justificativa:''};
+    _item.justificativa=oldJustMap[impRowKey(_item)]||'';
+    IMP_DATA.push(_item);
   });
   IMP_F_EMPS=[]; IMP_F_SAPS=[]; IMP_F_SQUADS=[];
   var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
@@ -7807,7 +7830,7 @@ function impRenderRegistros(){
   var el=document.getElementById('imp-lbl-count'); if(el) el.textContent=IMP_FILTERED.length+' registros';
   var tbody=document.getElementById('imp-tbody-reg'); if(!tbody) return;
   if(!IMP_FILTERED.length){
-    tbody.innerHTML='<tr><td colspan="14" style="text-align:center;padding:32px;color:var(--muted)">Nenhum registro para os filtros selecionados</td></tr>';
+    tbody.innerHTML='<tr><td colspan="15" style="text-align:center;padding:32px;color:var(--muted)">Nenhum registro para os filtros selecionados</td></tr>';
     var sr=document.getElementById('imp-stats-reg'); if(sr) sr.style.display='none'; return;
   }
   var at=IMP_FILTERED.filter(function(d){return d.delayMin>0;});
@@ -7829,7 +7852,9 @@ function impRenderRegistros(){
     var desc=d.descricao||'',LIM=80,descCell;
     if(desc.length<=LIM){descCell='<span style="color:var(--muted);font-size:11px;line-height:1.4">'+impEsc(desc||'—')+'</span>';}
     else{descCell='<span style="color:var(--muted);font-size:11px;line-height:1.4" id="imp-ds'+i+'">'+impEsc(desc.slice(0,LIM))+'…</span><span style="color:var(--muted);font-size:11px;line-height:1.4;white-space:pre-wrap;word-break:break-word" id="imp-df'+i+'" style="display:none">'+impEsc(desc)+'</span><button style="background:none;border:none;color:var(--acc);font-size:10px;font-weight:700;cursor:pointer;padding:0;margin-top:2px;display:block;font-family:inherit" id="imp-db'+i+'" onclick="impToggleDesc('+i+')">ver mais ▾</button>';}
-    return'<tr><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-family:\'Courier New\',monospace;font-size:11px;color:var(--acc2);vertical-align:middle;white-space:nowrap">'+impEsc(d.sap)+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="max-width:180px;vertical-align:top">'+descCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almI+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almF+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+term+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td></tr>';
+    var jid=d.supaId||null;
+    var justCell='<td style="vertical-align:middle;padding:4px 6px"><textarea rows="2" onblur="impSaveJust('+(jid?jid:'null')+','+i+',this)" style="width:100%;min-width:180px;border:1px solid var(--bord);border-radius:5px;padding:4px 7px;font-size:11px;font-family:Inter,sans-serif;color:var(--text);background:#fff;resize:vertical;outline:none;line-height:1.4" placeholder="Clique para justificar...">'+impEsc(d.justificativa||'')+'</textarea></td>';
+    return'<tr><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-family:\'Courier New\',monospace;font-size:11px;color:var(--acc2);vertical-align:middle;white-space:nowrap">'+impEsc(d.sap)+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="max-width:180px;vertical-align:top">'+descCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almI+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almF+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+term+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td>'+justCell+'</tr>';
   }).join('');
 }
 
@@ -8003,6 +8028,7 @@ async function renderViewImprodutividade(){
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Base</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Atraso</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Status</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap;min-width:200px">Justificativa</th>'
   +'</tr></thead><tbody id="imp-tbody-reg"></tbody></table></div></div></div>'
 
   // Tab Empresas
