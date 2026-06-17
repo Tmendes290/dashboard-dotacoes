@@ -7881,8 +7881,15 @@ function impRenderSquads(){
 // ── Tab control ───────────────────────────────────────────────────
 function impShowTab(tab,el){
   IMP_TAB=tab;
-  document.querySelectorAll('.imp-tab').forEach(function(t){t.classList.remove('active');});
+  document.querySelectorAll('.imp-tab').forEach(function(t){
+    t.classList.remove('active');
+    t.style.color='var(--muted)';
+    t.style.borderBottomColor='transparent';
+    t.style.fontWeight='600';
+  });
   el.classList.add('active');
+  el.style.color='var(--acc)';
+  el.style.borderBottomColor='var(--acc)';
   ['dashboard','registros','empresas','obras','squads'].forEach(function(t){var d=document.getElementById('imp-tab-'+t);if(d)d.style.display=t===tab?'':'none';});
   if(tab==='dashboard') impRenderDashboard();
 }
