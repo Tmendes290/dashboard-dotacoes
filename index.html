@@ -7516,22 +7516,24 @@ async function impSaveToSupabase(){
   }catch(e){console.error('impSaveToSupabase',e);toast('Erro ao salvar no servidor','red');}
 }
 
+var _IMP_LOAD_ERR='';
 async function impLoadFromSupabase(){
+  _IMP_LOAD_ERR='';
   // Aguarda até 3s pelo Supabase client inicializar (CDN lento)
   if(!supa){
     for(var _w=0;_w<10&&!supa;_w++) await new Promise(function(r){setTimeout(r,300);});
-    if(!supa){ console.warn('impLoadFromSupabase: supa ainda null'); return; }
+    if(!supa){ _IMP_LOAD_ERR='supa=null (client não inicializou)'; return; }
   }
   try{
     var {data,error}=await supa.from('improdutividade').select('*').order('data_sort_key',{ascending:true});
-    if(error){ console.error('impLoadFromSupabase erro:', error); return; }
-    if(!data||!data.length) return;
+    if(error){ _IMP_LOAD_ERR='Supabase error: '+JSON.stringify(error); return; }
+    if(!data||!data.length){ _IMP_LOAD_ERR='Tabela vazia (0 linhas)'; return; }
     IMP_DATA=data.map(function(r){return{supaId:r.id,dataStr:r.data_str,dataSortKey:r.data_sort_key,empresa:r.empresa||'',sap:r.sap||'',produto:r.produto||'',descricao:r.descricao||'',chegadaMin:r.chegada_min,ptsMin:r.pts_min,inicioMin:r.inicio_min,almIniMin:r.alm_ini_min,almFimMin:r.alm_fim_min,terminoMin:r.termino_min,justificativa:r.justificativa||'',acao:r.acao||''};});
     var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
     IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
     impBuildSapNomes();
     try{localStorage.setItem('imp_data',JSON.stringify(IMP_DATA));}catch(e){}
-  }catch(e){console.error('impLoadFromSupabase',e);}
+  }catch(e){ _IMP_LOAD_ERR='Exceção: '+String(e); }
 }
 
 function impSaveJust(supaId,filtIdx,el){
@@ -7977,7 +7979,8 @@ async function renderViewImprodutividade(){
       if(IMP_DATA.length===0){
         // Supabase não retornou dados — mostra botão de retry + importar
         el.innerHTML='<div style="padding:60px;text-align:center">'
-          +'<p style="color:var(--muted);font-size:13px;margin-bottom:20px">Nenhum dado encontrado no servidor.</p>'
+          +'<p style="color:var(--muted);font-size:13px;margin-bottom:8px">Nenhum dado encontrado no servidor.</p>'
+          +(_IMP_LOAD_ERR?'<p style="font-family:monospace;font-size:11px;color:#b91c1c;background:#fee2e2;border-radius:6px;padding:8px 14px;margin-bottom:16px;max-width:600px;word-break:break-all">'+_IMP_LOAD_ERR+'</p>':'')
           +'<button onclick="renderViewImprodutividade()" style="background:var(--acc);color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">↺ Tentar novamente</button>'
           +'<label style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:10px 22px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer">📂 Importar planilha<input type="file" accept=".xlsx,.xls" style="display:none" onchange="impHandleFile(this.files[0])"></label>'
           +'</div>';
