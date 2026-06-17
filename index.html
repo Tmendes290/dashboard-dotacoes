@@ -7654,12 +7654,12 @@ function impApplyFilters(){
   var hint=document.getElementById('imp-filter-hint');
   if(hint){ hint.textContent=ativos.length?'Filtrando: '+ativos.join(', '):''; hint.style.display=ativos.length?'':'none'; }
 
-  impRenderCards(refMin);
-  impRenderDashboard();
-  impRenderRegistros();
-  impRenderEmpresas();
-  impRenderObras();
-  impRenderSquads();
+  try{impRenderCards(refMin);}catch(e){console.error('[imp] cards',e);}
+  try{impRenderDashboard();}catch(e){console.error('[imp] dashboard',e);}
+  try{impRenderRegistros();}catch(e){console.error('[imp] registros',e);}
+  try{impRenderEmpresas();}catch(e){console.error('[imp] empresas',e);}
+  try{impRenderObras();}catch(e){console.error('[imp] obras',e);}
+  try{impRenderSquads();}catch(e){console.error('[imp] squads',e);}
 }
 
 function impSetChartFilter(type,val){
@@ -7862,7 +7862,9 @@ function impRenderRegistros(){
   var at=IMP_FILTERED.filter(function(d){return d.delayMin>0;});
   var sr=document.getElementById('imp-stats-reg');
   if(sr){ sr.style.display='flex'; sr.innerHTML='<div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">Com atraso: <b style="color:var(--acc)">'+at.length+'</b></div><div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">No prazo: <b style="color:var(--acc)">'+(IMP_FILTERED.length-at.length)+'</b></div><div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">Total improdutivo: <b style="color:var(--acc)">'+at.reduce(function(s,d){return s+d.delayMin;},0)+' min</b></div>'; }
-  tbody.innerHTML=IMP_FILTERED.map(function(d,i){
+  var _rows=[];
+  IMP_FILTERED.forEach(function(d,i){
+    try{
     var dl=d.delayMin;
     var atrasoCell=dl>60?'<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">▲ '+impFmtDelay(dl)+'</span>':dl>0?'<span style="background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">▲ '+impFmtDelay(dl)+'</span>':'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">—</span>';
     var statusBadge=dl>60?'<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">Atrasado</span>':dl>0?'<span style="background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">Leve</span>':'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">✓ Ok</span>';
@@ -7887,8 +7889,10 @@ function impRenderRegistros(){
       +'<option value="Resolvida"'+('Resolvida'===_acaoVal?' selected':'')+'>Resolvida</option>'
       +'</select></td>';
     var justCell='<td style="vertical-align:middle;padding:4px 6px"><textarea rows="2" onblur="impSaveJust('+(jid?jid:'null')+','+i+',this)" style="width:100%;min-width:180px;border:1px solid var(--bord);border-radius:5px;padding:4px 7px;font-size:11px;font-family:Inter,sans-serif;color:var(--text);background:#fff;resize:vertical;outline:none;line-height:1.4" placeholder="Clique para justificar...">'+impEsc(d.justificativa||'')+'</textarea></td>';
-    return'<tr><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-family:\'Courier New\',monospace;font-size:11px;color:var(--acc2);vertical-align:middle;white-space:nowrap">'+impEsc(d.sap)+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="max-width:180px;vertical-align:top">'+descCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almI+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almF+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+term+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td>'+acaoCell+justCell+'</tr>';
-  }).join('');
+    _rows.push('<tr><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-family:\'Courier New\',monospace;font-size:11px;color:var(--acc2);vertical-align:middle;white-space:nowrap">'+impEsc(d.sap)+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="max-width:180px;vertical-align:top">'+descCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almI+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almF+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+term+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td>'+acaoCell+justCell+'</tr>');
+    }catch(e){console.error('[imp] row '+i,e);}
+  });
+  tbody.innerHTML=_rows.join('');
 }
 
 // ── Empresas ─────────────────────────────────────────────────────
