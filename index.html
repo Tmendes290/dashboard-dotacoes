@@ -4241,6 +4241,8 @@ function onMsChange(id){
     populateMultiSelects();
   }
   render();
+  if(id.startsWith('ms-reg-') && typeof renderRegularizar==='function') renderRegularizar();
+  if(id.startsWith('ms-sp-') && typeof renderSaudePep==='function') renderSaudePep();
 }
 
 function updateMsLabel(id, selected){
@@ -8117,7 +8119,7 @@ async function renderViewImprodutividade(){
 // Patch buildMsDrop para suportar callback customizado
 var _origBuildMsDrop = buildMsDrop;
 buildMsDrop = function(id, options, selected, callbackName){
-  var cb = callbackName || 'onMsChange';
+  var cb = (typeof callbackName === 'function') ? (callbackName.name || 'onMsChange') : (callbackName || 'onMsChange');
   var drop=document.getElementById(id+'-drop'); if(!drop) return;
   var html='<div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMsOpts(this,\''+id+'\')" onclick="event.stopPropagation()"></div>';
   html+='<div class="ms-opts" id="'+id+'-opts">';
