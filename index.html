@@ -4211,6 +4211,7 @@ function getMsSelected(id){
 }
 
 function onMsChange(id){
+  if(id.startsWith('ms-imp-')){ impOnMs(id); return; }
   var selected = getMsSelected(id);
   updateMsLabel(id, selected);
   if(id.startsWith('ms-mat-')){
@@ -4258,7 +4259,10 @@ function updateMsLabel(id, selected){
     'ms-mat-fornecedor': 'Todos os Fornecedores...',
     'ms-mat-squad': 'Todos os Squads',
     'ms-mat-situacao': 'Todas as Situações',
-    'ms-sp-pep': 'Todos os PEPs...'
+    'ms-sp-pep': 'Todos os PEPs...',
+    'ms-imp-emp': 'Todas',
+    'ms-imp-sap': 'Todas',
+    'ms-imp-squad': 'Todos'
   };
   if(selected.length === 0){
     label.textContent = defaults[id] || 'Todos';
