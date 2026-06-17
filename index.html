@@ -3951,7 +3951,7 @@ function updateUserBadge(){
   // Set body class for CSS-based admin visibility
   document.body.classList.toggle("is-admin", CURRENT_PERFIL.role === "admin");
   document.body.classList.toggle("is-lider", CURRENT_PERFIL.role === "lider");
-  document.body.classList.toggle("is-imp", CURRENT_PERFIL.role === "admin" || (CURRENT_PERFIL.email||'').toLowerCase() === 'tm0133929@gmail.com');
+  document.body.classList.toggle("is-imp", CURRENT_PERFIL.role === "admin");
   var isAdmin = CURRENT_PERFIL.role === 'admin';
   var isLider = CURRENT_PERFIL.role === 'lider';
   var nome = CURRENT_PERFIL.nome || CURRENT_PERFIL.email || 'Usuário';
