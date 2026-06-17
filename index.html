@@ -7488,6 +7488,30 @@ function impRebuildMs(){
   drop.innerHTML=html;
 }
 
+// ── Supabase sync ────────────────────────────────────────────────
+async function impSaveToSupabase(){
+  if(!supa) return;
+  try{
+    await supa.from('improdutividade').delete().neq('id',0);
+    var rows=IMP_DATA.map(function(d){return{data_sort_key:d.dataSortKey,data_str:d.dataStr,empresa:d.empresa,sap:d.sap,produto:d.produto,descricao:d.descricao,chegada_min:d.chegadaMin,pts_min:d.ptsMin,inicio_min:d.inicioMin,alm_ini_min:d.almIniMin,alm_fim_min:d.almFimMin,termino_min:d.terminoMin};});
+    for(var i=0;i<rows.length;i+=500){var res=await supa.from('improdutividade').insert(rows.slice(i,i+500));if(res.error)throw res.error;}
+    toast(IMP_DATA.length+' registros salvos no servidor','#15803d');
+  }catch(e){console.error('impSaveToSupabase',e);toast('Erro ao salvar no servidor','red');}
+}
+
+async function impLoadFromSupabase(){
+  if(!supa) return;
+  try{
+    var {data,error}=await supa.from('improdutividade').select('*').order('data_sort_key',{ascending:true});
+    if(error||!data||!data.length) return;
+    IMP_DATA=data.map(function(r){return{dataStr:r.data_str,dataSortKey:r.data_sort_key,empresa:r.empresa||'',sap:r.sap||'',produto:r.produto||'',descricao:r.descricao||'',chegadaMin:r.chegada_min,ptsMin:r.pts_min,inicioMin:r.inicio_min,almIniMin:r.alm_ini_min,almFimMin:r.alm_fim_min,terminoMin:r.termino_min};});
+    var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
+    IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
+    impBuildSapNomes();
+    try{localStorage.setItem('imp_data',JSON.stringify(IMP_DATA));}catch(e){}
+  }catch(e){console.error('impLoadFromSupabase',e);}
+}
+
 // ── File handling ────────────────────────────────────────────────
 function impHandleFile(file){
   if(!file||!file.name.match(/\.xlsx?$/i)){ toast('Use um arquivo .xlsx','red'); return; }
@@ -7529,6 +7553,7 @@ function impProcessData(rows){
   IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
   impBuildSapNomes();
   try{ localStorage.setItem('imp_data',JSON.stringify(IMP_DATA)); }catch(e){}
+  impSaveToSupabase();
   var ini=document.getElementById('imp-dt-ini'); if(ini) ini.value=IMP_DT_MIN;
   var fim=document.getElementById('imp-dt-fim'); if(fim) fim.value=IMP_DT_MAX;
   impRebuildMs();
@@ -7863,13 +7888,17 @@ function impShowTab(tab,el){
 }
 
 // ── Render view principal ─────────────────────────────────────────
-function renderViewImprodutividade(){
+async function renderViewImprodutividade(){
   var el=document.getElementById('v-improdutividade'); if(!el) return;
   if(IMP_DATA.length===0){
     try{
       var _saved=localStorage.getItem('imp_data');
       if(_saved){ IMP_DATA=JSON.parse(_saved); var _ds=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort(); IMP_DT_MIN=_ds[0]||''; IMP_DT_MAX=_ds[_ds.length-1]||''; impBuildSapNomes(); }
     }catch(e){}
+    if(IMP_DATA.length===0){
+      el.innerHTML='<div style="padding:60px;text-align:center;color:var(--muted);font-size:13px">⏳ Carregando dados...</div>';
+      await impLoadFromSupabase();
+    }
   }
   var jaDados=IMP_DATA.length>0;
 
