@@ -7513,7 +7513,7 @@ async function impSaveToSupabase(){
     allInserted.forEach(function(r){idMap[(r.data_sort_key||'')+'|'+(r.empresa||'')+'|'+(r.sap||'')+'|'+(r.chegada_min!=null?r.chegada_min:'')]=r.id;});
     IMP_DATA.forEach(function(d){d.supaId=idMap[impRowKey(d)]||null;});
     toast(IMP_DATA.length+' registros salvos no servidor','#15803d');
-  }catch(e){console.error('impSaveToSupabase',e);toast('Erro ao salvar no servidor','red');}
+  }catch(e){console.error('impSaveToSupabase',e);toast('Erro Supabase: '+(e&&e.message?e.message:JSON.stringify(e)),'red');}
 }
 
 var _IMP_LOAD_ERR='';
