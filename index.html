@@ -7411,6 +7411,7 @@ var IMP_F_EMPS=[], IMP_F_SAPS=[], IMP_F_SQUADS=[];
 var IMP_DT_MIN='', IMP_DT_MAX='';
 var IMP_TAB='dashboard';
 var _impCharts={};
+var IMP_CHART_F={empresa:null,sap:null,squad:null};
 
 // ── Utilitários ─────────────────────────────────────────────────
 function impTimeToMin(val){
@@ -7513,7 +7514,10 @@ function impProcessData(rows){
     }
     var sap=String(row['Nº Sap']||row['Nº SAP']||row['N° Sap']||'—').trim();
     var produto=String(row['Produto']||row['produto']||'').trim();
-    IMP_DATA.push({dataStr:dataStr,dataSortKey:dataSortKey,empresa:String(row['Empresa']||'—').trim(),sap:sap,produto:produto,descricao:String(row['Descrição']||row['Descricao']||'').trim(),chegadaMin:chegada,ptsMin:pts,inicioMin:inicio});
+    var almIni=impTimeToMin(row['Alm_ini']||row['Alm_Ini']||row['alm_ini']||null);
+    var almFim=impTimeToMin(row['Alm_fim']||row['Alm_Fim']||row['alm_fim']||null);
+    var termino=impTimeToMin(row['Termino']||row['Término']||row['termino']||null);
+    IMP_DATA.push({dataStr:dataStr,dataSortKey:dataSortKey,empresa:String(row['Empresa']||'—').trim(),sap:sap,produto:produto,descricao:String(row['Descrição']||row['Descricao']||'').trim(),chegadaMin:chegada,ptsMin:pts,inicioMin:inicio,almIniMin:almIni,almFimMin:almFim,terminoMin:termino});
   });
   IMP_F_EMPS=[]; IMP_F_SAPS=[]; IMP_F_SQUADS=[];
   var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
@@ -7546,6 +7550,9 @@ function impApplyFilters(){
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0) return false;
     var sq=impGetSquad(d.sap).squad;
     if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0) return false;
+    if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa) return false;
+    if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap) return false;
+    if(IMP_CHART_F.squad&&impGetSquad(d.sap).squad!==IMP_CHART_F.squad) return false;
     return true;
   });
   IMP_FILTERED.forEach(function(d){
@@ -7554,6 +7561,9 @@ function impApplyFilters(){
     else if(d.ptsMin!==null){base=d.ptsMin;bu='PTS';}
     d.baseUsada=bu; d.delayMin=base!==null?Math.max(0,base-refMin):0;
     d.squadInfo=impGetSquad(d.sap);
+    var almPausa=(d.almIniMin!==null&&d.almFimMin!==null)?(d.almFimMin-d.almIniMin):0;
+    d.horasTrab=(d.inicioMin!==null&&d.terminoMin!==null)?d.terminoMin-d.inicioMin-almPausa:null;
+    d.almExcesso=(d.almIniMin!==null&&d.almFimMin!==null)?Math.max(0,(d.almFimMin-d.almIniMin)-60):null;
   });
   IMP_FILTERED.sort(function(a,b){return b.delayMin-a.delayMin;});
 
@@ -7573,8 +7583,23 @@ function impApplyFilters(){
   impRenderSquads();
 }
 
+function impSetChartFilter(type,val){
+  IMP_CHART_F[type]=IMP_CHART_F[type]===val?null:val;
+  impRenderChartChips();
+  impApplyFilters();
+}
+function impRenderChartChips(){
+  var el=document.getElementById('imp-chart-chips'); if(!el) return;
+  var labels={empresa:'Empresa',sap:'SAP',squad:'Squad'};
+  el.innerHTML=Object.keys(IMP_CHART_F).filter(function(k){return IMP_CHART_F[k];}).map(function(k){
+    return'<div style="display:inline-flex;align-items:center;gap:5px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:#1d4ed8;cursor:pointer" onclick="impSetChartFilter(\''+k+'\',\''+IMP_CHART_F[k].replace(/'/g,"\\'")+'\')">'
+      +labels[k]+': <span style="font-weight:400">'+IMP_CHART_F[k]+'</span> ✕</div>';
+  }).join('');
+}
+
 function impLimpar(){
   IMP_F_EMPS=[]; IMP_F_SAPS=[]; IMP_F_SQUADS=[];
+  IMP_CHART_F={empresa:null,sap:null,squad:null};
   var ini=document.getElementById('imp-dt-ini'); if(ini) ini.value=IMP_DT_MIN;
   var fim=document.getElementById('imp-dt-fim'); if(fim) fim.value=IMP_DT_MAX;
   var ref=document.getElementById('imp-ref-time'); if(ref) ref.value='08:00';
@@ -7582,6 +7607,7 @@ function impLimpar(){
   updateMsLabel('ms-imp-emp',[],'Todas');
   updateMsLabel('ms-imp-sap',[],'Todas');
   updateMsLabel('ms-imp-squad',[],'Todos');
+  impRenderChartChips();
   impApplyFilters();
 }
 
@@ -7612,8 +7638,53 @@ function impCard(cor,val,lbl,sub){
 // ── Dashboard Charts ──────────────────────────────────────────────
 function impSetBadge(id,txt){ var el=document.getElementById(id); if(el) el.textContent=txt; }
 
+function impRenderKPIs(){
+  var at=IMP_FILTERED.filter(function(d){return d.delayMin>0;});
+  var avgDelay=at.length?Math.round(at.reduce(function(s,d){return s+d.delayMin;},0)/at.length):null;
+  var comH=IMP_FILTERED.filter(function(d){return d.horasTrab!==null;});
+  var avgH=comH.length?comH.reduce(function(s,d){return s+d.horasTrab;},0)/comH.length:null;
+  var comAlm=IMP_FILTERED.filter(function(d){return d.almExcesso!==null;});
+  var avgAlm=comAlm.length?Math.round(comAlm.reduce(function(s,d){return s+d.almExcesso;},0)/comAlm.length):null;
+  var k1=document.getElementById('imp-kpi-delay'),k2=document.getElementById('imp-kpi-hours'),k3=document.getElementById('imp-kpi-lunch');
+  if(k1) k1.textContent=avgDelay!==null?avgDelay+' min':'—';
+  if(k2) k2.textContent=avgH!==null?(avgH/60).toFixed(1)+'h':'—';
+  if(k3) k3.textContent=avgAlm!==null?(avgAlm>0?avgAlm+' min':'Ok'):'—';
+}
+
+function impChartSap(){
+  var bySAP={};
+  IMP_FILTERED.forEach(function(d){if(!bySAP[d.sap])bySAP[d.sap]=0;bySAP[d.sap]++;});
+  var list=Object.entries(bySAP).sort(function(a,b){return b[1]-a[1];});
+  var total=list.reduce(function(s,e){return s+e[1];},0)||1;
+  var colors=['#6366f1','#f59e0b','#10b981','#009CDE','#06b6d4','#8b5cf6','#ec4899','#94a3b8'];
+  var labels=list.map(function(e){return e[0];});
+  var data=list.map(function(e){return e[1];});
+  var el=document.getElementById('imp-badge-sap'); if(el) el.textContent=list.length+' SAPs';
+  impSafeChart('imp-chart-sap',{type:'doughnut',data:{labels:labels,datasets:[{data:data,
+    backgroundColor:labels.map(function(s,i){return IMP_CHART_F.sap===s?colors[i%colors.length]:_impRgba(colors[i%colors.length],.8);}),
+    borderWidth:labels.map(function(s){return IMP_CHART_F.sap===s?4:2;}),borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
+      onClick:function(ev,els){if(els.length)impSetChartFilter('sap',labels[els[0].index]);},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){var n=_IMP_SAP_NOMES[c.label]||'';return[c.label+(n?' — '+n:''),c.raw+' reg. ('+Math.round(c.raw/total*100)+'%)'];}}}}}});
+  var leg=document.getElementById('imp-leg-sap'); if(!leg) return;
+  leg.innerHTML=labels.map(function(sap,i){
+    var nome=_IMP_SAP_NOMES[sap]||'';var pct=Math.round(data[i]/total*100);var active=IMP_CHART_F.sap===sap;
+    return'<div onclick="impSetChartFilter(\'sap\',\''+sap.replace(/'/g,"\\'")+'\')" style="cursor:pointer;padding:4px 6px;border-radius:5px;'+(active?'background:#eff6ff':'')+'">'+
+      '<div style="display:flex;align-items:center;gap:5px">'+
+      '<div style="width:10px;height:10px;border-radius:2px;background:'+colors[i%colors.length]+';flex-shrink:0"></div>'+
+      '<span style="font-family:monospace;font-size:10px;font-weight:'+(active?'700':'600')+';color:'+(active?'#009CDE':'#0f172a')+'">'+sap+'</span>'+
+      '<span style="margin-left:auto;font-weight:700;color:#0f172a;font-size:10px;padding-left:6px">'+pct+'%</span></div>'+
+      (nome?'<div style="font-size:9px;color:#94a3b8;padding-left:15px;margin-top:1px">'+nome+'</div>':'')+
+      '</div>';
+  }).join('');
+}
+
+function _impRgba(hex,a){var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return'rgba('+r+','+g+','+b+','+a+')';}
+
 function impRenderDashboard(){
   if(IMP_TAB!=='dashboard') return;
+  impRenderKPIs();
+  impChartSap();
   impChartTimeline();
   impChartStatus();
   impChartEmpresas();
@@ -7659,7 +7730,8 @@ function impChartEmpresas(){
   var list=Object.entries(byE).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
   impSetBadge('imp-badge-emp',list.length+' empresas');
   if(!list.length){impDestroyChart('imp-chart-emp');return;}
-  impSafeChart('imp-chart-emp',{type:'bar',data:{labels:list.map(function(e){var n=e[0];return n.length>24?n.slice(0,24)+'…':n;}),datasets:[{data:list.map(function(e){return e[1];}),backgroundColor:'rgba(14,165,233,.7)',borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+' min';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+' min';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:9}})})}})});
+  var empLabels=list.map(function(e){return e[0];});
+  impSafeChart('imp-chart-emp',{type:'bar',data:{labels:empLabels.map(function(n){return n.length>24?n.slice(0,24)+'…':n;}),datasets:[{data:list.map(function(e){return e[1];}),backgroundColor:empLabels.map(function(e){return IMP_CHART_F.empresa===e?'rgba(14,165,233,1)':'rgba(14,165,233,.65)';}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',onClick:function(ev,els){if(els.length)impSetChartFilter('empresa',empLabels[els[0].index]);},plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+' min';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+' min';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:9}})})}})});
 }
 
 function impChartSquads(){
@@ -7668,8 +7740,9 @@ function impChartSquads(){
   var list=Object.entries(bySq).sort(function(a,b){return b[1]-a[1];});
   impSetBadge('imp-badge-sq',list.length+' squads');
   if(!list.length){impDestroyChart('imp-chart-sq');return;}
+  var sqLabels=list.map(function(s){return s[0];});
   var cores=['rgba(124,58,237,.75)','rgba(109,40,217,.75)','rgba(139,92,246,.75)','rgba(167,139,250,.75)','rgba(91,33,182,.75)'];
-  impSafeChart('imp-chart-sq',{type:'bar',data:{labels:list.map(function(s){return s[0];}),datasets:[{data:list.map(function(s){return s[1];}),backgroundColor:list.map(function(s,i){return cores[i%cores.length];}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+' min';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+' min';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
+  impSafeChart('imp-chart-sq',{type:'bar',data:{labels:sqLabels,datasets:[{data:list.map(function(s){return s[1];}),backgroundColor:sqLabels.map(function(sq,i){return IMP_CHART_F.squad===sq?'rgba(124,58,237,1)':cores[i%cores.length];}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',onClick:function(ev,els){if(els.length)impSetChartFilter('squad',sqLabels[els[0].index]);},plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+' min';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+' min';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
 }
 
 function impChartFaixa(){
@@ -7686,7 +7759,8 @@ function impChartObras(){
   var list=Object.entries(byO).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
   impSetBadge('imp-badge-obras',list.length+' obras');
   if(!list.length){impDestroyChart('imp-chart-obras');return;}
-  impSafeChart('imp-chart-obras',{type:'bar',data:{labels:list.map(function(o){return o[0];}),datasets:[{data:list.map(function(o){return o[1];}),backgroundColor:'rgba(14,165,233,.7)',borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+' min';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+' min';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10,family:"'Courier New',monospace"}})})}})});
+  var obraLabels=list.map(function(o){return o[0];});
+  impSafeChart('imp-chart-obras',{type:'bar',data:{labels:obraLabels,datasets:[{data:list.map(function(o){return o[1];}),backgroundColor:obraLabels.map(function(s){return IMP_CHART_F.sap===s?'rgba(14,165,233,1)':'rgba(14,165,233,.65)';}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',onClick:function(ev,els){if(els.length)impSetChartFilter('sap',obraLabels[els[0].index]);},plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){var n=_IMP_SAP_NOMES[c.label]||'';return c.raw+' min'+(n?' — '+n:'');}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+' min';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10,family:"'Courier New',monospace"}})})}})});
 }
 
 // ── Registros ────────────────────────────────────────────────────
@@ -7700,7 +7774,7 @@ function impRenderRegistros(){
   var el=document.getElementById('imp-lbl-count'); if(el) el.textContent=IMP_FILTERED.length+' registros';
   var tbody=document.getElementById('imp-tbody-reg'); if(!tbody) return;
   if(!IMP_FILTERED.length){
-    tbody.innerHTML='<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted)">Nenhum registro para os filtros selecionados</td></tr>';
+    tbody.innerHTML='<tr><td colspan="14" style="text-align:center;padding:32px;color:var(--muted)">Nenhum registro para os filtros selecionados</td></tr>';
     var sr=document.getElementById('imp-stats-reg'); if(sr) sr.style.display='none'; return;
   }
   var at=IMP_FILTERED.filter(function(d){return d.delayMin>0;});
@@ -7713,13 +7787,16 @@ function impRenderRegistros(){
     var ch=d.chegadaMin!==null?impToHHMM(d.chegadaMin):'<span style="color:#ccc">—</span>';
     var pt=d.ptsMin!==null?impToHHMM(d.ptsMin):'<span style="color:#ccc">—</span>';
     var ini=d.inicioMin!==null?impToHHMM(d.inicioMin):'<span style="color:#ccc">—</span>';
+    var almI=d.almIniMin!==null?impToHHMM(d.almIniMin):'<span style="color:#ccc">—</span>';
+    var almF=d.almFimMin!==null?impToHHMM(d.almFimMin):'<span style="color:#ccc">—</span>';
+    var term=d.terminoMin!==null?impToHHMM(d.terminoMin):'<span style="color:#ccc">—</span>';
     var baseChip=d.baseUsada==='PTS'?'<span style="font-size:9px;background:#fffbeb;color:#92400e;padding:1px 5px;border-radius:3px;font-weight:700">PTS</span>':'<span style="font-size:9px;background:#eff6ff;color:#1d4ed8;padding:1px 5px;border-radius:3px;font-weight:700">Chegada</span>';
     var sq=d.squadInfo;
     var sqCell=sq&&sq.squad?'<div style="font-weight:600;font-size:11px">'+impEsc(sq.squad)+'</div><div style="font-size:10px;color:var(--muted)">'+impEsc(sq.lider)+'</div>':'<span style="color:#ccc;font-size:11px">—</span>';
     var desc=d.descricao||'',LIM=80,descCell;
     if(desc.length<=LIM){descCell='<span style="color:var(--muted);font-size:11px;line-height:1.4">'+impEsc(desc||'—')+'</span>';}
     else{descCell='<span style="color:var(--muted);font-size:11px;line-height:1.4" id="imp-ds'+i+'">'+impEsc(desc.slice(0,LIM))+'…</span><span style="color:var(--muted);font-size:11px;line-height:1.4;white-space:pre-wrap;word-break:break-word" id="imp-df'+i+'" style="display:none">'+impEsc(desc)+'</span><button style="background:none;border:none;color:var(--acc);font-size:10px;font-weight:700;cursor:pointer;padding:0;margin-top:2px;display:block;font-family:inherit" id="imp-db'+i+'" onclick="impToggleDesc('+i+')">ver mais ▾</button>';}
-    return'<tr><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-family:\'Courier New\',monospace;font-size:11px;color:var(--acc2);vertical-align:middle;white-space:nowrap">'+impEsc(d.sap)+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="max-width:180px;vertical-align:top">'+descCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td></tr>';
+    return'<tr><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-family:\'Courier New\',monospace;font-size:11px;color:var(--acc2);vertical-align:middle;white-space:nowrap">'+impEsc(d.sap)+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="max-width:180px;vertical-align:top">'+descCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almI+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almF+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+term+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td></tr>';
   }).join('');
 }
 
@@ -7821,6 +7898,9 @@ function renderViewImprodutividade(){
   +'<span id="imp-filter-hint" style="font-size:10px;color:var(--acc);font-weight:600;align-self:center;display:none"></span>'
   +'</div>'
 
+  // Chart filter chips
+  +'<div id="imp-chart-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;min-height:0"></div>'
+
   // Cards
   +'<div id="imp-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin-bottom:20px"></div>'
 
@@ -7835,6 +7915,17 @@ function renderViewImprodutividade(){
 
   // Tab Dashboard
   +'<div id="imp-tab-dashboard">'
+
+  // SAP donut + KPI boxes
+  +'<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Improdutividade por Obra (SAP)</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-sap"></span></div><div style="display:flex;gap:16px;align-items:flex-start"><div style="position:relative;width:160px;height:160px;flex-shrink:0"><canvas id="imp-chart-sap"></canvas></div><div id="imp-leg-sap" style="flex:1;display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto"></div></div></div>'
+  +'<div style="display:flex;flex-direction:column;gap:12px">'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Min. médios de atraso</div><div id="imp-kpi-delay" style="font-size:28px;font-weight:800;color:#b91c1c;line-height:1.1">—</div><div style="font-size:10px;color:var(--muted);margin-top:2px">por registro com atraso</div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Média horas trabalhadas</div><div id="imp-kpi-hours" style="font-size:28px;font-weight:800;color:#1d4ed8;line-height:1.1">—</div><div style="font-size:10px;color:var(--muted);margin-top:2px">horas/pessoa na seleção</div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Excesso no almoço</div><div id="imp-kpi-lunch" style="font-size:28px;font-weight:800;color:#d97706;line-height:1.1">—</div><div style="font-size:10px;color:var(--muted);margin-top:2px">min. médios acima de 1h</div></div>'
+  +'</div>'
+  +'</div>'
+
   +'<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Improdutividade por dia</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-timeline"></span></div><div style="position:relative;height:200px"><canvas id="imp-chart-timeline"></canvas></div><div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:16px;height:4px;border-radius:2px;background:rgba(249,115,22,.7)"></div>Min. improdutivos</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:16px;height:3px;border-radius:2px;background:#009CDE"></div>Qtd. atrasos</div></div></div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Distribuição de status</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-status"></span></div><div style="position:relative;height:160px;display:flex;align-items:center;justify-content:center"><canvas id="imp-chart-status"></canvas></div><div id="imp-leg-status" style="display:flex;flex-direction:column;gap:5px;margin-top:10px"></div></div>'
@@ -7862,6 +7953,9 @@ function renderViewImprodutividade(){
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Chegada</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">PTS</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Início</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Alm. ini</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Alm. fim</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Término</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Base</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Atraso</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Status</th>'
