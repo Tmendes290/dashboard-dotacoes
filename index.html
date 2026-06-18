@@ -7669,6 +7669,7 @@ function impApplyFilters(){
   try{impRenderEmpresas();}catch(e){console.error('[imp] empresas',e);}
   try{impRenderObras();}catch(e){console.error('[imp] obras',e);}
   try{impRenderSquads();}catch(e){console.error('[imp] squads',e);}
+  try{rdoImpPopulateSelects(); if(IMP_TAB==='rdo') rdoImpRender();}catch(e){console.error('[imp] rdo',e);}
 }
 
 function impSetChartFilter(type,val){
@@ -7949,6 +7950,296 @@ function impRenderSquads(){
   }).join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">Squads não mapeados para os SAPs deste período</td></tr>';
 }
 
+// ══════════════════════════════════════════════════════════════════
+// RDO DIÁRIO — estado e funções
+// ══════════════════════════════════════════════════════════════════
+var RDO_SEL_DATES  = [];
+var RDO_SEL_CARD   = null;
+var RDO_SEL_SAPS   = [];   // multi-select PEP
+var RDO_SEL_EMPS   = [];   // multi-select empresa
+var RDO_CAL_YEAR   = new Date().getFullYear();
+var RDO_CAL_MONTH  = new Date().getMonth();
+var RDO_MS_OPEN    = null;
+var RDO_MONTHS     = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+// ── Helpers ──
+function rdoM2HM(m){ if(m===null||m===undefined||isNaN(m)) return '--'; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
+function rdoHtCalc(d){
+  if(d.inicioMin===null||d.terminoMin===null) return null;
+  var alm=(d.almIniMin!==null&&d.almFimMin!==null)?d.almFimMin-d.almIniMin:60;
+  return Math.max(0,d.terminoMin-d.inicioMin-alm);
+}
+function rdoHtStr(m){ if(m===null) return '--'; var h=Math.floor(m/60),mi=m%60; return h>0?h+'h'+(mi>0?String(mi).padStart(2,'0')+'m':''):mi+'m'; }
+function rdoHtCls(m){ return m===null?'rdo-mono':m>=480?'rdo-ht-g':m>=360?'rdo-ht-m':'rdo-ht-r'; }
+function rdoPepNome(sap){ var r=REF_PEPS.find(function(x){return x[0]===sap;}); return r?r[1]:''; }
+function rdoTribo(sap){ var sq=impGetSquad(sap).squad||''; var s=sq.toLowerCase(); if(/usina|br\s|slb|cpf|filtragem|flotac/.test(s)) return 'usina'; if(/mina|geo|geotec|dique/.test(s)) return 'mina'; return 'outros'; }
+function rdoFmtShort(s){ var p=s.split('-'); return p[2]+'/'+p[1]; }
+function rdoFmtFull(s){ var p=s.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+function rdoAvailDates(){ var s={}; IMP_FILTERED.forEach(function(d){if(d.dataSortKey&&d.inicioMin!==null&&d.terminoMin!==null) s[d.dataSortKey]=1;}); return Object.keys(s).sort(); }
+
+// ── Calendário ──
+document.addEventListener('click',function(e){
+  var cal=document.getElementById('rdo-cal'); if(!cal) return;
+  var fld=document.getElementById('rdo-date-fld');
+  if(fld&&!fld.contains(e.target)&&cal.classList.contains('show')){ cal.classList.remove('show'); var t=document.getElementById('rdo-dt-trigger'); if(t) t.classList.remove('open'); }
+  if(RDO_MS_OPEN&&!e.target.closest('.rdo-ms-wrap')){ var p=document.getElementById('rdo-'+RDO_MS_OPEN+'-panel'); if(p) p.classList.remove('show'); var tr=document.getElementById('rdo-'+RDO_MS_OPEN+'-trigger'); if(tr) tr.classList.remove('open'); RDO_MS_OPEN=null; }
+});
+function rdoToggleCal(){
+  var p=document.getElementById('rdo-cal'), t=document.getElementById('rdo-dt-trigger');
+  if(!p||!t) return;
+  var open=p.classList.contains('show');
+  if(open){p.classList.remove('show');t.classList.remove('open');}
+  else{p.classList.add('show');t.classList.add('open');rdoDrawCal();}
+}
+function rdoCalNav(d){ RDO_CAL_MONTH+=d; if(RDO_CAL_MONTH<0){RDO_CAL_MONTH=11;RDO_CAL_YEAR--;} if(RDO_CAL_MONTH>11){RDO_CAL_MONTH=0;RDO_CAL_YEAR++;} rdoDrawCal(); }
+function rdoCalToday(){ var n=new Date(); RDO_CAL_YEAR=n.getFullYear(); RDO_CAL_MONTH=n.getMonth(); rdoDrawCal(); }
+function rdoClearDates(){ RDO_SEL_DATES=[]; rdoUpdateDateUI(); rdoImpRender(); }
+function rdoDrawCal(){
+  var ml=document.getElementById('rdo-cal-month'); if(ml) ml.textContent=RDO_MONTHS[RDO_CAL_MONTH]+' de '+RDO_CAL_YEAR;
+  var grid=document.getElementById('rdo-cal-grid'); if(!grid) return;
+  grid.innerHTML='';
+  ['D','S','T','Q','Q','S','S'].forEach(function(d){var e=document.createElement('div');e.className='rdo-cal-dow';e.textContent=d;grid.appendChild(e);});
+  var avail=rdoAvailDates();
+  var first=new Date(RDO_CAL_YEAR,RDO_CAL_MONTH,1).getDay();
+  var days=new Date(RDO_CAL_YEAR,RDO_CAL_MONTH+1,0).getDate();
+  var today=new Date();
+  for(var i=0;i<first;i++){var e=document.createElement('div');e.className='rdo-cal-day no-data';grid.appendChild(e);}
+  for(var dd=1;dd<=days;dd++){
+    var mm2=String(RDO_CAL_MONTH+1).padStart(2,'0'),dd2=String(dd).padStart(2,'0');
+    var key=RDO_CAL_YEAR+'-'+mm2+'-'+dd2;
+    var has=avail.indexOf(key)>=0, sel=RDO_SEL_DATES.indexOf(key)>=0;
+    var el=document.createElement('div');
+    el.className='rdo-cal-day'+(has?' has-data':' no-data')+(sel?' sel':'');
+    el.textContent=dd;
+    if(has)(function(k){el.onclick=function(ev){ev.stopPropagation();rdoToggleDate(k);};})(key);
+    grid.appendChild(el);
+  }
+  var c=document.getElementById('rdo-cal-cnt'); if(c) c.textContent=RDO_SEL_DATES.length?RDO_SEL_DATES.length+' dia'+(RDO_SEL_DATES.length>1?'s':''):'';
+}
+function rdoToggleDate(k){ var i=RDO_SEL_DATES.indexOf(k); if(i>=0) RDO_SEL_DATES.splice(i,1); else RDO_SEL_DATES.push(k); RDO_SEL_DATES.sort(); rdoUpdateDateUI(); rdoDrawCal(); rdoImpRender(); }
+function rdoUpdateDateUI(){
+  var txt=document.getElementById('rdo-dt-txt'), chips=document.getElementById('rdo-chips');
+  if(!txt||!chips) return;
+  chips.innerHTML='';
+  if(!RDO_SEL_DATES.length){txt.textContent='Selecione datas';return;}
+  txt.textContent=RDO_SEL_DATES.length===1?rdoFmtFull(RDO_SEL_DATES[0]):RDO_SEL_DATES.length+' datas';
+  RDO_SEL_DATES.forEach(function(d){
+    var chip=document.createElement('div'); chip.className='rdo-chip';
+    chip.innerHTML=rdoFmtShort(d)+'<button onclick="(function(){rdoToggleDate(\''+d+'\');})()" title="Remover">×</button>';
+    chips.appendChild(chip);
+  });
+}
+
+// ── Multi-select ──
+function rdoMsToggle(key){
+  var panel=document.getElementById('rdo-'+key+'-panel'), trig=document.getElementById('rdo-'+key+'-trigger'); if(!panel||!trig) return;
+  var open=panel.classList.contains('show');
+  if(RDO_MS_OPEN&&RDO_MS_OPEN!==key){var op=document.getElementById('rdo-'+RDO_MS_OPEN+'-panel'),ot=document.getElementById('rdo-'+RDO_MS_OPEN+'-trigger');if(op)op.classList.remove('show');if(ot)ot.classList.remove('open');}
+  if(open){panel.classList.remove('show');trig.classList.remove('open');RDO_MS_OPEN=null;}
+  else{panel.classList.add('show');trig.classList.add('open');RDO_MS_OPEN=key;}
+}
+function rdoMsBuild(key,items,selArr,labelFn){
+  var panel=document.getElementById('rdo-'+key+'-panel'); if(!panel) return;
+  panel.innerHTML='';
+  var allDiv=document.createElement('div'); allDiv.className='rdo-ms-item';
+  var allCk=document.createElement('input'); allCk.type='checkbox'; allCk.id='rdo-'+key+'-all'; allCk.checked=selArr.length===0;
+  allCk.onchange=function(){selArr.length=0;rdoMsBuild(key,items,selArr,labelFn);rdoMsUpdateLbl(key,selArr);rdoImpRender();};
+  var allLbl=document.createElement('label'); allLbl.htmlFor='rdo-'+key+'-all'; allLbl.textContent='Todos';
+  allDiv.appendChild(allCk); allDiv.appendChild(allLbl); panel.appendChild(allDiv);
+  if(items.length){var hr=document.createElement('hr');hr.className='rdo-ms-div';panel.appendChild(hr);}
+  items.forEach(function(item){
+    var div=document.createElement('div'); div.className='rdo-ms-item';
+    var ck=document.createElement('input'); ck.type='checkbox'; var uid='rdo-'+key+'-'+item.replace(/[^a-z0-9]/gi,'_'); ck.id=uid; ck.checked=selArr.indexOf(item)>=0;
+    ck.onchange=(function(it,c){return function(){
+      if(c.checked){if(selArr.indexOf(it)<0) selArr.push(it);}else{var i=selArr.indexOf(it);if(i>=0)selArr.splice(i,1);}
+      var allCkEl=document.getElementById('rdo-'+key+'-all'); if(allCkEl) allCkEl.checked=selArr.length===0;
+      rdoMsUpdateLbl(key,selArr); rdoImpRender();
+    };})(item,ck);
+    var lbl=document.createElement('label'); lbl.htmlFor=uid; lbl.textContent=labelFn?labelFn(item):item;
+    div.appendChild(ck); div.appendChild(lbl); panel.appendChild(div);
+  });
+  var ftr=document.createElement('div'); ftr.className='rdo-ms-ftr';
+  var clrBtn=document.createElement('button'); clrBtn.textContent='Limpar';
+  clrBtn.onclick=function(){selArr.length=0;rdoMsBuild(key,items,selArr,labelFn);rdoMsUpdateLbl(key,selArr);rdoImpRender();};
+  ftr.appendChild(clrBtn); panel.appendChild(ftr);
+}
+function rdoMsUpdateLbl(key,selArr){
+  var lbl=document.getElementById('rdo-'+key+'-lbl'); if(!lbl) return;
+  var ph=key==='sq'?'Todos':'Todas';
+  if(!selArr.length) lbl.textContent=ph;
+  else if(selArr.length===1) lbl.textContent=selArr[0];
+  else lbl.textContent=selArr.length+' selecionados';
+}
+
+// ── Populate selects ──
+function rdoImpPopulateSelects(){
+  if(!document.getElementById('rdo-sq-panel')) return;
+  var saps={}, emps={};
+  IMP_FILTERED.forEach(function(d){
+    if(!RDO_SEL_DATES.length||RDO_SEL_DATES.indexOf(d.dataSortKey)<0) return;
+    if(d.inicioMin===null&&d.terminoMin===null) return;
+    saps[d.sap]=1; if(d.empresa) emps[d.empresa]=1;
+  });
+  rdoMsBuild('sq',  Object.keys(saps).sort(), RDO_SEL_SAPS, function(s){var n=rdoPepNome(s);return n?s+' — '+n:s;});
+  rdoMsBuild('emp', Object.keys(emps).sort(),  RDO_SEL_EMPS, null);
+  rdoMsUpdateLbl('sq',  RDO_SEL_SAPS);
+  rdoMsUpdateLbl('emp', RDO_SEL_EMPS);
+}
+
+// ── Agrega ──
+function rdoImpGetSquads(){
+  var tribo=document.getElementById('rdo-tribo')?document.getElementById('rdo-tribo').value:'';
+  var map={};
+  IMP_FILTERED.forEach(function(d){
+    if(!RDO_SEL_DATES.length||RDO_SEL_DATES.indexOf(d.dataSortKey)<0) return;
+    if(d.inicioMin===null&&d.terminoMin===null) return;
+    var sqKey=d.sap||'(sem SAP)';
+    var tb=rdoTribo(d.sap);
+    if(tribo&&tb!==tribo) return;
+    if(RDO_SEL_SAPS.length&&RDO_SEL_SAPS.indexOf(sqKey)<0) return;
+    if(RDO_SEL_CARD&&sqKey!==RDO_SEL_CARD) return;
+    if(RDO_SEL_EMPS.length&&RDO_SEL_EMPS.indexOf(d.empresa)<0) return;
+    if(!map[sqKey]) map[sqKey]={id:sqKey,sap:d.sap,tribo:tb,reg:0,perf:0,parc:0,nao:0,inicios:[],terminos:[],hts:[]};
+    var sq=map[sqKey]; sq.reg++;
+    if(d.delayMin===0) sq.perf++; else if(d.delayMin<=60) sq.parc++; else sq.nao++;
+    if(d.inicioMin!==null) sq.inicios.push(d.inicioMin);
+    if(d.terminoMin!==null) sq.terminos.push(d.terminoMin);
+    var ht=rdoHtCalc(d); if(ht!==null) sq.hts.push(ht);
+  });
+  return Object.values(map).map(function(sq){
+    sq.inicio=rdoM2HM(sq.inicios.length?Math.min.apply(null,sq.inicios):null);
+    sq.termino=rdoM2HM(sq.terminos.length?Math.max.apply(null,sq.terminos):null);
+    sq.ht=sq.hts.length?Math.round(sq.hts.reduce(function(a,b){return a+b;},0)/sq.hts.length):null;
+    return sq;
+  });
+}
+function rdoImpGetObras(squads){
+  var tribo=document.getElementById('rdo-tribo')?document.getElementById('rdo-tribo').value:'';
+  var sqSet={}; squads.forEach(function(sq){sqSet[sq.id]=1;});
+  var bySquad={}, multiDay=RDO_SEL_DATES.length>1;
+  IMP_FILTERED.forEach(function(d){
+    if(!RDO_SEL_DATES.length||RDO_SEL_DATES.indexOf(d.dataSortKey)<0) return;
+    var sqKey=d.sap||'(sem SAP)';
+    if(!sqSet[sqKey]) return;
+    if(d.inicioMin===null&&d.terminoMin===null) return;
+    if(RDO_SEL_EMPS.length&&RDO_SEL_EMPS.indexOf(d.empresa)<0) return;
+    var obraKey=sqKey+'||'+(d.descricao||d.produto||'');
+    if(!bySquad[sqKey]) bySquad[sqKey]=[];
+    var ob=bySquad[sqKey].find(function(o){return o._key===obraKey&&(!multiDay||o._dt===d.dataSortKey);});
+    if(!ob){ob={_key:obraKey,_dt:d.dataSortKey,empresa:d.empresa,frente:d.descricao||d.produto||d.sap,sap:d.sap,iniArr:[],terArr:[],ptsArr:[],almIArr:[],almFArr:[],reg:0};bySquad[sqKey].push(ob);}
+    ob.reg++;
+    if(d.inicioMin!==null) ob.iniArr.push(d.inicioMin);
+    if(d.terminoMin!==null) ob.terArr.push(d.terminoMin);
+    if(d.ptsMin!==null) ob.ptsArr.push(d.ptsMin);
+    if(d.almIniMin!==null) ob.almIArr.push(d.almIniMin);
+    if(d.almFimMin!==null) ob.almFArr.push(d.almFArr);
+  });
+  Object.keys(bySquad).forEach(function(sq){
+    bySquad[sq]=bySquad[sq].map(function(ob){
+      var minI=ob.iniArr.length?Math.min.apply(null,ob.iniArr):null;
+      var maxT=ob.terArr.length?Math.max.apply(null,ob.terArr):null;
+      var minP=ob.ptsArr.length?Math.min.apply(null,ob.ptsArr):null;
+      var almIm=ob.almIArr.length?Math.round(ob.almIArr.reduce(function(a,b){return a+b;},0)/ob.almIArr.length):null;
+      var almFm=ob.almFArr.length?Math.round(ob.almFArr.reduce(function(a,b){return a+b;},0)/ob.almFArr.length):null;
+      var alm=(almIm!==null&&almFm!==null)?almFm-almIm:60;
+      var ht=(minI!==null&&maxT!==null)?Math.max(0,maxT-minI-alm):null;
+      return{empresa:ob.empresa,frente:ob.frente,_dt:ob._dt,inicio:rdoM2HM(minI),termino:rdoM2HM(maxT),pts:rdoM2HM(minP),ht:ht,reg:ob.reg};
+    });
+  });
+  return bySquad;
+}
+
+// ── Render principal ──
+function rdoImpRender(){
+  rdoImpPopulateSelects();
+  var squads=rdoImpGetSquads();
+  var obras=rdoImpGetObras(squads);
+  var empty=document.getElementById('rdo-empty');
+  if(!squads.length){
+    var cg=document.getElementById('rdo-cards'); if(cg) cg.innerHTML='';
+    ['rdo-sec-usina','rdo-sec-mina','rdo-sec-outros'].forEach(function(id){var e=document.getElementById(id);if(e)e.className='rdo-sec hidden';});
+    if(empty) empty.style.display='block'; return;
+  }
+  if(empty) empty.style.display='none';
+  rdoImpRenderCards(squads);
+  rdoImpRenderSec('rdo-sec-usina','rdo-grp-usina','usina',squads,obras);
+  rdoImpRenderSec('rdo-sec-mina','rdo-grp-mina','mina',squads,obras);
+  rdoImpRenderSec('rdo-sec-outros','rdo-grp-outros','outros',squads,obras);
+}
+function rdoImpRenderCards(squads){
+  var g=document.getElementById('rdo-cards'); if(!g) return; g.innerHTML='';
+  squads.forEach(function(sq){
+    var isSel=RDO_SEL_CARD===sq.id, isDim=RDO_SEL_CARD&&!isSel;
+    var htColor=sq.ht===null?'#94a3b8':sq.ht>=480?'#16a34a':sq.ht>=360?'#d97706':'#dc2626';
+    var trLabel=sq.tribo==='usina'?'TRIBO USINA':sq.tribo==='mina'?'TRIBO MINA':'S/ VÍNCULO';
+    var nomeRef=rdoPepNome(sq.sap);
+    var d=document.createElement('div');
+    d.className='rdo-sq-card '+sq.tribo+(isSel?' sel':isDim?' dim':'');
+    d.onclick=function(){rdoImpToggleCard(sq.id);};
+    d.innerHTML='<div class="rdo-rn">'+sq.reg+'<small>reg</small></div>'
+      +'<div class="rdo-tr '+sq.tribo+'">'+trLabel+'</div>'
+      +'<div class="rdo-pep">PEP <span>'+impEsc(sq.sap)+'</span></div>'
+      +(nomeRef?'<div class="rdo-pnome">'+impEsc(nomeRef)+'</div>':'<div class="rdo-pnome"></div>')
+      +'<div class="rdo-times">'
+        +'<div class="rdo-tv"><div class="rdo-tv-v">'+sq.inicio+'</div><div class="rdo-tv-l">Início</div></div>'
+        +'<div class="rdo-tv"><div class="rdo-tv-v">'+sq.termino+'</div><div class="rdo-tv-l">Término</div></div>'
+        +'<div class="rdo-tv"><div class="rdo-tv-v" style="color:'+htColor+'">'+rdoHtStr(sq.ht)+'</div><div class="rdo-tv-l">H. Trab.</div></div>'
+      +'</div>'
+      +'<div class="rdo-status"><span class="rdo-sp">✓ '+sq.perf+' perf</span><span class="rdo-sa">~ '+sq.parc+' parc</span><span class="rdo-sn">✗ '+sq.nao+' não</span></div>';
+    g.appendChild(d);
+  });
+}
+function rdoImpRenderSec(secId,grpId,tribo,squads,obras){
+  var sec=document.getElementById(secId), grp=document.getElementById(grpId); if(!sec||!grp) return;
+  var list=squads.filter(function(sq){return sq.tribo===tribo;});
+  if(!list.length){sec.className='rdo-sec hidden';return;}
+  sec.className='rdo-sec'; grp.innerHTML='';
+  var trLabel=tribo==='usina'?'TRIBO USINA':tribo==='mina'?'TRIBO MINA':'S/ VÍNCULO';
+  var gbCls=tribo==='usina'?'u':tribo==='mina'?'m':'o';
+  var multiDay=RDO_SEL_DATES.length>1;
+  list.forEach(function(sq){
+    var os=obras[sq.id]||[]; if(!os.length) return;
+    var totalReg=os.reduce(function(s,o){return s+o.reg;},0);
+    var nomeRef=rdoPepNome(sq.sap);
+    var rows=os.map(function(o){
+      var tag=multiDay?'<span style="background:#f1f5f9;color:#475569;border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700;margin-right:4px">'+rdoFmtShort(o._dt)+'</span>':'';
+      return'<tr>'
+        +'<td style="font-weight:600;color:#374151;font-size:10px;white-space:nowrap">'+impEsc(o.empresa)+'</td>'
+        +'<td style="font-weight:500">'+tag+impEsc(o.frente)+'</td>'
+        +'<td class="rdo-mono">'+o.inicio+'</td>'
+        +'<td class="rdo-mono">'+o.termino+'</td>'
+        +'<td class="rdo-mono">'+o.pts+'</td>'
+        +'<td class="'+rdoHtCls(o.ht)+'">'+rdoHtStr(o.ht)+'</td>'
+        +'<td class="rdo-reg-n">'+o.reg+'</td>'
+        +'</tr>';
+    }).join('');
+    grp.innerHTML+='<div class="rdo-gbox">'
+      +'<div class="rdo-ghd"><span class="rdo-gbadge '+gbCls+'">'+trLabel+'</span>'
+      +'<span class="rdo-gname">'+impEsc(sq.sap)+(nomeRef?' — '+impEsc(nomeRef):'')+'</span>'
+      +'<span class="rdo-gcnt">'+totalReg+' registros</span></div>'
+      +'<table class="rdo-tbl"><thead><tr>'
+      +'<th>Empresa</th><th>Frente / Atividade</th>'
+      +'<th class="tc">Início</th><th class="tc">Término</th>'
+      +'<th class="tc">PTS</th><th class="tc">H. Trab.</th><th class="tc">Reg.</th>'
+      +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+  });
+}
+function rdoImpToggleCard(id){
+  RDO_SEL_CARD=(RDO_SEL_CARD===id)?null:id;
+  RDO_SEL_SAPS=RDO_SEL_CARD?[RDO_SEL_CARD]:[];
+  var pill=document.getElementById('rdo-pill'),pt=document.getElementById('rdo-pill-txt');
+  if(pill) pill.className='rdo-pill'+(RDO_SEL_CARD?' show':'');
+  if(pt) pt.textContent=RDO_SEL_CARD||'';
+  rdoImpRender();
+}
+function rdoLimparCard(){ RDO_SEL_CARD=null; RDO_SEL_SAPS=[]; var pill=document.getElementById('rdo-pill'); if(pill) pill.className='rdo-pill'; rdoImpRender(); }
+function rdoLimparTudo(){
+  RDO_SEL_CARD=null; RDO_SEL_DATES=[]; RDO_SEL_SAPS=[]; RDO_SEL_EMPS=[];
+  var tri=document.getElementById('rdo-tribo'); if(tri) tri.value='';
+  var pill=document.getElementById('rdo-pill'); if(pill) pill.className='rdo-pill';
+  rdoUpdateDateUI(); rdoImpRender();
+}
+
 // ── Tab control ───────────────────────────────────────────────────
 function impShowTab(tab,el){
   IMP_TAB=tab;
@@ -7961,7 +8252,7 @@ function impShowTab(tab,el){
   el.classList.add('active');
   el.style.color='var(--acc)';
   el.style.borderBottomColor='var(--acc)';
-  ['dashboard','registros','empresas','obras','squads'].forEach(function(t){var d=document.getElementById('imp-tab-'+t);if(d)d.style.display=t===tab?'':'none';});
+  ['dashboard','registros','empresas','obras','squads','rdo'].forEach(function(t){var d=document.getElementById('imp-tab-'+t);if(d)d.style.display=t===tab?'':'none';});
   if(tab==='dashboard') impRenderDashboard();
 }
 
@@ -8036,6 +8327,7 @@ async function renderViewImprodutividade(){
   +'<div class="imp-tab" onclick="impShowTab(\'empresas\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">Por Empresa</div>'
   +'<div class="imp-tab" onclick="impShowTab(\'obras\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">Por Obra</div>'
   +'<div class="imp-tab" onclick="impShowTab(\'squads\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">Por Squad</div>'
+  +'<div class="imp-tab" onclick="impShowTab(\'rdo\',this);rdoImpRender();" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">📅 RDO Diário</div>'
   +'</div>'
 
   // Tab Dashboard
@@ -8121,6 +8413,36 @@ async function renderViewImprodutividade(){
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:right">Maior atraso</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);min-width:90px">Distribuição</th>'
   +'</tr></thead><tbody id="imp-tbody-squad"></tbody></table></div></div></div>'
+
+  // Tab RDO Diário
+  +'<div id="imp-tab-rdo" style="display:none">'
+  // Filtros
+  +'<div class="rdo-bar-wrap">'
+  +'<div class="rdo-fld" id="rdo-date-fld" style="min-width:160px">'
+  +'<span class="rdo-lbl">Data(s)</span>'
+  +'<div class="rdo-dt-trigger" id="rdo-dt-trigger" onclick="rdoToggleCal()"><span>📅</span><span style="flex:1;font-size:11px" id="rdo-dt-txt">Selecione datas</span><span class="rdo-dt-caret">▼</span></div>'
+  +'<div class="rdo-chips" id="rdo-chips"></div>'
+  +'<div class="rdo-cal-popup" id="rdo-cal">'
+  +'<div class="rdo-cal-hdr"><button class="rdo-cal-nav" onclick="rdoCalNav(-1)">‹</button><span style="font-size:13px;font-weight:700" id="rdo-cal-month"></span><button class="rdo-cal-nav" onclick="rdoCalNav(1)">›</button></div>'
+  +'<div class="rdo-cal-grid" id="rdo-cal-grid"></div>'
+  +'<div class="rdo-cal-ftr"><button onclick="rdoClearDates()">Limpar</button><span style="font-size:10px;color:var(--muted)" id="rdo-cal-cnt"></span><button class="today" onclick="rdoCalToday()">Hoje</button></div>'
+  +'</div></div>'
+  +'<div class="rdo-fld"><span class="rdo-lbl">Tribo</span><select id="rdo-tribo" onchange="rdoImpRender()"><option value="">Todas</option><option value="usina">Tribo Usina</option><option value="mina">Tribo Mina</option><option value="outros">Sem Vínculo</option></select></div>'
+  +'<div class="rdo-fld rdo-ms-wrap" id="rdo-sq-wrap"><span class="rdo-lbl">PEP</span><div class="rdo-ms-trigger" id="rdo-sq-trigger" onclick="rdoMsToggle(\'sq\')"><span class="rdo-ms-lbl" id="rdo-sq-lbl">Todos</span><span class="rdo-ms-caret">▼</span></div><div class="rdo-ms-panel" id="rdo-sq-panel"></div></div>'
+  +'<div class="rdo-fld rdo-ms-wrap" id="rdo-emp-wrap"><span class="rdo-lbl">Empresa</span><div class="rdo-ms-trigger" id="rdo-emp-trigger" onclick="rdoMsToggle(\'emp\')"><span class="rdo-ms-lbl" id="rdo-emp-lbl">Todas</span><span class="rdo-ms-caret">▼</span></div><div class="rdo-ms-panel" id="rdo-emp-panel"></div></div>'
+  +'<button class="rdo-limpar" onclick="rdoLimparTudo()">✕ Limpar</button>'
+  +'</div>'
+  // Pill
+  +'<div class="rdo-pill" id="rdo-pill">Filtrando PEP: <strong id="rdo-pill-txt"></strong><button onclick="rdoLimparCard()">✕</button></div>'
+  // Cards grid
+  +'<div class="rdo-sq-grid" id="rdo-cards"></div>'
+  // Seções por tribo
+  +'<div class="rdo-sec" id="rdo-sec-usina"><div class="rdo-sec-hdr"><span class="rdo-sec-badge" style="background:#009CDE">TRIBO USINA</span></div><div id="rdo-grp-usina"></div></div>'
+  +'<div class="rdo-sec" id="rdo-sec-mina"><div class="rdo-sec-hdr"><span class="rdo-sec-badge" style="background:#059669">TRIBO MINA</span></div><div id="rdo-grp-mina"></div></div>'
+  +'<div class="rdo-sec" id="rdo-sec-outros"><div class="rdo-sec-hdr"><span class="rdo-sec-badge" style="background:#64748b">SEM VÍNCULO</span></div><div id="rdo-grp-outros"></div></div>'
+  +'<div class="rdo-empty" id="rdo-empty" style="display:none"><div style="font-size:36px;margin-bottom:12px">📭</div><h3>Selecione ao menos uma data</h3><p>Use o calendário acima para escolher os dias</p></div>'
+  +'<p style="text-align:center;font-size:10px;color:#cbd5e1;margin-top:20px;padding-bottom:16px">H. Trab. = Término − Início − almoço (sem dados de almoço: −60 min)</p>'
+  +'</div>'
 
   +'</div>' // imp-content
   +'</div>'; // padding wrapper
@@ -8266,6 +8588,107 @@ clearMs = function(id, cb){
 .ls-link-a:hover{color:#009CDE;text-shadow:0 0 12px rgba(0,156,222,.6)}
 .ls-err{display:none;color:#f87171;font-size:12px;margin-bottom:12px;padding:8px 12px;background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.25);border-radius:8px;font-family:'Share Tech Mono',monospace}
 .ls-footer{position:absolute;bottom:18px;left:0;right:0;text-align:center;font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(0,156,222,.28);letter-spacing:2px;animation:ls-fadeUp 1s ease .4s both;pointer-events:none}
+/* ── RDO Diário tab ── */
+.rdo-bar-wrap{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:11px 14px;margin-bottom:14px}
+.rdo-fld{display:flex;flex-direction:column;gap:3px;position:relative}
+.rdo-lbl{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)}
+.rdo-fld select{border:1px solid var(--bord);border-radius:6px;padding:6px 10px;font-size:12px;font-family:Inter,sans-serif;color:var(--text);background:#fff;outline:none;cursor:pointer;min-width:120px}
+.rdo-fld select:focus{border-color:var(--acc)}
+.rdo-dt-trigger{border:1px solid var(--bord);border-radius:6px;padding:6px 10px;font-size:12px;font-family:Inter,sans-serif;color:var(--text);background:#fff;cursor:pointer;display:flex;align-items:center;gap:6px;min-width:160px;user-select:none;transition:.15s}
+.rdo-dt-trigger:hover,.rdo-dt-trigger.open{border-color:var(--acc)}
+.rdo-dt-caret{color:var(--muted);font-size:10px;transition:.15s;flex-shrink:0}
+.rdo-dt-trigger.open .rdo-dt-caret{transform:rotate(180deg)}
+.rdo-cal-popup{position:absolute;top:calc(100% + 5px);left:0;background:#fff;border:1px solid var(--bord);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:500;padding:14px;width:260px;display:none}
+.rdo-cal-popup.show{display:block}
+.rdo-cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.rdo-cal-nav{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:2px 7px;border-radius:4px}
+.rdo-cal-nav:hover{background:#f1f5f9}
+.rdo-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.rdo-cal-dow{text-align:center;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;padding:3px 0}
+.rdo-cal-day{text-align:center;font-size:11px;font-weight:500;padding:5px 2px;border-radius:5px;user-select:none;position:relative;line-height:1.4}
+.rdo-cal-day.no-data{color:#cbd5e1;pointer-events:none}
+.rdo-cal-day.has-data{color:var(--text);cursor:pointer}
+.rdo-cal-day.has-data:hover{background:#e0f2fe}
+.rdo-cal-day.has-data::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--acc)}
+.rdo-cal-day.sel{background:var(--acc)!important;color:#fff!important;font-weight:700}
+.rdo-cal-day.sel::after{background:#bae6fd}
+.rdo-cal-ftr{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--bord)}
+.rdo-cal-ftr button{background:none;border:none;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;padding:4px 8px;border-radius:4px;color:var(--muted)}
+.rdo-cal-ftr button:hover{background:#f1f5f9}
+.rdo-cal-ftr .today{color:var(--acc)}
+.rdo-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.rdo-chip{display:inline-flex;align-items:center;gap:4px;background:#e0f2fe;border:1px solid #7dd3fc;color:#0369a1;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700}
+.rdo-chip button{background:none;border:none;color:#7dd3fc;cursor:pointer;font-size:12px;line-height:1;padding:0}
+.rdo-chip button:hover{color:#dc2626}
+.rdo-ms-wrap{position:relative}
+.rdo-ms-trigger{border:1px solid var(--bord);border-radius:6px;padding:6px 10px;background:#fff;cursor:pointer;display:flex;align-items:center;gap:6px;min-width:160px;user-select:none;font-size:12px;color:var(--text);transition:.15s}
+.rdo-ms-trigger:hover,.rdo-ms-trigger.open{border-color:var(--acc)}
+.rdo-ms-lbl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rdo-ms-caret{color:var(--muted);font-size:10px;flex-shrink:0;transition:.15s}
+.rdo-ms-trigger.open .rdo-ms-caret{transform:rotate(180deg)}
+.rdo-ms-panel{position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--bord);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:400;min-width:220px;max-height:240px;overflow-y:auto;display:none}
+.rdo-ms-panel.show{display:block}
+.rdo-ms-item{display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:11px;transition:.1s}
+.rdo-ms-item:hover{background:#f0f9ff}
+.rdo-ms-item input[type=checkbox]{accent-color:var(--acc);width:14px;height:14px;cursor:pointer;flex-shrink:0}
+.rdo-ms-item label{cursor:pointer;flex:1;line-height:1.3}
+.rdo-ms-div{border:none;border-top:1px solid var(--bord);margin:3px 0}
+.rdo-ms-ftr{padding:6px 12px;border-top:1px solid var(--bord);display:flex;justify-content:flex-end}
+.rdo-ms-ftr button{background:none;border:none;font-size:10px;font-weight:700;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;padding:2px 6px;border-radius:3px}
+.rdo-ms-ftr button:hover{color:var(--acc);background:#f0f9ff}
+.rdo-pill{display:none;align-items:center;gap:8px;background:#e0f2fe;border:1px solid #7dd3fc;border-radius:7px;padding:7px 14px;font-size:12px;font-weight:600;color:#0369a1;margin-bottom:12px}
+.rdo-pill.show{display:flex}
+.rdo-pill button{background:none;border:none;color:var(--acc);font-size:16px;cursor:pointer;line-height:1}
+.rdo-sq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:11px;margin-bottom:18px}
+.rdo-sq-card{background:var(--card);border:2px solid var(--bord);border-radius:10px;padding:12px 13px;cursor:pointer;position:relative;overflow:hidden;transition:all .15s;user-select:none}
+.rdo-sq-card:hover{border-color:#7dd3fc;box-shadow:0 4px 14px rgba(0,156,222,.15);transform:translateY(-2px)}
+.rdo-sq-card.sel{border-color:var(--acc);box-shadow:0 0 0 3px rgba(0,156,222,.2);background:#f0f9ff}
+.rdo-sq-card.dim{opacity:.3;transform:none!important;box-shadow:none!important;pointer-events:none}
+.rdo-sq-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--bord)}
+.rdo-sq-card.usina::before{background:#009CDE}
+.rdo-sq-card.mina::before{background:#10b981}
+.rdo-rn{position:absolute;top:11px;right:12px;font-size:20px;font-weight:800;color:var(--acc);line-height:1}
+.rdo-rn small{display:block;font-size:8px;font-weight:600;color:var(--muted);text-align:right}
+.rdo-tr{display:inline-flex;border-radius:3px;padding:1px 7px;font-size:8px;font-weight:800;letter-spacing:.5px;margin-bottom:4px}
+.rdo-tr.usina{background:#e0f2fe;color:#0369a1}
+.rdo-tr.mina{background:#d1fae5;color:#065f46}
+.rdo-tr.outros{background:#f1f5f9;color:#64748b}
+.rdo-pep{font-size:9px;font-weight:700;color:var(--muted);margin-bottom:1px;padding-right:36px}
+.rdo-pep span{font-family:'Courier New',monospace;color:#374151;font-size:10px}
+.rdo-pnome{font-size:11px;font-weight:600;margin-bottom:8px;line-height:1.3;color:#374151;padding-right:36px;word-break:break-word;min-height:16px}
+.rdo-times{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;margin-bottom:8px}
+.rdo-tv{text-align:center}
+.rdo-tv-v{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+.rdo-tv-l{font-size:8px;color:var(--muted);font-weight:500}
+.rdo-status{display:flex;gap:6px;font-size:10px;font-weight:700;border-top:1px solid var(--bord);padding-top:6px}
+.rdo-sp{color:#16a34a}.rdo-sa{color:#d97706}.rdo-sn{color:#dc2626}
+.rdo-sec{margin-bottom:8px}
+.rdo-sec.hidden{display:none}
+.rdo-sec-hdr{font-size:11px;font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.rdo-sec-badge{border-radius:4px;padding:2px 10px;font-size:9px;font-weight:800;letter-spacing:.5px;color:#fff}
+.rdo-gbox{background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden;margin-bottom:10px}
+.rdo-ghd{display:flex;align-items:center;gap:9px;padding:9px 14px;background:#f8fafc;border-bottom:1px solid var(--bord)}
+.rdo-gbadge{border-radius:3px;padding:2px 8px;font-size:9px;font-weight:800;letter-spacing:.5px}
+.rdo-gbadge.u{background:#e0f2fe;color:#0369a1}
+.rdo-gbadge.m{background:#d1fae5;color:#065f46}
+.rdo-gbadge.o{background:#f1f5f9;color:#64748b}
+.rdo-gname{font-size:13px;font-weight:700}
+.rdo-gcnt{margin-left:auto;font-size:11px;color:var(--muted);font-weight:600}
+table.rdo-tbl{width:100%;border-collapse:collapse}
+.rdo-tbl th{background:#f8fafc;color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:6px 12px;text-align:left;border-bottom:1px solid var(--bord)}
+.rdo-tbl th.tc{text-align:center}
+.rdo-tbl td{padding:7px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;vertical-align:middle}
+.rdo-tbl tr:last-child td{border-bottom:none}
+.rdo-tbl tr:hover td{background:#f8fafc}
+.rdo-mono{font-family:'Courier New',monospace;font-weight:600;text-align:center}
+.rdo-reg-n{text-align:center;font-weight:700;color:var(--acc)}
+.rdo-ht-g{text-align:center;font-weight:700;color:#16a34a;font-family:'Courier New',monospace}
+.rdo-ht-m{text-align:center;font-weight:700;color:#d97706;font-family:'Courier New',monospace}
+.rdo-ht-r{text-align:center;font-weight:700;color:#dc2626;font-family:'Courier New',monospace}
+.rdo-empty{text-align:center;padding:60px 20px;color:var(--muted)}
+.rdo-empty h3{font-size:16px;margin-bottom:8px}
+.rdo-limpar{background:#f8fafc;color:var(--muted);border:1px solid var(--bord);border-radius:6px;padding:6px 13px;font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif}
+.rdo-limpar:hover{background:#e2e8f0}
 </style>
 <div id="login-screen" style="display:flex;position:fixed;inset:0;z-index:2000;background:#000d1a;align-items:center;justify-content:center;flex-direction:column;overflow:hidden;">
 
