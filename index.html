@@ -7647,13 +7647,14 @@ function impApplyFilters(){
     var base=null,bu='';
     if(d.chegadaMin!==null){base=d.chegadaMin;bu='Chegada';}
     else if(d.ptsMin!==null){base=d.ptsMin;bu='PTS';}
-    d.baseUsada=bu; d.delayMin=base!==null?Math.max(0,base-refMin):0;
+    else if(d.inicioMin!==null){base=d.inicioMin;bu='Início';}
+    d.baseUsada=bu; d.delayMin=base!==null?Math.max(0,base-refMin):null;
     d.squadInfo=impGetSquad(d.sap);
     var almPausa=(d.almIniMin!==null&&d.almFimMin!==null)?(d.almFimMin-d.almIniMin):0;
     d.horasTrab=(d.inicioMin!==null&&d.terminoMin!==null)?d.terminoMin-d.inicioMin-almPausa:null;
     d.almExcesso=(d.almIniMin!==null&&d.almFimMin!==null)?Math.max(0,(d.almFimMin-d.almIniMin)-60):null;
   });
-  IMP_FILTERED.sort(function(a,b){return b.delayMin-a.delayMin;});
+  IMP_FILTERED.sort(function(a,b){return (b.delayMin||0)-(a.delayMin||0);});
 
   // Hint filtros ativos
   var ativos=[];
@@ -7704,7 +7705,7 @@ function impLimpar(){
 function impRenderCards(refMin){
   var total=IMP_FILTERED.length;
   var at=IMP_FILTERED.filter(function(d){return d.delayMin>0;});
-  var totalMin=IMP_FILTERED.reduce(function(s,d){return s+d.delayMin;},0);
+  var totalMin=IMP_FILTERED.reduce(function(s,d){return s+(d.delayMin||0);},0);
   var empAfet=new Set(at.map(function(d){return d.empresa;})).size;
   var sqAfet=new Set(at.map(function(d){return d.squadInfo&&d.squadInfo.squad;}).filter(Boolean)).size;
   var sqTotal=new Set(IMP_FILTERED.map(function(d){return d.squadInfo&&d.squadInfo.squad;}).filter(Boolean)).size;
@@ -7979,7 +7980,7 @@ function rdoImpGetSquads(){
     if(RDO_SEL_CARD&&sqKey!==RDO_SEL_CARD) return;
     if(!map[sqKey]) map[sqKey]={id:sqKey,sap:d.sap,tribo:tb,reg:0,perf:0,parc:0,nao:0,inicios:[],terminos:[],hts:[]};
     var sq=map[sqKey]; sq.reg++;
-    if(d.delayMin===0) sq.perf++; else if(d.delayMin<=60) sq.parc++; else sq.nao++;
+    var dm=d.delayMin; if(dm===null||dm===0) sq.perf++; else if(dm<=60) sq.parc++; else sq.nao++;
     if(d.inicioMin!==null) sq.inicios.push(d.inicioMin);
     if(d.terminoMin!==null) sq.terminos.push(d.terminoMin);
     var ht=rdoHtCalc(d); if(ht!==null) sq.hts.push(ht);
