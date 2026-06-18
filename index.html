@@ -7669,7 +7669,7 @@ function impApplyFilters(){
   try{impRenderEmpresas();}catch(e){console.error('[imp] empresas',e);}
   try{impRenderObras();}catch(e){console.error('[imp] obras',e);}
   try{impRenderSquads();}catch(e){console.error('[imp] squads',e);}
-  try{rdoImpPopulateSelects(); if(IMP_TAB==='rdo') rdoImpRender();}catch(e){console.error('[imp] rdo',e);}
+  try{if(IMP_TAB==='rdo') rdoImpRender();}catch(e){console.error('[imp] rdo',e);}
 }
 
 function impSetChartFilter(type,val){
@@ -7953,152 +7953,30 @@ function impRenderSquads(){
 // ══════════════════════════════════════════════════════════════════
 // RDO DIÁRIO — estado e funções
 // ══════════════════════════════════════════════════════════════════
-var RDO_SEL_DATES  = [];
-var RDO_SEL_CARD   = null;
-var RDO_SEL_SAPS   = [];   // multi-select PEP
-var RDO_SEL_EMPS   = [];   // multi-select empresa
-var RDO_CAL_YEAR   = new Date().getFullYear();
-var RDO_CAL_MONTH  = new Date().getMonth();
-var RDO_MS_OPEN    = null;
-var RDO_MONTHS     = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+var RDO_SEL_CARD = null;
 
 // ── Helpers ──
 function rdoM2HM(m){ if(m===null||m===undefined||isNaN(m)) return '--'; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
 function rdoHtCalc(d){
   if(d.inicioMin===null||d.terminoMin===null) return null;
-  var alm=(d.almIniMin!==null&&d.almFimMin!==null)?d.almFimMin-d.almIniMin:60;
-  return Math.max(0,d.terminoMin-d.inicioMin-alm);
+  var alm=(d.almIniMin!==null&&d.almFimMin!==null&&d.almFimMin>d.almIniMin)?(d.almFimMin-d.almIniMin):60;
+  var ht=d.terminoMin-d.inicioMin-alm;
+  return isNaN(ht)?null:Math.max(0,ht);
 }
-function rdoHtStr(m){ if(m===null) return '--'; var h=Math.floor(m/60),mi=m%60; return h>0?h+'h'+(mi>0?String(mi).padStart(2,'0')+'m':''):mi+'m'; }
-function rdoHtCls(m){ return m===null?'rdo-mono':m>=480?'rdo-ht-g':m>=360?'rdo-ht-m':'rdo-ht-r'; }
+function rdoHtStr(m){ if(m===null||m===undefined||isNaN(m)) return '--'; var h=Math.floor(m/60),mi=m%60; return h>0?h+'h'+(mi>0?String(mi).padStart(2,'0')+'m':''):mi+'m'; }
+function rdoHtCls(m){ return (m===null||isNaN(m))?'rdo-mono':m>=480?'rdo-ht-g':m>=360?'rdo-ht-m':'rdo-ht-r'; }
 function rdoPepNome(sap){ var r=REF_PEPS.find(function(x){return x[0]===sap;}); return r?r[1]:''; }
 function rdoTribo(sap){ var sq=impGetSquad(sap).squad||''; var s=sq.toLowerCase(); if(/usina|br\s|slb|cpf|filtragem|flotac/.test(s)) return 'usina'; if(/mina|geo|geotec|dique/.test(s)) return 'mina'; return 'outros'; }
 function rdoFmtShort(s){ var p=s.split('-'); return p[2]+'/'+p[1]; }
-function rdoFmtFull(s){ var p=s.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
-function rdoAvailDates(){ var s={}; IMP_FILTERED.forEach(function(d){if(d.dataSortKey&&d.inicioMin!==null&&d.terminoMin!==null) s[d.dataSortKey]=1;}); return Object.keys(s).sort(); }
 
-// ── Calendário ──
-document.addEventListener('click',function(e){
-  var cal=document.getElementById('rdo-cal'); if(!cal) return;
-  var fld=document.getElementById('rdo-date-fld');
-  if(fld&&!fld.contains(e.target)&&cal.classList.contains('show')){ cal.classList.remove('show'); var t=document.getElementById('rdo-dt-trigger'); if(t) t.classList.remove('open'); }
-  if(RDO_MS_OPEN&&!e.target.closest('.rdo-ms-wrap')){ var p=document.getElementById('rdo-'+RDO_MS_OPEN+'-panel'); if(p) p.classList.remove('show'); var tr=document.getElementById('rdo-'+RDO_MS_OPEN+'-trigger'); if(tr) tr.classList.remove('open'); RDO_MS_OPEN=null; }
-});
-function rdoToggleCal(){
-  var p=document.getElementById('rdo-cal'), t=document.getElementById('rdo-dt-trigger');
-  if(!p||!t) return;
-  var open=p.classList.contains('show');
-  if(open){p.classList.remove('show');t.classList.remove('open');}
-  else{p.classList.add('show');t.classList.add('open');rdoDrawCal();}
-}
-function rdoCalNav(d){ RDO_CAL_MONTH+=d; if(RDO_CAL_MONTH<0){RDO_CAL_MONTH=11;RDO_CAL_YEAR--;} if(RDO_CAL_MONTH>11){RDO_CAL_MONTH=0;RDO_CAL_YEAR++;} rdoDrawCal(); }
-function rdoCalToday(){ var n=new Date(); RDO_CAL_YEAR=n.getFullYear(); RDO_CAL_MONTH=n.getMonth(); rdoDrawCal(); }
-function rdoClearDates(){ RDO_SEL_DATES=[]; rdoUpdateDateUI(); rdoImpRender(); }
-function rdoDrawCal(){
-  var ml=document.getElementById('rdo-cal-month'); if(ml) ml.textContent=RDO_MONTHS[RDO_CAL_MONTH]+' de '+RDO_CAL_YEAR;
-  var grid=document.getElementById('rdo-cal-grid'); if(!grid) return;
-  grid.innerHTML='';
-  ['D','S','T','Q','Q','S','S'].forEach(function(d){var e=document.createElement('div');e.className='rdo-cal-dow';e.textContent=d;grid.appendChild(e);});
-  var avail=rdoAvailDates();
-  var first=new Date(RDO_CAL_YEAR,RDO_CAL_MONTH,1).getDay();
-  var days=new Date(RDO_CAL_YEAR,RDO_CAL_MONTH+1,0).getDate();
-  var today=new Date();
-  for(var i=0;i<first;i++){var e=document.createElement('div');e.className='rdo-cal-day no-data';grid.appendChild(e);}
-  for(var dd=1;dd<=days;dd++){
-    var mm2=String(RDO_CAL_MONTH+1).padStart(2,'0'),dd2=String(dd).padStart(2,'0');
-    var key=RDO_CAL_YEAR+'-'+mm2+'-'+dd2;
-    var has=avail.indexOf(key)>=0, sel=RDO_SEL_DATES.indexOf(key)>=0;
-    var el=document.createElement('div');
-    el.className='rdo-cal-day'+(has?' has-data':' no-data')+(sel?' sel':'');
-    el.textContent=dd;
-    if(has)(function(k){el.onclick=function(ev){ev.stopPropagation();rdoToggleDate(k);};})(key);
-    grid.appendChild(el);
-  }
-  var c=document.getElementById('rdo-cal-cnt'); if(c) c.textContent=RDO_SEL_DATES.length?RDO_SEL_DATES.length+' dia'+(RDO_SEL_DATES.length>1?'s':''):'';
-}
-function rdoToggleDate(k){ var i=RDO_SEL_DATES.indexOf(k); if(i>=0) RDO_SEL_DATES.splice(i,1); else RDO_SEL_DATES.push(k); RDO_SEL_DATES.sort(); rdoUpdateDateUI(); rdoDrawCal(); rdoImpRender(); }
-function rdoUpdateDateUI(){
-  var txt=document.getElementById('rdo-dt-txt'), chips=document.getElementById('rdo-chips');
-  if(!txt||!chips) return;
-  chips.innerHTML='';
-  if(!RDO_SEL_DATES.length){txt.textContent='Selecione datas';return;}
-  txt.textContent=RDO_SEL_DATES.length===1?rdoFmtFull(RDO_SEL_DATES[0]):RDO_SEL_DATES.length+' datas';
-  RDO_SEL_DATES.forEach(function(d){
-    var chip=document.createElement('div'); chip.className='rdo-chip';
-    chip.innerHTML=rdoFmtShort(d)+'<button onclick="(function(){rdoToggleDate(\''+d+'\');})()" title="Remover">×</button>';
-    chips.appendChild(chip);
-  });
-}
-
-// ── Multi-select ──
-function rdoMsToggle(key){
-  var panel=document.getElementById('rdo-'+key+'-panel'), trig=document.getElementById('rdo-'+key+'-trigger'); if(!panel||!trig) return;
-  var open=panel.classList.contains('show');
-  if(RDO_MS_OPEN&&RDO_MS_OPEN!==key){var op=document.getElementById('rdo-'+RDO_MS_OPEN+'-panel'),ot=document.getElementById('rdo-'+RDO_MS_OPEN+'-trigger');if(op)op.classList.remove('show');if(ot)ot.classList.remove('open');}
-  if(open){panel.classList.remove('show');trig.classList.remove('open');RDO_MS_OPEN=null;}
-  else{panel.classList.add('show');trig.classList.add('open');RDO_MS_OPEN=key;}
-}
-function rdoMsBuild(key,items,selArr,labelFn){
-  var panel=document.getElementById('rdo-'+key+'-panel'); if(!panel) return;
-  panel.innerHTML='';
-  var allDiv=document.createElement('div'); allDiv.className='rdo-ms-item';
-  var allCk=document.createElement('input'); allCk.type='checkbox'; allCk.id='rdo-'+key+'-all'; allCk.checked=selArr.length===0;
-  allCk.onchange=function(){selArr.length=0;rdoMsBuild(key,items,selArr,labelFn);rdoMsUpdateLbl(key,selArr);rdoImpRender();};
-  var allLbl=document.createElement('label'); allLbl.htmlFor='rdo-'+key+'-all'; allLbl.textContent='Todos';
-  allDiv.appendChild(allCk); allDiv.appendChild(allLbl); panel.appendChild(allDiv);
-  if(items.length){var hr=document.createElement('hr');hr.className='rdo-ms-div';panel.appendChild(hr);}
-  items.forEach(function(item){
-    var div=document.createElement('div'); div.className='rdo-ms-item';
-    var ck=document.createElement('input'); ck.type='checkbox'; var uid='rdo-'+key+'-'+item.replace(/[^a-z0-9]/gi,'_'); ck.id=uid; ck.checked=selArr.indexOf(item)>=0;
-    ck.onchange=(function(it,c){return function(){
-      if(c.checked){if(selArr.indexOf(it)<0) selArr.push(it);}else{var i=selArr.indexOf(it);if(i>=0)selArr.splice(i,1);}
-      var allCkEl=document.getElementById('rdo-'+key+'-all'); if(allCkEl) allCkEl.checked=selArr.length===0;
-      rdoMsUpdateLbl(key,selArr); rdoImpRender();
-    };})(item,ck);
-    var lbl=document.createElement('label'); lbl.htmlFor=uid; lbl.textContent=labelFn?labelFn(item):item;
-    div.appendChild(ck); div.appendChild(lbl); panel.appendChild(div);
-  });
-  var ftr=document.createElement('div'); ftr.className='rdo-ms-ftr';
-  var clrBtn=document.createElement('button'); clrBtn.textContent='Limpar';
-  clrBtn.onclick=function(){selArr.length=0;rdoMsBuild(key,items,selArr,labelFn);rdoMsUpdateLbl(key,selArr);rdoImpRender();};
-  ftr.appendChild(clrBtn); panel.appendChild(ftr);
-}
-function rdoMsUpdateLbl(key,selArr){
-  var lbl=document.getElementById('rdo-'+key+'-lbl'); if(!lbl) return;
-  var ph=key==='sq'?'Todos':'Todas';
-  if(!selArr.length) lbl.textContent=ph;
-  else if(selArr.length===1) lbl.textContent=selArr[0];
-  else lbl.textContent=selArr.length+' selecionados';
-}
-
-// ── Populate selects ──
-function rdoImpPopulateSelects(){
-  if(!document.getElementById('rdo-sq-panel')) return;
-  var saps={}, emps={};
-  IMP_FILTERED.forEach(function(d){
-    if(!RDO_SEL_DATES.length||RDO_SEL_DATES.indexOf(d.dataSortKey)<0) return;
-    if(d.inicioMin===null&&d.terminoMin===null) return;
-    saps[d.sap]=1; if(d.empresa) emps[d.empresa]=1;
-  });
-  rdoMsBuild('sq',  Object.keys(saps).sort(), RDO_SEL_SAPS, function(s){var n=rdoPepNome(s);return n?s+' — '+n:s;});
-  rdoMsBuild('emp', Object.keys(emps).sort(),  RDO_SEL_EMPS, null);
-  rdoMsUpdateLbl('sq',  RDO_SEL_SAPS);
-  rdoMsUpdateLbl('emp', RDO_SEL_EMPS);
-}
-
-// ── Agrega ──
+// ── Agrega — usa IMP_FILTERED diretamente (filtros do topo já aplicados) ──
 function rdoImpGetSquads(){
-  var tribo=document.getElementById('rdo-tribo')?document.getElementById('rdo-tribo').value:'';
   var map={};
   IMP_FILTERED.forEach(function(d){
-    if(!RDO_SEL_DATES.length||RDO_SEL_DATES.indexOf(d.dataSortKey)<0) return;
-    if(d.inicioMin===null&&d.terminoMin===null) return;
+    if(d.inicioMin===null&&d.terminoMin===null) return; // sem horário → ignora
     var sqKey=d.sap||'(sem SAP)';
     var tb=rdoTribo(d.sap);
-    if(tribo&&tb!==tribo) return;
-    if(RDO_SEL_SAPS.length&&RDO_SEL_SAPS.indexOf(sqKey)<0) return;
     if(RDO_SEL_CARD&&sqKey!==RDO_SEL_CARD) return;
-    if(RDO_SEL_EMPS.length&&RDO_SEL_EMPS.indexOf(d.empresa)<0) return;
     if(!map[sqKey]) map[sqKey]={id:sqKey,sap:d.sap,tribo:tb,reg:0,perf:0,parc:0,nao:0,inicios:[],terminos:[],hts:[]};
     var sq=map[sqKey]; sq.reg++;
     if(d.delayMin===0) sq.perf++; else if(d.delayMin<=60) sq.parc++; else sq.nao++;
@@ -8114,25 +7992,25 @@ function rdoImpGetSquads(){
   });
 }
 function rdoImpGetObras(squads){
-  var tribo=document.getElementById('rdo-tribo')?document.getElementById('rdo-tribo').value:'';
   var sqSet={}; squads.forEach(function(sq){sqSet[sq.id]=1;});
-  var bySquad={}, multiDay=RDO_SEL_DATES.length>1;
+  // detecta multi-dia a partir dos dados filtrados
+  var datas={}; IMP_FILTERED.forEach(function(d){if(d.dataSortKey) datas[d.dataSortKey]=1;});
+  var multiDay=Object.keys(datas).length>1;
+  var bySquad={};
   IMP_FILTERED.forEach(function(d){
-    if(!RDO_SEL_DATES.length||RDO_SEL_DATES.indexOf(d.dataSortKey)<0) return;
     var sqKey=d.sap||'(sem SAP)';
     if(!sqSet[sqKey]) return;
     if(d.inicioMin===null&&d.terminoMin===null) return;
-    if(RDO_SEL_EMPS.length&&RDO_SEL_EMPS.indexOf(d.empresa)<0) return;
     var obraKey=sqKey+'||'+(d.descricao||d.produto||'');
     if(!bySquad[sqKey]) bySquad[sqKey]=[];
     var ob=bySquad[sqKey].find(function(o){return o._key===obraKey&&(!multiDay||o._dt===d.dataSortKey);});
-    if(!ob){ob={_key:obraKey,_dt:d.dataSortKey,empresa:d.empresa,frente:d.descricao||d.produto||d.sap,sap:d.sap,iniArr:[],terArr:[],ptsArr:[],almIArr:[],almFArr:[],reg:0};bySquad[sqKey].push(ob);}
+    if(!ob){ob={_key:obraKey,_dt:d.dataSortKey,empresa:d.empresa,frente:d.descricao||d.produto||d.sap,iniArr:[],terArr:[],ptsArr:[],almIArr:[],almFArr:[],reg:0};bySquad[sqKey].push(ob);}
     ob.reg++;
     if(d.inicioMin!==null) ob.iniArr.push(d.inicioMin);
     if(d.terminoMin!==null) ob.terArr.push(d.terminoMin);
     if(d.ptsMin!==null) ob.ptsArr.push(d.ptsMin);
     if(d.almIniMin!==null) ob.almIArr.push(d.almIniMin);
-    if(d.almFimMin!==null) ob.almFArr.push(d.almFArr);
+    if(d.almFimMin!==null) ob.almFArr.push(d.almFimMin); // ← corrigido: era d.almFArr
   });
   Object.keys(bySquad).forEach(function(sq){
     bySquad[sq]=bySquad[sq].map(function(ob){
@@ -8141,7 +8019,7 @@ function rdoImpGetObras(squads){
       var minP=ob.ptsArr.length?Math.min.apply(null,ob.ptsArr):null;
       var almIm=ob.almIArr.length?Math.round(ob.almIArr.reduce(function(a,b){return a+b;},0)/ob.almIArr.length):null;
       var almFm=ob.almFArr.length?Math.round(ob.almFArr.reduce(function(a,b){return a+b;},0)/ob.almFArr.length):null;
-      var alm=(almIm!==null&&almFm!==null)?almFm-almIm:60;
+      var alm=(almIm!==null&&almFm!==null&&almFm>almIm)?almFm-almIm:60;
       var ht=(minI!==null&&maxT!==null)?Math.max(0,maxT-minI-alm):null;
       return{empresa:ob.empresa,frente:ob.frente,_dt:ob._dt,inicio:rdoM2HM(minI),termino:rdoM2HM(maxT),pts:rdoM2HM(minP),ht:ht,reg:ob.reg};
     });
@@ -8151,7 +8029,6 @@ function rdoImpGetObras(squads){
 
 // ── Render principal ──
 function rdoImpRender(){
-  rdoImpPopulateSelects();
   var squads=rdoImpGetSquads();
   var obras=rdoImpGetObras(squads);
   var empty=document.getElementById('rdo-empty');
@@ -8226,19 +8103,12 @@ function rdoImpRenderSec(secId,grpId,tribo,squads,obras){
 }
 function rdoImpToggleCard(id){
   RDO_SEL_CARD=(RDO_SEL_CARD===id)?null:id;
-  RDO_SEL_SAPS=RDO_SEL_CARD?[RDO_SEL_CARD]:[];
   var pill=document.getElementById('rdo-pill'),pt=document.getElementById('rdo-pill-txt');
   if(pill) pill.className='rdo-pill'+(RDO_SEL_CARD?' show':'');
   if(pt) pt.textContent=RDO_SEL_CARD||'';
   rdoImpRender();
 }
-function rdoLimparCard(){ RDO_SEL_CARD=null; RDO_SEL_SAPS=[]; var pill=document.getElementById('rdo-pill'); if(pill) pill.className='rdo-pill'; rdoImpRender(); }
-function rdoLimparTudo(){
-  RDO_SEL_CARD=null; RDO_SEL_DATES=[]; RDO_SEL_SAPS=[]; RDO_SEL_EMPS=[];
-  var tri=document.getElementById('rdo-tribo'); if(tri) tri.value='';
-  var pill=document.getElementById('rdo-pill'); if(pill) pill.className='rdo-pill';
-  rdoUpdateDateUI(); rdoImpRender();
-}
+function rdoLimparCard(){ RDO_SEL_CARD=null; var pill=document.getElementById('rdo-pill'); if(pill) pill.className='rdo-pill'; rdoImpRender(); }
 
 // ── Tab control ───────────────────────────────────────────────────
 function impShowTab(tab,el){
@@ -8414,34 +8284,15 @@ async function renderViewImprodutividade(){
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);min-width:90px">Distribuição</th>'
   +'</tr></thead><tbody id="imp-tbody-squad"></tbody></table></div></div></div>'
 
-  // Tab RDO Diário
+  // Tab RDO Diário — usa apenas os filtros do topo (De/Até, Empresa, Obra, Squad)
   +'<div id="imp-tab-rdo" style="display:none">'
-  // Filtros
-  +'<div class="rdo-bar-wrap">'
-  +'<div class="rdo-fld" id="rdo-date-fld" style="min-width:160px">'
-  +'<span class="rdo-lbl">Data(s)</span>'
-  +'<div class="rdo-dt-trigger" id="rdo-dt-trigger" onclick="rdoToggleCal()"><span>📅</span><span style="flex:1;font-size:11px" id="rdo-dt-txt">Selecione datas</span><span class="rdo-dt-caret">▼</span></div>'
-  +'<div class="rdo-chips" id="rdo-chips"></div>'
-  +'<div class="rdo-cal-popup" id="rdo-cal">'
-  +'<div class="rdo-cal-hdr"><button class="rdo-cal-nav" onclick="rdoCalNav(-1)">‹</button><span style="font-size:13px;font-weight:700" id="rdo-cal-month"></span><button class="rdo-cal-nav" onclick="rdoCalNav(1)">›</button></div>'
-  +'<div class="rdo-cal-grid" id="rdo-cal-grid"></div>'
-  +'<div class="rdo-cal-ftr"><button onclick="rdoClearDates()">Limpar</button><span style="font-size:10px;color:var(--muted)" id="rdo-cal-cnt"></span><button class="today" onclick="rdoCalToday()">Hoje</button></div>'
-  +'</div></div>'
-  +'<div class="rdo-fld"><span class="rdo-lbl">Tribo</span><select id="rdo-tribo" onchange="rdoImpRender()"><option value="">Todas</option><option value="usina">Tribo Usina</option><option value="mina">Tribo Mina</option><option value="outros">Sem Vínculo</option></select></div>'
-  +'<div class="rdo-fld rdo-ms-wrap" id="rdo-sq-wrap"><span class="rdo-lbl">PEP</span><div class="rdo-ms-trigger" id="rdo-sq-trigger" onclick="rdoMsToggle(\'sq\')"><span class="rdo-ms-lbl" id="rdo-sq-lbl">Todos</span><span class="rdo-ms-caret">▼</span></div><div class="rdo-ms-panel" id="rdo-sq-panel"></div></div>'
-  +'<div class="rdo-fld rdo-ms-wrap" id="rdo-emp-wrap"><span class="rdo-lbl">Empresa</span><div class="rdo-ms-trigger" id="rdo-emp-trigger" onclick="rdoMsToggle(\'emp\')"><span class="rdo-ms-lbl" id="rdo-emp-lbl">Todas</span><span class="rdo-ms-caret">▼</span></div><div class="rdo-ms-panel" id="rdo-emp-panel"></div></div>'
-  +'<button class="rdo-limpar" onclick="rdoLimparTudo()">✕ Limpar</button>'
-  +'</div>'
-  // Pill
-  +'<div class="rdo-pill" id="rdo-pill">Filtrando PEP: <strong id="rdo-pill-txt"></strong><button onclick="rdoLimparCard()">✕</button></div>'
-  // Cards grid
+  +'<div class="rdo-pill" id="rdo-pill" style="margin-bottom:12px">Filtrando PEP: <strong id="rdo-pill-txt"></strong><button onclick="rdoLimparCard()">✕</button></div>'
   +'<div class="rdo-sq-grid" id="rdo-cards"></div>'
-  // Seções por tribo
   +'<div class="rdo-sec" id="rdo-sec-usina"><div class="rdo-sec-hdr"><span class="rdo-sec-badge" style="background:#009CDE">TRIBO USINA</span></div><div id="rdo-grp-usina"></div></div>'
   +'<div class="rdo-sec" id="rdo-sec-mina"><div class="rdo-sec-hdr"><span class="rdo-sec-badge" style="background:#059669">TRIBO MINA</span></div><div id="rdo-grp-mina"></div></div>'
   +'<div class="rdo-sec" id="rdo-sec-outros"><div class="rdo-sec-hdr"><span class="rdo-sec-badge" style="background:#64748b">SEM VÍNCULO</span></div><div id="rdo-grp-outros"></div></div>'
-  +'<div class="rdo-empty" id="rdo-empty" style="display:none"><div style="font-size:36px;margin-bottom:12px">📭</div><h3>Selecione ao menos uma data</h3><p>Use o calendário acima para escolher os dias</p></div>'
-  +'<p style="text-align:center;font-size:10px;color:#cbd5e1;margin-top:20px;padding-bottom:16px">H. Trab. = Término − Início − almoço (sem dados de almoço: −60 min)</p>'
+  +'<div class="rdo-empty" id="rdo-empty" style="display:none;text-align:center;padding:60px 20px;color:var(--muted)"><div style="font-size:36px;margin-bottom:12px">📭</div><h3 style="font-size:16px;margin-bottom:8px">Nenhum dado com horário</h3><p>Ajuste o filtro de datas acima</p></div>'
+  +'<p style="text-align:center;font-size:10px;color:#cbd5e1;margin-top:20px;padding-bottom:16px">H. Trab. = Término − Início − almoço (sem dados de almoço: −60 min) &nbsp;·&nbsp; Clique num card para filtrar</p>'
   +'</div>'
 
   +'</div>' // imp-content
