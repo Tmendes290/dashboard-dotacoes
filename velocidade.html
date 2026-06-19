@@ -245,7 +245,7 @@ body.embed .main{width:100%!important}
       <div class="kpi red"><div class="kpi-lbl">Total Eventos</div><div class="kpi-val" id="k-ev">—</div><div class="kpi-sub" id="k-ev-sub">no período selecionado</div></div>
       <div class="kpi orange"><div class="kpi-lbl">Motoristas</div><div class="kpi-val" id="k-drv">—</div><div class="kpi-sub">com ao menos 1 desvio</div></div>
       <div class="kpi purple"><div class="kpi-lbl">Tempo em Excesso</div><div class="kpi-val" id="k-dur">—</div><div class="kpi-sub">horas acumuladas em violação</div></div>
-      <div class="kpi blue"><div class="kpi-lbl">Custo Extra Est.</div><div class="kpi-val" id="k-custo">—</div><div class="kpi-sub">combustível desperdiçado (R$ 6,50/L)</div></div>
+      <div class="kpi blue"><div class="kpi-lbl">Custo Extra Est.</div><div class="kpi-val" id="k-custo">—</div><div class="kpi-sub">combustível desperdiçado (R$ 7,11/L)</div></div>
       <div class="kpi" style="border-top:3px solid var(--danger)"><div class="kpi-lbl" style="color:var(--danger)">Comitê pela Vida</div><div class="kpi-val" id="k-comite" style="color:var(--danger)">—</div><div class="kpi-sub">motoristas com ação máxima</div></div>
     </div>
 
@@ -704,7 +704,7 @@ function renderAll(){
   var maxVel=FILTERED.reduce(function(s,r){return Math.max(s,r[7]);},0);
   var comiteDrivers=drvData.filter(function(d){return getDriverCons(d).indexOf('Comitê')>=0;});
   var comiteCount=comiteDrivers.length;
-  var custo=(totalB*0.04+totalM*0.10+totalG*0.18+totalGV*0.30)*6.50;
+  var custo=(totalB*0.04+totalM*0.10+totalG*0.18+totalGV*0.30)*7.11;
 
   document.getElementById('k-ev').textContent=(totalEv+totalC).toLocaleString('pt-BR');
   document.getElementById('k-drv').textContent=drvData.length;
