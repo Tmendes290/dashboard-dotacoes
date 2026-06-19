@@ -312,9 +312,8 @@ function rowEv(r){
 function byDriver(rows){
   var m={};
   rows.forEach(function(r){
-    var d=r[1],ev=rowEv(r),ec=r[9]||0;if(!ev&&!ec)return;
-    if(!m[d])m[d]={drv:d,ev:0,c:0,b:0,mb:0,g:0,gv:0,dur:0,maxV:0};
-    m[d].c+=ec;
+    var d=r[1],ev=rowEv(r);if(!ev)return;
+    if(!m[d])m[d]={drv:d,ev:0,b:0,mb:0,g:0,gv:0,dur:0,maxV:0};
     if(!SEV_FILTER||SEV_FILTER.has('B'))m[d].b+=r[2];
     if(!SEV_FILTER||SEV_FILTER.has('M'))m[d].mb+=r[3];
     if(!SEV_FILTER||SEV_FILTER.has('G'))m[d].g+=r[4];
@@ -330,8 +329,8 @@ function byMonth(rows){
   return m;
 }
 
-function getWorstSev(d){if(d.gv>0)return 'GV';if(d.g>0)return 'G';if(d.mb>0)return 'M';if(d.b>0)return 'B';return 'C';}
-function getDriverCons(d){var s=getWorstSev(d);if(s==='C')return 'Conversa informal';var cnt=s==='GV'?d.gv:s==='G'?d.g:s==='M'?d.mb:d.b;return getConsequencia(s,cnt);}
+function getWorstSev(d){if(d.gv>0)return 'GV';if(d.g>0)return 'G';if(d.mb>0)return 'M';return 'B';}
+function getDriverCons(d){var s=getWorstSev(d);var cnt=s==='GV'?d.gv:s==='G'?d.g:s==='M'?d.mb:d.b;return getConsequencia(s,cnt);}
 
 // ── CHARTS ────────────────────────────────────────────────────────
 var chartSev=null, chartEv=null;
@@ -354,13 +353,13 @@ function renderComiteTable(comiteDrvs) {
     // Group rows for this driver by month
     var dRows = rows.filter(function(r){return r[1]===d.drv;});
     var byMo={};
-    MO_LABELS.forEach(function(m){byMo[m]={b:0,mb:0,g:0,gv:0,c:0,total:0};});
+    MO_LABELS.forEach(function(m){byMo[m]={b:0,mb:0,g:0,gv:0,total:0};});
     var allDays={};
     dRows.forEach(function(r){
       var mo=r[0].slice(0,7);
-      if(!byMo[mo])byMo[mo]={b:0,mb:0,g:0,gv:0,c:0,total:0};
-      byMo[mo].b+=r[2];byMo[mo].mb+=r[3];byMo[mo].g+=r[4];byMo[mo].gv+=r[5];byMo[mo].c+=r[9]||0;
-      var ev=r[2]+r[3]+r[4]+r[5]+(r[9]||0);byMo[mo].total+=ev;
+      if(!byMo[mo])byMo[mo]={b:0,mb:0,g:0,gv:0,total:0};
+      byMo[mo].b+=r[2];byMo[mo].mb+=r[3];byMo[mo].g+=r[4];byMo[mo].gv+=r[5];
+      var ev=r[2]+r[3]+r[4]+r[5];byMo[mo].total+=ev;
       if(!allDays[r[0]])allDays[r[0]]={total:0,gv:0,g:0};
       allDays[r[0]].total+=ev;allDays[r[0]].gv+=r[5];allDays[r[0]].g+=r[4];
     });
@@ -390,11 +389,11 @@ function renderComiteTable(comiteDrvs) {
     var detailRow='';
     if(isOpen){
       var allDayRows=dRows.slice().sort(function(a,b){
-        var ea=a[2]+a[3]+a[4]+a[5]+(a[9]||0),eb=b[2]+b[3]+b[4]+b[5]+(b[9]||0);return eb-ea;
+        var ea=a[2]+a[3]+a[4]+a[5],eb=b[2]+b[3]+b[4]+b[5];return eb-ea;
       });
       var tblRows=allDayRows.map(function(r){
         var dt=r[0].slice(8,10)+'/'+r[0].slice(5,7)+'/'+r[0].slice(0,4);
-        var ev=r[2]+r[3]+r[4]+r[5]+(r[9]||0);
+        var ev=r[2]+r[3]+r[4]+r[5];
         var lim=r[8]||0;
         var pct=lim>0?Math.round((r[7]/lim-1)*100):0;
         var sev=pct>30?'Gravíssima':pct>20?'Grave':pct>10?'Média':'Baixa';
@@ -404,7 +403,6 @@ function renderComiteTable(comiteDrvs) {
         return '<tr style="border-bottom:1px solid #fde8e8">'
           +'<td style="padding:4px 10px;font-weight:600">'+dt+'</td>'
           +'<td style="padding:4px 10px;text-align:center;font-weight:700;color:var(--danger)">'+ev+'</td>'
-          +'<td style="padding:4px 10px;text-align:center;color:#0369a1">'+(r[9]||0)+'</td>'
           +'<td style="padding:4px 10px;text-align:center;color:#15803d">'+r[2]+'</td>'
           +'<td style="padding:4px 10px;text-align:center;color:#a16207">'+r[3]+'</td>'
           +'<td style="padding:4px 10px;text-align:center;color:#c2410c">'+r[4]+'</td>'
@@ -423,7 +421,6 @@ function renderComiteTable(comiteDrvs) {
         +'<thead><tr style="background:#fff5f5">'
         +'<th style="padding:5px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#b91c1c;white-space:nowrap;border-bottom:2px solid #fecaca">Data</th>'
         +'<th style="padding:5px 10px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#b91c1c;white-space:nowrap;border-bottom:2px solid #fecaca">Eventos</th>'
-        +'<th style="padding:5px 10px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#0369a1;white-space:nowrap;border-bottom:2px solid #fecaca">Conv.</th>'
         +'<th style="padding:5px 10px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#15803d;white-space:nowrap;border-bottom:2px solid #fecaca">Baixa</th>'
         +'<th style="padding:5px 10px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#a16207;white-space:nowrap;border-bottom:2px solid #fecaca">Média</th>'
         +'<th style="padding:5px 10px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#c2410c;white-space:nowrap;border-bottom:2px solid #fecaca">Grave</th>'
@@ -448,7 +445,6 @@ function renderAll(){
   var drvData=byDriver(rows).sort(function(a,b){return b.ev-a.ev;});
   var moData=byMonth(rows);
   var totalEv=drvData.reduce(function(s,d){return s+d.ev;},0);
-  var totalC=drvData.reduce(function(s,d){return s+(d.c||0);},0);
   var totalDur=FILTERED.reduce(function(s,r){return s+r[6];},0); // duration from unfiltered sev
   var totalB=drvData.reduce(function(s,d){return s+d.b;},0);
   var totalM=drvData.reduce(function(s,d){return s+d.mb;},0);
@@ -459,12 +455,12 @@ function renderAll(){
   var comiteCount=comiteDrivers.length;
   var custo=(totalB*0.04+totalM*0.10+totalG*0.18+totalGV*0.30)*7.11;
 
-  document.getElementById('k-ev').textContent=(totalEv+totalC).toLocaleString('pt-BR');
+  document.getElementById('k-ev').textContent=totalEv.toLocaleString('pt-BR');
   document.getElementById('k-drv').textContent=drvData.length;
   document.getElementById('k-dur').textContent=Math.round(totalDur/3600).toLocaleString('pt-BR')+'h';
   document.getElementById('k-custo').textContent='R$ '+Math.round(custo).toLocaleString('pt-BR');
   document.getElementById('k-comite').textContent=comiteCount;
-  document.getElementById('sb-ev').textContent=(totalEv+totalC).toLocaleString('pt-BR');
+  document.getElementById('sb-ev').textContent=totalEv.toLocaleString('pt-BR');
   document.getElementById('sb-drv').textContent=drvData.length;
   document.getElementById('sb-dur').textContent=Math.round(totalDur/3600)+'h';
   document.getElementById('sb-vel').textContent=maxVel+' km/h';
@@ -499,14 +495,14 @@ function renderAll(){
   var sevActive=SEV_FILTER?['B','M','G','GV'].map(function(s){return SEV_FILTER.has(s)?1:.35;}):[1,1,1,1];
   chartSev=new Chart(document.getElementById('chartSev'),{
     type:'doughnut',
-    data:{labels:['Baixa (1–10%)','Média (11–20%)','Grave (21–30%)','Gravíssima (>30%)','Conversa (≤12s)'],
-      datasets:[{data:[totalB,totalM,totalG,totalGV,totalC],
-        backgroundColor:['rgba(34,197,94,VAL)'.replace('VAL',sevActive[0]),'rgba(234,179,8,VAL)'.replace('VAL',sevActive[1]),'rgba(249,115,22,VAL)'.replace('VAL',sevActive[2]),'rgba(239,68,68,VAL)'.replace('VAL',sevActive[3]),'rgba(14,165,233,0.85)'],
+    data:{labels:['Baixa (1–10%)','Média (11–20%)','Grave (21–30%)','Gravíssima (>30%)'],
+      datasets:[{data:[totalB,totalM,totalG,totalGV],
+        backgroundColor:['rgba(34,197,94,VAL)'.replace('VAL',sevActive[0]),'rgba(234,179,8,VAL)'.replace('VAL',sevActive[1]),'rgba(249,115,22,VAL)'.replace('VAL',sevActive[2]),'rgba(239,68,68,VAL)'.replace('VAL',sevActive[3])],
         borderWidth:SEV_FILTER?3:2,borderColor:'#fff'}]},
     options:{
-      onClick:function(evt,els){if(els.length>0){var sevs=['B','M','G','GV'];if(els[0].index<4)toggleSevFilter(sevs[els[0].index]);}},
+      onClick:function(evt,els){if(els.length>0){var sevs=['B','M','G','GV'];toggleSevFilter(sevs[els[0].index]);}},
       plugins:{legend:{position:'bottom',labels:{color:'#5a7a99',font:{size:10},padding:8}},
-        tooltip:{callbacks:{label:function(c){var t=totalB+totalM+totalG+totalGV+totalC||1;return ' '+c.raw.toLocaleString('pt-BR')+' ('+Math.round(c.raw/t*100)+'%)';}}}},
+        tooltip:{callbacks:{label:function(c){var t=totalB+totalM+totalG+totalGV||1;return ' '+c.raw.toLocaleString('pt-BR')+' ('+Math.round(c.raw/t*100)+'%) — clique para filtrar';}}}},
       cutout:'62%',cursor:'pointer'}
   });
 
@@ -514,11 +510,9 @@ function renderAll(){
   document.getElementById('mat-count').textContent=drvData.length+' motoristas';
   document.getElementById('mat-tbody').innerHTML=drvData.slice(0,60).map(function(d,i){
     var sev=getWorstSev(d),cons=getDriverCons(d),cc=getConsClass(cons);
-    var tot=d.ev+(d.c||0);
     return '<tr><td style="font-weight:800;color:var(--muted);width:28px">'+(i+1)+'</td>'
       +'<td style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px" title="'+d.drv+'">'+d.drv.split(' ').slice(0,3).join(' ')+'</td>'
-      +'<td style="font-weight:700">'+tot.toLocaleString('pt-BR')+'</td>'
-      +'<td style="color:#0369a1">'+(d.c||'—')+'</td>'
+      +'<td style="font-weight:700">'+d.ev.toLocaleString('pt-BR')+'</td>'
       +'<td style="color:#15803d">'+(d.b||'—')+'</td>'
       +'<td style="color:#a16207">'+(d.mb||'—')+'</td>'
       +'<td style="color:#c2410c">'+(d.g||'—')+'</td>'
@@ -900,7 +894,6 @@ const html = `<!DOCTYPE html>
         <table>
           <thead><tr>
             <th>#</th><th>Motorista</th><th>Total Eventos</th>
-            <th style="color:#0369a1">Conversa<br><span style="font-size:8px;font-weight:400;color:var(--muted)">≤12s</span></th>
             <th style="color:#15803d">Baixa<br><span style="font-size:8px;font-weight:400;color:var(--muted)">1–10%</span></th>
             <th style="color:#a16207">Média<br><span style="font-size:8px;font-weight:400;color:var(--muted)">11–20%</span></th>
             <th style="color:#c2410c">Grave<br><span style="font-size:8px;font-weight:400;color:var(--muted)">21–30%</span></th>
