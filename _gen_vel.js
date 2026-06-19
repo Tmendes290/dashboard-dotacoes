@@ -681,81 +681,45 @@ fetch('/api/velocidade')
   .catch(function(){});
 
 // ── IMPORT: CARREGAR SHEETJS E PROCESSAR EXCEL ───────────────
-function _loadXLSX(cb){
-  if(window.XLSX)return cb();
-  var s=document.createElement('script');
-  s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-  s.onload=cb;document.head.appendChild(s);
-}
-function parseVelRows(rawRows){
-  var headers=rawRows[0];
-  function fc(pat){return headers.findIndex(function(h){return pat.test(String(h).trim());});}
-  var iDados=fc(/^dados$/i);
-  var iData=fc(/^data$/i);
-  var iDur=fc(/dura/i);
-  var iNomeM=fc(/motorista/i);
-  if(iDados<0||iData<0||iNomeM<0){
-    var st2=document.getElementById('import-status');
-    if(st2)st2.textContent='Erro: colunas não encontradas. Cabeçalhos: '+headers.slice(0,5).join(', ');
-    return{rows:[],drivers:[],ranulfo:[]};
-  }
-  function parseDate(v){if(typeof v==='number')return new Date((v-25569)*86400*1000).toISOString().slice(0,10);return String(v).slice(0,10);}
-  function parseDd(d){var s=String(d||'');var mx=s.match(/max:([\d,]+)/i);var lm=s.match(/limite:([\d,]+)/i);return{maxV:mx?parseFloat(String(mx[1]).replace(',','.')):0,lim:lm?parseFloat(String(lm[1]).replace(',','.')):0};}
-  function gs(p){return p>30?'GV':p>20?'G':p>10?'M':'B';}
-  var map={},dset=new Set();
-  for(var i=1;i<rawRows.length;i++){
-    var r=rawRows[i];
-    var dt=parseDate(r[iData]);if(!dt||dt.length<7)continue;
-    var drv=String(r[iNomeM]||'').trim().toUpperCase();if(!drv)continue;
-    var dur=Number(r[iDur])||0;
-    var pd=parseDd(r[iDados]);if(!pd.maxV||!pd.lim)continue;
-    var pct=Math.round((pd.maxV/pd.lim-1)*100);if(pct<1)continue;
-    var sev=gs(pct);var key=dt+'|'+drv;
-    if(!map[key])map[key]={dt:dt,drv:drv,b:0,m:0,g:0,gv:0,dur:0,maxV:0,limAtMax:0};
-    var e=map[key];
-    if(sev==='B')e.b++;else if(sev==='M')e.m++;else if(sev==='G')e.g++;else e.gv++;
-    e.dur+=dur;if(pd.maxV>e.maxV){e.maxV=pd.maxV;e.limAtMax=pd.lim;}
-    dset.add(drv);
-  }
-  var rows=Object.values(map).sort(function(a,b){return a.dt<b.dt?-1:1;}).map(function(e){return[e.dt,e.drv,e.b,e.m,e.g,e.gv,e.dur,e.maxV,e.limAtMax];});
-  var drivers=[...dset].sort();
-  var rn=null;rows.forEach(function(r){if(r[1].includes('RANULFO')&&r[1].includes('CARVALHO'))rn=r[1];});
-  var ranulfo=rn?rows.filter(function(r){return r[1]===rn;}).map(function(r){return{dt:r[0],ev:r[2]+r[3]+r[4]+r[5],maxV:r[7],lim:r[8],pct:Math.round((r[7]/r[8]-1)*100),dur:r[6]};}):[];
-  return{rows:rows,drivers:drivers,ranulfo:ranulfo};
-}
 function handleImport(file){
   if(!file)return;
   var st=document.getElementById('import-status');
-  st.style.display='flex';st.textContent='Carregando SheetJS...';
-  _loadXLSX(function(){
-    st.textContent='Lendo planilha...';
-    var reader=new FileReader();
-    reader.onload=function(e){
-      try{
-        var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-        var ws=wb.Sheets[wb.SheetNames[0]];
-        var rawRows=XLSX.utils.sheet_to_json(ws,{header:1});
-        st.textContent='Processando '+rawRows.length.toLocaleString('pt-BR')+' linhas...';
-        setTimeout(function(){
-          var result=parseVelRows(rawRows);
-          st.textContent='Salvando...';
-          fetch('/api/velocidade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(result)})
-            .then(function(r){return r.json();})
-            .then(function(d){
-              if(d.ok){
-                st.textContent='✓ '+d.rows.toLocaleString('pt-BR')+' registros · '+d.drivers+' motoristas salvos';
-                _RAW=result;ALL_ROWS=result.rows;ALL_DRIVERS=result.drivers;
-                FILTERED=ALL_ROWS.slice();SEV_FILTER=null;expandedRows.clear();
-                buildMs('ms-motorista',ALL_DRIVERS,'Todos os motoristas',applyFilters);
-                applyFilters();
-              } else { st.textContent='Erro: '+(d.error||'desconhecido'); }
-            })
-            .catch(function(err){st.textContent='Erro ao salvar: '+err.message;});
-        },50);
-      }catch(err){st.textContent='Erro ao ler Excel: '+err.message;}
-    };
-    reader.readAsArrayBuffer(file);
-  });
+  st.style.display='flex';st.textContent='Enviando planilha...';
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      // Converte para base64 e envia para o servidor processar
+      var bytes=new Uint8Array(e.target.result);
+      var bin='';for(var i=0;i<bytes.byteLength;i++)bin+=String.fromCharCode(bytes[i]);
+      var b64=btoa(bin);
+      st.textContent='Processando no servidor...';
+      fetch('/api/import-velocidade',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({fileBase64:b64})
+      })
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(d.ok){
+            st.textContent='✓ '+d.rows.toLocaleString('pt-BR')+' registros · '+d.drivers+' motoristas salvos';
+            // Recarrega dados do servidor
+            fetch('/api/velocidade')
+              .then(function(r2){return r2.ok?r2.json():null;})
+              .then(function(d2){
+                if(d2&&d2.payload&&d2.payload.rows&&d2.payload.rows.length>0){
+                  var p=d2.payload;
+                  _RAW=p;ALL_ROWS=p.rows;ALL_DRIVERS=p.drivers;
+                  FILTERED=ALL_ROWS.slice();SEV_FILTER=null;expandedRows.clear();
+                  buildMs('ms-motorista',ALL_DRIVERS,'Todos os motoristas',applyFilters);
+                  applyFilters();
+                }
+              }).catch(function(){});
+          } else { st.textContent='Erro: '+(d.error||'desconhecido'); }
+        })
+        .catch(function(err){st.textContent='Erro: '+err.message;});
+    }catch(err){st.textContent='Erro ao ler arquivo: '+err.message;}
+  };
+  reader.readAsArrayBuffer(file);
 }
 `;
 

@@ -141,6 +141,104 @@ app.post('/api/admin/delete-user', async (req, res) => {
   }
 });
 
+// ── VELOCIDADE: IMPORTAR EXCEL (parse no servidor, salva no Supabase) ──
+app.post('/api/import-velocidade', async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  const { fileBase64 } = req.body;
+  if (!fileBase64) return res.status(400).json({ error: 'no file' });
+
+  try {
+    const XLSX = require('xlsx');
+    const buffer = Buffer.from(fileBase64, 'base64');
+    const wb = XLSX.read(buffer, { type: 'buffer' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    const headers = rawRows[0];
+
+    const fc = (pat) => headers.findIndex(h => pat.test(String(h || '').trim()));
+    const iDados = fc(/^dados$/i);
+    const iData  = fc(/^data$/i);
+    const iDur   = fc(/dura/i);
+    const iNomeM = fc(/motorista/i);
+
+    if (iDados < 0 || iData < 0 || iNomeM < 0) {
+      return res.status(400).json({ error: 'Colunas não encontradas. Headers: ' + headers.slice(0, 8).join(', ') });
+    }
+
+    function parseDate(v) {
+      if (typeof v === 'number') return new Date((v - 25569) * 86400 * 1000).toISOString().slice(0, 10);
+      return String(v || '').slice(0, 10);
+    }
+    function parseDados(d) {
+      const s = String(d || '');
+      const mx = s.match(/max:([\d,]+)/i);
+      const lm = s.match(/limite:([\d,]+)/i);
+      return {
+        maxV: mx ? parseFloat(String(mx[1]).replace(',', '.')) : 0,
+        lim:  lm ? parseFloat(String(lm[1]).replace(',', '.')) : 0
+      };
+    }
+    function getSev(pct) { return pct > 30 ? 'GV' : pct > 20 ? 'G' : pct > 10 ? 'M' : 'B'; }
+
+    const map = {}, driverSet = new Set();
+    for (let i = 1; i < rawRows.length; i++) {
+      const r = rawRows[i];
+      const dt = parseDate(r[iData]);
+      if (!dt || dt.length < 7) continue;
+      const drv = String(r[iNomeM] || '').trim().toUpperCase();
+      if (!drv) continue;
+      const dur = Number(r[iDur]) || 0;
+      const { maxV, lim } = parseDados(r[iDados]);
+      if (!maxV || !lim) continue;
+      const pct = Math.round((maxV / lim - 1) * 100);
+      if (pct < 1) continue;
+      const sev = getSev(pct);
+      const key = dt + '|' + drv;
+      if (!map[key]) map[key] = { dt, drv, b: 0, m: 0, g: 0, gv: 0, dur: 0, maxV: 0, limAtMax: 0 };
+      const e = map[key];
+      if (sev === 'B') e.b++; else if (sev === 'M') e.m++; else if (sev === 'G') e.g++; else e.gv++;
+      e.dur += dur;
+      if (maxV > e.maxV) { e.maxV = maxV; e.limAtMax = lim; }
+      driverSet.add(drv);
+    }
+
+    const rows = Object.values(map).sort((a, b) => a.dt < b.dt ? -1 : 1)
+      .map(e => [e.dt, e.drv, e.b, e.m, e.g, e.gv, e.dur, e.maxV, e.limAtMax]);
+    const drivers = [...driverSet].sort();
+    let ranulfoName = null;
+    rows.forEach(r => { if (r[1].includes('RANULFO') && r[1].includes('CARVALHO')) ranulfoName = r[1]; });
+    const ranulfo = ranulfoName
+      ? rows.filter(r => r[1] === ranulfoName).map(r => ({
+          dt: r[0], ev: r[2]+r[3]+r[4]+r[5], maxV: r[7], lim: r[8],
+          pct: Math.round((r[7]/r[8]-1)*100), dur: r[6]
+        }))
+      : [];
+
+    // Salva no Supabase
+    const payload = { rows, drivers, ranulfo };
+    const supa = await fetch(`${SUPA_URL}/rest/v1/vel_dados`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
+        'apikey': SUPA_SERVICE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify([{ chave: 'main', payload, atualizado_em: new Date().toISOString() }])
+    });
+    if (!supa.ok) {
+      const err = await supa.text();
+      return res.status(500).json({ error: 'Erro Supabase: ' + err });
+    }
+
+    console.log(`[import-velocidade] ${rows.length} rows, ${drivers.length} drivers`);
+    res.json({ ok: true, rows: rows.length, drivers: drivers.length, ranulfo: ranulfo.length });
+  } catch (e) {
+    console.error('[import-velocidade]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── VELOCIDADE: GET (fetch saved data) ────────────────────────
 app.get('/api/velocidade', async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
