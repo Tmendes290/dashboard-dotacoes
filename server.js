@@ -141,6 +141,52 @@ app.post('/api/admin/delete-user', async (req, res) => {
   }
 });
 
+// ── VELOCIDADE: GET (fetch saved data) ────────────────────────
+app.get('/api/velocidade', async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/vel_dados?chave=eq.main&select=payload,atualizado_em`, {
+      headers: { 'Authorization': `Bearer ${SUPA_SERVICE_KEY}`, 'apikey': SUPA_SERVICE_KEY }
+    });
+    const data = await r.json();
+    if (!data[0]) return res.status(404).json({ error: 'no data' });
+    res.json(data[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── VELOCIDADE: POST (save imported data) ─────────────────────
+app.post('/api/velocidade', async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  const { rows, drivers, ranulfo } = req.body;
+  if (!rows || !drivers) return res.status(400).json({ error: 'payload inválido' });
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/vel_dados`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
+        'apikey': SUPA_SERVICE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify([{
+        chave: 'main',
+        payload: { rows, drivers, ranulfo: ranulfo || [] },
+        atualizado_em: new Date().toISOString()
+      }])
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      return res.status(500).json({ error: err });
+    }
+    console.log(`[velocidade] ${rows.length} rows, ${drivers.length} drivers salvos`);
+    res.json({ ok: true, rows: rows.length, drivers: drivers.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── COPPER PRICE PROXY ─────────────────────────────────────────
 // Busca cotação do cobre (HG=F) server-side para evitar CORS do browser
 app.get('/api/copper', async (req, res) => {
