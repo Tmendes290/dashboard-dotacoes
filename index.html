@@ -3914,7 +3914,8 @@ async function registerUser(){
   });
 
   if(result.error){
-    errEl.textContent = result.error.message;
+    console.error('Signup error:', result.error);
+    errEl.textContent = result.error.message || result.error.name || 'Erro ao enviar e-mail de confirmação. Verifique as configurações SMTP.';
     errEl.style.display='block';
   } else {
     alert('Conta criada! Verifique seu e-mail para confirmar o acesso, depois faça login.');
