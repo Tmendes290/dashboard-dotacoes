@@ -7549,8 +7549,21 @@ var _IMP_ACAO_STYLES={
   'Não Iniciada':'background:#fef3c7;color:#92400e;border-color:#fcd34d',
   'Em Andamento':'background:#dbeafe;color:#1e40af;border-color:#93c5fd',
   'Resolvida':'background:#dcfce7;color:#15803d;border-color:#86efac',
+  'Desconsiderar':'background:#f1f5f9;color:#475569;border-color:#cbd5e1',
   '':'background:#f8fafc;color:#94a3b8;border-color:var(--bord)'
 };
+function impGetFimMin(){
+  var el=document.getElementById('imp-fim-time');
+  if(!el||!el.value) return 1020;
+  var p=el.value.split(':');
+  return parseInt(p[0])*60+parseInt(p[1]||0);
+}
+function impIsExcluido(d){
+  if(d.acao==='Desconsiderar') return true;
+  var fimMin=impGetFimMin();
+  if(d.terminoMin!==null&&d.terminoMin>fimMin) return true;
+  return false;
+}
 function impStyleAcaoSelect(el,val){
   var s=_IMP_ACAO_STYLES[val]||_IMP_ACAO_STYLES[''];
   el.setAttribute('style','width:100%;border-radius:6px;padding:5px 7px;font-size:11px;font-family:Inter,sans-serif;font-weight:600;cursor:pointer;outline:none;border:1px solid;'+s);
@@ -7563,6 +7576,9 @@ function impSaveAcao(supaId,filtIdx,el){
   if(orig) orig.acao=val;
   try{localStorage.setItem('imp_data',JSON.stringify(IMP_DATA));}catch(e){}
   if(supaId&&supa) supa.from('improdutividade').update({acao:val}).eq('id',supaId).then(function(r){if(r.error)console.error('acao save',r.error);});
+  var _rp=((document.getElementById('imp-ref-time')||{}).value||'08:00').split(':');
+  impRenderCards(parseInt(_rp[0])*60+parseInt(_rp[1]||0));
+  impRenderRegistros();
 }
 
 // ── File handling ────────────────────────────────────────────────
@@ -7693,6 +7709,7 @@ function impLimpar(){
   var ini=document.getElementById('imp-dt-ini'); if(ini) ini.value=IMP_DT_MIN;
   var fim=document.getElementById('imp-dt-fim'); if(fim) fim.value=IMP_DT_MAX;
   var ref=document.getElementById('imp-ref-time'); if(ref) ref.value='08:00';
+  var fim2=document.getElementById('imp-fim-time'); if(fim2) fim2.value='17:00';
   impRebuildMs();
   updateMsLabel('ms-imp-emp',[],'Todas');
   updateMsLabel('ms-imp-sap',[],'Todas');
@@ -7703,18 +7720,19 @@ function impLimpar(){
 
 // ── Render Cards ─────────────────────────────────────────────────
 function impRenderCards(refMin){
-  var total=IMP_FILTERED.length;
-  var at=IMP_FILTERED.filter(function(d){return d.delayMin>0;});
-  var totalMin=IMP_FILTERED.reduce(function(s,d){return s+(d.delayMin||0);},0);
+  var validos=IMP_FILTERED.filter(function(d){return !impIsExcluido(d);});
+  var total=validos.length;
+  var at=validos.filter(function(d){return d.delayMin>0;});
+  var totalMin=validos.reduce(function(s,d){return s+(d.delayMin||0);},0);
   var empAfet=new Set(at.map(function(d){return d.empresa;})).size;
   var sqAfet=new Set(at.map(function(d){return d.squadInfo&&d.squadInfo.squad;}).filter(Boolean)).size;
-  var sqTotal=new Set(IMP_FILTERED.map(function(d){return d.squadInfo&&d.squadInfo.squad;}).filter(Boolean)).size;
+  var sqTotal=new Set(validos.map(function(d){return d.squadInfo&&d.squadInfo.squad;}).filter(Boolean)).size;
   var el=document.getElementById('imp-cards'); if(!el) return;
   el.innerHTML=
     impCard('var(--acc)',total,'Registros com horário','Chegada ou PTS preenchidos')+
     impCard('#ef4444',at.length,'Com atraso',(total>0?Math.round(at.length/total*100):0)+'% do total')+
     impCard('#f59e0b',impFmtDelay(totalMin)||'0 min','Total improdutivo','Ref: '+impToHHMM(refMin)+' — '+totalMin+' min')+
-    impCard('#10b981',empAfet,'Empresas com atraso','de '+new Set(IMP_FILTERED.map(function(d){return d.empresa;})).size+' no período')+
+    impCard('#10b981',empAfet,'Empresas com atraso','de '+new Set(validos.map(function(d){return d.empresa;})).size+' no período')+
     impCard('#7c3aed',sqAfet,'Squads afetados','de '+sqTotal+' no período');
 }
 function impCard(cor,val,lbl,sub){
@@ -7870,15 +7888,18 @@ function impRenderRegistros(){
     tbody.innerHTML='<tr><td colspan="16" style="text-align:center;padding:32px;color:var(--muted)">Nenhum registro para os filtros selecionados</td></tr>';
     var sr=document.getElementById('imp-stats-reg'); if(sr) sr.style.display='none'; return;
   }
-  var at=IMP_FILTERED.filter(function(d){return d.delayMin>0;});
+  var validos=IMP_FILTERED.filter(function(d){return !impIsExcluido(d);});
+  var at=validos.filter(function(d){return d.delayMin>0;});
   var sr=document.getElementById('imp-stats-reg');
-  if(sr){ sr.style.display='flex'; sr.innerHTML='<div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">Com atraso: <b style="color:var(--acc)">'+at.length+'</b></div><div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">No prazo: <b style="color:var(--acc)">'+(IMP_FILTERED.length-at.length)+'</b></div><div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">Total improdutivo: <b style="color:var(--acc)">'+at.reduce(function(s,d){return s+d.delayMin;},0)+' min</b></div>'; }
+  if(sr){ sr.style.display='flex'; sr.innerHTML='<div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">Com atraso: <b style="color:var(--acc)">'+at.length+'</b></div><div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">No prazo: <b style="color:var(--acc)">'+(validos.length-at.length)+'</b></div><div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">Total improdutivo: <b style="color:var(--acc)">'+at.reduce(function(s,d){return s+d.delayMin;},0)+' min</b></div>'; }
   var _rows=[];
   IMP_FILTERED.forEach(function(d,i){
     try{
+    var excluido=impIsExcluido(d);
+    var trStyle=excluido?'opacity:.45;':'';
     var dl=d.delayMin;
-    var atrasoCell=dl>60?'<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">▲ '+impFmtDelay(dl)+'</span>':dl>0?'<span style="background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">▲ '+impFmtDelay(dl)+'</span>':'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">—</span>';
-    var statusBadge=dl>60?'<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">Atrasado</span>':dl>0?'<span style="background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">Leve</span>':'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">✓ Ok</span>';
+    var atrasoCell=dl>60?'<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700'+(excluido?';text-decoration:line-through':'')+'">'+'▲ '+impFmtDelay(dl)+'</span>':dl>0?'<span style="background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700'+(excluido?';text-decoration:line-through':'')+'">'+'▲ '+impFmtDelay(dl)+'</span>':'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">—</span>';
+    var statusBadge=dl>60?'<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700'+(excluido?';text-decoration:line-through':'')+'">'+'Atrasado</span>':dl>0?'<span style="background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700'+(excluido?';text-decoration:line-through':'')+'">'+'Leve</span>':'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">✓ Ok</span>';
     var ch=d.chegadaMin!==null?impToHHMM(d.chegadaMin):'<span style="color:#ccc">—</span>';
     var pt=d.ptsMin!==null?impToHHMM(d.ptsMin):'<span style="color:#ccc">—</span>';
     var ini=d.inicioMin!==null?impToHHMM(d.inicioMin):'<span style="color:#ccc">—</span>';
@@ -7898,9 +7919,10 @@ function impRenderRegistros(){
       +'<option value="Não Iniciada"'+('Não Iniciada'===_acaoVal?' selected':'')+'>Não Iniciada</option>'
       +'<option value="Em Andamento"'+('Em Andamento'===_acaoVal?' selected':'')+'>Em Andamento</option>'
       +'<option value="Resolvida"'+('Resolvida'===_acaoVal?' selected':'')+'>Resolvida</option>'
+      +'<option value="Desconsiderar"'+('Desconsiderar'===_acaoVal?' selected':'')+'>Desconsiderar</option>'
       +'</select></td>';
     var justCell='<td style="vertical-align:middle;padding:4px 6px"><textarea rows="2" onblur="impSaveJust('+(jid?jid:'null')+','+i+',this)" style="width:100%;min-width:180px;border:1px solid var(--bord);border-radius:5px;padding:4px 7px;font-size:11px;font-family:Inter,sans-serif;color:var(--text);background:#fff;resize:vertical;outline:none;line-height:1.4" placeholder="Clique para justificar...">'+impEsc(d.justificativa||'')+'</textarea></td>';
-    _rows.push('<tr><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-family:\'Courier New\',monospace;font-size:11px;color:var(--acc2);vertical-align:middle;white-space:nowrap">'+impEsc(d.sap)+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="max-width:180px;vertical-align:top">'+descCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almI+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almF+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+term+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td>'+acaoCell+justCell+'</tr>');
+    _rows.push('<tr style="'+trStyle+'"><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-family:\'Courier New\',monospace;font-size:11px;color:var(--acc2);vertical-align:middle;white-space:nowrap">'+impEsc(d.sap)+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="max-width:180px;vertical-align:top">'+descCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almI+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almF+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+term+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td>'+acaoCell+justCell+'</tr>');
     }catch(e){console.error('[imp] row '+i,e);}
   });
   tbody.innerHTML=_rows.join('');
@@ -8194,6 +8216,7 @@ async function renderViewImprodutividade(){
   +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Squad</label><div class="ms-wrap" id="ms-imp-squad"><div class="ms-input" onclick="toggleMs(\'ms-imp-squad\')"><span class="ms-label" id="ms-imp-squad-label">Todos</span><span>▾</span></div><div class="ms-drop" id="ms-imp-squad-drop" style="display:none"></div></div></div>'
   +'<div style="width:1px;height:32px;background:var(--bord);align-self:center;flex-shrink:0"></div>'
   +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Horário ref.</label><input type="time" id="imp-ref-time" value="08:00" onchange="impApplyFilters()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;width:90px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"></div>'
+  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Término até</label><input type="time" id="imp-fim-time" value="17:00" onchange="impApplyFilters()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;width:90px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"></div>'
   +'<button onclick="impLimpar()" style="padding:7px 14px;border:1px solid #fca5a5;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;background:#fff;color:#dc2626;align-self:flex-end;font-family:inherit">✕ Limpar filtros</button>'
   +'<span id="imp-filter-hint" style="font-size:10px;color:var(--acc);font-weight:600;align-self:center;display:none"></span>'
   +'</div>'
