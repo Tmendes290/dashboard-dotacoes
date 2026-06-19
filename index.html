@@ -7847,13 +7847,18 @@ function impChartEmpresas(){
 
 function impChartSquads(){
   var bySq={};
-  IMP_FILTERED.forEach(function(d){if(d.delayMin<=0)return;var sq=d.squadInfo&&d.squadInfo.squad?d.squadInfo.squad:'(sem squad)';if(!bySq[sq])bySq[sq]=0;bySq[sq]+=d.delayMin;});
-  var list=Object.entries(bySq).sort(function(a,b){return b[1]-a[1];});
+  IMP_FILTERED.forEach(function(d){
+    if(impIsExcluido(d)||d.delayMin<=0) return;
+    var sq=d.squadInfo&&d.squadInfo.squad?d.squadInfo.squad:'(sem squad)';
+    if(!bySq[sq]) bySq[sq]={total:0,n:0};
+    bySq[sq].total+=d.delayMin; bySq[sq].n++;
+  });
+  var list=Object.entries(bySq).map(function(e){return[e[0],Math.round(e[1].total/e[1].n),e[1].n];}).sort(function(a,b){return b[1]-a[1];});
   impSetBadge('imp-badge-sq',list.length+' squads');
   if(!list.length){impDestroyChart('imp-chart-sq');return;}
   var sqLabels=list.map(function(s){return s[0];});
   var cores=['rgba(124,58,237,.75)','rgba(109,40,217,.75)','rgba(139,92,246,.75)','rgba(167,139,250,.75)','rgba(91,33,182,.75)'];
-  impSafeChart('imp-chart-sq',{type:'bar',data:{labels:sqLabels,datasets:[{data:list.map(function(s){return s[1];}),backgroundColor:sqLabels.map(function(sq,i){return IMP_CHART_F.squad===sq?'rgba(124,58,237,1)':cores[i%cores.length];}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',onClick:function(ev,els){if(els.length)impSetChartFilter('squad',sqLabels[els[0].index]);},plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+' min';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+' min';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
+  impSafeChart('imp-chart-sq',{type:'bar',data:{labels:sqLabels,datasets:[{data:list.map(function(s){return s[1];}),backgroundColor:sqLabels.map(function(sq,i){return IMP_CHART_F.squad===sq?'rgba(124,58,237,1)':cores[i%cores.length];}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',onClick:function(ev,els){if(els.length)impSetChartFilter('squad',sqLabels[els[0].index]);},plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){var n=list[c.dataIndex][2];return c.raw+' min/reg ('+n+' reg. com atraso)';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+' min';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
 }
 
 function impChartFaixa(){
@@ -8256,7 +8261,7 @@ async function renderViewImprodutividade(){
   +'</div>'
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Top empresas — minutos improdutivos</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-emp"></span></div><div style="position:relative;height:240px"><canvas id="imp-chart-emp"></canvas></div></div>'
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Por squad — minutos improdutivos</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-sq"></span></div><div style="position:relative;height:240px"><canvas id="imp-chart-sq"></canvas></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Por squad — média de min. improdutivos/registro</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-sq"></span></div><div style="position:relative;height:240px"><canvas id="imp-chart-sq"></canvas></div></div>'
   +'</div>'
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Distribuição por faixa de chegada</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-faixa"></span></div><div style="position:relative;height:190px"><canvas id="imp-chart-faixa"></canvas></div><div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#10b981;flex-shrink:0"></div>No prazo (≤08:00)</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#f59e0b;flex-shrink:0"></div>Leve atraso</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>Atrasado</div></div></div>'
