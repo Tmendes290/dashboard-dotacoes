@@ -1,5 +1,6 @@
 // Regenera vel_data.json a partir do Excel
-// Rows: [date, driver, b, m, g, gv, durSec, maxV, limAtMaxV]
+// Rows: [date, driver, b, m, g, gv, durSec, maxV, limAtMaxV, c]
+// c = eventos "Conversa" (duração ≤ 12s — não são infrações formais)
 const XLSX = require('xlsx');
 const fs = require('fs');
 
@@ -27,7 +28,8 @@ function parseDados(dados) {
   return { maxV, lim };
 }
 
-function getSev(pct) {
+function getSev(pct, dur) {
+  if (dur <= 12) return 'C'; // ≤ 12s = apenas conversa, não é infração formal
   if (pct > 30) return 'GV';
   if (pct > 20) return 'G';
   if (pct > 10) return 'M';
@@ -49,14 +51,15 @@ for (let i = 1; i < raw.length; i++) {
   if (!maxV || !lim) continue;
   const pct = Math.round((maxV / lim - 1) * 100);
   if (pct < 1) continue; // não é violação
-  const sev = getSev(pct);
+  const sev = getSev(pct, dur);
 
   const key = dt + '|' + drv;
   if (!map[key]) {
-    map[key] = { dt, drv, b: 0, m: 0, g: 0, gv: 0, dur: 0, maxV: 0, limAtMax: 0 };
+    map[key] = { dt, drv, c: 0, b: 0, m: 0, g: 0, gv: 0, dur: 0, maxV: 0, limAtMax: 0 };
   }
   const e = map[key];
-  if (sev === 'B') e.b++;
+  if (sev === 'C') e.c++;
+  else if (sev === 'B') e.b++;
   else if (sev === 'M') e.m++;
   else if (sev === 'G') e.g++;
   else e.gv++;
@@ -68,7 +71,7 @@ for (let i = 1; i < raw.length; i++) {
 
 // Sort rows by date
 const rows = Object.values(map).sort((a, b) => a.dt < b.dt ? -1 : 1).map(e => [
-  e.dt, e.drv, e.b, e.m, e.g, e.gv, e.dur, e.maxV, e.limAtMax
+  e.dt, e.drv, e.b, e.m, e.g, e.gv, e.dur, e.maxV, e.limAtMax, e.c
 ]);
 
 const drivers = [...driverSet].sort();
@@ -86,7 +89,7 @@ if (ranulfoName) {
   const rn = ranulfoName[1];
   ranulfo = rows.filter(r => r[1] === rn).map(r => ({
     dt: r[0],
-    ev: r[2] + r[3] + r[4] + r[5],
+    ev: r[2] + r[3] + r[4] + r[5] + (r[9] || 0),
     maxV: r[7],
     lim: r[8],
     pct: Math.round((r[7] / r[8] - 1) * 100),
