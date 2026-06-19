@@ -689,10 +689,16 @@ function _loadXLSX(cb){
 }
 function parseVelRows(rawRows){
   var headers=rawRows[0];
-  var iDados=headers.findIndex(function(h){return String(h)==='Dados';});
-  var iData=headers.findIndex(function(h){return String(h)==='Data';});
-  var iDur=headers.findIndex(function(h){return String(h)==='Duração';});
-  var iNomeM=headers.findIndex(function(h){return String(h)==='Nome Motorista';});
+  function fc(pat){return headers.findIndex(function(h){return pat.test(String(h).trim());});}
+  var iDados=fc(/^dados$/i);
+  var iData=fc(/^data$/i);
+  var iDur=fc(/dura/i);
+  var iNomeM=fc(/motorista/i);
+  if(iDados<0||iData<0||iNomeM<0){
+    var st2=document.getElementById('import-status');
+    if(st2)st2.textContent='Erro: colunas não encontradas. Cabeçalhos: '+headers.slice(0,5).join(', ');
+    return{rows:[],drivers:[],ranulfo:[]};
+  }
   function parseDate(v){if(typeof v==='number')return new Date((v-25569)*86400*1000).toISOString().slice(0,10);return String(v).slice(0,10);}
   function parseDd(d){var s=String(d||'');var mx=s.match(/max:([\d,]+)/i);var lm=s.match(/limite:([\d,]+)/i);return{maxV:mx?parseFloat(String(mx[1]).replace(',','.')):0,lim:lm?parseFloat(String(lm[1]).replace(',','.')):0};}
   function gs(p){return p>30?'GV':p>20?'G':p>10?'M':'B';}
