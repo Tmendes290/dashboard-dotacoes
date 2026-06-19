@@ -103,6 +103,9 @@ select:focus,input:focus{border-color:var(--acc)}
 .cons-recicla{background:#fef9c3;color:#a16207}
 .cons-advert{background:#fef3c7;color:#b45309}
 .cons-conversa{background:#dcfce7;color:#15803d}
+/* Embed mode (dentro do iframe do dashboard) */
+body.embed .sb{display:none!important}
+body.embed .main{width:100%!important}
 /* Alert expandable */
 .alert-crit{cursor:pointer;transition:box-shadow .2s}
 .alert-crit:hover{box-shadow:0 0 0 2px var(--danger)}
@@ -657,6 +660,8 @@ function toggleAlertDetail() {
     hint.textContent = '▼ ver detalhes';
   }
 }
+
+if(location.search.includes('embed'))document.body.classList.add('embed');
 
 applyFilters();
 
