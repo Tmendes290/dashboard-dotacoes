@@ -664,7 +664,7 @@ applyFilters();
 fetch('/api/velocidade')
   .then(function(r){return r.ok?r.json():null;})
   .then(function(d){
-    if(!d||!d.payload||!d.payload.rows)return;
+    if(!d||!d.payload||!d.payload.rows||d.payload.rows.length===0)return;
     var p=d.payload;
     _RAW=p;ALL_ROWS=p.rows;ALL_DRIVERS=p.drivers;
     FILTERED=ALL_ROWS.slice();SEV_FILTER=null;expandedRows.clear();
@@ -776,16 +776,16 @@ const html = `<!DOCTYPE html>
   </div>
   <div class="sb-nav">
     <div class="sb-nav-sec">Dotações</div>
-    <div class="sb-item"><span>📊</span> Visão Geral</div>
-    <div class="sb-item"><span>📋</span> Resumo Sub PEP</div>
-    <div class="sb-item"><span>📄</span> Dotações</div>
+    <div class="sb-item" onclick="window.location='/'" style="cursor:pointer"><span>📊</span> Visão Geral</div>
+    <div class="sb-item" onclick="window.location='/'" style="cursor:pointer"><span>📋</span> Resumo Sub PEP</div>
+    <div class="sb-item" onclick="window.location='/'" style="cursor:pointer"><span>📄</span> Dotações</div>
     <div class="sb-nav-sec">Saúde Capex</div>
-    <div class="sb-item"><span>📈</span> Dashboard</div>
-    <div class="sb-item"><span>🏗</span> Saúde do PEP</div>
+    <div class="sb-item" onclick="window.location='/'" style="cursor:pointer"><span>📈</span> Dashboard</div>
+    <div class="sb-item" onclick="window.location='/'" style="cursor:pointer"><span>🏗</span> Saúde do PEP</div>
     <div class="sb-nav-sec">Materiais</div>
-    <div class="sb-item"><span>📦</span> Materiais</div>
+    <div class="sb-item" onclick="window.location='/'" style="cursor:pointer"><span>📦</span> Materiais</div>
     <div class="sb-nav-sec">Fiscalização</div>
-    <div class="sb-item"><span>⏱</span> Improdutividade</div>
+    <div class="sb-item" onclick="window.location='/'" style="cursor:pointer"><span>⏱</span> Improdutividade</div>
     <div class="sb-nav-sec">Frota</div>
     <div class="sb-item active"><span>🚗</span> Velocidade <span class="sb-badge">!</span></div>
   </div>
