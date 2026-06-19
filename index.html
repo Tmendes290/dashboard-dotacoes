@@ -7661,9 +7661,9 @@ function impApplyFilters(){
   });
   IMP_FILTERED.forEach(function(d){
     var base=null,bu='';
-    if(d.chegadaMin!==null){base=d.chegadaMin;bu='Chegada';}
+    if(d.inicioMin!==null){base=d.inicioMin;bu='Início';}
+    else if(d.chegadaMin!==null){base=d.chegadaMin;bu='Chegada';}
     else if(d.ptsMin!==null){base=d.ptsMin;bu='PTS';}
-    else if(d.inicioMin!==null){base=d.inicioMin;bu='Início';}
     d.baseUsada=bu; d.delayMin=base!==null?Math.max(0,base-refMin):null;
     d.squadInfo=impGetSquad(d.sap);
     var almPausa=(d.almIniMin!==null&&d.almFimMin!==null)?(d.almFimMin-d.almIniMin):0;
