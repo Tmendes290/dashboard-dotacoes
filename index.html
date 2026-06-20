@@ -1937,8 +1937,8 @@ const VIEW_META={
 };
 function pdfAction(){
   if(currentView==='velocidade'){
-    var w=window.open('/velocidade.html','_blank');
-    w.onload=function(){w.print();};
+    var fr=document.getElementById('vel-iframe');
+    if(fr&&fr.contentWindow)fr.contentWindow.print();
   } else {
     window.print();
   }
