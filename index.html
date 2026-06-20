@@ -7496,7 +7496,7 @@ function impBuildSapNomes(){
   });
 }
 
-function impRebuildMs(){
+function impRebuildMs(){impBuildSemanaOpts();
   var empresas=[...new Set(IMP_DATA.map(function(d){return d.empresa;}))].sort();
   var saps=[...new Set(IMP_DATA.map(function(d){return d.sap;}))].sort();
   var squads=[...new Set(IMP_DATA.map(function(d){return impGetSquad(d.sap).squad;}).filter(Boolean))].sort();
@@ -7582,35 +7582,40 @@ function impGetFimMin(){
 }
 var IMP_SEMANA_BASE=null,IMP_SEMANA_W=0;
 function _impFmt(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function _impFmt2(d){return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');}
 function _impSetRange(ini,fim){var a=document.getElementById('imp-dt-ini'),b=document.getElementById('imp-dt-fim');if(a)a.value=ini;if(b)b.value=fim;impApplyFilters();}
-function impSetMes(m){
+function _impISOMonday(w,y){var d=new Date(y,0,4);d.setDate(d.getDate()-(d.getDay()||7)+1+(w-1)*7);return d;}
+function impBuildSemanaOpts(){
+  var el=document.getElementById('imp-semana-sel');if(!el)return;
   var y=new Date().getFullYear();
+  var html='<option value="">Todas</option>';
+  for(var w=1;w<=53;w++){
+    var mon=_impISOMonday(w,y);if(mon.getFullYear()>y)break;
+    var fri=new Date(mon);fri.setDate(mon.getDate()+4);
+    html+='<option value="'+w+'">Sem. '+w+' — '+_impFmt2(mon)+' a '+_impFmt2(fri)+'</option>';
+  }
+  el.innerHTML=html;
+}
+function impOnMesSel(v){
+  if(v===''){_impSetRange(IMP_DT_MIN,IMP_DT_MAX);IMP_SEMANA_BASE=null;IMP_SEMANA_W=0;var dr=document.getElementById('imp-dias-row');if(dr)dr.style.display='none';var ss=document.getElementById('imp-semana-sel');if(ss)ss.value='';return;}
+  var m=parseInt(v),y=new Date().getFullYear();
   _impSetRange(_impFmt(new Date(y,m,1)),_impFmt(new Date(y,m+1,0)));
   IMP_SEMANA_BASE=null;IMP_SEMANA_W=0;
   var dr=document.getElementById('imp-dias-row');if(dr)dr.style.display='none';
-  var sn=document.getElementById('imp-semana-num');if(sn)sn.value='';
-  document.querySelectorAll('.imp-mes-btn').forEach(function(b,i){b.style.background=i===m?'var(--acc)':'';b.style.color=i===m?'#fff':'var(--muted)';b.style.fontWeight=i===m?'700':'500';});
+  var ss=document.getElementById('imp-semana-sel');if(ss)ss.value='';
 }
-function _impISOMonday(w,y){
-  var d=new Date(y,0,4);d.setDate(d.getDate()-(d.getDay()||7)+1+(w-1)*7);return d;
-}
-function _impCurWeek(){
-  var d=new Date(),t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
-  t.setUTCDate(t.getUTCDate()+4-(t.getUTCDay()||7));
-  var ys=new Date(Date.UTC(t.getUTCFullYear(),0,1));
-  return Math.ceil((((t-ys)/86400000)+1)/7);
-}
-function impSetSemana(w){
-  w=Math.max(1,Math.min(53,parseInt(w)||1));IMP_SEMANA_W=w;
+function impOnSemanaSel(v){
+  if(v===''){var dr=document.getElementById('imp-dias-row');if(dr)dr.style.display='none';IMP_SEMANA_BASE=null;IMP_SEMANA_W=0;return;}
+  var w=parseInt(v);IMP_SEMANA_W=w;
   IMP_SEMANA_BASE=_impISOMonday(w,new Date().getFullYear());
-  var sn=document.getElementById('imp-semana-num');if(sn)sn.value=w;
   var dr=document.getElementById('imp-dias-row');if(dr)dr.style.display='flex';
   var di=document.getElementById('imp-dia-ini'),df=document.getElementById('imp-dia-fim');
   if(di)di.value='0';if(df)df.value='4';
-  document.querySelectorAll('.imp-mes-btn').forEach(function(b){b.style.background='';b.style.color='var(--muted)';b.style.fontWeight='500';});
+  var ms=document.getElementById('imp-mes-sel');if(ms)ms.value='';
   impAplicaDias();
 }
-function impNavSemana(dir){impSetSemana((IMP_SEMANA_W||_impCurWeek())+dir);}
+function impSetMes(m){var ms=document.getElementById('imp-mes-sel');if(ms)ms.value=String(m);impOnMesSel(String(m));}
+function impSetSemana(w){var ss=document.getElementById('imp-semana-sel');if(ss)ss.value=String(w);impOnSemanaSel(String(w));}
 function impAplicaDias(){
   if(!IMP_SEMANA_BASE)return;
   var di=parseInt((document.getElementById('imp-dia-ini')||{}).value||0);
@@ -7769,9 +7774,9 @@ function impLimpar(){
   IMP_F_EMPS=[]; IMP_F_SAPS=[]; IMP_F_SQUADS=[];
   IMP_CHART_F={empresa:null,sap:null,squad:null};
   IMP_SEMANA_BASE=null;IMP_SEMANA_W=0;
-  var sn=document.getElementById('imp-semana-num');if(sn)sn.value='';
+  var ss=document.getElementById('imp-semana-sel');if(ss)ss.value='';
+  var ms=document.getElementById('imp-mes-sel');if(ms)ms.value='';
   var dr=document.getElementById('imp-dias-row');if(dr)dr.style.display='none';
-  document.querySelectorAll('.imp-mes-btn').forEach(function(b){b.style.background='';b.style.color='var(--muted)';b.style.fontWeight='500';});
   var ini=document.getElementById('imp-dt-ini'); if(ini) ini.value=IMP_DT_MIN;
   var fim=document.getElementById('imp-dt-fim'); if(fim) fim.value=IMP_DT_MAX;
   var ref=document.getElementById('imp-ref-time'); if(ref) ref.value='08:00';
@@ -8286,27 +8291,13 @@ async function renderViewImprodutividade(){
   // Content (sempre presente, oculto se sem dados)
   +'<div id="imp-content" style="display:'+(jaDados?'block':'none')+'">'
 
-  // Quick-filter bar (mês / semana / dias)
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:8px 14px;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
-  +'<span style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted);flex-shrink:0">Mês</span>'
-  +['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map(function(n,i){return'<button class="imp-mes-btn" onclick="impSetMes('+i+')" style="padding:3px 8px;border:1px solid var(--bord);border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;background:;color:var(--muted);font-family:inherit;transition:all .15s">'+n+'</button>';}).join('')
-  +'<div style="width:1px;height:24px;background:var(--bord);flex-shrink:0"></div>'
-  +'<span style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted);flex-shrink:0">Semana</span>'
-  +'<button onclick="impNavSemana(-1)" style="padding:2px 8px;border:1px solid var(--bord);border-radius:5px;font-size:14px;font-weight:700;cursor:pointer;background:var(--card);color:var(--text);font-family:inherit;line-height:1.4">‹</button>'
-  +'<input type="number" id="imp-semana-num" min="1" max="53" placeholder="nº" onchange="impSetSemana(this.value)" style="width:52px;border:1px solid var(--bord);border-radius:5px;padding:4px 6px;font-size:12px;text-align:center;color:var(--text);background:#fff;font-family:inherit;outline:none">'
-  +'<button onclick="impNavSemana(1)" style="padding:2px 8px;border:1px solid var(--bord);border-radius:5px;font-size:14px;font-weight:700;cursor:pointer;background:var(--card);color:var(--text);font-family:inherit;line-height:1.4">›</button>'
-  +'<div id="imp-dias-row" style="display:none;align-items:center;gap:6px;margin-left:4px">'
-  +'<span style="font-size:11px;color:var(--muted)">de</span>'
-  +'<select id="imp-dia-ini" onchange="impAplicaDias()" style="border:1px solid var(--bord);border-radius:5px;padding:4px 6px;font-size:11px;color:var(--text);background:#fff;font-family:inherit;outline:none"><option value="0">Seg</option><option value="1">Ter</option><option value="2">Qua</option><option value="3">Qui</option><option value="4">Sex</option><option value="5">Sáb</option><option value="6">Dom</option></select>'
-  +'<span style="font-size:11px;color:var(--muted)">até</span>'
-  +'<select id="imp-dia-fim" onchange="impAplicaDias()" style="border:1px solid var(--bord);border-radius:5px;padding:4px 6px;font-size:11px;color:var(--text);background:#fff;font-family:inherit;outline:none"><option value="0">Seg</option><option value="1">Ter</option><option value="2">Qua</option><option value="3">Qui</option><option value="4" selected>Sex</option><option value="5">Sáb</option><option value="6">Dom</option></select>'
-  +'</div>'
-  +'</div>'
-
   // Controls bar
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">'
   +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">De</label><input type="date" id="imp-dt-ini" value="'+IMP_DT_MIN+'" onchange="impApplyFilters()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"></div>'
   +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Até</label><input type="date" id="imp-dt-fim" value="'+IMP_DT_MAX+'" onchange="impApplyFilters()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"></div>'
+  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Mês</label><select id="imp-mes-sel" onchange="impOnMesSel(this.value)" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none;cursor:pointer"><option value="">Todos</option><option value="0">Janeiro</option><option value="1">Fevereiro</option><option value="2">Março</option><option value="3">Abril</option><option value="4">Maio</option><option value="5">Junho</option><option value="6">Julho</option><option value="7">Agosto</option><option value="8">Setembro</option><option value="9">Outubro</option><option value="10">Novembro</option><option value="11">Dezembro</option></select></div>'
+  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Semana</label><select id="imp-semana-sel" onchange="impOnSemanaSel(this.value)" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none;cursor:pointer;min-width:170px"><option value="">Todas</option></select></div>'
+  +'<div id="imp-dias-row" style="display:none;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Período</label><div style="display:flex;align-items:center;gap:5px"><select id="imp-dia-ini" onchange="impAplicaDias()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 6px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"><option value="0">Seg</option><option value="1">Ter</option><option value="2">Qua</option><option value="3">Qui</option><option value="4">Sex</option><option value="5">Sáb</option><option value="6">Dom</option></select><span style="font-size:11px;color:var(--muted)">até</span><select id="imp-dia-fim" onchange="impAplicaDias()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 6px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"><option value="0">Seg</option><option value="1">Ter</option><option value="2">Qua</option><option value="3">Qui</option><option value="4" selected>Sex</option><option value="5">Sáb</option><option value="6">Dom</option></select></div></div>'
   +'<div style="width:1px;height:32px;background:var(--bord);align-self:center;flex-shrink:0"></div>'
   +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Empresa</label><div class="ms-wrap" id="ms-imp-emp"><div class="ms-input" onclick="toggleMs(\'ms-imp-emp\')"><span class="ms-label" id="ms-imp-emp-label">Todas</span><span>▾</span></div><div class="ms-drop" id="ms-imp-emp-drop" style="display:none"></div></div></div>'
   +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Obra (SAP)</label><div class="ms-wrap" id="ms-imp-sap"><div class="ms-input" onclick="toggleMs(\'ms-imp-sap\')"><span class="ms-label" id="ms-imp-sap-label">Todas</span><span>▾</span></div><div class="ms-drop" id="ms-imp-sap-drop" style="display:none"></div></div></div>'
