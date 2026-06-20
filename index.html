@@ -8126,14 +8126,34 @@ function impRenderSquads(){
   var maxM=list.length?list[0].min:1;
   var el=document.getElementById('imp-lbl-squads'); if(el) el.textContent=list.length+' squads';
 
-  // ── Gráfico 1: Total improdutivo em horas ──
+  // ── Gráfico 1: Total improdutivo em horas + rótulos ──
   var sqLabels=list.map(function(s){return s.squad;});
   var sqHoras=list.map(function(s){return Math.round(s.min/60*10)/10;});
   var sqPcts=list.map(function(s){return s.total>0?Math.round(s.at/s.total*100):0;});
   var colMin=sqHoras.map(function(v,i){return sqPcts[i]>75?'rgba(239,68,68,.75)':sqPcts[i]>50?'rgba(245,158,11,.75)':'rgba(14,165,233,.75)';});
-  var colPct=sqPcts.map(function(v){return v>75?'rgba(239,68,68,.8)':v>50?'rgba(245,158,11,.8)':'rgba(16,185,129,.8)';});
-  impSafeChart('imp-chart-sq-min',{type:'bar',data:{labels:sqLabels,datasets:[{data:sqHoras,backgroundColor:colMin,borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+'h improdutivo';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
-  impSafeChart('imp-chart-sq-pct',{type:'bar',data:{labels:sqLabels,datasets:[{data:sqPcts,backgroundColor:colPct,borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+'% com atraso';}}}}),scales:{x:Object.assign({},_impAXX,{min:0,max:100,ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'%';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
+  var _lblPlugin={id:'_lbl',afterDatasetsDraw:function(ch){var ctx=ch.ctx;ch.data.datasets.forEach(function(ds,di){ch.getDatasetMeta(di).data.forEach(function(bar,idx){var v=ds.data[idx];if(!v||v<=0) return;var txt=ds._fmt?ds._fmt(v):v;ctx.save();ctx.fillStyle='#374151';ctx.font='bold 9px Inter,sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(txt,bar.x+4,bar.y);ctx.restore();});});} };
+  impSafeChart('imp-chart-sq-min',{type:'bar',data:{labels:sqLabels,datasets:[Object.assign({data:sqHoras,backgroundColor:colMin,borderRadius:4,borderSkipped:false},{_fmt:function(v){return v+'h';}})]},options:Object.assign({},_impCT,{indexAxis:'y',layout:{padding:{right:44}},plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+'h improdutivo';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}}),[_lblPlugin]});
+
+  // ── Gráfico 2: Fatores de atraso (stacked: início, término, almoço) ──
+  var fimMin=impGetFimMin();
+  var causaMap={};
+  IMP_FILTERED.forEach(function(d){
+    var sq=impGetSquad(d.sap).squad||'(sem squad)';
+    if(!causaMap[sq]) causaMap[sq]={i:0,t:0,a:0};
+    if(d.delayMin>0) causaMap[sq].i+=d.delayMin;
+    if(d.terminoMin!==null&&d.terminoMin<fimMin) causaMap[sq].t+=(fimMin-d.terminoMin);
+    if(d.almIniMin!==null&&d.almFimMin!==null&&d.almFimMin-d.almIniMin>60) causaMap[sq].a+=(d.almFimMin-d.almIniMin-60);
+  });
+  var h2=function(m){return Math.round(m/60*10)/10;};
+  var dIni=sqLabels.map(function(s){return h2((causaMap[s]||{i:0}).i||0);});
+  var dTer=sqLabels.map(function(s){return h2((causaMap[s]||{t:0}).t||0);});
+  var dAlm=sqLabels.map(function(s){return h2((causaMap[s]||{a:0}).a||0);});
+  var _fmtH=function(v){return v>0?v+'h':'';};
+  impSafeChart('imp-chart-sq-causa',{type:'bar',data:{labels:sqLabels,datasets:[
+    Object.assign({label:'Início',data:dIni,backgroundColor:'rgba(248,113,113,.8)',borderSkipped:false},{_fmt:_fmtH}),
+    Object.assign({label:'Término',data:dTer,backgroundColor:'rgba(251,146,60,.8)',borderSkipped:false},{_fmt:_fmtH}),
+    Object.assign({label:'Almoço',data:dAlm,backgroundColor:'rgba(167,139,250,.8)',borderSkipped:false},{_fmt:_fmtH})
+  ]},options:Object.assign({},_impCT,{indexAxis:'y',layout:{padding:{right:44}},plugins:Object.assign({},_impCT.plugins,{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+c.raw+'h';}}}}),scales:{x:Object.assign({},_impAXX,{stacked:true,ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{stacked:true,ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}}),[_lblPlugin]});
 
   var tbody=document.getElementById('imp-tbody-squad'); if(!tbody) return;
   tbody.innerHTML=list.length?list.map(function(s){
@@ -8561,7 +8581,7 @@ async function renderViewImprodutividade(){
   +'<div id="imp-tab-squads" style="display:none">'
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">Total improdutivo por squad (h)</div><div style="position:relative;height:220px"><canvas id="imp-chart-sq-min"></canvas></div></div>'
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">% com atraso por squad</div><div style="position:relative;height:220px"><canvas id="imp-chart-sq-pct"></canvas></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px">Fatores de atraso por squad (h)</div><div style="display:flex;gap:14px;margin-bottom:8px;flex-wrap:wrap"><span style="font-size:10px;color:#64748b;display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#f87171"></span>Início</span><span style="font-size:10px;color:#64748b;display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#fb923c"></span>Término</span><span style="font-size:10px;color:#64748b;display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#a78bfa"></span>Almoço</span></div><div style="position:relative;height:220px"><canvas id="imp-chart-sq-causa"></canvas></div></div>'
   +'</div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700">Por Squad</span><span style="font-size:11px;color:var(--muted)" id="imp-lbl-squads"></span></div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left">Squad</th>'
