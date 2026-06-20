@@ -7454,11 +7454,23 @@ function impToHHMM(min){ if(min===null||min===undefined) return '—'; return St
 function impFmtDelay(min){ if(!min||min<=0) return '—'; if(min<60) return min+' min'; var h=Math.floor(min/60),m=min%60; return h+'h'+(m>0?String(m).padStart(2,'0'):''); }
 function impEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+var _IMP_PROJ_SQUAD={}; // SAP → squad name derivado do campo 'projeto'
+function impBuildProjSquad(){
+  _IMP_PROJ_SQUAD={};
+  IMP_DATA.forEach(function(d){
+    if(!d.sap||!d.projeto) return;
+    var pep=d.sap.split('.')[0];
+    // só usa se não houver mapeamento em REF_SQUADS
+    if(!REF_SQUADS[d.sap]&&!REF_SQUADS[pep]) _IMP_PROJ_SQUAD[d.sap]=d.projeto;
+  });
+}
 function impGetSquad(sap){
   if(!sap) return{squad:'',lider:'',planejador:''};
   var r=REF_SQUADS[sap]; if(r) return r;
   var pep=sap.split('.')[0];
-  return REF_SQUADS[pep]||{squad:'',lider:'',planejador:''};
+  var r2=REF_SQUADS[pep]; if(r2) return r2;
+  var proj=_IMP_PROJ_SQUAD[sap]||_IMP_PROJ_SQUAD[pep]||'';
+  return{squad:proj,lider:'',planejador:''};
 }
 
 // ── Destroy / Safe chart ─────────────────────────────────────────
@@ -7567,7 +7579,7 @@ async function impLoadFromSupabase(){
     IMP_DATA=data.map(function(r){return{supaId:r.id,dataStr:r.data_str,dataSortKey:r.data_sort_key,empresa:r.empresa||'',sap:r.sap||'',produto:r.produto||'',descricao:r.descricao||'',projeto:r.projeto||'',fiscal:r.fiscal||'',chegadaMin:r.chegada_min,ptsMin:r.pts_min,inicioMin:r.inicio_min,almIniMin:r.alm_ini_min,almFimMin:r.alm_fim_min,terminoMin:r.termino_min,justificativa:r.justificativa||'',acao:r.acao||''};});
     var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
     IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
-    impBuildSapNomes();
+    impBuildSapNomes();impBuildProjSquad();
     try{localStorage.setItem('imp_data',JSON.stringify(IMP_DATA));}catch(e){}
   }catch(e){ _IMP_LOAD_ERR='Exceção: '+String(e); }
 }
@@ -7729,7 +7741,7 @@ function impProcessData(rows){
   IMP_F_EMPS=[]; IMP_F_SAPS=[]; IMP_F_SQUADS=[];
   var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
   IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
-  impBuildSapNomes();
+  impBuildSapNomes();impBuildProjSquad();
   try{ localStorage.setItem('imp_data',JSON.stringify(IMP_DATA)); }catch(e){}
   impSaveToSupabase();
   var ini=document.getElementById('imp-dt-ini'); if(ini) ini.value=IMP_DT_MIN;
@@ -8383,7 +8395,7 @@ async function renderViewImprodutividade(){
   if(IMP_DATA.length===0){
     try{
       var _saved=localStorage.getItem('imp_data');
-      if(_saved){ IMP_DATA=JSON.parse(_saved); var _ds=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort(); IMP_DT_MIN=_ds[0]||''; IMP_DT_MAX=_ds[_ds.length-1]||''; impBuildSapNomes(); }
+      if(_saved){ IMP_DATA=JSON.parse(_saved); var _ds=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort(); IMP_DT_MIN=_ds[0]||''; IMP_DT_MAX=_ds[_ds.length-1]||''; impBuildSapNomes();impBuildProjSquad(); }
     }catch(e){}
     if(IMP_DATA.length===0){
       el.innerHTML='<div style="padding:60px;text-align:center;color:var(--muted);font-size:13px">⏳ Carregando dados do servidor...</div>';
