@@ -7491,6 +7491,18 @@ function impGetPepNome(sap){
   }
   return '';
 }
+function impGetObraNome(sap){
+  var nome=impGetPepNome(sap);
+  if(nome) return nome;
+  // sobe na hierarquia removendo o último segmento (.XX)
+  var parts=sap.split('.');
+  while(parts.length>1){
+    parts.pop();
+    nome=impGetPepNome(parts.join('.'));
+    if(nome) return nome;
+  }
+  return '';
+}
 function impBuildSapNomes(){
   _IMP_SAP_NOMES={};
   IMP_DATA.forEach(function(d){
@@ -7510,7 +7522,7 @@ function impRebuildMs(){impBuildSemanaOpts();setTimeout(impInitFP,0);
   html+='<div class="ms-opts" id="ms-imp-sap-opts">';
   saps.forEach(function(sap){
     var chk=IMP_F_SAPS.indexOf(sap)>=0;
-    var nome=impGetPepNome(sap);
+    var nome=impGetObraNome(sap);
     var label=nome?sap+' <span style="color:#94a3b8;font-weight:400">— '+nome+'</span>':sap;
     html+='<label class="ms-opt'+(chk?' selected':'')+'"><input type="checkbox" value="'+sap.replace(/"/g,'&quot;')+'"'+(chk?' checked':'')+' onclick="impOnMs(\'ms-imp-sap\')"><span>'+label+'</span></label>';
   });
@@ -7997,7 +8009,7 @@ function impChartObras(){
   impSetBadge('imp-badge-obras',list.length+' obras');
   if(!list.length){impDestroyChart('imp-chart-obras');return;}
   var sapCodes=list.map(function(o){return o[0];});
-  var dispLabels=sapCodes.map(function(sap){var n=impGetPepNome(sap);var l=n?sap+' — '+n:sap;return l.length>42?l.slice(0,42)+'…':l;});
+  var dispLabels=sapCodes.map(function(sap){var n=impGetObraNome(sap);var l=n?sap+' — '+n:sap;return l.length>42?l.slice(0,42)+'…':l;});
   var dataH=list.map(function(o){return Math.round(o[1]/60*10)/10;});
   impSafeChart('imp-chart-obras',{type:'bar',data:{labels:dispLabels,datasets:[{data:dataH,backgroundColor:sapCodes.map(function(s){return IMP_CHART_F.sap===s?'rgba(14,165,233,1)':'rgba(14,165,233,.65)';}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',onClick:function(ev,els){if(els.length)impSetChartFilter('sap',sapCodes[els[0].index]);},plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+'h improdutivo';}}}}) ,scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:9}})})}})});
 }
@@ -8050,7 +8062,7 @@ function impRenderRegistros(){
       +'<option value="Desconsiderar"'+('Desconsiderar'===_acaoVal?' selected':'')+'>Desconsiderar</option>'
       +'</select></td>';
     var justCell='<td style="vertical-align:middle;padding:4px 6px"><textarea rows="2" onblur="impSaveJust('+(jid?jid:'null')+','+i+',this)" style="width:100%;min-width:180px;border:1px solid var(--bord);border-radius:5px;padding:4px 7px;font-size:11px;font-family:Inter,sans-serif;color:var(--text);background:#fff;resize:vertical;outline:none;line-height:1.4" placeholder="Clique para justificar...">'+impEsc(d.justificativa||'')+'</textarea></td>';
-    _rows.push('<tr style="'+trStyle+'"><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-size:11px;vertical-align:middle;min-width:130px"><div style="font-family:\'Courier New\',monospace;color:var(--acc2);font-weight:700;white-space:nowrap">'+impEsc(d.sap)+'</div>'+(impGetPepNome(d.sap)?'<div style="font-size:10px;color:var(--muted);line-height:1.3;white-space:normal;max-width:180px;margin-top:2px">'+impEsc(impGetPepNome(d.sap))+'</div>':'')+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almI+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almF+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+term+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td>'+acaoCell+justCell+'</tr>');
+    _rows.push('<tr style="'+trStyle+'"><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-size:11px;vertical-align:middle;min-width:130px"><div style="font-family:\'Courier New\',monospace;color:var(--acc2);font-weight:700;white-space:nowrap">'+impEsc(d.sap)+'</div>'+(impGetObraNome(d.sap)?'<div style="font-size:10px;color:var(--muted);line-height:1.3;white-space:normal;max-width:180px;margin-top:2px">'+impEsc(impGetObraNome(d.sap))+'</div>':'')+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almI+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almF+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+term+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td>'+acaoCell+justCell+'</tr>');
     }catch(e){console.error('[imp] row '+i,e);}
   });
   tbody.innerHTML=_rows.join('');
