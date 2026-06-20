@@ -7541,7 +7541,7 @@ async function impSaveToSupabase(){
     IMP_DATA.forEach(function(d){if(d.justificativa) justMap[impRowKey(d)]=d.justificativa;});
     await supa.from('improdutividade').delete().neq('id',0);
     var acaoMap={};IMP_DATA.forEach(function(d){if(d.acao) acaoMap[impRowKey(d)]=d.acao;});
-    var rows=IMP_DATA.map(function(d){return{data_sort_key:d.dataSortKey,data_str:d.dataStr,empresa:d.empresa,sap:d.sap,produto:d.produto,descricao:d.descricao,chegada_min:d.chegadaMin,pts_min:d.ptsMin,inicio_min:d.inicioMin,alm_ini_min:d.almIniMin,alm_fim_min:d.almFimMin,termino_min:d.terminoMin,justificativa:justMap[impRowKey(d)]||null,acao:acaoMap[impRowKey(d)]||null};});
+    var rows=IMP_DATA.map(function(d){return{data_sort_key:d.dataSortKey,data_str:d.dataStr,empresa:d.empresa,sap:d.sap,produto:d.produto,descricao:d.descricao,projeto:d.projeto||null,fiscal:d.fiscal||null,chegada_min:d.chegadaMin,pts_min:d.ptsMin,inicio_min:d.inicioMin,alm_ini_min:d.almIniMin,alm_fim_min:d.almFimMin,termino_min:d.terminoMin,justificativa:justMap[impRowKey(d)]||null,acao:acaoMap[impRowKey(d)]||null};});
     var allInserted=[];
     for(var i=0;i<rows.length;i+=500){var res=await supa.from('improdutividade').insert(rows.slice(i,i+500)).select('id,data_sort_key,empresa,sap,chegada_min');if(res.error)throw res.error;if(res.data)allInserted=allInserted.concat(res.data);}
     // Mapear IDs de volta ao IMP_DATA
@@ -7564,7 +7564,7 @@ async function impLoadFromSupabase(){
     var {data,error}=await supa.from('improdutividade').select('*').order('data_sort_key',{ascending:true});
     if(error){ _IMP_LOAD_ERR='Supabase error: '+JSON.stringify(error); return; }
     if(!data||!data.length){ _IMP_LOAD_ERR='Tabela vazia (0 linhas)'; return; }
-    IMP_DATA=data.map(function(r){return{supaId:r.id,dataStr:r.data_str,dataSortKey:r.data_sort_key,empresa:r.empresa||'',sap:r.sap||'',produto:r.produto||'',descricao:r.descricao||'',chegadaMin:r.chegada_min,ptsMin:r.pts_min,inicioMin:r.inicio_min,almIniMin:r.alm_ini_min,almFimMin:r.alm_fim_min,terminoMin:r.termino_min,justificativa:r.justificativa||'',acao:r.acao||''};});
+    IMP_DATA=data.map(function(r){return{supaId:r.id,dataStr:r.data_str,dataSortKey:r.data_sort_key,empresa:r.empresa||'',sap:r.sap||'',produto:r.produto||'',descricao:r.descricao||'',projeto:r.projeto||'',fiscal:r.fiscal||'',chegadaMin:r.chegada_min,ptsMin:r.pts_min,inicioMin:r.inicio_min,almIniMin:r.alm_ini_min,almFimMin:r.alm_fim_min,terminoMin:r.termino_min,justificativa:r.justificativa||'',acao:r.acao||''};});
     var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
     IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
     impBuildSapNomes();
@@ -7721,7 +7721,7 @@ function impProcessData(rows){
     var almIni=impTimeToMin(row['Alm_ini']||row['Alm_Ini']||row['alm_ini']||null);
     var almFim=impTimeToMin(row['Alm_fim']||row['Alm_Fim']||row['alm_fim']||null);
     var termino=impTimeToMin(row['Termino']||row['Término']||row['termino']||null);
-    var _item={supaId:null,dataStr:dataStr,dataSortKey:dataSortKey,empresa:String(row['Empresa']||'—').trim(),sap:sap,produto:produto,descricao:String(row['Descrição']||row['Descricao']||'').trim(),chegadaMin:chegada,ptsMin:pts,inicioMin:inicio,almIniMin:almIni,almFimMin:almFim,terminoMin:termino,justificativa:''};
+    var _item={supaId:null,dataStr:dataStr,dataSortKey:dataSortKey,empresa:String(row['Empresa']||'—').trim(),sap:sap,produto:produto,descricao:String(row['Descrição']||row['Descricao']||'').trim(),projeto:String(row['Projeto']||row['projeto']||'').trim(),fiscal:String(row['Fiscal']||row['fiscal']||'').trim(),chegadaMin:chegada,ptsMin:pts,inicioMin:inicio,almIniMin:almIni,almFimMin:almFim,terminoMin:termino,justificativa:''};
     _item.justificativa=oldJustMap[impRowKey(_item)]||'';
     _item.acao=oldAcaoMap[impRowKey(_item)]||'';
     IMP_DATA.push(_item);
