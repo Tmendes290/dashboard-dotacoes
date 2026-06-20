@@ -7996,8 +7996,10 @@ function impChartObras(){
   var list=Object.entries(byO).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
   impSetBadge('imp-badge-obras',list.length+' obras');
   if(!list.length){impDestroyChart('imp-chart-obras');return;}
-  var obraLabels=list.map(function(o){return o[0];});
-  impSafeChart('imp-chart-obras',{type:'bar',data:{labels:obraLabels,datasets:[{data:list.map(function(o){return o[1];}),backgroundColor:obraLabels.map(function(s){return IMP_CHART_F.sap===s?'rgba(14,165,233,1)':'rgba(14,165,233,.65)';}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',onClick:function(ev,els){if(els.length)impSetChartFilter('sap',obraLabels[els[0].index]);},plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){var n=_IMP_SAP_NOMES[c.label]||'';return c.raw+' min'+(n?' — '+n:'');}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+' min';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10,family:"'Courier New',monospace"}})})}})});
+  var sapCodes=list.map(function(o){return o[0];});
+  var dispLabels=sapCodes.map(function(sap){var n=impGetPepNome(sap);var l=n?sap+' — '+n:sap;return l.length>42?l.slice(0,42)+'…':l;});
+  var dataH=list.map(function(o){return Math.round(o[1]/60*10)/10;});
+  impSafeChart('imp-chart-obras',{type:'bar',data:{labels:dispLabels,datasets:[{data:dataH,backgroundColor:sapCodes.map(function(s){return IMP_CHART_F.sap===s?'rgba(14,165,233,1)':'rgba(14,165,233,.65)';}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',onClick:function(ev,els){if(els.length)impSetChartFilter('sap',sapCodes[els[0].index]);},plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+'h improdutivo';}}}}) ,scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:9}})})}})});
 }
 
 // ── Registros ────────────────────────────────────────────────────
