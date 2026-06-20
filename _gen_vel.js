@@ -798,7 +798,6 @@ const html = `<!DOCTYPE html>
     <div style="display:flex;gap:8px;align-items:center">
       <div id="import-status" style="display:none;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--acc2);background:rgba(0,156,222,.08);border:1px solid var(--acc);border-radius:5px;padding:5px 12px"></div>
       <button onclick="document.getElementById('vel-file-input').click()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border:1px solid var(--bord);cursor:pointer;font-family:Inter,sans-serif;font-size:11px;font-weight:600;border-radius:5px;background:#fff;color:var(--text)">📥 Importar Planilha</button>
-      <button onclick="window.print()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border:none;cursor:pointer;font-family:Inter,sans-serif;font-size:11px;font-weight:600;border-radius:5px;background:var(--sb);color:#fff">🖨 Imprimir</button>
       <input type="file" id="vel-file-input" accept=".xlsx" style="display:none" onchange="handleImport(this.files[0]);this.value=''">
     </div>
   </div>
