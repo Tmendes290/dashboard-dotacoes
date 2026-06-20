@@ -8129,8 +8129,7 @@ function impRenderSquads(){
   var sqHoras=list.map(function(s){return Math.round(s.min/60*10)/10;});
   var sqPcts=list.map(function(s){return s.total>0?Math.round(s.at/s.total*100):0;});
   var colMin=sqHoras.map(function(v,i){return sqPcts[i]>75?'rgba(239,68,68,.75)':sqPcts[i]>50?'rgba(245,158,11,.75)':'rgba(14,165,233,.75)';});
-  var _lblPlugin={id:'_lbl',afterDatasetsDraw:function(ch){var ctx=ch.ctx;ch.data.datasets.forEach(function(ds,di){ch.getDatasetMeta(di).data.forEach(function(bar,idx){var v=ds.data[idx];if(!v||v<=0) return;var txt=ds._fmt?ds._fmt(v):v;ctx.save();ctx.fillStyle='#374151';ctx.font='bold 9px Inter,sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(txt,bar.x+4,bar.y);ctx.restore();});});} };
-  impSafeChart('imp-chart-sq-min',{type:'bar',data:{labels:sqLabels,datasets:[Object.assign({data:sqHoras,backgroundColor:colMin,borderRadius:4,borderSkipped:false},{_fmt:function(v){return v+'h';}})]},options:Object.assign({},_impCT,{indexAxis:'y',layout:{padding:{right:44}},plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+'h improdutivo';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}}),[_lblPlugin]});
+  impSafeChart('imp-chart-sq-min',{type:'bar',data:{labels:sqLabels,datasets:[{data:sqHoras,backgroundColor:colMin,borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+'h improdutivo';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
 
   // ── Gráfico 2: Fatores de atraso (stacked: início, término, almoço) ──
   var fimMin=impGetFimMin();
@@ -8147,11 +8146,12 @@ function impRenderSquads(){
   var dTer=sqLabels.map(function(s){return h2((causaMap[s]||{t:0}).t||0);});
   var dAlm=sqLabels.map(function(s){return h2((causaMap[s]||{a:0}).a||0);});
   var _fmtH=function(v){return v>0?v+'h':'';};
+  var _fmtH2=function(v){return v>0?v+'h':'';};
   impSafeChart('imp-chart-sq-causa',{type:'bar',data:{labels:sqLabels,datasets:[
-    Object.assign({label:'Início',data:dIni,backgroundColor:'rgba(248,113,113,.8)',borderSkipped:false},{_fmt:_fmtH}),
-    Object.assign({label:'Término',data:dTer,backgroundColor:'rgba(251,146,60,.8)',borderSkipped:false},{_fmt:_fmtH}),
-    Object.assign({label:'Almoço',data:dAlm,backgroundColor:'rgba(167,139,250,.8)',borderSkipped:false},{_fmt:_fmtH})
-  ]},options:Object.assign({},_impCT,{indexAxis:'y',layout:{padding:{right:44}},plugins:Object.assign({},_impCT.plugins,{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+c.raw+'h';}}}}),scales:{x:Object.assign({},_impAXX,{stacked:true,ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{stacked:true,ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}}),[_lblPlugin]});
+    {label:'Início',data:dIni,backgroundColor:'rgba(248,113,113,.8)',borderSkipped:false},
+    {label:'Término',data:dTer,backgroundColor:'rgba(251,146,60,.8)',borderSkipped:false},
+    {label:'Almoço',data:dAlm,backgroundColor:'rgba(167,139,250,.8)',borderSkipped:false}
+  ]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+c.raw+'h';}}}}),scales:{x:Object.assign({},_impAXX,{stacked:true,ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{stacked:true,ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
 
   var tbody=document.getElementById('imp-tbody-squad'); if(!tbody) return;
   tbody.innerHTML=list.length?list.map(function(s){
