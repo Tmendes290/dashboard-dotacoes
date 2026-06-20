@@ -8125,6 +8125,16 @@ function impRenderSquads(){
   var list=Object.values(bySq).sort(function(a,b){return b.min-a.min;});
   var maxM=list.length?list[0].min:1;
   var el=document.getElementById('imp-lbl-squads'); if(el) el.textContent=list.length+' squads';
+
+  // ── Gráfico 1: Total improdutivo em horas ──
+  var sqLabels=list.map(function(s){return s.squad;});
+  var sqHoras=list.map(function(s){return Math.round(s.min/60*10)/10;});
+  var sqPcts=list.map(function(s){return s.total>0?Math.round(s.at/s.total*100):0;});
+  var colMin=sqHoras.map(function(v,i){return sqPcts[i]>75?'rgba(239,68,68,.75)':sqPcts[i]>50?'rgba(245,158,11,.75)':'rgba(14,165,233,.75)';});
+  var colPct=sqPcts.map(function(v){return v>75?'rgba(239,68,68,.8)':v>50?'rgba(245,158,11,.8)':'rgba(16,185,129,.8)';});
+  impSafeChart('imp-chart-sq-min',{type:'bar',data:{labels:sqLabels,datasets:[{data:sqHoras,backgroundColor:colMin,borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+'h improdutivo';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
+  impSafeChart('imp-chart-sq-pct',{type:'bar',data:{labels:sqLabels,datasets:[{data:sqPcts,backgroundColor:colPct,borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+'% com atraso';}}}}),scales:{x:Object.assign({},_impAXX,{min:0,max:100,ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'%';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
+
   var tbody=document.getElementById('imp-tbody-squad'); if(!tbody) return;
   tbody.innerHTML=list.length?list.map(function(s){
     var pct=s.total>0?Math.round(s.at/s.total*100):0;
@@ -8548,7 +8558,12 @@ async function renderViewImprodutividade(){
   +'</tr></thead><tbody id="imp-tbody-obra"></tbody></table></div></div></div>'
 
   // Tab Squads
-  +'<div id="imp-tab-squads" style="display:none"><div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700">Por Squad</span><span style="font-size:11px;color:var(--muted)" id="imp-lbl-squads"></span></div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
+  +'<div id="imp-tab-squads" style="display:none">'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">Total improdutivo por squad (h)</div><div style="position:relative;height:220px"><canvas id="imp-chart-sq-min"></canvas></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">% com atraso por squad</div><div style="position:relative;height:220px"><canvas id="imp-chart-sq-pct"></canvas></div></div>'
+  +'</div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700">Por Squad</span><span style="font-size:11px;color:var(--muted)" id="imp-lbl-squads"></span></div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left">Squad</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left">Líder</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center">Registros</th>'
@@ -8557,7 +8572,7 @@ async function renderViewImprodutividade(){
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:right">Total min.</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:right">Maior atraso</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);min-width:90px">Distribuição</th>'
-  +'</tr></thead><tbody id="imp-tbody-squad"></tbody></table></div></div></div>'
+  +'</tr></thead><tbody id="imp-tbody-squad"></tbody></table></div></div></div></div>'
 
   // Tab RDO Diário — usa apenas os filtros do topo (De/Até, Empresa, Obra, Squad)
   +'<div id="imp-tab-rdo" style="display:none">'
