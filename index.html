@@ -7455,13 +7455,22 @@ function impFmtDelay(min){ if(!min||min<=0) return '—'; if(min<60) return min+
 function impEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 var _IMP_PROJ_SQUAD={}; // SAP → squad name derivado do campo 'projeto'
+var _IMP_PROJ_MAP={ // mapeamento projeto (UPPER) → squad existente
+  'INTEGRIDADE ESTRUTURAL - BRITAGENS + FILTRAGEM':'BR I, II, III E FILTRAGEM',
+  'INTEGRIDADE ESTRUTURAL - USINA SALOBO I E II':'USINAS I E II',
+  'INTEGRIDADE ESTRUTURAL - USINA SALOBO III':'SLB III',
+  'INTEGRIDADE ESTRUTURAL - ÁREA DE MINA':'MINA',
+  'INTEGRIDADE ESTRUTURAL - AREA DE MINA':'MINA'
+};
 function impBuildProjSquad(){
   _IMP_PROJ_SQUAD={};
   IMP_DATA.forEach(function(d){
     if(!d.sap||!d.projeto) return;
     var pep=d.sap.split('.')[0];
-    // só usa se não houver mapeamento em REF_SQUADS
-    if(!REF_SQUADS[d.sap]&&!REF_SQUADS[pep]) _IMP_PROJ_SQUAD[d.sap]=d.projeto;
+    if(!REF_SQUADS[d.sap]&&!REF_SQUADS[pep]){
+      var key=d.projeto.toUpperCase().trim();
+      _IMP_PROJ_SQUAD[d.sap]=_IMP_PROJ_MAP[key]||d.projeto;
+    }
   });
 }
 function impGetSquad(sap){
