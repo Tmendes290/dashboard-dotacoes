@@ -7580,6 +7580,46 @@ function impGetFimMin(){
   var p=el.value.split(':');
   return parseInt(p[0])*60+parseInt(p[1]||0);
 }
+var IMP_SEMANA_BASE=null,IMP_SEMANA_W=0;
+function _impFmt(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function _impSetRange(ini,fim){var a=document.getElementById('imp-dt-ini'),b=document.getElementById('imp-dt-fim');if(a)a.value=ini;if(b)b.value=fim;impApplyFilters();}
+function impSetMes(m){
+  var y=new Date().getFullYear();
+  _impSetRange(_impFmt(new Date(y,m,1)),_impFmt(new Date(y,m+1,0)));
+  IMP_SEMANA_BASE=null;IMP_SEMANA_W=0;
+  var dr=document.getElementById('imp-dias-row');if(dr)dr.style.display='none';
+  var sn=document.getElementById('imp-semana-num');if(sn)sn.value='';
+  document.querySelectorAll('.imp-mes-btn').forEach(function(b,i){b.style.background=i===m?'var(--acc)':'';b.style.color=i===m?'#fff':'var(--muted)';b.style.fontWeight=i===m?'700':'500';});
+}
+function _impISOMonday(w,y){
+  var d=new Date(y,0,4);d.setDate(d.getDate()-(d.getDay()||7)+1+(w-1)*7);return d;
+}
+function _impCurWeek(){
+  var d=new Date(),t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  t.setUTCDate(t.getUTCDate()+4-(t.getUTCDay()||7));
+  var ys=new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  return Math.ceil((((t-ys)/86400000)+1)/7);
+}
+function impSetSemana(w){
+  w=Math.max(1,Math.min(53,parseInt(w)||1));IMP_SEMANA_W=w;
+  IMP_SEMANA_BASE=_impISOMonday(w,new Date().getFullYear());
+  var sn=document.getElementById('imp-semana-num');if(sn)sn.value=w;
+  var dr=document.getElementById('imp-dias-row');if(dr)dr.style.display='flex';
+  var di=document.getElementById('imp-dia-ini'),df=document.getElementById('imp-dia-fim');
+  if(di)di.value='0';if(df)df.value='4';
+  document.querySelectorAll('.imp-mes-btn').forEach(function(b){b.style.background='';b.style.color='var(--muted)';b.style.fontWeight='500';});
+  impAplicaDias();
+}
+function impNavSemana(dir){impSetSemana((IMP_SEMANA_W||_impCurWeek())+dir);}
+function impAplicaDias(){
+  if(!IMP_SEMANA_BASE)return;
+  var di=parseInt((document.getElementById('imp-dia-ini')||{}).value||0);
+  var df=parseInt((document.getElementById('imp-dia-fim')||{}).value||4);
+  if(df<di){var tmp=di;di=df;df=tmp;var el=document.getElementById('imp-dia-fim');if(el)el.value=String(df);}
+  var s=new Date(IMP_SEMANA_BASE);s.setDate(IMP_SEMANA_BASE.getDate()+di);
+  var e=new Date(IMP_SEMANA_BASE);e.setDate(IMP_SEMANA_BASE.getDate()+df);
+  _impSetRange(_impFmt(s),_impFmt(e));
+}
 function impIsExcluido(d){
   if(d.acao==='Desconsiderar') return true;
   return false;
@@ -7728,6 +7768,10 @@ function impRenderChartChips(){
 function impLimpar(){
   IMP_F_EMPS=[]; IMP_F_SAPS=[]; IMP_F_SQUADS=[];
   IMP_CHART_F={empresa:null,sap:null,squad:null};
+  IMP_SEMANA_BASE=null;IMP_SEMANA_W=0;
+  var sn=document.getElementById('imp-semana-num');if(sn)sn.value='';
+  var dr=document.getElementById('imp-dias-row');if(dr)dr.style.display='none';
+  document.querySelectorAll('.imp-mes-btn').forEach(function(b){b.style.background='';b.style.color='var(--muted)';b.style.fontWeight='500';});
   var ini=document.getElementById('imp-dt-ini'); if(ini) ini.value=IMP_DT_MIN;
   var fim=document.getElementById('imp-dt-fim'); if(fim) fim.value=IMP_DT_MAX;
   var ref=document.getElementById('imp-ref-time'); if(ref) ref.value='08:00';
@@ -8241,6 +8285,23 @@ async function renderViewImprodutividade(){
 
   // Content (sempre presente, oculto se sem dados)
   +'<div id="imp-content" style="display:'+(jaDados?'block':'none')+'">'
+
+  // Quick-filter bar (mês / semana / dias)
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:8px 14px;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+  +'<span style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted);flex-shrink:0">Mês</span>'
+  +['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map(function(n,i){return'<button class="imp-mes-btn" onclick="impSetMes('+i+')" style="padding:3px 8px;border:1px solid var(--bord);border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;background:;color:var(--muted);font-family:inherit;transition:all .15s">'+n+'</button>';}).join('')
+  +'<div style="width:1px;height:24px;background:var(--bord);flex-shrink:0"></div>'
+  +'<span style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted);flex-shrink:0">Semana</span>'
+  +'<button onclick="impNavSemana(-1)" style="padding:2px 8px;border:1px solid var(--bord);border-radius:5px;font-size:14px;font-weight:700;cursor:pointer;background:var(--card);color:var(--text);font-family:inherit;line-height:1.4">‹</button>'
+  +'<input type="number" id="imp-semana-num" min="1" max="53" placeholder="nº" onchange="impSetSemana(this.value)" style="width:52px;border:1px solid var(--bord);border-radius:5px;padding:4px 6px;font-size:12px;text-align:center;color:var(--text);background:#fff;font-family:inherit;outline:none">'
+  +'<button onclick="impNavSemana(1)" style="padding:2px 8px;border:1px solid var(--bord);border-radius:5px;font-size:14px;font-weight:700;cursor:pointer;background:var(--card);color:var(--text);font-family:inherit;line-height:1.4">›</button>'
+  +'<div id="imp-dias-row" style="display:none;align-items:center;gap:6px;margin-left:4px">'
+  +'<span style="font-size:11px;color:var(--muted)">de</span>'
+  +'<select id="imp-dia-ini" onchange="impAplicaDias()" style="border:1px solid var(--bord);border-radius:5px;padding:4px 6px;font-size:11px;color:var(--text);background:#fff;font-family:inherit;outline:none"><option value="0">Seg</option><option value="1">Ter</option><option value="2">Qua</option><option value="3">Qui</option><option value="4">Sex</option><option value="5">Sáb</option><option value="6">Dom</option></select>'
+  +'<span style="font-size:11px;color:var(--muted)">até</span>'
+  +'<select id="imp-dia-fim" onchange="impAplicaDias()" style="border:1px solid var(--bord);border-radius:5px;padding:4px 6px;font-size:11px;color:var(--text);background:#fff;font-family:inherit;outline:none"><option value="0">Seg</option><option value="1">Ter</option><option value="2">Qua</option><option value="3">Qui</option><option value="4" selected>Sex</option><option value="5">Sáb</option><option value="6">Dom</option></select>'
+  +'</div>'
+  +'</div>'
 
   // Controls bar
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">'
