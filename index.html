@@ -7823,10 +7823,12 @@ function impRenderCards(refMin){
   var total=validos.length;
   var at=validos.filter(function(d){return d.delayMin>0;});
   var totalMin=validos.reduce(function(s,d){return s+(d.delayMin||0);},0);
-  // Base: Seg–Qui = 9h (540 min), Sex = 8h (480 min) por registro
+  // Base dinâmica: período do filtro para Seg–Qui; Sex = 1h menos
+  var fimMin=impGetFimMin();
+  var periodoBase=Math.max(0,fimMin-refMin);
   var totalEsperadoMin=validos.reduce(function(s,d){
     var dow=d.dataSortKey?new Date(d.dataSortKey+'T00:00:00').getDay():1;
-    return s+(dow===5?480:540);
+    return s+(dow===5?Math.max(0,periodoBase-60):periodoBase);
   },0);
   var totalProdMin=Math.max(0,totalEsperadoMin-totalMin);
   var pctImp=totalEsperadoMin>0?Math.round(totalMin/totalEsperadoMin*100):0;
