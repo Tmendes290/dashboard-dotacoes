@@ -8116,8 +8116,7 @@ function impRenderSquads(){
 // ══════════════════════════════════════════════════════════════════
 // RDO DIÁRIO — estado e funções
 // ══════════════════════════════════════════════════════════════════
-var RDO_VIEW = 'squad'; // 'squad' | 'obras'
-var RDO_SEL_SQUAD = null;
+var RDO_SEL_SQUADS = []; // squads selecionados (multi-select)
 
 // ── Helpers ──
 function rdoM2HM(m){ if(m===null||m===undefined||isNaN(m)) return '--'; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
@@ -8189,7 +8188,7 @@ function rdoImpGetSapAggr(squadFilter){
   var map={};
   IMP_FILTERED.forEach(function(d){
     if(d.inicioMin===null&&d.terminoMin===null) return;
-    if(squadFilter){var sq=impGetSquad(d.sap);if((sq.squad||'Sem vínculo')!==squadFilter) return;}
+    if(squadFilter&&squadFilter.length){var sq=impGetSquad(d.sap);if(squadFilter.indexOf(sq.squad||'Sem vínculo')<0) return;}
     var sap=d.sap||'(sem SAP)';
     var tb=rdoTribo(d.sap);
     if(!map[sap]) map[sap]={id:sap,sap:sap,tribo:tb,reg:0,perf:0,parc:0,nao:0,inicios:[],terminos:[],hts:[]};
@@ -8283,33 +8282,25 @@ function rdoImpRenderSec(secId,grpId,tribo,saps,obras,multiDay){
 function rdoImpRender(){
   var empty=document.getElementById('rdo-empty');
   var pill=document.getElementById('rdo-pill'),pt=document.getElementById('rdo-pill-txt');
-  var squadFilter=RDO_VIEW==='obras'?RDO_SEL_SQUAD:null;
-  var saps=rdoImpGetSapAggr(squadFilter);
+  var squads=rdoImpGetSquadCards();
+  if(!squads.length){
+    var cg=document.getElementById('rdo-cards');if(cg)cg.innerHTML='';
+    ['rdo-sec-usina','rdo-sec-mina','rdo-sec-outros'].forEach(function(id){var e=document.getElementById(id);if(e){e.className='rdo-sec hidden';e.style.display='';}});
+    if(empty)empty.style.display='block'; return;
+  }
+  if(empty) empty.style.display='none';
+  rdoImpRenderSquadCards(squads);
+  var hasSel=RDO_SEL_SQUADS.length>0;
+  if(pill) pill.className='rdo-pill'+(hasSel?' show':'');
+  if(pt) pt.textContent=hasSel?(RDO_SEL_SQUADS.length+' squad'+(RDO_SEL_SQUADS.length>1?'s':'')+' selecionado'+(RDO_SEL_SQUADS.length>1?'s':'')):'';
+  if(!hasSel){
+    ['rdo-sec-usina','rdo-sec-mina','rdo-sec-outros'].forEach(function(id){var e=document.getElementById(id);if(e){e.className='rdo-sec hidden';e.style.display='';}});
+    return;
+  }
+  var saps=rdoImpGetSapAggr(RDO_SEL_SQUADS);
   var obras=rdoImpGetObras(saps);
   var dts={}; IMP_FILTERED.forEach(function(d){if(d.dataSortKey)dts[d.dataSortKey]=1;});
   var multiDay=Object.keys(dts).length>1;
-  if(RDO_VIEW==='squad'){
-    if(pill) pill.className='rdo-pill';
-    var squads=rdoImpGetSquadCards();
-    if(!squads.length){
-      var cg=document.getElementById('rdo-cards');if(cg)cg.innerHTML='';
-      ['rdo-sec-usina','rdo-sec-mina','rdo-sec-outros'].forEach(function(id){var e=document.getElementById(id);if(e){e.className='rdo-sec hidden';e.style.display='';}});
-      if(empty)empty.style.display='block'; return;
-    }
-    if(empty) empty.style.display='none';
-    rdoImpRenderSquadCards(squads);
-  } else {
-    if(pill) pill.className='rdo-pill show';
-    if(pt) pt.textContent=RDO_SEL_SQUAD||'';
-    var obraCards=rdoImpGetObraCards(RDO_SEL_SQUAD);
-    if(!obraCards.length){
-      var cg=document.getElementById('rdo-cards');if(cg)cg.innerHTML='';
-      ['rdo-sec-usina','rdo-sec-mina','rdo-sec-outros'].forEach(function(id){var e=document.getElementById(id);if(e){e.className='rdo-sec hidden';e.style.display='';}});
-      if(empty)empty.style.display='block'; return;
-    }
-    if(empty) empty.style.display='none';
-    rdoImpRenderObraCards(obraCards);
-  }
   rdoImpRenderSec('rdo-sec-usina','rdo-grp-usina','usina',saps,obras,multiDay);
   rdoImpRenderSec('rdo-sec-mina','rdo-grp-mina','mina',saps,obras,multiDay);
   rdoImpRenderSec('rdo-sec-outros','rdo-grp-outros','outros',saps,obras,multiDay);
@@ -8321,8 +8312,9 @@ function rdoImpRenderSquadCards(squads){
   squads.forEach(function(sq){
     var tl=rdoTrLabel(sq.tribo);
     var d=document.createElement('div');
-    d.className='rdo-sq-card '+sq.tribo;
-    d.onclick=function(){rdoImpDrillSquad(sq.squad);};
+    var isSel=RDO_SEL_SQUADS.indexOf(sq.squad)>=0;
+    d.className='rdo-sq-card '+sq.tribo+(isSel?' sel':'');
+    d.onclick=(function(name){return function(){rdoImpToggleSquad(name);};})(sq.squad);
     d.innerHTML='<div class="rdo-rn">'+sq.reg+'<small>reg</small></div>'
       +'<div class="rdo-tr '+sq.tribo+'">'+tl+'</div>'
       +'<div style="font-size:17px;font-weight:800;line-height:1.25;margin:8px 0 12px;color:var(--text);padding-right:36px">'+impEsc(sq.squad)+'</div>'
@@ -8362,11 +8354,12 @@ function rdoImpRenderObraCards(obras){
   });
 }
 
-function rdoImpDrillSquad(squadName){
-  RDO_VIEW='obras'; RDO_SEL_SQUAD=squadName;
+function rdoImpToggleSquad(name){
+  var idx=RDO_SEL_SQUADS.indexOf(name);
+  if(idx>=0) RDO_SEL_SQUADS.splice(idx,1); else RDO_SEL_SQUADS.push(name);
   rdoImpRender();
 }
-function rdoLimparCard(){ RDO_VIEW='squad'; RDO_SEL_SQUAD=null; rdoImpRender(); }
+function rdoLimparCard(){ RDO_SEL_SQUADS=[]; rdoImpRender(); }
 
 // ── Tab control ───────────────────────────────────────────────────
 function impShowTab(tab,el){
@@ -8546,7 +8539,7 @@ async function renderViewImprodutividade(){
 
   // Tab RDO Diário — usa apenas os filtros do topo (De/Até, Empresa, Obra, Squad)
   +'<div id="imp-tab-rdo" style="display:none">'
-  +'<div class="rdo-pill" id="rdo-pill" style="margin-bottom:12px">← Squad: <strong id="rdo-pill-txt"></strong><button onclick="rdoLimparCard()" title="Voltar">✕ Voltar</button></div>'
+  +'<div class="rdo-pill" id="rdo-pill" style="margin-bottom:12px"><strong id="rdo-pill-txt"></strong><button onclick="rdoLimparCard()" title="Limpar seleção">✕ Limpar</button></div>'
   +'<div class="rdo-sq-grid" id="rdo-cards"></div>'
   +'<div class="rdo-sec" id="rdo-sec-usina"><div class="rdo-sec-hdr"><span class="rdo-sec-badge" style="background:#009CDE">TRIBO USINA</span></div><div id="rdo-grp-usina"></div></div>'
   +'<div class="rdo-sec" id="rdo-sec-mina"><div class="rdo-sec-hdr"><span class="rdo-sec-badge" style="background:#059669">TRIBO MINA</span></div><div id="rdo-grp-mina"></div></div>'
