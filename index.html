@@ -7823,11 +7823,11 @@ function impRenderCards(refMin){
   var total=validos.length;
   var at=validos.filter(function(d){return d.delayMin>0;});
   var totalMin=validos.reduce(function(s,d){return s+(d.delayMin||0);},0);
-  var comH=validos.filter(function(d){return d.horasTrab!==null&&d.horasTrab>0;});
-  var totalHMin=comH.reduce(function(s,d){return s+d.horasTrab;},0);
-  var totalPeriodo=totalHMin+totalMin;
-  var pctImp=totalPeriodo>0?Math.round(totalMin/totalPeriodo*100):0;
-  var pctProd=totalPeriodo>0?100-pctImp:0;
+  var BASE_MIN=6*60; // 6h por registro = base produtiva
+  var totalEsperadoMin=total*BASE_MIN;
+  var totalProdMin=Math.max(0,totalEsperadoMin-totalMin);
+  var pctImp=totalEsperadoMin>0?Math.round(totalMin/totalEsperadoMin*100):0;
+  var pctProd=100-pctImp;
   var el=document.getElementById('imp-cards'); if(!el) return;
   el.innerHTML=
     impCard('var(--acc)',total,'Registros com horário','Chegada ou PTS preenchidos',
@@ -7836,10 +7836,10 @@ function impRenderCards(refMin){
       'Registros onde a base (Início, Chegada ou PTS — nessa ordem de prioridade) é posterior ao Horário Ref. definido no filtro acima.')+
     impCard('#f59e0b',impFmtDelay(totalMin)||'0 min','Total improdutivo','Ref: '+impToHHMM(refMin)+' — '+totalMin+' min',
       'Soma de todos os minutos de atraso. Cálculo por registro: Atraso = Base − Horário Ref. Ex: chegada 10:30, ref. 08:00 → 150 min improdutivos.')+
-    impCard('#10b981',impFmtDelay(totalHMin)||'0 min','Horas produtivas',pctProd+'% do período total',
-      'Soma das horas efetivamente trabalhadas (Início → Término menos almoço). Percentual calculado sobre horas produtivas + horas improdutivas acumuladas.')+
-    impCard('#6366f1',pctImp+'%','Taxa improdutiva',pctProd+'% produtivo',
-      'Percentual das horas improdutivas sobre o total do período (horas produtivas + atraso acumulado). Quanto menor, melhor.');
+    impCard('#10b981',impFmtDelay(totalProdMin)||'0 min','Horas produtivas',pctProd+'% da base ('+total+'×6h)',
+      'Base: 6h por registro ('+total+' registros = '+impFmtDelay(totalEsperadoMin)+'). Horas produtivas = base − total improdutivo. Ex: 10 registros × 6h = 60h; 5h improdutivas = 55h produtivas.')+
+    impCard('#6366f1',pctImp+'%','Taxa improdutiva',pctProd+'% produtivo — base 6h/reg.',
+      'Percentual de horas improdutivas sobre a base de 6h por registro. Fórmula: total improdutivo ÷ (registros × 6h) × 100. Quanto menor, melhor.');
 }
 function impCard(cor,val,lbl,sub,info){
   var btn=info?'<div title="'+info+'" style="position:absolute;top:8px;right:8px;width:17px;height:17px;border-radius:50%;background:#e2e8f0;color:#64748b;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:help;flex-shrink:0;line-height:1">!</div>':'';
