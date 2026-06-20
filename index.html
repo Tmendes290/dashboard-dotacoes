@@ -8218,7 +8218,8 @@ function rdoImpGetObras(saps){
     var key=sap+'||'+(d.descricao||d.produto||'');
     if(!byS[sap]) byS[sap]=[];
     var ob=byS[sap].find(function(o){return o._key===key&&(!multiDay||o._dt===d.dataSortKey);});
-    if(!ob){ob={_key:key,_dt:d.dataSortKey,empresa:d.empresa,frente:d.descricao||d.produto||d.sap,chegArr:[],baseArr:[],iniArr:[],terArr:[],ptsArr:[],almIArr:[],almFArr:[],reg:0};byS[sap].push(ob);}
+    if(!ob){ob={_key:key,_dt:d.dataSortKey,empresa:d.empresa,frente:d.descricao||d.produto||d.sap,fiscal:d.fiscal||'',chegArr:[],baseArr:[],iniArr:[],terArr:[],ptsArr:[],almIArr:[],almFArr:[],reg:0};byS[sap].push(ob);}
+    if(d.fiscal&&!ob.fiscal) ob.fiscal=d.fiscal;
     ob.reg++;
     if(d.chegadaMin!==null){ob.chegArr.push(d.chegadaMin);ob.baseArr.push(d.baseUsada||'Chegada');}
     else if(d.baseUsada) ob.baseArr.push(d.baseUsada);
@@ -8239,7 +8240,7 @@ function rdoImpGetObras(saps){
       var almFm=ob.almFArr.length?Math.round(ob.almFArr.reduce(function(a,b){return a+b;},0)/ob.almFArr.length):null;
       var alm=(almIm!==null&&almFm!==null&&almFm>almIm)?almFm-almIm:60;
       var ht=(minI!==null&&maxT!==null)?Math.max(0,maxT-minI-alm):null;
-      return{empresa:ob.empresa,frente:ob.frente,_dt:ob._dt,chegada:rdoM2HM(minC),base:base,inicio:rdoM2HM(minI),termino:rdoM2HM(maxT),pts:rdoM2HM(minP),ht:ht,reg:ob.reg};
+      return{empresa:ob.empresa,frente:ob.frente,fiscal:ob.fiscal||'',_dt:ob._dt,chegada:rdoM2HM(minC),base:base,inicio:rdoM2HM(minI),termino:rdoM2HM(maxT),pts:rdoM2HM(minP),ht:ht,reg:ob.reg};
     });
   });
   return byS;
@@ -8261,7 +8262,7 @@ function rdoImpRenderSec(secId,grpId,tribo,saps,obras,multiDay){
       var baseTip=o.base==='PTS'?'title="Base: PTS"':'title="Base: '+impEsc(o.base||'Chegada')+'"';
       var chegCell=o.chegada!=='--'?'<td class="rdo-mono" '+baseTip+'>'+o.chegada+'</td>':(o.base==='Início'?'<td class="rdo-mono" style="color:#6366f1" title="Sem chegada — usando Início">—</td>':'<td class="rdo-mono" style="color:#ccc">—</td>');
       return'<tr><td style="font-weight:600;color:#374151;font-size:10px;white-space:nowrap">'+impEsc(o.empresa)+'</td>'
-        +'<td style="font-weight:500">'+tag+impEsc(o.frente)+'</td>'
+        +'<td style="font-weight:500">'+tag+impEsc(o.fiscal||o.frente)+'</td>'
         +chegCell
         +'<td class="rdo-mono">'+o.inicio+'</td><td class="rdo-mono">'+o.termino+'</td>'
         +'<td class="rdo-mono">'+o.pts+'</td>'
@@ -8271,7 +8272,7 @@ function rdoImpRenderSec(secId,grpId,tribo,saps,obras,multiDay){
     grp.innerHTML+='<div class="rdo-gbox"><div class="rdo-ghd"><span class="rdo-gbadge '+gbCls+'">'+tl+'</span>'
       +'<span class="rdo-gname">'+impEsc(sq.sap)+(nomeRef?' — '+impEsc(nomeRef):'')+'</span>'
       +'<span class="rdo-gcnt">'+totalReg+' registros</span></div>'
-      +'<table class="rdo-tbl"><thead><tr><th>Empresa</th><th>Frente / Atividade</th>'
+      +'<table class="rdo-tbl"><thead><tr><th>Empresa</th><th>Fiscal</th>'
       +'<th class="tc">Chegada</th><th class="tc">Início</th><th class="tc">Término</th>'
       +'<th class="tc">PTS</th><th class="tc">H. Trab.</th><th class="tc">Reg.</th>'
       +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
