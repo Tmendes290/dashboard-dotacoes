@@ -8184,26 +8184,134 @@ function rdoImpGetObraCards(squadName){
   }).sort(function(a,b){return b.reg-a.reg;});
 }
 
+// ── Agrega por SAP para as tabelas de detalhe (squadFilter opcional) ──
+function rdoImpGetSapAggr(squadFilter){
+  var map={};
+  IMP_FILTERED.forEach(function(d){
+    if(d.inicioMin===null&&d.terminoMin===null) return;
+    if(squadFilter){var sq=impGetSquad(d.sap);if((sq.squad||'Sem vínculo')!==squadFilter) return;}
+    var sap=d.sap||'(sem SAP)';
+    var tb=rdoTribo(d.sap);
+    if(!map[sap]) map[sap]={id:sap,sap:sap,tribo:tb,reg:0,perf:0,parc:0,nao:0,inicios:[],terminos:[],hts:[]};
+    var e=map[sap]; e.reg++;
+    var dm=d.delayMin; if(dm===null||dm===0) e.perf++; else if(dm<=60) e.parc++; else e.nao++;
+    if(d.inicioMin!==null) e.inicios.push(d.inicioMin);
+    if(d.terminoMin!==null) e.terminos.push(d.terminoMin);
+    var ht=rdoHtCalc(d); if(ht!==null) e.hts.push(ht);
+  });
+  return Object.values(map).map(function(e){
+    e.inicio=rdoM2HM(e.inicios.length?Math.min.apply(null,e.inicios):null);
+    e.termino=rdoM2HM(e.terminos.length?Math.max.apply(null,e.terminos):null);
+    e.ht=e.hts.length?Math.round(e.hts.reduce(function(a,b){return a+b;},0)/e.hts.length):null;
+    return e;
+  });
+}
+function rdoImpGetObras(saps){
+  var sqSet={}; saps.forEach(function(s){sqSet[s.id]=1;});
+  var datas={}; IMP_FILTERED.forEach(function(d){if(d.dataSortKey)datas[d.dataSortKey]=1;});
+  var multiDay=Object.keys(datas).length>1;
+  var byS={};
+  IMP_FILTERED.forEach(function(d){
+    var sap=d.sap||'(sem SAP)';
+    if(!sqSet[sap]) return;
+    if(d.inicioMin===null&&d.terminoMin===null) return;
+    var key=sap+'||'+(d.descricao||d.produto||'');
+    if(!byS[sap]) byS[sap]=[];
+    var ob=byS[sap].find(function(o){return o._key===key&&(!multiDay||o._dt===d.dataSortKey);});
+    if(!ob){ob={_key:key,_dt:d.dataSortKey,empresa:d.empresa,frente:d.descricao||d.produto||d.sap,chegArr:[],baseArr:[],iniArr:[],terArr:[],ptsArr:[],almIArr:[],almFArr:[],reg:0};byS[sap].push(ob);}
+    ob.reg++;
+    if(d.chegadaMin!==null){ob.chegArr.push(d.chegadaMin);ob.baseArr.push(d.baseUsada||'Chegada');}
+    else if(d.baseUsada) ob.baseArr.push(d.baseUsada);
+    if(d.inicioMin!==null) ob.iniArr.push(d.inicioMin);
+    if(d.terminoMin!==null) ob.terArr.push(d.terminoMin);
+    if(d.ptsMin!==null) ob.ptsArr.push(d.ptsMin);
+    if(d.almIniMin!==null) ob.almIArr.push(d.almIniMin);
+    if(d.almFimMin!==null) ob.almFArr.push(d.almFimMin);
+  });
+  Object.keys(byS).forEach(function(sap){
+    byS[sap]=byS[sap].map(function(ob){
+      var minI=ob.iniArr.length?Math.min.apply(null,ob.iniArr):null;
+      var maxT=ob.terArr.length?Math.max.apply(null,ob.terArr):null;
+      var minP=ob.ptsArr.length?Math.min.apply(null,ob.ptsArr):null;
+      var minC=ob.chegArr.length?Math.min.apply(null,ob.chegArr):null;
+      var base=ob.baseArr.length?ob.baseArr[0]:'';
+      var almIm=ob.almIArr.length?Math.round(ob.almIArr.reduce(function(a,b){return a+b;},0)/ob.almIArr.length):null;
+      var almFm=ob.almFArr.length?Math.round(ob.almFArr.reduce(function(a,b){return a+b;},0)/ob.almFArr.length):null;
+      var alm=(almIm!==null&&almFm!==null&&almFm>almIm)?almFm-almIm:60;
+      var ht=(minI!==null&&maxT!==null)?Math.max(0,maxT-minI-alm):null;
+      return{empresa:ob.empresa,frente:ob.frente,_dt:ob._dt,chegada:rdoM2HM(minC),base:base,inicio:rdoM2HM(minI),termino:rdoM2HM(maxT),pts:rdoM2HM(minP),ht:ht,reg:ob.reg};
+    });
+  });
+  return byS;
+}
+function rdoFmtShort(s){var p=s.split('-');return p[2]+'/'+p[1];}
+function rdoImpRenderSec(secId,grpId,tribo,saps,obras,multiDay){
+  var sec=document.getElementById(secId),grp=document.getElementById(grpId); if(!sec||!grp) return;
+  var list=saps.filter(function(s){return s.tribo===tribo;});
+  if(!list.length){sec.className='rdo-sec hidden';sec.style.display='';return;}
+  sec.className='rdo-sec'; sec.style.display=''; grp.innerHTML='';
+  var tl=rdoTrLabel(tribo);
+  var gbCls=tribo==='usina'?'u':tribo==='mina'?'m':'o';
+  list.forEach(function(sq){
+    var os=obras[sq.id]||[]; if(!os.length) return;
+    var totalReg=os.reduce(function(s,o){return s+o.reg;},0);
+    var nomeRef=impGetObraNome(sq.sap);
+    var rows=os.map(function(o){
+      var tag=multiDay?'<span style="background:#f1f5f9;color:#475569;border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700;margin-right:4px">'+rdoFmtShort(o._dt)+'</span>':'';
+      var baseTip=o.base==='PTS'?'title="Base: PTS"':'title="Base: '+impEsc(o.base||'Chegada')+'"';
+      var chegCell=o.chegada!=='--'?'<td class="rdo-mono" '+baseTip+'>'+o.chegada+'</td>':(o.base==='Início'?'<td class="rdo-mono" style="color:#6366f1" title="Sem chegada — usando Início">—</td>':'<td class="rdo-mono" style="color:#ccc">—</td>');
+      return'<tr><td style="font-weight:600;color:#374151;font-size:10px;white-space:nowrap">'+impEsc(o.empresa)+'</td>'
+        +'<td style="font-weight:500">'+tag+impEsc(o.frente)+'</td>'
+        +chegCell
+        +'<td class="rdo-mono">'+o.inicio+'</td><td class="rdo-mono">'+o.termino+'</td>'
+        +'<td class="rdo-mono">'+o.pts+'</td>'
+        +'<td class="'+rdoHtCls(o.ht)+'">'+rdoHtStr(o.ht)+'</td>'
+        +'<td class="rdo-reg-n">'+o.reg+'</td></tr>';
+    }).join('');
+    grp.innerHTML+='<div class="rdo-gbox"><div class="rdo-ghd"><span class="rdo-gbadge '+gbCls+'">'+tl+'</span>'
+      +'<span class="rdo-gname">'+impEsc(sq.sap)+(nomeRef?' — '+impEsc(nomeRef):'')+'</span>'
+      +'<span class="rdo-gcnt">'+totalReg+' registros</span></div>'
+      +'<table class="rdo-tbl"><thead><tr><th>Empresa</th><th>Frente / Atividade</th>'
+      +'<th class="tc">Chegada</th><th class="tc">Início</th><th class="tc">Término</th>'
+      +'<th class="tc">PTS</th><th class="tc">H. Trab.</th><th class="tc">Reg.</th>'
+      +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+  });
+}
+
 // ── Render principal ──
 function rdoImpRender(){
-  // seções de tabela antigas: ocultas no novo layout
-  ['rdo-sec-usina','rdo-sec-mina','rdo-sec-outros'].forEach(function(id){var e=document.getElementById(id);if(e)e.style.display='none';});
   var empty=document.getElementById('rdo-empty');
   var pill=document.getElementById('rdo-pill'),pt=document.getElementById('rdo-pill-txt');
+  var squadFilter=RDO_VIEW==='obras'?RDO_SEL_SQUAD:null;
+  var saps=rdoImpGetSapAggr(squadFilter);
+  var obras=rdoImpGetObras(saps);
+  var dts={}; IMP_FILTERED.forEach(function(d){if(d.dataSortKey)dts[d.dataSortKey]=1;});
+  var multiDay=Object.keys(dts).length>1;
   if(RDO_VIEW==='squad'){
     if(pill) pill.className='rdo-pill';
     var squads=rdoImpGetSquadCards();
-    if(!squads.length){var cg=document.getElementById('rdo-cards');if(cg)cg.innerHTML='';if(empty)empty.style.display='block';return;}
+    if(!squads.length){
+      var cg=document.getElementById('rdo-cards');if(cg)cg.innerHTML='';
+      ['rdo-sec-usina','rdo-sec-mina','rdo-sec-outros'].forEach(function(id){var e=document.getElementById(id);if(e){e.className='rdo-sec hidden';e.style.display='';}});
+      if(empty)empty.style.display='block'; return;
+    }
     if(empty) empty.style.display='none';
     rdoImpRenderSquadCards(squads);
   } else {
     if(pill) pill.className='rdo-pill show';
     if(pt) pt.textContent=RDO_SEL_SQUAD||'';
-    var obras=rdoImpGetObraCards(RDO_SEL_SQUAD);
-    if(!obras.length){var cg=document.getElementById('rdo-cards');if(cg)cg.innerHTML='';if(empty)empty.style.display='block';return;}
+    var obraCards=rdoImpGetObraCards(RDO_SEL_SQUAD);
+    if(!obraCards.length){
+      var cg=document.getElementById('rdo-cards');if(cg)cg.innerHTML='';
+      ['rdo-sec-usina','rdo-sec-mina','rdo-sec-outros'].forEach(function(id){var e=document.getElementById(id);if(e){e.className='rdo-sec hidden';e.style.display='';}});
+      if(empty)empty.style.display='block'; return;
+    }
     if(empty) empty.style.display='none';
-    rdoImpRenderObraCards(obras);
+    rdoImpRenderObraCards(obraCards);
   }
+  rdoImpRenderSec('rdo-sec-usina','rdo-grp-usina','usina',saps,obras,multiDay);
+  rdoImpRenderSec('rdo-sec-mina','rdo-grp-mina','mina',saps,obras,multiDay);
+  rdoImpRenderSec('rdo-sec-outros','rdo-grp-outros','outros',saps,obras,multiDay);
 }
 
 // ── Cards de Squad (nível 1) ──
