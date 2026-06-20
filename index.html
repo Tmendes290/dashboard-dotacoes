@@ -7582,8 +7582,6 @@ function impGetFimMin(){
 }
 function impIsExcluido(d){
   if(d.acao==='Desconsiderar') return true;
-  var fimMin=impGetFimMin();
-  if(d.terminoMin!==null&&d.terminoMin>fimMin) return true;
   return false;
 }
 function impStyleAcaoSelect(el,val){
