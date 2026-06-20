@@ -7867,7 +7867,7 @@ function impRenderKPIs(){
   var comAlm=IMP_FILTERED.filter(function(d){return d.almExcesso!==null;});
   var avgAlm=comAlm.length?Math.round(comAlm.reduce(function(s,d){return s+d.almExcesso;},0)/comAlm.length):null;
   var k1=document.getElementById('imp-kpi-delay'),k2=document.getElementById('imp-kpi-hours'),k3=document.getElementById('imp-kpi-lunch');
-  if(k1) k1.textContent=avgDelay!==null?avgDelay+' min':'—';
+  if(k1) k1.textContent=avgDelay!==null?impFmtDelay(avgDelay)||'—':'—';
   if(k2) k2.textContent=avgH!==null?(avgH/60).toFixed(1)+'h':'—';
   if(k3) k3.textContent=avgAlm!==null?(avgAlm>0?avgAlm+' min':'Ok'):'—';
 }
@@ -8374,9 +8374,8 @@ async function renderViewImprodutividade(){
   +'<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;font-weight:700;color:var(--text)">Top obras (SAP) — minutos improdutivos</span><div style="display:flex;align-items:center;gap:8px"><button onclick="impFiltrarTop10Obras()" style="padding:3px 10px;border:1px solid var(--acc);border-radius:20px;font-size:10px;font-weight:700;cursor:pointer;background:#eff6ff;color:var(--acc);font-family:inherit">🔝 Filtrar top 10</button><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-obras"></span></div></div><div style="font-size:10px;color:var(--muted);margin-bottom:8px">Clique em uma barra para filtrar por aquela obra</div><div style="position:relative;height:220px"><canvas id="imp-chart-obras"></canvas></div></div>'
   +'<div style="display:flex;flex-direction:column;gap:12px">'
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Min. médios de atraso</div><div id="imp-kpi-delay" style="font-size:28px;font-weight:800;color:#b91c1c;line-height:1.1">—</div><div style="font-size:10px;color:var(--muted);margin-top:2px">por registro com atraso</div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Média de atraso</div><div id="imp-kpi-delay" style="font-size:28px;font-weight:800;color:#b91c1c;line-height:1.1">—</div><div style="font-size:10px;color:var(--muted);margin-top:2px">por registro com atraso</div></div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Média horas trabalhadas</div><div id="imp-kpi-hours" style="font-size:28px;font-weight:800;color:#1d4ed8;line-height:1.1">—</div><div style="font-size:10px;color:var(--muted);margin-top:2px">horas/pessoa na seleção</div></div>'
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Excesso no almoço</div><div id="imp-kpi-lunch" style="font-size:28px;font-weight:800;color:#d97706;line-height:1.1">—</div><div style="font-size:10px;color:var(--muted);margin-top:2px">min. médios acima de 1h</div></div>'
   +'</div>'
   +'</div>'
 
