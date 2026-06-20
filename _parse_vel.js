@@ -50,6 +50,7 @@ for (let i = 1; i < raw.length; i++) {
   if (!maxV || !lim) continue;
   const pct = Math.round((maxV / lim - 1) * 100);
   if (pct < 1) continue; // não é violação
+  if (dur <= 12) continue; // duração ≤ 12s não conta como desvio formal (PRO-025917 Rev.12)
   const sev = getSev(pct);
 
   const key = dt + '|' + drv;

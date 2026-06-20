@@ -192,6 +192,7 @@ app.post('/api/import-velocidade', async (req, res) => {
       if (!maxV || !lim) continue;
       const pct = Math.round((maxV / lim - 1) * 100);
       if (pct < 1) continue;
+      if (dur <= 12) continue; // duração ≤ 12s não conta como desvio formal (PRO-025917 Rev.12)
       const sev = getSev(pct);
       const key = dt + '|' + drv;
       if (!map[key]) map[key] = { dt, drv, b: 0, m: 0, g: 0, gv: 0, dur: 0, maxV: 0, limAtMax: 0 };
