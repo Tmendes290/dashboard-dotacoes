@@ -517,7 +517,7 @@ function renderAll(){
       +'<td style="color:#a16207">'+(d.mb||'—')+'</td>'
       +'<td style="color:#c2410c">'+(d.g||'—')+'</td>'
       +'<td style="color:#b91c1c;font-weight:'+(d.gv>0?'700':'400')+'">'+(d.gv||'—')+'</td>'
-      +'<td style="color:var(--muted);white-space:nowrap">'+(d.dur<3600?Math.round(d.dur/60)+'min':Math.round(d.dur/3600)+'h')+'</td>'
+      +'<td style="color:var(--muted);white-space:nowrap">'+(d.dur<60?d.dur+'s':d.dur<3600?Math.round(d.dur/60)+'min':Math.round(d.dur/3600)+'h')+'</td>'
       +'<td>'+getSevLabel(sev)+'</td>'
       +'<td><span class="'+cc+'">'+cons+'</span></td>'
       +'</tr>';
@@ -533,7 +533,7 @@ function renderAll(){
       +'<td style="font-weight:600;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+d.drv+'">'+d.drv.split(' ').slice(0,2).join(' ')+'…</td>'
       +'<td><span class="pill '+pillC+'">'+d.ev.toLocaleString('pt-BR')+'</span></td>'
       +'<td><div class="fb"><div class="fb-fill" style="width:'+pct+'%"></div></div></td>'
-      +'<td style="color:var(--muted)">'+(d.dur<3600?Math.round(d.dur/60)+'min':Math.round(d.dur/3600)+'h')+'</td>'
+      +'<td style="color:var(--muted)">'+(d.dur<60?d.dur+'s':d.dur<3600?Math.round(d.dur/60)+'min':Math.round(d.dur/3600)+'h')+'</td>'
       +'<td style="font-weight:700;color:'+(d.maxV>=100?'var(--danger)':d.maxV>=90?'#ea580c':'var(--warn)')+'">'+d.maxV+' km/h</td></tr>';
   }).join('');
 
