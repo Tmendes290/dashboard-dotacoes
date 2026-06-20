@@ -103,6 +103,9 @@ select:focus,input:focus{border-color:var(--acc)}
 .cons-recicla{background:#fef9c3;color:#a16207}
 .cons-advert{background:#fef3c7;color:#b45309}
 .cons-conversa{background:#dcfce7;color:#15803d}
+.ia-btn{padding:3px 10px;border-radius:4px;border:1px solid var(--bord);background:var(--bg);color:var(--muted);font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s}
+.ia-btn:hover{border-color:var(--acc);color:var(--acc)}
+.ia-btn.ia-active{background:var(--acc);color:#fff;border-color:var(--acc)}
 /* Embed mode (dentro do iframe do dashboard) */
 body.embed .sb{display:none!important}
 body.embed .main{width:100%!important}
@@ -181,6 +184,17 @@ var MESES_IDX={Janeiro:'01',Fevereiro:'02','Março':'03',Abril:'04',Maio:'05',Ju
 var MESES_LABEL=['Jan','Fev','Mar','Abr','Mai','Jun'];
 var DIAS_ALL=Array.from({length:31},function(_,i){return String(i+1).padStart(2,'0');});
 var MO_LABELS=['2026-01','2026-02','2026-03','2026-04','2026-05','2026-06'];
+
+var INACTIVE_DAYS=0;
+function setInactive(d){
+  INACTIVE_DAYS=d;
+  ['ia-all','ia-30','ia-60'].forEach(function(id){
+    var el=document.getElementById(id);if(!el)return;
+    var active=(d===0&&id==='ia-all')||(d===30&&id==='ia-30')||(d===60&&id==='ia-60');
+    el.className='ia-btn'+(active?' ia-active':'');
+  });
+  renderAll();
+}
 
 buildMs('ms-mes',MESES_ALL,'Todos os meses',applyFilters);
 buildMs('ms-dia',DIAS_ALL,'Todos os dias',applyFilters);
@@ -313,12 +327,13 @@ function byDriver(rows){
   var m={};
   rows.forEach(function(r){
     var d=r[1],ev=rowEv(r);if(!ev)return;
-    if(!m[d])m[d]={drv:d,ev:0,b:0,mb:0,g:0,gv:0,dur:0,maxV:0};
+    if(!m[d])m[d]={drv:d,ev:0,b:0,mb:0,g:0,gv:0,dur:0,maxV:0,lastDt:''};
     if(!SEV_FILTER||SEV_FILTER.has('B'))m[d].b+=r[2];
     if(!SEV_FILTER||SEV_FILTER.has('M'))m[d].mb+=r[3];
     if(!SEV_FILTER||SEV_FILTER.has('G'))m[d].g+=r[4];
     if(!SEV_FILTER||SEV_FILTER.has('GV'))m[d].gv+=r[5];
     m[d].ev+=ev;m[d].dur+=r[6];m[d].maxV=Math.max(m[d].maxV,r[7]);
+    if(r[0]>m[d].lastDt)m[d].lastDt=r[0];
   });
   return Object.values(m);
 }
@@ -443,6 +458,7 @@ function renderComiteTable(comiteDrvs) {
 function renderAll(){
   var rows = getRows();
   var drvData=byDriver(rows).sort(function(a,b){return b.ev-a.ev;});
+  if(INACTIVE_DAYS>0){var _cut=new Date();_cut.setDate(_cut.getDate()-INACTIVE_DAYS);var _cutStr=_cut.toISOString().slice(0,10);drvData=drvData.filter(function(d){return d.lastDt>=_cutStr;});}
   var moData=byMonth(rows);
   var totalEv=drvData.reduce(function(s,d){return s+d.ev;},0);
   var totalDur=FILTERED.reduce(function(s,r){return s+r[6];},0); // duration from unfiltered sev
@@ -511,8 +527,13 @@ function renderAll(){
   document.getElementById('mat-tbody').innerHTML=drvData.slice(0,60).map(function(d,i){
     var sev=getWorstSev(d),cons=getDriverCons(d),cc=getConsClass(cons);
     var racBadge=d.gv>3?'<span class="pill" style="background:#1e1b4b;color:#a5b4fc;font-size:9px;margin-left:4px">⚠ Imp. RAC 02</span>':'';
-    return '<tr><td style="font-weight:800;color:var(--muted);width:28px">'+(i+1)+'</td>'
+    var daysSince=d.lastDt?Math.floor((new Date()-new Date(d.lastDt))/86400000):999;
+    var lastFmt=d.lastDt?d.lastDt.slice(8,10)+'/'+d.lastDt.slice(5,7):'—';
+    var lastClr=daysSince<30?'#15803d':daysSince<60?'#a16207':'#9ca3af';
+    var rowOp=daysSince>=60?'opacity:.55':'';
+    return '<tr style="'+rowOp+'"><td style="font-weight:800;color:var(--muted);width:28px">'+(i+1)+'</td>'
       +'<td style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px" title="'+d.drv+'">'+d.drv.split(' ').slice(0,3).join(' ')+'</td>'
+      +'<td style="color:'+lastClr+';white-space:nowrap;font-size:11px">'+lastFmt+'</td>'
       +'<td style="font-weight:700">'+d.ev.toLocaleString('pt-BR')+'</td>'
       +'<td style="color:#15803d">'+(d.b||'—')+'</td>'
       +'<td style="color:#a16207">'+(d.mb||'—')+'</td>'
@@ -890,11 +911,17 @@ const html = `<!DOCTYPE html>
           <span class="pill cons-comite" style="font-size:9px">Comitê</span>
           <span class="cc-badge" id="mat-count">—</span>
         </div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:10px;color:var(--muted);font-weight:600;margin-right:2px">Mostrar:</span>
+          <button id="ia-all" class="ia-btn ia-active" onclick="setInactive(0)">Todos</button>
+          <button id="ia-30" class="ia-btn" onclick="setInactive(30)">Ativos 30d</button>
+          <button id="ia-60" class="ia-btn" onclick="setInactive(60)">Ativos 60d</button>
+        </div>
       </div>
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>#</th><th>Motorista</th><th>Total Eventos</th>
+            <th>#</th><th>Motorista</th><th>Último Reg.</th><th>Total Eventos</th>
             <th style="color:#15803d">Baixa<br><span style="font-size:8px;font-weight:400;color:var(--muted)">1–10%</span></th>
             <th style="color:#a16207">Média<br><span style="font-size:8px;font-weight:400;color:var(--muted)">11–20%</span></th>
             <th style="color:#c2410c">Grave<br><span style="font-size:8px;font-weight:400;color:var(--muted)">21–30%</span></th>
