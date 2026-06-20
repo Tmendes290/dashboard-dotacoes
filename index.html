@@ -7982,6 +7982,14 @@ function impChartFaixa(){
   impSafeChart('imp-chart-faixa',{type:'bar',data:{labels:faixas.map(function(f){return f.l;}),datasets:[{data:faixas.map(function(f){return f.n;}),backgroundColor:faixas.map(function(f){return f.c;}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+' chegadas';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{font:{size:9}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{stepSize:1})})}})});
 }
 
+function impFiltrarTop10Obras(){
+  var byO={};
+  IMP_DATA.forEach(function(d){if(d.delayMin<=0)return;if(!byO[d.sap])byO[d.sap]=0;byO[d.sap]+=d.delayMin;});
+  var top10=Object.entries(byO).sort(function(a,b){return b[1]-a[1];}).slice(0,10).map(function(e){return e[0];});
+  IMP_F_SAPS=top10;
+  updateMsLabel('ms-imp-sap',top10,'Todas');
+  impApplyFilters();
+}
 function impChartObras(){
   var byO={};
   IMP_FILTERED.forEach(function(d){if(d.delayMin<=0)return;if(!byO[d.sap])byO[d.sap]=0;byO[d.sap]+=d.delayMin;});
@@ -8382,7 +8390,7 @@ async function renderViewImprodutividade(){
   +'</div>'
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Distribuição por faixa de chegada</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-faixa"></span></div><div style="position:relative;height:190px"><canvas id="imp-chart-faixa"></canvas></div><div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#10b981;flex-shrink:0"></div>No prazo (≤08:00)</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#f59e0b;flex-shrink:0"></div>Leve atraso</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>Atrasado</div></div></div>'
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Top obras (SAP) — minutos improdutivos</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-obras"></span></div><div style="position:relative;height:220px"><canvas id="imp-chart-obras"></canvas></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Top obras (SAP) — minutos improdutivos</span><div style="display:flex;align-items:center;gap:8px"><button onclick="impFiltrarTop10Obras()" style="padding:3px 10px;border:1px solid var(--acc);border-radius:20px;font-size:10px;font-weight:700;cursor:pointer;background:#eff6ff;color:var(--acc);font-family:inherit">🔝 Filtrar top 10</button><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-obras"></span></div></div><div style="font-size:10px;color:var(--muted);margin-bottom:8px">Clique em uma barra para filtrar por aquela obra</div><div style="position:relative;height:220px"><canvas id="imp-chart-obras"></canvas></div></div>'
   +'</div>'
   +'</div>'
 
