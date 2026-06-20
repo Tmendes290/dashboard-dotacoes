@@ -3,6 +3,8 @@
 <html lang="pt-BR"><head><meta charset="UTF-8"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>.flatpickr-day.inRange,.flatpickr-day.selected,.flatpickr-day.startRange,.flatpickr-day.endRange{background:var(--acc,#009CDE)!important;border-color:var(--acc,#009CDE)!important}.flatpickr-day.inRange{box-shadow:-5px 0 0 #009CDE,5px 0 0 #009CDE}</style>
 
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=5.0,user-scalable=yes">
 <title>Dashboard de Dotações — Vale Base Metals</title>
@@ -7496,7 +7498,7 @@ function impBuildSapNomes(){
   });
 }
 
-function impRebuildMs(){impBuildSemanaOpts();
+function impRebuildMs(){impBuildSemanaOpts();setTimeout(impInitFP,0);
   var empresas=[...new Set(IMP_DATA.map(function(d){return d.empresa;}))].sort();
   var saps=[...new Set(IMP_DATA.map(function(d){return d.sap;}))].sort();
   var squads=[...new Set(IMP_DATA.map(function(d){return impGetSquad(d.sap).squad;}).filter(Boolean))].sort();
@@ -7580,10 +7582,35 @@ function impGetFimMin(){
   var p=el.value.split(':');
   return parseInt(p[0])*60+parseInt(p[1]||0);
 }
-var IMP_SEMANA_BASE=null,IMP_SEMANA_W=0;
+var IMP_SEMANA_BASE=null,IMP_SEMANA_W=0,impFP=null;
 function _impFmt(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function _impFmt2(d){return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');}
-function _impSetRange(ini,fim){var a=document.getElementById('imp-dt-ini'),b=document.getElementById('imp-dt-fim');if(a)a.value=ini;if(b)b.value=fim;impApplyFilters();}
+function _impSetRange(ini,fim){
+  var a=document.getElementById('imp-dt-ini'),b=document.getElementById('imp-dt-fim');
+  if(a)a.value=ini;if(b)b.value=fim;
+  if(impFP){var p1=ini.split('-'),p2=fim.split('-');impFP.setDate([new Date(p1[0],p1[1]-1,p1[2]),new Date(p2[0],p2[1]-1,p2[2])],false);}
+  impApplyFilters();
+}
+function impInitFP(){
+  if(typeof flatpickr==='undefined')return;
+  var el=document.getElementById('imp-dt-range');if(!el)return;
+  if(impFP){impFP.destroy();impFP=null;}
+  var ini=document.getElementById('imp-dt-ini'),fim=document.getElementById('imp-dt-fim');
+  impFP=flatpickr(el,{mode:'range',dateFormat:'d/m/Y',locale:'pt',allowInput:false,
+    defaultDate:[ini?ini.value:IMP_DT_MIN,fim?fim.value:IMP_DT_MAX],
+    onChange:function(dates){
+      if(dates.length===2){
+        var a=document.getElementById('imp-dt-ini'),b=document.getElementById('imp-dt-fim');
+        if(a)a.value=_impFmt(dates[0]);if(b)b.value=_impFmt(dates[1]);
+        var ss=document.getElementById('imp-semana-sel');if(ss)ss.value='';
+        var ms=document.getElementById('imp-mes-sel');if(ms)ms.value='';
+        IMP_SEMANA_BASE=null;IMP_SEMANA_W=0;
+        var dr=document.getElementById('imp-dias-row');if(dr)dr.style.display='none';
+        impApplyFilters();
+      }
+    }
+  });
+}
 function _impISOMonday(w,y){var d=new Date(y,0,4);d.setDate(d.getDate()-(d.getDay()||7)+1+(w-1)*7);return d;}
 function impBuildSemanaOpts(){
   var el=document.getElementById('imp-semana-sel');if(!el)return;
@@ -7779,6 +7806,7 @@ function impLimpar(){
   var dr=document.getElementById('imp-dias-row');if(dr)dr.style.display='none';
   var ini=document.getElementById('imp-dt-ini'); if(ini) ini.value=IMP_DT_MIN;
   var fim=document.getElementById('imp-dt-fim'); if(fim) fim.value=IMP_DT_MAX;
+  if(impFP)impFP.setDate([IMP_DT_MIN,IMP_DT_MAX],false);
   var ref=document.getElementById('imp-ref-time'); if(ref) ref.value='08:00';
   var fim2=document.getElementById('imp-fim-time'); if(fim2) fim2.value='17:00';
   impRebuildMs();
@@ -8293,8 +8321,9 @@ async function renderViewImprodutividade(){
 
   // Controls bar
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">'
-  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">De</label><input type="date" id="imp-dt-ini" value="'+IMP_DT_MIN+'" onchange="impApplyFilters()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"></div>'
-  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Até</label><input type="date" id="imp-dt-fim" value="'+IMP_DT_MAX+'" onchange="impApplyFilters()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"></div>'
+  +'<input type="hidden" id="imp-dt-ini" value="'+IMP_DT_MIN+'">'
+  +'<input type="hidden" id="imp-dt-fim" value="'+IMP_DT_MAX+'">'
+  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Dia</label><input type="text" id="imp-dt-range" placeholder="Selecione o período" readonly style="border:1px solid var(--bord);border-radius:5px;padding:6px 10px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none;cursor:pointer;min-width:190px"></div>'
   +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Mês</label><select id="imp-mes-sel" onchange="impOnMesSel(this.value)" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none;cursor:pointer"><option value="">Todos</option><option value="0">Janeiro</option><option value="1">Fevereiro</option><option value="2">Março</option><option value="3">Abril</option><option value="4">Maio</option><option value="5">Junho</option><option value="6">Julho</option><option value="7">Agosto</option><option value="8">Setembro</option><option value="9">Outubro</option><option value="10">Novembro</option><option value="11">Dezembro</option></select></div>'
   +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Semana</label><select id="imp-semana-sel" onchange="impOnSemanaSel(this.value)" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none;cursor:pointer;min-width:170px"><option value="">Todas</option></select></div>'
   +'<div id="imp-dias-row" style="display:none;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Período</label><div style="display:flex;align-items:center;gap:5px"><select id="imp-dia-ini" onchange="impAplicaDias()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 6px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"><option value="0">Seg</option><option value="1">Ter</option><option value="2">Qua</option><option value="3">Qui</option><option value="4">Sex</option><option value="5">Sáb</option><option value="6">Dom</option></select><span style="font-size:11px;color:var(--muted)">até</span><select id="imp-dia-fim" onchange="impAplicaDias()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 6px;font-size:12px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"><option value="0">Seg</option><option value="1">Ter</option><option value="2">Qua</option><option value="3">Qui</option><option value="4" selected>Sex</option><option value="5">Sáb</option><option value="6">Dom</option></select></div></div>'
@@ -9054,4 +9083,6 @@ table.rdo-tbl{width:100%;border-collapse:collapse}
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
 </body></html>
