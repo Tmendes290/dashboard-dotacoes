@@ -8334,7 +8334,8 @@ function rdoImpRenderSquadCards(squads){
     var tl=rdoTrLabel(sq.tribo);
     var d=document.createElement('div');
     var isSel=RDO_SEL_SQUADS.indexOf(sq.squad)>=0;
-    d.className='rdo-sq-card '+sq.tribo+(isSel?' sel':'');
+    var isDim=RDO_SEL_SQUADS.length>0&&!isSel;
+    d.className='rdo-sq-card '+sq.tribo+(isSel?' sel':isDim?' dim':'');
     d.onclick=(function(name){return function(){rdoImpToggleSquad(name);};})(sq.squad);
     d.innerHTML='<div class="rdo-rn">'+sq.reg+'<small>reg</small></div>'
       +'<div class="rdo-tr '+sq.tribo+'">'+tl+'</div>'
