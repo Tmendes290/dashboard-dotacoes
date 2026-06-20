@@ -129,6 +129,24 @@ body.embed .main{width:100%!important}
 .fchip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;background:rgba(0,156,222,.12);color:var(--acc2);border:1px solid var(--acc);cursor:pointer}
 .fchip:hover{background:rgba(0,156,222,.22)}
 .fchip span{font-size:11px;font-weight:900;color:var(--acc2)}
+@media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  body{display:block!important;height:auto!important;overflow:visible!important;width:100%!important}
+  .sb{display:none!important}
+  .topbar{display:none!important}
+  .statusbar{position:static!important;height:auto!important;flex-shrink:0}
+  .main{display:block!important;overflow:visible!important;height:auto!important}
+  .content{display:block!important;overflow:visible!important;height:auto!important;padding:8px 12px!important}
+  .filters{page-break-inside:avoid}
+  .cc{page-break-inside:avoid;margin-bottom:12px}
+  .tbl-wrap{overflow:visible!important;max-height:none!important}
+  .alert-crit{page-break-inside:avoid}
+  .g2,.g-60-40,.kpi-row{page-break-inside:avoid}
+  .chart-h220{height:200px}
+  select,.ms-wrap,.ia-btn{display:none!important}
+  .filters{display:none!important}
+  #filter-chips{display:none!important}
+}
 `;
 
 const js = `
