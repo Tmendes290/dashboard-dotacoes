@@ -3857,41 +3857,39 @@ function showLogin(){
 }
 
 async function loginUser(){
-  if(!supa){ toast('Conectando ao servidor...','red'); return; }
-  var email = document.getElementById('login-email').value.trim();
-  var senha = document.getElementById('login-senha').value;
   var errEl = document.getElementById('login-error');
   var btn = document.getElementById('login-btn-text');
-  
+  function _resetBtn(msg){ btn.textContent='▶   Acessar Sistema'; document.getElementById('login-btn').disabled=false; if(msg){errEl.textContent=msg;errEl.style.display='block';} }
+  if(!supa){
+    errEl.textContent='Servidor não conectado. Aguarde e tente novamente.';
+    errEl.style.display='block';
+    return;
+  }
+  var email = document.getElementById('login-email').value.trim();
+  var senha = document.getElementById('login-senha').value;
   if(!email || !senha){ errEl.textContent='Preencha e-mail e senha.'; errEl.style.display='block'; return; }
-  
   btn.textContent = 'Entrando...';
   document.getElementById('login-btn').disabled = true;
   errEl.style.display='none';
-  
-  var result = await supa.auth.signInWithPassword({email: email, password: senha});
-  
-  if(result.error){
-    errEl.textContent = result.error.message === 'Invalid login credentials' 
-      ? 'E-mail ou senha incorretos.' : result.error.message;
-    errEl.style.display='block';
-    btn.textContent='Entrar';
-    document.getElementById('login-btn').disabled=false;
-  } else {
-    CURRENT_USER = result.data.user;
-    var perfilOk = await loadPerfil();
-    if(!perfilOk){
-      errEl.textContent = 'Sua conta foi desativada. Contate o administrador.';
-      errEl.style.display='block';
-      btn.textContent='Entrar';
-      document.getElementById('login-btn').disabled=false;
-      return;
-    }
+  try {
+    var result = await supa.auth.signInWithPassword({email: email, password: senha});
+    if(result.error){
+      var msg = result.error.message;
+      if(msg==='Invalid login credentials') msg='E-mail ou senha incorretos.';
+      else if(msg==='Email not confirmed') msg='E-mail não confirmado. Verifique sua caixa de entrada.';
+      _resetBtn(msg);
+    } else {
+      CURRENT_USER = result.data.user;
+      var perfilOk = await loadPerfil();
+      if(!perfilOk){ _resetBtn('Sua conta foi desativada. Contate o administrador.'); return; }
     hideLoginScreen();
     updateUserBadge();
     setTimeout(updateUserBadge, 300);
-    loadFromSupabase();
-    startPresence();
+      loadFromSupabase();
+      startPresence();
+    }
+  } catch(e) {
+    _resetBtn('Erro ao conectar. Verifique sua conexão e tente novamente.');
   }
 }
 
@@ -8876,12 +8874,12 @@ table.rdo-tbl{width:100%;border-collapse:collapse}
       <div class="ls-divider"></div>
       <div class="ls-field">
         <div class="ls-label">E-mail</div>
-        <input id="login-email" type="email" placeholder="email@vale.com" class="ls-input"
+        <input id="login-email" type="email" name="email" autocomplete="email" placeholder="email@vale.com" class="ls-input"
                onkeydown="if(event.key==='Enter') loginUser()">
       </div>
       <div class="ls-field">
         <div class="ls-label">Senha</div>
-        <input id="login-senha" type="password" placeholder="••••••••" class="ls-input"
+        <input id="login-senha" type="password" name="password" autocomplete="current-password" placeholder="••••••••" class="ls-input"
                onkeydown="if(event.key==='Enter') loginUser()">
       </div>
       <div id="login-error" class="ls-err"></div>
