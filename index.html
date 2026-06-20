@@ -7749,14 +7749,21 @@ function impRenderCards(refMin){
   var sqTotal=new Set(validos.map(function(d){return d.squadInfo&&d.squadInfo.squad;}).filter(Boolean)).size;
   var el=document.getElementById('imp-cards'); if(!el) return;
   el.innerHTML=
-    impCard('var(--acc)',total,'Registros com horário','Chegada ou PTS preenchidos')+
-    impCard('#ef4444',at.length,'Com atraso',(total>0?Math.round(at.length/total*100):0)+'% do total')+
-    impCard('#f59e0b',impFmtDelay(totalMin)||'0 min','Total improdutivo','Ref: '+impToHHMM(refMin)+' — '+totalMin+' min')+
-    impCard('#10b981',empAfet,'Empresas com atraso','de '+new Set(validos.map(function(d){return d.empresa;})).size+' no período')+
-    impCard('#7c3aed',sqAfet,'Squads afetados','de '+sqTotal+' no período');
+    impCard('var(--acc)',total,'Registros com horário','Chegada ou PTS preenchidos',
+      'Conta os registros que têm ao menos um horário preenchido (Chegada ou PTS). Registros sem nenhum desses dados são ignorados.')+
+    impCard('#ef4444',at.length,'Com atraso',(total>0?Math.round(at.length/total*100):0)+'% do total',
+      'Registros onde a base (Início, Chegada ou PTS — nessa ordem de prioridade) é posterior ao Horário Ref. definido no filtro acima.')+
+    impCard('#f59e0b',impFmtDelay(totalMin)||'0 min','Total improdutivo','Ref: '+impToHHMM(refMin)+' — '+totalMin+' min',
+      'Soma de todos os minutos de atraso. Cálculo por registro: Atraso = Base − Horário Ref. Ex: chegada 10:30, ref. 08:00 → 150 min improdutivos.')+
+    impCard('#10b981',empAfet,'Empresas com atraso','de '+new Set(validos.map(function(d){return d.empresa;})).size+' no período',
+      'Número de empresas distintas com ao menos 1 registro em atraso no período selecionado.')+
+    impCard('#7c3aed',sqAfet,'Squads afetados','de '+sqTotal+' no período',
+      'Número de squads distintos com ao menos 1 registro em atraso. Squads sem atraso não entram nessa contagem.');
 }
-function impCard(cor,val,lbl,sub){
-  return'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px;border-top:3px solid '+cor+'">'
+function impCard(cor,val,lbl,sub,info){
+  var btn=info?'<div title="'+info+'" style="position:absolute;top:8px;right:8px;width:17px;height:17px;border-radius:50%;background:#e2e8f0;color:#64748b;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:help;flex-shrink:0;line-height:1">!</div>':'';
+  return'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px;border-top:3px solid '+cor+';position:relative">'
+    +btn
     +'<div style="font-size:26px;font-weight:800;line-height:1">'+val+'</div>'
     +'<div style="font-size:11px;color:var(--muted);margin-top:4px;font-weight:500">'+lbl+'</div>'
     +'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+sub+'</div>'
