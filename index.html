@@ -8262,7 +8262,7 @@ function rdoImpRenderSec(secId,grpId,tribo,saps,obras,multiDay){
       var baseTip=o.base==='PTS'?'title="Base: PTS"':'title="Base: '+impEsc(o.base||'Chegada')+'"';
       var chegCell=o.chegada!=='--'?'<td class="rdo-mono" '+baseTip+'>'+o.chegada+'</td>':(o.base==='Início'?'<td class="rdo-mono" style="color:#6366f1" title="Sem chegada — usando Início">—</td>':'<td class="rdo-mono" style="color:#ccc">—</td>');
       return'<tr><td style="font-weight:600;color:#374151;font-size:10px;white-space:nowrap">'+impEsc(o.empresa)+'</td>'
-        +'<td style="font-weight:500">'+tag+impEsc(o.fiscal||o.frente)+'</td>'
+        +'<td style="font-weight:500;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+tag+(o.fiscal?impEsc(o.fiscal):'<span style="color:#cbd5e1">—</span>')+'</td>'
         +chegCell
         +'<td class="rdo-mono">'+o.inicio+'</td><td class="rdo-mono">'+o.termino+'</td>'
         +'<td class="rdo-mono">'+o.pts+'</td>'
@@ -8272,7 +8272,7 @@ function rdoImpRenderSec(secId,grpId,tribo,saps,obras,multiDay){
     grp.innerHTML+='<div class="rdo-gbox"><div class="rdo-ghd"><span class="rdo-gbadge '+gbCls+'">'+tl+'</span>'
       +'<span class="rdo-gname">'+impEsc(sq.sap)+(nomeRef?' — '+impEsc(nomeRef):'')+'</span>'
       +'<span class="rdo-gcnt">'+totalReg+' registros</span></div>'
-      +'<table class="rdo-tbl"><thead><tr><th>Empresa</th><th>Fiscal</th>'
+      +'<table class="rdo-tbl"><thead><tr><th>Empresa</th><th style="width:180px">Fiscal</th>'
       +'<th class="tc">Chegada</th><th class="tc">Início</th><th class="tc">Término</th>'
       +'<th class="tc">PTS</th><th class="tc">H. Trab.</th><th class="tc">Reg.</th>'
       +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
