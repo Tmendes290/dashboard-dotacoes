@@ -7667,9 +7667,11 @@ function impApplyFilters(){
   var rp=refStr.split(':');
   var refMin=parseInt(rp[0])*60+parseInt(rp[1]||0);
 
+  var fimMin=impGetFimMin();
   IMP_FILTERED=IMP_DATA.filter(function(d){
     if(dtIni&&d.dataSortKey<dtIni) return false;
     if(dtFim&&d.dataSortKey>dtFim) return false;
+    if(d.terminoMin!==null&&d.terminoMin>fimMin) return false;
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0) return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0) return false;
     var sq=impGetSquad(d.sap).squad;
