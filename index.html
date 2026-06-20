@@ -7823,9 +7823,11 @@ function impRenderCards(refMin){
   var total=validos.length;
   var at=validos.filter(function(d){return d.delayMin>0;});
   var totalMin=validos.reduce(function(s,d){return s+(d.delayMin||0);},0);
-  var fimMin=impGetFimMin();
-  var periodoMin=Math.max(0,fimMin-refMin); // ex: 17:00-08:00 = 540 min = 9h
-  var totalEsperadoMin=total*periodoMin;
+  // Base: Seg–Qui = 9h (540 min), Sex = 8h (480 min) por registro
+  var totalEsperadoMin=validos.reduce(function(s,d){
+    var dow=d.dataSortKey?new Date(d.dataSortKey+'T00:00:00').getDay():1;
+    return s+(dow===5?480:540);
+  },0);
   var totalProdMin=Math.max(0,totalEsperadoMin-totalMin);
   var pctImp=totalEsperadoMin>0?Math.round(totalMin/totalEsperadoMin*100):0;
   var pctProd=100-pctImp;
@@ -7837,10 +7839,10 @@ function impRenderCards(refMin){
       'Registros onde a base (Início, Chegada ou PTS — nessa ordem de prioridade) é posterior ao Horário Ref. definido no filtro acima.')+
     impCard('#f59e0b',impFmtDelay(totalMin)||'0 min','Total improdutivo','Ref: '+impToHHMM(refMin)+' — '+totalMin+' min',
       'Soma de todos os minutos de atraso. Cálculo por registro: Atraso = Base − Horário Ref. Ex: chegada 10:30, ref. 08:00 → 150 min improdutivos.')+
-    impCard('#10b981',impFmtDelay(totalProdMin)||'0 min','Horas produtivas',pctProd+'% — base '+impToHHMM(refMin)+'–'+impToHHMM(fimMin),
-      'Base = período do filtro × registros ('+impToHHMM(refMin)+'–'+impToHHMM(fimMin)+' × '+total+' reg. = '+impFmtDelay(totalEsperadoMin)+'). Horas produtivas = base − total improdutivo.')+
+    impCard('#10b981',impFmtDelay(totalProdMin)||'0 min','Horas produtivas',pctProd+'% — base '+impFmtDelay(totalEsperadoMin),
+      'Base por registro: Seg–Qui = 9h, Sex = 8h. Total esperado = '+impFmtDelay(totalEsperadoMin)+'. Horas produtivas = base − total improdutivo ('+impFmtDelay(totalMin)+'). Quanto mais próximo da base, melhor.')+
     impCard('#6366f1',pctImp+'%','Taxa improdutiva',pctProd+'% produtivo',
-      'Improdutivo ÷ base × 100. Base = '+impToHHMM(refMin)+'–'+impToHHMM(fimMin)+' × '+total+' registros = '+impFmtDelay(totalEsperadoMin)+'. Quanto menor, melhor.');
+      'Improdutivo ÷ base × 100. Base: Seg–Qui = 9h/reg., Sex = 8h/reg. Total base = '+impFmtDelay(totalEsperadoMin)+' para '+total+' registros. Quanto menor, melhor.');
 }
 function impCard(cor,val,lbl,sub,info){
   var btn=info?'<div title="'+info+'" style="position:absolute;top:8px;right:8px;width:17px;height:17px;border-radius:50%;background:#e2e8f0;color:#64748b;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:help;flex-shrink:0;line-height:1">!</div>':'';
