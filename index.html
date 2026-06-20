@@ -899,7 +899,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div class="topbar-actions">
       <div class="topbar-online-mobile" id="s-online-wrap-m" style="position:relative;cursor:pointer;align-items:center;gap:4px;font-size:11px;color:var(--muted)" onclick="toggleOnlinePanel(event)" title="Quem está conectado agora">🟢 <strong id="s-online-count-m">1</strong></div>
       <button class="btn btn-outline" id="btn-theme" onclick="toggleTheme()" title="Alternar tema escuro/claro" style="font-size:15px;padding:5px 9px">🌙</button>
-      <button class="btn btn-dark" onclick="window.print()">🖨 PDF</button>
+      <button class="btn btn-dark" onclick="pdfAction()">🖨 PDF</button>
       <button class="btn btn-orange" onclick="exportCSV()">⬇ Exportar CSV</button>
       <button class="btn" style="background:#1D6F42;color:#fff" onclick="exportExcel()">📗 Exportar Excel</button>
     </div>
@@ -1935,6 +1935,14 @@ const VIEW_META={
   materiais:{title:'Materiais',sub:'Acompanhamento de pedidos, RCs e diligenciamento'},
   analytics:{title:'Dashboard',sub:'Dotado vs Medido por empresa e PEP'}
 };
+function pdfAction(){
+  if(currentView==='velocidade'){
+    var w=window.open('/velocidade.html','_blank');
+    w.onload=function(){w.print();};
+  } else {
+    window.print();
+  }
+}
 function setView(id){
   currentView=id;
   ['v-overview','v-resumo','v-dotacoes','v-alertas','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-velocidade'].forEach(v=>document.getElementById(v).classList.add('hidden'));
