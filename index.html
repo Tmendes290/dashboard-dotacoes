@@ -7746,9 +7746,11 @@ function impRenderCards(refMin){
   var total=validos.length;
   var at=validos.filter(function(d){return d.delayMin>0;});
   var totalMin=validos.reduce(function(s,d){return s+(d.delayMin||0);},0);
-  var empAfet=new Set(at.map(function(d){return d.empresa;})).size;
-  var sqAfet=new Set(at.map(function(d){return d.squadInfo&&d.squadInfo.squad;}).filter(Boolean)).size;
-  var sqTotal=new Set(validos.map(function(d){return d.squadInfo&&d.squadInfo.squad;}).filter(Boolean)).size;
+  var comH=validos.filter(function(d){return d.horasTrab!==null&&d.horasTrab>0;});
+  var totalHMin=comH.reduce(function(s,d){return s+d.horasTrab;},0);
+  var totalPeriodo=totalHMin+totalMin;
+  var pctImp=totalPeriodo>0?Math.round(totalMin/totalPeriodo*100):0;
+  var pctProd=totalPeriodo>0?100-pctImp:0;
   var el=document.getElementById('imp-cards'); if(!el) return;
   el.innerHTML=
     impCard('var(--acc)',total,'Registros com horário','Chegada ou PTS preenchidos',
@@ -7757,10 +7759,10 @@ function impRenderCards(refMin){
       'Registros onde a base (Início, Chegada ou PTS — nessa ordem de prioridade) é posterior ao Horário Ref. definido no filtro acima.')+
     impCard('#f59e0b',impFmtDelay(totalMin)||'0 min','Total improdutivo','Ref: '+impToHHMM(refMin)+' — '+totalMin+' min',
       'Soma de todos os minutos de atraso. Cálculo por registro: Atraso = Base − Horário Ref. Ex: chegada 10:30, ref. 08:00 → 150 min improdutivos.')+
-    impCard('#10b981',empAfet,'Empresas com atraso','de '+new Set(validos.map(function(d){return d.empresa;})).size+' no período',
-      'Número de empresas distintas com ao menos 1 registro em atraso no período selecionado.')+
-    impCard('#7c3aed',sqAfet,'Squads afetados','de '+sqTotal+' no período',
-      'Número de squads distintos com ao menos 1 registro em atraso. Squads sem atraso não entram nessa contagem.');
+    impCard('#10b981',impFmtDelay(totalHMin)||'0 min','Horas produtivas',pctProd+'% do período total',
+      'Soma das horas efetivamente trabalhadas (Início → Término menos almoço). Percentual calculado sobre horas produtivas + horas improdutivas acumuladas.')+
+    impCard('#6366f1',pctImp+'%','Taxa improdutiva',pctProd+'% produtivo',
+      'Percentual das horas improdutivas sobre o total do período (horas produtivas + atraso acumulado). Quanto menor, melhor.');
 }
 function impCard(cor,val,lbl,sub,info){
   var btn=info?'<div title="'+info+'" style="position:absolute;top:8px;right:8px;width:17px;height:17px;border-radius:50%;background:#e2e8f0;color:#64748b;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:help;flex-shrink:0;line-height:1">!</div>':'';
