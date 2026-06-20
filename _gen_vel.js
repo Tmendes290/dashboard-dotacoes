@@ -138,14 +138,14 @@ var FILTERED = ALL_ROWS.slice();
 var SEV_FILTER = null;
 
 var MATRIX = {
-  B:{1:'Conversa formal — Líder',2:'Conversa formal + Advert. Verbal',3:'Suspensão 30 dias (condução) + Advert. formal + Reciclagem',x:'Comitê pela Vida'},
-  M:{1:'Advertência Verbal',2:'Reciclagem + Advert. formal',3:'Suspensão 60 dias (condução) + Advert. formal',x:'Comitê pela Vida'},
-  G:{1:'Reciclagem + Advert. formal',2:'Reciclagem + Suspensão 30 dias (condução) + Advert. formal',3:'Afastar + Comitê pela Vida',x:'Afastar + Comitê pela Vida'},
-  GV:{1:'Suspensão 30 dias (condução) + Advert. formal + Reciclagem',2:'Suspensão 60 dias + Advert. formal + 5 dias suspensão',3:'Afastar + Comitê pela Vida',x:'Afastar + Comitê pela Vida'}
+  B:{1:'Conversa formal — Líder',2:'Conversa formal + Advert. Verbal',3:'Restrição 03 dias (condução) + Advert. formal + Reciclagem',x:'Comitê pela Vida'},
+  M:{1:'Advertência Verbal',2:'Reciclagem + Advert. formal',3:'Restrição 05 dias (condução) + Advert. formal + Reciclagem',x:'Comitê pela Vida'},
+  G:{1:'Reciclagem + Advert. formal',2:'Restrição 03 dias (condução) + Advert. formal + Reciclagem',3:'Comitê pela Vida',x:'Comitê pela Vida'},
+  GV:{1:'Restrição 03 dias (condução) + Advert. formal + Reciclagem',2:'Restrição 05 dias (condução) + Advert. formal + Reciclagem',3:'Comitê pela Vida',x:'Comitê pela Vida'}
 };
 
 function getConsequencia(sev,count){var m=MATRIX[sev];var k=count>=4?'x':count<=0?1:count;return m[k]||m[3];}
-function getConsClass(c){if(c.indexOf('Comitê')>=0||c.indexOf('Afastar')>=0)return 'pill cons-comite';if(c.indexOf('60 dias')>=0)return 'pill cons-rest5';if(c.indexOf('30 dias')>=0)return 'pill cons-rest3';if(c.indexOf('Reciclagem')>=0)return 'pill cons-recicla';if(c.indexOf('Verbal')>=0)return 'pill cons-advert';return 'pill cons-conversa';}
+function getConsClass(c){if(c.indexOf('Comitê')>=0)return 'pill cons-comite';if(c.indexOf('05 dias')>=0)return 'pill cons-rest5';if(c.indexOf('03 dias')>=0)return 'pill cons-rest3';if(c.indexOf('Reciclagem')>=0)return 'pill cons-recicla';if(c.indexOf('Verbal')>=0)return 'pill cons-advert';return 'pill cons-conversa';}
 function getSevLabel(s){if(s==='GV')return '<span class="pill pill-red">Gravíssima</span>';if(s==='G')return '<span class="pill pill-orange">Grave</span>';if(s==='M')return '<span class="pill pill-yellow">Média</span>';if(s==='C')return '<span class="pill pill-blue">Conversa</span>';return '<span class="pill pill-green">Baixa</span>';}
 
 // ── MULTI-SELECT ──────────────────────────────────────────────────
@@ -330,7 +330,7 @@ function byMonth(rows){
 }
 
 function getWorstSev(d){if(d.gv>0)return 'GV';if(d.g>0)return 'G';if(d.mb>0)return 'M';return 'B';}
-function getDriverCons(d){var types=(d.b>0?1:0)+(d.mb>0?1:0)+(d.g>0?1:0)+(d.gv>0?1:0);if(types>=3)return 'Afastar + Comitê pela Vida';var s=getWorstSev(d);var cnt=s==='GV'?d.gv:s==='G'?d.g:s==='M'?d.mb:d.b;return getConsequencia(s,cnt);}
+function getDriverCons(d){var s=getWorstSev(d);var cnt=d.b+d.mb+d.g+d.gv;return getConsequencia(s,cnt);}
 
 // ── CHARTS ────────────────────────────────────────────────────────
 var chartSev=null, chartEv=null;
@@ -510,6 +510,7 @@ function renderAll(){
   document.getElementById('mat-count').textContent=drvData.length+' motoristas';
   document.getElementById('mat-tbody').innerHTML=drvData.slice(0,60).map(function(d,i){
     var sev=getWorstSev(d),cons=getDriverCons(d),cc=getConsClass(cons);
+    var racBadge=d.gv>3?'<span class="pill" style="background:#1e1b4b;color:#a5b4fc;font-size:9px;margin-left:4px">⚠ Imp. RAC 02</span>':'';
     return '<tr><td style="font-weight:800;color:var(--muted);width:28px">'+(i+1)+'</td>'
       +'<td style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px" title="'+d.drv+'">'+d.drv.split(' ').slice(0,3).join(' ')+'</td>'
       +'<td style="font-weight:700">'+d.ev.toLocaleString('pt-BR')+'</td>'
@@ -519,7 +520,7 @@ function renderAll(){
       +'<td style="color:#b91c1c;font-weight:'+(d.gv>0?'700':'400')+'">'+(d.gv||'—')+'</td>'
       +'<td style="color:var(--muted);white-space:nowrap">'+(d.dur<60?d.dur+'s':d.dur<3600?Math.round(d.dur/60)+'min':Math.round(d.dur/3600)+'h')+'</td>'
       +'<td>'+getSevLabel(sev)+'</td>'
-      +'<td><span class="'+cc+'">'+cons+'</span></td>'
+      +'<td><span class="'+cc+'">'+cons+'</span>'+racBadge+'</td>'
       +'</tr>';
   }).join('');
 
