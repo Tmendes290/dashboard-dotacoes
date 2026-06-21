@@ -1947,7 +1947,8 @@ const VIEW_META={
   upload:{title:'Atualizar Bases',sub:'Importe as planilhas de Medido, CAPEX e PEP/Sub-PEP/Planejadores'},
   'saude-pep':{title:'Saúde do PEP',sub:'Visão financeira consolidada por projeto'},
   materiais:{title:'Materiais',sub:'Acompanhamento de pedidos, RCs e diligenciamento'},
-  analytics:{title:'Dashboard',sub:'Dotado vs Medido por empresa e PEP'}
+  analytics:{title:'Dashboard',sub:'Dotado vs Medido por empresa e PEP'},
+  improdutividade:{title:'Produtividade Projetos Salobo',sub:'Registro de chegada e atraso das equipes'}
 };
 function pdfAction(){
   if(currentView==='velocidade'){
@@ -1962,7 +1963,12 @@ function setView(id){
   ['v-overview','v-resumo','v-dotacoes','v-alertas','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-velocidade'].forEach(v=>document.getElementById(v).classList.add('hidden'));
   document.getElementById('v-'+id).classList.remove('hidden');
   document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','velocidade'].includes(id));
-  if(id==='improdutividade'){ renderViewImprodutividade(); return; }
+  if(id==='improdutividade'){
+    var _mImp=VIEW_META['improdutividade'];
+    var _ptImp=document.getElementById('page-title');if(_ptImp)_ptImp.textContent=_mImp.title;
+    var _psImp=document.getElementById('page-sub');if(_psImp)_psImp.textContent=_mImp.sub;
+    renderViewImprodutividade(); return;
+  }
   if(id==='velocidade'){
     document.querySelectorAll('.sb-item').forEach(el=>{el.classList.toggle('active',el.dataset.view===id);});
     var fr=document.getElementById('vel-iframe');
