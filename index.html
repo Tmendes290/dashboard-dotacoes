@@ -3971,9 +3971,9 @@ async function loadPerfil(){
       : CURRENT_USER.email.split('@')[0];
     await supa.from('perfis').upsert({
       id: CURRENT_USER.id, nome: nome,
-      email: CURRENT_USER.email, role: 'planejador'
+      email: CURRENT_USER.email, role: 'planejador', permissoes: ['overview']
     });
-    CURRENT_PERFIL = {id: CURRENT_USER.id, nome: nome, email: CURRENT_USER.email, role: 'planejador'};
+    CURRENT_PERFIL = {id: CURRENT_USER.id, nome: nome, email: CURRENT_USER.email, role: 'planejador', permissoes: ['overview']};
   }
   // Bloqueia acesso de usuário desativado pelo admin
   if(CURRENT_PERFIL && CURRENT_PERFIL.ativo === false){
@@ -3991,7 +3991,24 @@ function updateUserBadge(){
   // Set body class for CSS-based admin visibility
   document.body.classList.toggle("is-admin", CURRENT_PERFIL.role === "admin");
   document.body.classList.toggle("is-lider", CURRENT_PERFIL.role === "lider");
-  document.body.classList.toggle("is-imp", CURRENT_PERFIL.role === "admin");
+  var _perms = (CURRENT_PERFIL.permissoes && CURRENT_PERFIL.permissoes.length) ? CURRENT_PERFIL.permissoes : ['overview'];
+  document.body.classList.toggle("is-imp", isAdmin || _perms.indexOf('improdutividade') >= 0);
+  if(!isAdmin){
+    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','velocidade'];
+    document.querySelectorAll('.sb-nav .sb-item').forEach(function(item){
+      if(item.classList.contains('admin-only')||item.classList.contains('imp-only')) return;
+      var v=item.dataset.view; if(!v||_permViews.indexOf(v)<0) return;
+      item.style.display=(_perms.indexOf(v)>=0)?'flex':'none';
+    });
+    document.querySelectorAll('.sb-nav .sb-nav-sec:not(.admin-only):not(.imp-only)').forEach(function(sec){
+      var sib=sec.nextElementSibling,anyVis=false;
+      while(sib&&!sib.classList.contains('sb-nav-sec')){
+        if(sib.classList.contains('sb-item')&&!sib.classList.contains('admin-only')&&!sib.classList.contains('imp-only')&&sib.style.display!=='none'){anyVis=true;break;}
+        sib=sib.nextElementSibling;
+      }
+      sec.style.display=anyVis?'':'none';
+    });
+  }
   var isAdmin = CURRENT_PERFIL.role === 'admin';
   var isLider = CURRENT_PERFIL.role === 'lider';
   var nome = CURRENT_PERFIL.nome || CURRENT_PERFIL.email || 'Usuário';
@@ -5857,6 +5874,27 @@ function renderUsuariosHTML(el, usuarios){
       html += '</select></div>';
       html += '</div>';
 
+      // Permissões de acesso
+      var _PERMS_LIST = [
+        {v:'overview',l:'Visão Geral'},{v:'resumo',l:'Resumo Sub PEP'},{v:'dotacoes',l:'Dotações'},
+        {v:'alertas',l:'Capex Projetos'},{v:'nova',l:'Nova Dotação'},{v:'regularizar',l:'Regularizar Saldo'},
+        {v:'analytics',l:'Dashboard'},{v:'saude-pep',l:'Saúde do PEP'},{v:'materiais',l:'Materiais'},
+        {v:'improdutividade',l:'Produtividade'},{v:'velocidade',l:'Telemetria'}
+      ];
+      var _uPerms = u.permissoes || ['overview'];
+      html += '<div style="margin-top:10px;border-top:1px solid #f1f5f9;padding-top:10px">';
+      html += '<label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Acesso às seções</label>';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 12px">';
+      _PERMS_LIST.forEach(function(p){
+        var chk = _uPerms.indexOf(p.v) >= 0;
+        html += '<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#374151;cursor:pointer;padding:2px 0">'
+          + '<input type="checkbox" class="perm-cb" data-puid="'+u.id+'" value="'+p.v+'"'+(chk?' checked':'')
+          + (p.v==='overview'?' disabled title="Acesso mínimo obrigatório"':'')
+          + ' onchange="onPermChange(\''+u.id+'\')" style="accent-color:#009CDE;cursor:pointer">'
+          + '<span>'+(p.v==='overview'?'<strong>'+p.l+'</strong>':p.l)+'</span></label>';
+      });
+      html += '</div></div>';
+
       // Status toggle
       html += '<div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">';
       html += '<span style="font-size:11px;color:#64748b">Status: <strong style="color:' + (ativo?'#007E7A':'#ef4444') + '">' + (ativo?'Ativo':'Inativo') + '</strong></span>';
@@ -5904,6 +5942,19 @@ async function updateUsuarioSquad(userId, newSquad){
   var result = await supa.from('perfis').update({squad: newSquad||null}).eq('id', userId);
   if(result.error){ toast('Erro ao atualizar squad: '+result.error.message,'red'); return; }
   toast('✔ Squad atualizado!','green');
+}
+
+function onPermChange(uid){
+  var boxes = document.querySelectorAll('.perm-cb[data-puid="'+uid+'"]');
+  var perms = [];
+  boxes.forEach(function(b){ if(b.checked) perms.push(b.value); });
+  updateUsuarioPermissoes(uid, perms);
+}
+async function updateUsuarioPermissoes(uid, perms){
+  if(!supa) return;
+  var result = await supa.from('perfis').update({permissoes: perms}).eq('id', uid);
+  if(result.error){ toast('Erro: '+result.error.message,'red'); return; }
+  toast('✔ Permissões salvas!','green');
 }
 
 async function toggleUsuarioAtivo(userId, currentAtivo, email){
