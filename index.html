@@ -742,7 +742,11 @@ input,select,textarea{font-size:16px!important} /* prevent iOS zoom on focus */
   /* Esconde elementos de UI desnecessários no PDF */
   #imp-update-btn, #imp-upload-zone,
   #imp-controls-bar, #imp-tabs-bar,
-  #imp-chart-chips { display: none !important; }
+  #imp-chart-chips, #rdo-htrab-note { display: none !important; }
+
+  /* Mostra elementos exclusivos do print */
+  #imp-print-info { display: block !important; }
+  #imp-print-footer { display: block !important; }
 }
 </style>
 <!-- Supabase SDK -->
@@ -7820,6 +7824,16 @@ function impApplyFilters(){
   var hint=document.getElementById('imp-filter-hint');
   if(hint){ hint.textContent=ativos.length?'Filtrando: '+ativos.join(', '):''; hint.style.display=ativos.length?'':'none'; }
 
+  // Atualiza info de período para o print
+  var _pi=document.getElementById('imp-print-info');
+  if(_pi){
+    function _toBR(s){if(!s)return'—';var p=s.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
+    var _periodoStr=dtIni&&dtFim&&dtIni!==dtFim?_toBR(dtIni)+' a '+_toBR(dtFim):_toBR(dtIni||dtFim);
+    var _refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
+    var _fimStr=(document.getElementById('imp-fim-time')||{}).value||'17:00';
+    _pi.textContent='Período: '+_periodoStr+'  ·  Referência de entrada: '+_refStr+'  |  Término até: '+_fimStr;
+  }
+
   try{impRenderCards(refMin);}catch(e){console.error('[imp] cards',e);}
   try{impRenderDashboard();}catch(e){console.error('[imp] dashboard',e);}
   try{impRenderRegistros();}catch(e){console.error('[imp] registros',e);}
@@ -8515,6 +8529,9 @@ async function renderViewImprodutividade(){
   // Cards
   +'<div id="imp-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin-bottom:20px"></div>'
 
+  // Info de período (visível apenas no print)
+  +'<div id="imp-print-info" style="display:none;font-size:11px;color:#475569;margin-bottom:14px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc"></div>'
+
   // Tabs
   +'<div id="imp-tabs-bar" style="display:flex;border-bottom:2px solid var(--bord);margin-bottom:16px">'
   +'<div class="imp-tab active" onclick="impShowTab(\'dashboard\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--acc);border-bottom:2px solid var(--acc);margin-bottom:-2px;white-space:nowrap">📊 Dashboard</div>'
@@ -8619,7 +8636,8 @@ async function renderViewImprodutividade(){
   +'<div class="rdo-sec" id="rdo-sec-mina"><div class="rdo-sec-hdr"><span class="rdo-sec-badge" style="background:#059669">TRIBO MINA</span></div><div id="rdo-grp-mina"></div></div>'
   +'<div class="rdo-sec" id="rdo-sec-outros"><div class="rdo-sec-hdr"><span class="rdo-sec-badge" style="background:#64748b">SEM VÍNCULO</span></div><div id="rdo-grp-outros"></div></div>'
   +'<div class="rdo-empty" id="rdo-empty" style="display:none;text-align:center;padding:60px 20px;color:var(--muted)"><div style="font-size:36px;margin-bottom:12px">📭</div><h3 style="font-size:16px;margin-bottom:8px">Nenhum dado com horário</h3><p>Ajuste o filtro de datas acima</p></div>'
-  +'<p style="text-align:center;font-size:10px;color:#cbd5e1;margin-top:20px;padding-bottom:16px">H. Trab. = Término − Início − almoço (sem dados: −60 min) &nbsp;·&nbsp; Clique em um squad para ver as obras</p>'
+  +'<p id="rdo-htrab-note" style="text-align:center;font-size:10px;color:#cbd5e1;margin-top:20px;padding-bottom:16px">H. Trab. = Término − Início − almoço (sem dados: −60 min) &nbsp;·&nbsp; Clique em um squad para ver as obras</p>'
+  +'<div id="imp-print-footer" style="display:none;text-align:right;font-size:10px;color:#94a3b8;padding-top:12px;border-top:1px solid #e2e8f0;margin-top:16px">Desenvolvido por: Thiago Mendes Lima</div>'
   +'</div>'
 
   +'</div>' // imp-content
