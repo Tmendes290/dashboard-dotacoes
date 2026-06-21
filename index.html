@@ -8750,11 +8750,15 @@ buildMsDrop = function(id, options, selected, callbackName){
   drop.innerHTML=html;
 };
 
-var _origSelectAllMs = selectAllMs;
 selectAllMs = function(id, cb){
-  if(!cb){ _origSelectAllMs(id); return; }
-  document.querySelectorAll('#'+id+'-opts input[type=checkbox]').forEach(function(c){c.checked=true;c.closest('.ms-opt').classList.add('selected');});
-  window[cb](id);
+  var checkboxes = document.querySelectorAll('#'+id+'-drop input[type=checkbox]');
+  checkboxes.forEach(function(c){
+    var lbl = c.closest('.ms-opt');
+    var visible = lbl && lbl.style.display !== 'none';
+    if(visible){ c.checked=true; if(lbl) lbl.classList.add('selected'); }
+    else { c.checked=false; if(lbl) lbl.classList.remove('selected'); }
+  });
+  if(cb){ window[cb](id); } else { onMsChange(id); }
 };
 
 var _origClearMs = clearMs;
