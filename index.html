@@ -4340,11 +4340,14 @@ function updateMsLabel(id, selected){
 
 function selectAllMs(id){
   var checkboxes = document.querySelectorAll('#' + id + '-drop input[type=checkbox]');
-  checkboxes.forEach(function(c){ 
+  checkboxes.forEach(function(c){
     var label = c.closest('.ms-opt');
     if(label && label.style.display !== 'none'){
       c.checked = true;
       label.classList.add('selected');
+    } else {
+      c.checked = false;
+      if(label) label.classList.remove('selected');
     }
   });
   onMsChange(id);
