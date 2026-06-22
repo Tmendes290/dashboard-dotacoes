@@ -7102,6 +7102,7 @@ function handleMateriaisUpload(file){
           valorUni: r['VALOR UNI.']||0,
           valorTotal: r['VALOR TOTAL']||0,
           observacao: String(r['OBSERVAÇÃO']||'').trim(),
+          comentario: String(r['COMENTÁRIO']||r['COMENTARIO']||'').trim(),
           pep: pepCode,
           squad: sqInfo.squad||'',
           lider: sqInfo.lider||'',
@@ -7316,6 +7317,10 @@ function _matDashHtml(data){
     +   '<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px">Valor por Squad</div>'
     +   '<div style="position:relative;height:220px"><canvas id="mat-chart-squad"></canvas></div>'
     + '</div>'
+    + '</div>'
+    + '<div style="margin-top:16px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px">'
+    +   '<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px">Ader&ecirc;ncia de Entregas por M&ecirc;s</div>'
+    +   '<div style="position:relative;height:220px"><canvas id="mat-chart-ader"></canvas></div>'
     + '</div>';
 
   return cards + charts;
@@ -7374,6 +7379,62 @@ function buildMatCharts(data){
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false}},
       scales:{x:{ticks:{font:{size:10}}},y:{ticks:{stepSize:1},grid:{display:false}}}}
+  });}
+
+  // Chart 5: Aderência de Entregas por Mês (bar + line)
+  var today = new Date();
+  var aderPrevMap = {}, aderRealMap = {};
+  data.forEach(function(r){
+    var d = r.prevEntrega||'';
+    if(d.length >= 7){
+      var m = parseInt(d.substring(3,5),10)-1;
+      var y = d.substring(6,10);
+      if(m >= 0 && m <= 11 && y){
+        var k = nomesMeses[m]+'/'+y.substring(2);
+        aderPrevMap[k] = (aderPrevMap[k]||0)+1;
+        var sit = (r.situacao||'').toLowerCase();
+        var com = (r.comentario||'').toLowerCase();
+        var entregue = sit.includes('entregue') || sit.includes('antecipado')
+                    || com.includes('chegou') || com.includes('recebido') || com.includes('entregue') || com.includes('receb');
+        if(entregue) aderRealMap[k] = (aderRealMap[k]||0)+1;
+      }
+    }
+  });
+  var aderKeys = Object.keys(aderPrevMap).sort(function(a,b){
+    var pa=a.split('/'), pb=b.split('/');
+    return (parseInt('20'+pb[1])*12+nomesMeses.indexOf(pb[0])) - (parseInt('20'+pa[1])*12+nomesMeses.indexOf(pa[0]));
+  }).reverse();
+  var aderPrevVals = aderKeys.map(function(k){ return aderPrevMap[k]||0; });
+  var aderRealVals = aderKeys.map(function(k,i){
+    var parts=k.split('/'); var mIdx=nomesMeses.indexOf(parts[0]); var yr=parseInt('20'+parts[1]);
+    return new Date(yr,mIdx,1)<=today ? (aderRealMap[k]||0) : null;
+  });
+  var aderPctVals = aderKeys.map(function(k,i){
+    var prev=aderPrevVals[i], real=aderRealVals[i];
+    return (real!==null && prev>0) ? Math.round(real/prev*100) : null;
+  });
+  var c5 = document.getElementById('mat-chart-ader');
+  if(c5){ _matCharts.ader = new Chart(c5.getContext('2d'),{
+    data:{labels:aderKeys,datasets:[
+      {type:'bar',label:'Previsto',data:aderPrevVals,backgroundColor:'#2563eb55',borderColor:'#2563eb',borderWidth:1,yAxisID:'y'},
+      {type:'bar',label:'Entregue',data:aderRealVals,backgroundColor:'#16a34a55',borderColor:'#16a34a',borderWidth:1,yAxisID:'y'},
+      {type:'line',label:'% Aderência',data:aderPctVals,borderColor:'#d97706',backgroundColor:'transparent',borderWidth:2,pointRadius:3,pointBackgroundColor:'#d97706',tension:0.3,yAxisID:'y2',spanGaps:false}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:true,position:'top',labels:{font:{size:9},boxWidth:10,padding:10}},
+        tooltip:{callbacks:{label:function(ctx){
+          if(ctx.dataset.label==='% Aderência') return ctx.parsed.y!==null?' Aderência: '+ctx.parsed.y+'%':'';
+          return ' '+ctx.dataset.label+': '+(ctx.parsed.y!==null?ctx.parsed.y.toLocaleString('pt-BR'):'-')+' itens';
+        }}}
+      },
+      scales:{
+        y:{position:'left',ticks:{font:{size:9},stepSize:1},grid:{display:false}},
+        y2:{position:'right',min:0,max:120,ticks:{font:{size:9},callback:function(v){return v+'%';}},grid:{color:'#f1f5f9'}},
+        x:{ticks:{font:{size:9}}}
+      }
+    }
   });}
 
   // Chart 4: Valor por Squad (bar)
