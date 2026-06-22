@@ -2153,7 +2153,7 @@ function renderOverview(dot,res){
     // ── KPI STRIP ──
     +'<div class="g5" style="gap:10px;margin-bottom:16px">'
       +kpi('Dota&ccedil;&otilde;es','&#x1F4CB;','#e0f2fe',fmtK(tAprov),'#002F6C',pctM,'#0ea5e9',pctM+'% medido','#e0f2fe','#0369a1')
-      +kpi('CAPEX Contratado','&#x1F3D7;','#eef2ff',fmtK(tCont),'#4f46e5',pctPago,'#4f46e5',fmtK(tPago)+' pago','#eef2ff','#4f46e5')
+      +kpi('CAPEX Contratado','&#x1F3D7;','#eef2ff',fmtCapex(tCont),'#4f46e5',pctPago,'#4f46e5',fmtCapex(tPago)+' pago','#eef2ff','#4f46e5')
       +kpi('Medido Total','&#x1F4C8;','#f0fdf4',fmtK(tMedido),'#16a34a',pctM,'#16a34a',pctM+'% dotado','#f0fdf4','#16a34a')
       +kpi('Irregularidades','&#x26A0;','#fef2f2',(nOver+nCpxAlerta)+'','#dc2626',Math.min((nOver+nCpxAlerta)*3,100),'#dc2626',nOver+' dot. &middot; '+nCpxAlerta+' CAPEX','#fef2f2','#dc2626',(nOver>0||nCpxAlerta>0)?'#fca5a5':undefined)
       +kpi('Materiais','&#x1F4E6;','#fffbeb',mats.length.toLocaleString('pt-BR'),'#d97706',80,'#d97706',matPeps+' PEPs &middot; '+matFornecs+' fornec.','#fffbeb','#d97706')
