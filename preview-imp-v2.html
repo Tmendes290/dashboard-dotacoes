@@ -1024,31 +1024,28 @@ function buildChegadaChart(tipo) {
   const meta = 480; // 08:00 em minutos
   if(_chegadaChart) _chegadaChart.destroy();
   _chegadaChart = new Chart(document.getElementById('chartChegada').getContext('2d'), {
-    type: 'line',
+    type: 'bar',
     data: {
       labels: d.labels,
       datasets: [
         {
           label: 'Méd. chegada',
           data: d.values,
-          borderColor: '#009CDE',
-          backgroundColor: 'rgba(0,156,222,.08)',
-          borderWidth: 2.5,
-          pointRadius: 5,
-          pointBackgroundColor: d.values.map(v => v <= meta ? '#16a34a' : '#ef4444'),
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          tension: 0.35,
-          fill: true
+          backgroundColor: d.values.map(v => v <= meta ? 'rgba(22,163,74,.75)' : 'rgba(239,68,68,.75)'),
+          borderRadius: 5,
+          borderSkipped: false,
+          order: 2
         },
         {
+          type: 'line',
           label: 'Meta (08:00)',
           data: d.labels.map(() => meta),
-          borderColor: '#ef4444',
-          borderWidth: 1.5,
-          borderDash: [5, 4],
+          borderColor: '#002F6C',
+          borderWidth: 2,
+          borderDash: [6, 4],
           pointRadius: 0,
-          fill: false
+          fill: false,
+          order: 1
         }
       ]
     },
@@ -1061,14 +1058,17 @@ function buildChegadaChart(tipo) {
             label: (ctx) => {
               if(ctx.datasetIndex === 1) return ' Meta: 08:00';
               const i = ctx.dataIndex;
-              return [` Média: ${d.display[i]}`, ` Registros: ${d.regs[i]}`];
+              const diff = d.values[i] - meta;
+              const sign = diff > 0 ? '+' : '';
+              const dm = Math.abs(diff);
+              return [` Média: ${d.display[i]}`, ` ${sign}${diff > 0 ? diff : -diff} min ${diff > 0 ? 'acima' : 'abaixo'} da meta`, ` Registros: ${d.regs[i]}`];
             }
           }
         }
       },
       scales: {
         y: {
-          min: 450, max: 540,
+          min: 450, max: 545,
           ticks: {
             callback: v => { const h=Math.floor(v/60), m=v%60; return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`; },
             font: { size: 10 }
@@ -1076,6 +1076,19 @@ function buildChegadaChart(tipo) {
           grid: { color: '#f1f5f9' }
         },
         x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              if(ctx.datasetIndex === 1) return ' Meta: 08:00';
+              const i = ctx.dataIndex;
+              const diff = d.values[i] - meta;
+              return [` Média: ${d.display[i]}`, ` ${Math.abs(diff)} min ${diff > 0 ? 'acima' : 'abaixo'} da meta`, ` Registros: ${d.regs[i]}`];
+            }
+          }
+        }
       }
     }
   });
