@@ -7238,7 +7238,7 @@ function handleMateriaisUpload(file){
           pedido:'', rc:rc, projeto:projetoLabel, projetoRaw:projetoRawMx,
           descricao:escopoGeral, qtde:mx['Qtd.solicitada (RC)']||'', unMedida:String(mx['Un. (RC)']||'').trim(),
           fornecedor:String(mx['Nome do fornecedor']||'').trim(), situacao:'RC sem pedido',
-          prevEntrega:fmtMatDate(mx['Data da solicitação (RC)']), dataRemessa:'', dataFaturamento:'',
+          prevEntrega:fmtMatDate(mx['Previsão Entrega']), dataSolicitacao:fmtMatDate(mx['Data da solicitação (RC)']), dataRemessa:'', dataFaturamento:'',
           valorUni:mx['Preço avaliação (RC)']||0, valorTotal:mx['Valor total (RC)']||0, observacao:'', comentario:'',
           pep:pepCode, squad:sqInfo.squad||'', lider:sqInfo.lider||String(mx['Líder']||'').trim()||'',
           planejador:sqInfo.planejador||'', idFerramenta:String(mx['IDFerramenta']||'').trim(),
@@ -7645,15 +7645,16 @@ function _matTabelaHtml(data){
 
     var diasCell;
     if(sit === 'rc sem pedido'){
-      // Premissa: 45 dias a partir da Data de Solicitação para gerar o pedido
-      if(!r.prevEntrega || r.prevEntrega === '—'){
+      // Premissa: 60 dias a partir da Data de Solicitação para gerar o pedido
+      var dataSolic = r.dataSolicitacao || '';
+      if(!dataSolic || dataSolic === '—'){
         diasCell = '<td style="padding:8px 10px;text-align:center;color:#94a3b8">—</td>';
       } else {
-        var pS = r.prevEntrega.split('/');
+        var pS = dataSolic.split('/');
         var dtSolic = new Date(parseInt(pS[2]), parseInt(pS[1])-1, parseInt(pS[0]));
         var hojeS = new Date(); hojeS.setHours(0,0,0,0);
         var decorridos = Math.round((hojeS - dtSolic) / 86400000);
-        var restam = 45 - decorridos;
+        var restam = 60 - decorridos;
         var dcTxt, dcColor, dcBg, dcFw;
         if(restam < 0){
           dcTxt = Math.abs(restam)+' dias de desvio'; dcColor='#dc2626'; dcBg='#fef2f2'; dcFw='700';
