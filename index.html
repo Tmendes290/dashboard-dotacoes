@@ -7215,6 +7215,11 @@ function handleMateriaisUpload(file){
           idFerramenta: idFerr
         });
       });
+      // Diagnóstico: mostra colunas reais do BD_MATRIZ
+      if(matrizRows.length > 0) console.log('[MATRIZ] Colunas:', Object.keys(matrizRows[0]));
+      console.log('[MATRIZ] Total linhas:', matrizRows.length);
+      var semPedidoCount = 0;
+
       // Adiciona RCs do BD_MATRIZ que ainda não geraram pedido
       matrizRows.forEach(function(mx){
         var pedido = String(mx['Pedido']||'').trim();
@@ -7236,7 +7241,9 @@ function handleMateriaisUpload(file){
           pep:pepCode, squad:sqInfo.squad||'', lider:sqInfo.lider||'',
           planejador:sqInfo.planejador||'', idFerramenta:String(mx['IDFerramenta']||'').trim()
         });
+        semPedidoCount++;
       });
+      console.log('[MATRIZ] RCs sem pedido encontradas:', semPedidoCount);
 
       STATE_MATERIAIS = merged;
       var matImportInfo = {file:file.name, date: new Date().toLocaleString('pt-BR')};
