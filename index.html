@@ -3904,7 +3904,8 @@ async function resetPassword(){
   btn.textContent='✉   Enviar link de recuperação';
   document.getElementById('forgot-btn').disabled=false;
   if(result.error){
-    msg.textContent='Erro: '+result.error.message;
+    var errMsg = result.error.message || result.error.name || JSON.stringify(result.error) || 'Erro desconhecido';
+    msg.textContent='Erro: '+errMsg;
     msg.style.color='#e74c3c';
   } else {
     msg.textContent='Link enviado! Verifique sua caixa de entrada.';
