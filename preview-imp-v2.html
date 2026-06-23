@@ -154,6 +154,25 @@ tr:hover td{background:#f8fbff}
 .btn-m.prim{background:var(--sb);color:#fff}
 .btn-m.sec{background:#f1f5f9;color:#374151}
 
+/* RDO SQUAD CARDS — igual ao site */
+.rdo-sq-card{background:var(--card);border:2px solid var(--bord);border-radius:10px;padding:12px 13px;cursor:pointer;position:relative;overflow:hidden;transition:all .15s;user-select:none}
+.rdo-sq-card:hover{border-color:#7dd3fc;box-shadow:0 4px 14px rgba(0,156,222,.15);transform:translateY(-2px)}
+.rdo-sq-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--bord)}
+.rdo-sq-card.usina::before{background:#009CDE}
+.rdo-sq-card.mina::before{background:#10b981}
+.rdo-rn{position:absolute;top:11px;right:12px;font-size:20px;font-weight:800;color:var(--acc);line-height:1}
+.rdo-rn small{display:block;font-size:8px;font-weight:600;color:var(--muted);text-align:right}
+.rdo-tr{display:inline-flex;border-radius:3px;padding:1px 7px;font-size:8px;font-weight:800;letter-spacing:.5px;margin-bottom:4px}
+.rdo-tr.usina{background:#e0f2fe;color:#0369a1}
+.rdo-tr.mina{background:#d1fae5;color:#065f46}
+.rdo-tr.outros{background:#f1f5f9;color:#64748b}
+.rdo-times{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;margin-bottom:8px}
+.rdo-tv{text-align:center}
+.rdo-tv-v{font-size:12px;font-weight:700}
+.rdo-tv-l{font-size:8px;color:var(--muted);font-weight:500}
+.rdo-status{display:flex;gap:6px;font-size:10px;font-weight:700;border-top:1px solid var(--bord);padding-top:6px}
+.rdo-sp{color:#16a34a}.rdo-sa{color:#d97706}.rdo-sn{color:#dc2626}
+
 /* PROGRESS */
 .prog-row{margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9}
 .prog-meta{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:4px}
@@ -751,43 +770,101 @@ tr:hover td{background:#f8fbff}
 
     <!-- ═══════════════ TAB: RDO DIÁRIO ═══════════════ -->
     <div id="tab-rdo" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div>
-          <div style="font-size:13px;font-weight:700;color:var(--sb)">RDO Diário — 20/06/2026</div>
-          <div style="font-size:11px;color:var(--muted)">Relatório de desempenho do dia</div>
-        </div>
-        <button style="padding:6px 14px;background:var(--sb);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">📄 Exportar PDF</button>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
-        <div class="c" style="text-align:center"><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px">Presentes</div><div style="font-size:24px;font-weight:800;color:var(--sb)">208</div><div style="font-size:10px;color:#16a34a">▲ +23 vs ontem</div></div>
-        <div class="c" style="text-align:center"><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px">Com atraso</div><div style="font-size:24px;font-weight:800;color:#dc2626">187</div><div style="font-size:10px;color:#dc2626">90% do total</div></div>
-        <div class="c" style="text-align:center"><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px">H. Improdutivas</div><div style="font-size:24px;font-weight:800;color:#d97706">226h14</div><div style="font-size:10px;color:#d97706">13.574 min</div></div>
-        <div class="c" style="text-align:center"><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px">H. Produtivas</div><div style="font-size:24px;font-weight:800;color:#16a34a">1613h46</div><div style="font-size:10px;color:#16a34a">88% produtivo</div></div>
-      </div>
-      <div class="g2">
-        <div class="c">
-          <div class="c-head"><span class="c-title">Chegadas por horário</span></div>
-          <div style="display:flex;flex-direction:column;gap:5px;font-size:11px">
-            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="width:55px;color:var(--muted)">07:00-07:30</span><div style="flex:1;background:#f1f5f9;border-radius:3px;height:6px"><div style="background:#16a34a;width:5%;height:6px;border-radius:3px"></div></div><span style="width:20px;text-align:right;font-weight:700">8</span></div>
-            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="width:55px;color:var(--muted)">07:30-08:00</span><div style="flex:1;background:#f1f5f9;border-radius:3px;height:6px"><div style="background:#16a34a;width:8%;height:6px;border-radius:3px"></div></div><span style="width:20px;text-align:right;font-weight:700">13</span></div>
-            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="width:55px;color:#d97706;font-weight:700">08:00-08:30</span><div style="flex:1;background:#f1f5f9;border-radius:3px;height:6px"><div style="background:#f59e0b;width:42%;height:6px;border-radius:3px"></div></div><span style="width:20px;text-align:right;font-weight:700;color:#d97706">72</span></div>
-            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="width:55px;color:#d97706;font-weight:700">08:30-09:00</span><div style="flex:1;background:#f1f5f9;border-radius:3px;height:6px"><div style="background:#f59e0b;width:35%;height:6px;border-radius:3px"></div></div><span style="width:20px;text-align:right;font-weight:700;color:#d97706">60</span></div>
-            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="width:55px;color:#dc2626;font-weight:700">09:00-10:00</span><div style="flex:1;background:#f1f5f9;border-radius:3px;height:6px"><div style="background:#ef4444;width:24%;height:6px;border-radius:3px"></div></div><span style="width:20px;text-align:right;font-weight:700;color:#dc2626">41</span></div>
-            <div style="display:flex;align-items:center;gap:8px;padding:5px 0"><span style="width:55px;color:#dc2626;font-weight:700">+10:00</span><div style="flex:1;background:#f1f5f9;border-radius:3px;height:6px"><div style="background:#ef4444;width:8%;height:6px;border-radius:3px"></div></div><span style="width:20px;text-align:right;font-weight:700;color:#dc2626">14</span></div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">H. Trab. = Término − Início − almoço (sem dados: ~60 min) &nbsp;·&nbsp; Clique em um squad para ver as obras</div>
+      <!-- Squad cards — layout original do site -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">
+
+        <!-- BR I, II, III E FILTRAGEM -->
+        <div class="rdo-sq-card usina" style="cursor:pointer">
+          <div class="rdo-rn">65<small>reg</small></div>
+          <div class="rdo-tr usina">TRIBO USINA</div>
+          <div style="font-size:17px;font-weight:800;line-height:1.25;margin:8px 0 12px;color:var(--text);padding-right:36px">BR I, II, III E FILTRAGEM</div>
+          <div class="rdo-times">
+            <div class="rdo-tv"><div class="rdo-tv-v">08:03</div><div class="rdo-tv-l">Chegada</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">08:59</div><div class="rdo-tv-l">Início</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">56m</div><div class="rdo-tv-l">Mob.</div></div>
           </div>
+          <div class="rdo-status"><span class="rdo-sp">✓ 1 perf</span><span class="rdo-sa">~ 42 parc</span><span class="rdo-sn">✗ 22 não</span></div>
         </div>
-        <div class="c">
-          <div class="c-head"><span class="c-title">Justificativas do dia <span class="new-pill">NOVO</span></span></div>
-          <div style="margin-bottom:8px">
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px"><span>Justificativas registradas</span><span style="font-weight:700;color:var(--sb)">12 / 187</span></div>
-            <div class="prog-bar"><div class="prog-fill" style="width:6%"></div></div>
+
+        <!-- USINAS I E II -->
+        <div class="rdo-sq-card usina" style="cursor:pointer">
+          <div class="rdo-rn">55<small>reg</small></div>
+          <div class="rdo-tr usina">TRIBO USINA</div>
+          <div style="font-size:17px;font-weight:800;line-height:1.25;margin:8px 0 12px;color:var(--text);padding-right:36px">USINAS I E II</div>
+          <div class="rdo-times">
+            <div class="rdo-tv"><div class="rdo-tv-v">07:29</div><div class="rdo-tv-l">Chegada</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">09:04</div><div class="rdo-tv-l">Início</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">40m</div><div class="rdo-tv-l">Mob.</div></div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:5px;font-size:11px">
-            <div style="padding:6px 10px;background:#fef2f2;border-radius:6px;border-left:3px solid #ef4444"><strong>REDE MONTAGENS</strong> — 1h34 de atraso<br><span style="color:var(--muted)">Sem justificativa</span></div>
-            <div style="padding:6px 10px;background:#f0fdf4;border-radius:6px;border-left:3px solid #16a34a"><strong>TOP ANDAIMES</strong> — 47 min<br><span style="color:#16a34a">Trânsito na BR-422</span></div>
-            <div style="padding:6px 10px;background:#fef2f2;border-radius:6px;border-left:3px solid #ef4444"><strong>LUK ENGENHARIA</strong> — 2h05 de atraso<br><span style="color:var(--muted)">Sem justificativa</span></div>
-          </div>
+          <div class="rdo-status"><span class="rdo-sp">✓ 12 perf</span><span class="rdo-sa">~ 18 parc</span><span class="rdo-sn">✗ 25 não</span></div>
         </div>
+
+        <!-- SLB III -->
+        <div class="rdo-sq-card usina" style="cursor:pointer">
+          <div class="rdo-rn">43<small>reg</small></div>
+          <div class="rdo-tr usina">TRIBO USINA</div>
+          <div style="font-size:17px;font-weight:800;line-height:1.25;margin:8px 0 12px;color:var(--text);padding-right:36px">SLB III</div>
+          <div class="rdo-times">
+            <div class="rdo-tv"><div class="rdo-tv-v">07:29</div><div class="rdo-tv-l">Chegada</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">08:55</div><div class="rdo-tv-l">Início</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">86m</div><div class="rdo-tv-l">Mob.</div></div>
+          </div>
+          <div class="rdo-status"><span class="rdo-sp">✓ 4 perf</span><span class="rdo-sa">~ 30 parc</span><span class="rdo-sn">✗ 9 não</span></div>
+        </div>
+
+        <!-- CPF -->
+        <div class="rdo-sq-card usina" style="cursor:pointer">
+          <div class="rdo-rn">27<small>reg</small></div>
+          <div class="rdo-tr usina">TRIBO USINA</div>
+          <div style="font-size:17px;font-weight:800;line-height:1.25;margin:8px 0 12px;color:var(--text);padding-right:36px">CPF</div>
+          <div class="rdo-times">
+            <div class="rdo-tv"><div class="rdo-tv-v">09:00</div><div class="rdo-tv-l">Chegada</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">09:57</div><div class="rdo-tv-l">Início</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">57m</div><div class="rdo-tv-l">Mob.</div></div>
+          </div>
+          <div class="rdo-status"><span class="rdo-sp">✓ 3 perf</span><span class="rdo-sa">~ 7 parc</span><span class="rdo-sn">✗ 17 não</span></div>
+        </div>
+
+        <!-- MINA -->
+        <div class="rdo-sq-card mina" style="cursor:pointer">
+          <div class="rdo-rn">9<small>reg</small></div>
+          <div class="rdo-tr mina">TRIBO MINA</div>
+          <div style="font-size:17px;font-weight:800;line-height:1.25;margin:8px 0 12px;color:var(--text);padding-right:36px">MINA</div>
+          <div class="rdo-times">
+            <div class="rdo-tv"><div class="rdo-tv-v">07:54</div><div class="rdo-tv-l">Chegada</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">08:22</div><div class="rdo-tv-l">Início</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">28m</div><div class="rdo-tv-l">Mob.</div></div>
+          </div>
+          <div class="rdo-status"><span class="rdo-sp">✓ 0 perf</span><span class="rdo-sa">~ 8 parc</span><span class="rdo-sn">✗ 1 não</span></div>
+        </div>
+
+        <!-- PAULO FONTELES -->
+        <div class="rdo-sq-card outros" style="cursor:pointer">
+          <div class="rdo-rn">8<small>reg</small></div>
+          <div class="rdo-tr outros">S/ VÍNCULO</div>
+          <div style="font-size:17px;font-weight:800;line-height:1.25;margin:8px 0 12px;color:var(--text);padding-right:36px">PAULO FONTELES</div>
+          <div class="rdo-times">
+            <div class="rdo-tv"><div class="rdo-tv-v">07:45</div><div class="rdo-tv-l">Chegada</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">08:28</div><div class="rdo-tv-l">Início</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">43m</div><div class="rdo-tv-l">Mob.</div></div>
+          </div>
+          <div class="rdo-status"><span class="rdo-sp">✓ 1 perf</span><span class="rdo-sa">~ 6 parc</span><span class="rdo-sn">✗ 1 não</span></div>
+        </div>
+
+        <!-- GEOTECNIA -->
+        <div class="rdo-sq-card mina" style="cursor:pointer">
+          <div class="rdo-rn">1<small>reg</small></div>
+          <div class="rdo-tr mina">TRIBO MINA</div>
+          <div style="font-size:17px;font-weight:800;line-height:1.25;margin:8px 0 12px;color:var(--text);padding-right:36px">GEOTECNIA</div>
+          <div class="rdo-times">
+            <div class="rdo-tv"><div class="rdo-tv-v">07:40</div><div class="rdo-tv-l">Chegada</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">13:00</div><div class="rdo-tv-l">Início</div></div>
+            <div class="rdo-tv"><div class="rdo-tv-v">320m</div><div class="rdo-tv-l">Mob.</div></div>
+          </div>
+          <div class="rdo-status"><span class="rdo-sp">✓ 0 perf</span><span class="rdo-sa">~ 0 parc</span><span class="rdo-sn">✗ 1 não</span></div>
+        </div>
+
       </div>
     </div>
 
