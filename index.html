@@ -4027,10 +4027,12 @@ async function loadPerfil(){
 
 function updateUserBadge(){
   if(!CURRENT_PERFIL) return;
-  console.log('[DEBUG] updateUserBadge - role:', CURRENT_PERFIL.role, 'email:', CURRENT_PERFIL.email);
+  var isAdmin = CURRENT_PERFIL.role === 'admin';
+  var isLider = CURRENT_PERFIL.role === 'lider';
+  console.log('[DEBUG] updateUserBadge - role:', CURRENT_PERFIL.role, 'email:', CURRENT_PERFIL.email, 'isAdmin:', isAdmin);
   // Set body class for CSS-based admin visibility
-  document.body.classList.toggle("is-admin", CURRENT_PERFIL.role === "admin");
-  document.body.classList.toggle("is-lider", CURRENT_PERFIL.role === "lider");
+  document.body.classList.toggle("is-admin", isAdmin);
+  document.body.classList.toggle("is-lider", isLider);
   var _perms = (CURRENT_PERFIL.permissoes && CURRENT_PERFIL.permissoes.length) ? CURRENT_PERFIL.permissoes : ['overview'];
   document.body.classList.toggle("is-imp", isAdmin || _perms.indexOf('improdutividade') >= 0);
   if(!isAdmin){
@@ -4049,8 +4051,6 @@ function updateUserBadge(){
       sec.style.display=anyVis?'':'none';
     });
   }
-  var isAdmin = CURRENT_PERFIL.role === 'admin';
-  var isLider = CURRENT_PERFIL.role === 'lider';
   var nome = CURRENT_PERFIL.nome || CURRENT_PERFIL.email || 'Usuário';
   var inicial = nome.charAt(0).toUpperCase();
   var roleLabel = isAdmin ? 'Administrador' : isLider ? 'Líder' : 'Planejador';
