@@ -7240,8 +7240,9 @@ function handleMateriaisUpload(file){
           fornecedor:String(mx['Nome do fornecedor']||'').trim(), situacao:'RC sem pedido',
           prevEntrega:fmtMatDate(mx['Data da solicitação (RC)']), dataRemessa:'', dataFaturamento:'',
           valorUni:mx['Preço avaliação (RC)']||0, valorTotal:mx['Valor total (RC)']||0, observacao:'', comentario:'',
-          pep:pepCode, squad:sqInfo.squad||'', lider:sqInfo.lider||'',
-          planejador:sqInfo.planejador||'', idFerramenta:String(mx['IDFerramenta']||'').trim()
+          pep:pepCode, squad:sqInfo.squad||'', lider:String(mx['Líder']||'').trim()||sqInfo.lider||'',
+          planejador:sqInfo.planejador||'', idFerramenta:String(mx['IDFerramenta']||'').trim(),
+          farol:String(mx['Farol']||'').trim(), statusCaptura:String(mx['Status da Captura']||'').trim()
         });
         semPedidoCount++;
       });
@@ -7647,6 +7648,18 @@ function _matTabelaHtml(data){
       +'<span style="font-size:10px;font-weight:'+dp.fw+';color:'+dp.color+';background:'+dp.bg+';padding:3px 8px;border-radius:20px">'+dp.txt+'</span>'
       +'</td>';
 
+    var farolF = (r.farol||'').toUpperCase();
+    var farolColor = farolF==='DENTRO_PRAZO'?'#16a34a':farolF==='FORA_PRAZO'?'#dc2626':farolF==='DEVOLVIDA'?'#d97706':'#94a3b8';
+    var farolCell2 = r.farol
+      ? '<td style="padding:8px 10px"><span style="font-size:10px;font-weight:700;color:'+farolColor+';background:'+farolColor+'18;padding:3px 8px;border-radius:20px;white-space:nowrap">'+escHtml(r.farol)+'</span></td>'
+      : '<td style="padding:8px 10px;font-size:11px;color:#cbd5e1;text-align:center">—</td>';
+
+    var scF = (r.statusCaptura||'').toUpperCase();
+    var scColor = scF==='ABERTA'?'#2563eb':scF==='CONCLUIDA'||scF==='CONCLUÍDA'?'#16a34a':scF==='CANCELADA'?'#dc2626':scF==='DEVOLVIDA'?'#d97706':scF==='PROCESSAMENTO_SAP'?'#7c3aed':'#94a3b8';
+    var scCell = r.statusCaptura
+      ? '<td style="padding:8px 10px"><span style="font-size:10px;font-weight:700;color:'+scColor+';background:'+scColor+'18;padding:3px 8px;border-radius:20px;white-space:nowrap">'+escHtml(r.statusCaptura)+'</span></td>'
+      : '<td style="padding:8px 10px;font-size:11px;color:#cbd5e1;text-align:center">—</td>';
+
     // Projeto: código do PEP em destaque + descrição completa abaixo (sem cortar)
     var projFull = r.projetoRaw || r.projeto || '';
     var pepCodeMat = r.pep || (projFull.includes(' - ') ? projFull.split(' - ')[0].trim() : projFull);
@@ -7674,6 +7687,8 @@ function _matTabelaHtml(data){
       +'<td style="padding:8px 10px;font-size:11px;font-weight:600;color:#1e293b;text-align:right;white-space:nowrap">'+fmtMatCurrency(r.valorTotal)+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#7c3aed;white-space:nowrap">'+escHtml(r.squad||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;white-space:nowrap">'+escHtml(r.lider||'—')+'</td>'
+      + farolCell2
+      + scCell
       +'<td style="padding:8px 10px;font-size:11px;color:'+(r.observacao?'#374151':'#cbd5e1')+';max-width:240px;white-space:normal;line-height:1.4">'+escHtml(r.observacao||'—')+'</td>'
       +'</tr>';
   }).join('');
@@ -7700,9 +7715,9 @@ function _matTabelaHtml(data){
     +_matTh('Pedido')+_matTh('RC')+_matTh('Projeto')+_matTh('Descrição')
     +_matTh('Qtde')+_matTh('Fornecedor')+_matTh('Situação')
     +_matTh('Prev. Entrega')+_matTh('Prazo')+_matTh('Dt. Remessa')+_matTh('Dt. Faturamento')
-    +_matTh('Vl. Unit.')+_matTh('Vl. Total')+_matTh('Squad')+_matTh('Líder')+_matTh('Comentário')
+    +_matTh('Vl. Unit.')+_matTh('Vl. Total')+_matTh('Squad')+_matTh('Líder')+_matTh('Farol')+_matTh('Status Captura')+_matTh('Comentário')
     +'</tr></thead>'
-    +'<tbody>'+(rows||'<tr><td colspan="16" style="text-align:center;padding:32px;color:#94a3b8">Nenhum item encontrado com os filtros aplicados</td></tr>')+'</tbody>'
+    +'<tbody>'+(rows||'<tr><td colspan="18" style="text-align:center;padding:32px;color:#94a3b8">Nenhum item encontrado com os filtros aplicados</td></tr>')+'</tbody>'
     +'</table></div>'+more+'</div>'
     +(CURRENT_PERFIL && CURRENT_PERFIL.role === 'admin'
       ? '<div style="margin-top:12px;text-align:right"><label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#7c3aed;color:#fff;border-radius:7px;font-size:11px;font-weight:700"><input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleMateriaisUpload(this.files[0])">📂 Importar novo arquivo</label></div>'
