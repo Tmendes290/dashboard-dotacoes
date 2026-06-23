@@ -7247,8 +7247,15 @@ function handleMateriaisUpload(file){
 
       STATE_MATERIAIS = merged;
       var matImportInfo = {file:file.name, date: new Date().toLocaleString('pt-BR')};
-      localStorage.setItem('mat_data', JSON.stringify(merged));
-      localStorage.setItem('mat_import', JSON.stringify(matImportInfo));
+      try {
+        localStorage.setItem('mat_data', JSON.stringify(merged));
+        localStorage.setItem('mat_import', JSON.stringify(matImportInfo));
+      } catch(eQuota) {
+        // localStorage cheio — limpa e depende do Supabase como storage
+        localStorage.removeItem('mat_data');
+        localStorage.setItem('mat_import', JSON.stringify(matImportInfo));
+        console.warn('[Materiais] localStorage cheio, usando apenas Supabase.');
+      }
       // Salva no Supabase para todos os usuários verem
       if(supa){
         supa.from('mat_config').upsert({id:1, data:merged, import_file:file.name, import_date:matImportInfo.date, updated_at:new Date().toISOString()})
