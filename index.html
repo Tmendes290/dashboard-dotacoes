@@ -7215,6 +7215,29 @@ function handleMateriaisUpload(file){
           idFerramenta: idFerr
         });
       });
+      // Adiciona RCs do BD_MATRIZ que ainda não geraram pedido
+      matrizRows.forEach(function(mx){
+        var pedido = String(mx['Pedido']||'').trim();
+        if(pedido) return; // já tem pedido — coberto pelo BD_DILIG
+        var rc = String(mx['RC']||'').trim();
+        if(!rc) return;
+        var pepCode = String(mx['Elemento PEP']||'').trim();
+        var projetoRaw = String(mx['Projeto']||'').trim();
+        var sqInfo = (pepCode && typeof getSquadInfo === 'function') ? getSquadInfo(pepCode) : {squad:'',lider:'',planejador:''};
+        var pepRef = (pepCode && typeof REF_PEPS !== 'undefined') ? REF_PEPS.find(function(p){ return p[0]===pepCode; }) : null;
+        var projetoLabel = pepRef ? pepCode+' — '+pepRef[1] : (projetoRaw||pepCode);
+        var desc = String(mx['Descrição']||mx['DESCRIÇÃO']||mx['Descrição Breve']||mx['DESCRICAO']||'').trim();
+        merged.push({
+          pedido:'', rc:rc, projeto:projetoLabel, projetoRaw:projetoRaw,
+          descricao:desc, qtde:mx['Qtde']||mx['QTDE']||'', unMedida:'',
+          fornecedor:'', situacao:'RC sem pedido',
+          prevEntrega:'', dataRemessa:'', dataFaturamento:'',
+          valorUni:0, valorTotal:0, observacao:'', comentario:'',
+          pep:pepCode, squad:sqInfo.squad||'', lider:sqInfo.lider||'',
+          planejador:sqInfo.planejador||'', idFerramenta:String(mx['IDFerramenta']||'').trim()
+        });
+      });
+
       STATE_MATERIAIS = merged;
       var matImportInfo = {file:file.name, date: new Date().toLocaleString('pt-BR')};
       localStorage.setItem('mat_data', JSON.stringify(merged));
@@ -7395,13 +7418,22 @@ function _matDashHtml(data){
     return sit && !sit.includes('entregue') && !sit.includes('cancelad') && !sit.includes('encerrad');
   }).length;
   var pctEntregue  = data.length ? Math.round(entregues/data.length*100) : 0;
+  var rcSemPedido  = data.filter(function(r){ return r.situacao === 'RC sem pedido'; });
 
-  var cards = '<div class="g4" style="gap:14px;margin-bottom:20px">'
+  var cards = '<div class="g4" style="gap:14px;margin-bottom:' + (rcSemPedido.length ? '10' : '20') + 'px">'
     + _matCard('🗂','Pedidos',totalPedidos,'#2563eb')
     + _matCard('📋','RCs',totalRCs,'#7c3aed')
     + _matCard('💰','Valor Total',MAT_VALORES_VISIVEIS ? valorTotal.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : '<span style="letter-spacing:3px;color:#94a3b8">••••••</span>','#16a34a')
     + _matCard('✅','% Entregues',pctEntregue+'%','#0891b2')
-    + '</div>';
+    + '</div>'
+    + (rcSemPedido.length
+        ? '<div style="display:flex;align-items:center;gap:12px;background:#fffbeb;border:1px solid #fcd34d;border-left:4px solid #f59e0b;border-radius:8px;padding:12px 16px;margin-bottom:20px">'
+          + '<span style="font-size:20px">⚠️</span>'
+          + '<div><span style="font-size:13px;font-weight:700;color:#92400e">' + rcSemPedido.length + ' RC' + (rcSemPedido.length > 1 ? 's' : '') + ' sem pedido gerado</span>'
+          + '<span style="font-size:11px;color:#b45309;margin-left:8px">RC lançada mas pedido ainda não foi criado no SAP</span></div>'
+          + '<button onclick="setMatTab(\'tabela\');MAT_FILTERS.situacao=[\'RC sem pedido\'];MAT_PAGE=1;renderMateriais()" style="margin-left:auto;font-size:11px;font-weight:700;padding:5px 12px;border-radius:6px;border:1px solid #f59e0b;background:#fff;color:#92400e;cursor:pointer">Ver RCs →</button>'
+          + '</div>'
+        : '');
 
   var charts = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
     + '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px">'
@@ -7588,7 +7620,8 @@ function _matTabelaHtml(data){
   var rows = pageData.map(function(r){
     var sitColor = '#64748b';
     var sit = (r.situacao||'').toLowerCase();
-    if(sit.includes('entregue')) sitColor='#16a34a';
+    if(sit === 'rc sem pedido') sitColor='#f59e0b';
+    else if(sit.includes('entregue')) sitColor='#16a34a';
     else if(sit.includes('atraso')||sit.includes('crítico')) sitColor='#dc2626';
     else if(sit.includes('transit')||sit.includes('remessa')) sitColor='#d97706';
     else if(sit.includes('pedido')||sit.includes('rc')) sitColor='#2563eb';
