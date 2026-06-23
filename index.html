@@ -763,6 +763,15 @@ function initSupabase(){
   if(typeof supabase !== 'undefined'){
     supa = supabase.createClient(SUPA_URL, SUPA_KEY);
     console.log('Supabase conectado!');
+    supa.auth.onAuthStateChange(function(event){
+      if(event === 'PASSWORD_RECOVERY'){
+        var ls = document.getElementById('login-screen');
+        if(ls) ls.style.display='flex';
+        ['login-form','register-form','forgot-form'].forEach(function(id){ var el=document.getElementById(id); if(el) el.style.display='none'; });
+        var np = document.getElementById('newpass-form');
+        if(np) np.style.display='block';
+      }
+    });
   } else {
     setTimeout(initSupabase, 300);
   }
@@ -3871,7 +3880,37 @@ function showRegister(){
 
 function showLogin(){
   document.getElementById('register-form').style.display='none';
+  document.getElementById('forgot-form').style.display='none';
   document.getElementById('login-form').style.display='block';
+}
+
+function showForgot(){
+  document.getElementById('login-form').style.display='none';
+  document.getElementById('register-form').style.display='none';
+  document.getElementById('forgot-form').style.display='block';
+  var msg = document.getElementById('forgot-msg');
+  msg.style.display='none'; msg.textContent='';
+}
+
+async function resetPassword(){
+  if(!supa) return;
+  var email = document.getElementById('forgot-email').value.trim();
+  var msg   = document.getElementById('forgot-msg');
+  var btn   = document.getElementById('forgot-btn-text');
+  if(!email){ msg.textContent='Informe o e-mail cadastrado.'; msg.style.color='#e74c3c'; msg.style.display='block'; return; }
+  btn.textContent='Enviando...';
+  document.getElementById('forgot-btn').disabled=true;
+  var result = await supa.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+  btn.textContent='✉   Enviar link de recuperação';
+  document.getElementById('forgot-btn').disabled=false;
+  if(result.error){
+    msg.textContent='Erro: '+result.error.message;
+    msg.style.color='#e74c3c';
+  } else {
+    msg.textContent='Link enviado! Verifique sua caixa de entrada.';
+    msg.style.color='#27ae60';
+  }
+  msg.style.display='block';
 }
 
 async function loginUser(){
@@ -4040,9 +4079,43 @@ function updateUserBadge(){
 }
 
 
+async function saveNewPassword(){
+  if(!supa) return;
+  var senha   = document.getElementById('newpass-senha').value;
+  var confirm = document.getElementById('newpass-confirm').value;
+  var msg     = document.getElementById('newpass-msg');
+  var btn     = document.getElementById('newpass-btn-text');
+  if(senha.length < 6){ msg.textContent='Senha deve ter pelo menos 6 caracteres.'; msg.style.color='#e74c3c'; msg.style.display='block'; return; }
+  if(senha !== confirm){ msg.textContent='As senhas não conferem.'; msg.style.color='#e74c3c'; msg.style.display='block'; return; }
+  btn.textContent='Salvando...';
+  document.getElementById('newpass-btn').disabled=true;
+  var result = await supa.auth.updateUser({ password: senha });
+  document.getElementById('newpass-btn').disabled=false;
+  btn.textContent='✔   Salvar nova senha';
+  if(result.error){
+    msg.textContent='Erro: '+result.error.message;
+    msg.style.color='#e74c3c';
+    msg.style.display='block';
+  } else {
+    msg.textContent='Senha alterada com sucesso! Redirecionando...';
+    msg.style.color='#27ae60';
+    msg.style.display='block';
+    setTimeout(function(){ showLogin(); document.getElementById('login-screen').style.display='flex'; }, 2000);
+  }
+}
+
 // ── VERIFICAR SESSÃO AO CARREGAR ─────────────────────────────────
 async function checkAuthSession(){
   if(!supa){ setTimeout(checkAuthSession, 300); return; }
+  // Detecta link de recuperação de senha no hash da URL
+  var hash = window.location.hash;
+  if(hash && hash.indexOf('type=recovery') >= 0){
+    var ls = document.getElementById('login-screen');
+    if(ls) ls.style.display='flex';
+    ['login-form','register-form','forgot-form'].forEach(function(id){ document.getElementById(id).style.display='none'; });
+    document.getElementById('newpass-form').style.display='block';
+    return;
+  }
   // Mostra loading enquanto verifica sessão
   var ls = document.getElementById('login-screen');
   try {
@@ -9072,9 +9145,52 @@ table.rdo-tbl{width:100%;border-collapse:collapse}
       <button onclick="loginUser()" id="login-btn" class="ls-btn">
         <span id="login-btn-text">▶ &nbsp; Acessar Sistema</span>
       </button>
+      <div class="ls-link" style="margin-bottom:6px">
+        <a href="#" onclick="showForgot()" class="ls-link-a" style="opacity:.7">Esqueceu a senha?</a>
+      </div>
       <div class="ls-link">
         <a href="#" onclick="showRegister()" class="ls-link-a">Primeiro acesso? Criar conta</a>
       </div>
+    </div>
+
+    <!-- Formulário de recuperação de senha -->
+    <div id="forgot-form" style="display:none">
+      <div class="ls-card-sys">Recuperar Acesso</div>
+      <div class="ls-card-title">Esqueceu a senha?</div>
+      <div class="ls-divider"></div>
+      <div class="ls-field">
+        <div class="ls-label">E-mail cadastrado</div>
+        <input id="forgot-email" type="email" placeholder="email@vale.com" class="ls-input"
+               onkeydown="if(event.key==='Enter') resetPassword()">
+      </div>
+      <div id="forgot-msg" class="ls-err" style="display:none"></div>
+      <button onclick="resetPassword()" id="forgot-btn" class="ls-btn">
+        <span id="forgot-btn-text">✉ &nbsp; Enviar link de recuperação</span>
+      </button>
+      <div class="ls-link">
+        <a href="#" onclick="showLogin()" class="ls-link-a">← Voltar ao login</a>
+      </div>
+    </div>
+
+    <!-- Formulário de nova senha (após clicar no link do email) -->
+    <div id="newpass-form" style="display:none">
+      <div class="ls-card-sys">Recuperar Acesso</div>
+      <div class="ls-card-title">Nova Senha</div>
+      <div class="ls-divider"></div>
+      <div class="ls-field">
+        <div class="ls-label">Nova senha</div>
+        <input id="newpass-senha" type="password" placeholder="mínimo 6 caracteres" class="ls-input"
+               onkeydown="if(event.key==='Enter') saveNewPassword()">
+      </div>
+      <div class="ls-field">
+        <div class="ls-label">Confirmar senha</div>
+        <input id="newpass-confirm" type="password" placeholder="repita a senha" class="ls-input"
+               onkeydown="if(event.key==='Enter') saveNewPassword()">
+      </div>
+      <div id="newpass-msg" class="ls-err" style="display:none"></div>
+      <button onclick="saveNewPassword()" id="newpass-btn" class="ls-btn">
+        <span id="newpass-btn-text">✔ &nbsp; Salvar nova senha</span>
+      </button>
     </div>
 
     <!-- Formulário de cadastro -->
