@@ -8343,21 +8343,20 @@ function _impDlPlugin(fmt,axis){
 function _impDlPluginStacked(){
   return {id:'impDlSt',afterDatasetsDraw:function(chart){
     var ctx=chart.ctx;
-    chart.data.datasets.forEach(function(ds,i){
-      var meta=chart.getDatasetMeta(i);
-      meta.data.forEach(function(el,j){
-        var val=ds.data[j];
-        if(!val||val<1) return;
-        var segW=el.x-el.base;
-        if(segW<28) return; // segmento pequeno demais
-        ctx.save();
-        ctx.fillStyle='#fff';
-        ctx.font='700 9px Arial,sans-serif';
-        ctx.textAlign='center';
-        ctx.textBaseline='middle';
-        ctx.fillText(val+'h',el.base+segW/2,el.y);
-        ctx.restore();
-      });
+    var nDs=chart.data.datasets.length;
+    var lastMeta=chart.getDatasetMeta(nDs-1);
+    // Mostra total acumulado à direita da barra inteira (último dataset)
+    lastMeta.data.forEach(function(el,j){
+      var total=0;
+      for(var k=0;k<nDs;k++) total+=chart.data.datasets[k].data[j]||0;
+      if(!total) return;
+      ctx.save();
+      ctx.fillStyle='#374151';
+      ctx.font='600 9px Arial,sans-serif';
+      ctx.textAlign='left';
+      ctx.textBaseline='middle';
+      ctx.fillText(Math.round(total*10)/10+'h',el.x+4,el.y);
+      ctx.restore();
     });
   }};
 }
