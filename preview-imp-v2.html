@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Preview — Melhorias Improdutividade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--sb:#002F6C;--sb2:#004A9E;--acc:#009CDE;--acc3:#10b981;--bg:#EEF4FB;--card:#fff;--text:#1a2a40;--muted:#5a7a99;--bord:#d0dff0;--danger:#ef4444;--warn:#f59e0b;--purple:#8b5cf6}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden;width:100vw;font-size:13px}
+
+/* SIDEBAR */
+.sb{width:220px;min-width:220px;background:var(--sb);display:flex;flex-direction:column;height:100vh;overflow-y:auto;flex-shrink:0}
+.sb-logo{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.1)}
+.sb-logo-name{font-size:13px;font-weight:800;color:#fff;letter-spacing:.3px}
+.sb-logo-sub{font-size:10px;color:rgba(255,255,255,.5);margin-top:1px}
+.sb-proj{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.07)}
+.sb-proj-name{font-size:11px;font-weight:700;color:rgba(255,255,255,.9)}
+.sb-proj-sub{font-size:10px;color:rgba(255,255,255,.45);margin-top:2px}
+.sb-nav-sec{padding:10px 14px 4px;font-size:9px;font-weight:700;color:rgba(255,255,255,.35);letter-spacing:.12em;text-transform:uppercase}
+.sb-item{display:flex;align-items:center;gap:9px;padding:9px 14px;cursor:pointer;font-size:12px;font-weight:500;color:rgba(255,255,255,.7);border-radius:0;transition:.12s}
+.sb-item:hover{background:rgba(255,255,255,.08);color:#fff}
+.sb-item.active{background:rgba(255,255,255,.13);color:#fff;font-weight:700}
+.sb-badge{display:inline-flex;align-items:center;justify-content:center;background:var(--danger);color:#fff;font-size:9px;font-weight:800;border-radius:10px;padding:1px 5px;margin-left:auto}
+.ico{width:16px;text-align:center;font-size:14px;flex-shrink:0}
+
+/* TOPBAR */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:var(--card);border-bottom:1px solid var(--bord);padding:8px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:800;color:var(--sb)}
+.topbar-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.topbar-actions{display:flex;gap:8px}
+.btn-act{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;border:none;font-family:inherit}
+.btn-pdf{background:#1e293b;color:#fff}
+.btn-csv{background:#002F6C;color:#fff}
+.btn-xlsx{background:#16a34a;color:#fff}
+
+/* STATUSBAR */
+.statusbar{background:var(--card);border-bottom:2px solid var(--bord);padding:0 20px;display:flex;align-items:center;gap:0;overflow:hidden;flex-shrink:0;height:30px}
+.sb-tick{display:flex;align-items:center;gap:5px;padding:0 10px;font-size:10px;color:var(--muted);border-right:1px solid var(--bord);white-space:nowrap}
+.sb-tick span{font-weight:600;color:var(--text)}
+.live{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;color:#16a34a;padding:0 10px;border-right:1px solid var(--bord)}
+.live-dot{width:6px;height:6px;background:#16a34a;border-radius:50%;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* CONTENT AREA */
+.content{flex:1;overflow-y:auto;padding:16px 20px}
+
+/* IMP FILTER BAR */
+.filter-bar{background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.filter-group{display:flex;flex-direction:column;gap:3px}
+.filter-label{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)}
+.filter-sel{border:1px solid var(--bord);border-radius:5px;padding:5px 8px;font-size:12px;color:var(--text);background:#fff;font-family:inherit;outline:none;cursor:pointer}
+.filter-sep{width:1px;height:30px;background:var(--bord);align-self:center}
+.btn-clear{padding:6px 12px;border:1px solid #fca5a5;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;background:#fff;color:#dc2626;font-family:inherit;align-self:flex-end}
+
+/* KPI CARDS — BIG ROW */
+.imp-kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px}
+.imp-kpi{background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;position:relative;overflow:hidden}
+.imp-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.imp-kpi.c-blue::before{background:var(--acc)}
+.imp-kpi.c-red::before{background:var(--danger)}
+.imp-kpi.c-orange::before{background:var(--warn)}
+.imp-kpi.c-green::before{background:var(--acc3)}
+.imp-kpi.c-purple::before{background:var(--purple)}
+.imp-kpi-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:3px}
+.imp-kpi-val{font-size:26px;font-weight:800;color:var(--sb);line-height:1.1;margin-bottom:2px}
+.imp-kpi-sub{font-size:10px;color:var(--muted)}
+/* ── DELTA badge (NOVO) ── */
+.delta{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;margin-top:6px}
+.delta.up-bad{background:#fef2f2;color:#dc2626}
+.delta.dn-good{background:#f0fdf4;color:#16a34a}
+.delta.up-good{background:#f0fdf4;color:#16a34a}
+.delta.dn-bad{background:#fef2f2;color:#dc2626}
+.delta-vs{font-size:9px;color:var(--muted);margin-top:2px;font-weight:400}
+
+/* TABS */
+.imp-tabs{display:flex;border-bottom:2px solid var(--bord);margin-bottom:14px}
+.imp-tab{padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:.12s}
+.imp-tab.active{color:var(--acc);border-bottom-color:var(--acc)}
+.imp-tab.active.evo{color:#10b981;border-bottom-color:#10b981}
+.new-pill{display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px;vertical-align:middle}
+
+/* 2-col layout */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.g21{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px}
+
+/* CARD */
+.c{background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px}
+.c-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.c-title{font-size:12px;font-weight:700;color:var(--text)}
+.c-badge{font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px}
+
+/* EVOLUÇÃO — TREND CARDS */
+.evo-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.evo-period{display:flex;gap:5px}
+.evo-btn{padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit}
+.evo-btn.active{background:var(--sb);color:#fff;border-color:var(--sb)}
+.trend-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.trend-c{background:var(--bg);border:1px solid var(--bord);border-radius:8px;padding:12px 14px;text-align:center}
+.trend-c-lbl{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.trend-c-val{font-size:20px;font-weight:800;color:var(--sb)}
+.trend-c-prev{font-size:10px;color:var(--muted);margin:2px 0}
+.trend-c-delta{font-size:11px;font-weight:700;margin-top:3px}
+.trend-c-delta.bad{color:#dc2626}
+.trend-c-delta.good{color:#16a34a}
+
+/* DESTAQUE TENDÊNCIA */
+.hl{border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px}
+.hl.bad{background:#fef2f2;border:1px solid #fecaca}
+.hl.good{background:#f0fdf4;border:1px solid #bbf7d0}
+.hl-ico{font-size:22px}
+.hl-txt strong{font-size:13px;font-weight:800;color:var(--sb);display:block}
+.hl-txt span{font-size:11px;color:var(--muted)}
+.evo-wrap{position:relative;height:200px}
+
+/* TABELA REGISTROS */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+tr:hover td{background:#f8fbff}
+.tbadge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600}
+.tbadge.grave{background:#fef2f2;color:#dc2626}
+.tbadge.leve{background:#fef3c7;color:#d97706}
+.tbadge.ok{background:#f0fdf4;color:#16a34a}
+.just-btn{padding:3px 9px;border-radius:5px;border:1px dashed var(--acc);background:transparent;color:var(--acc);font-size:10px;font-weight:600;cursor:pointer;font-family:inherit}
+.just-done{display:flex;flex-direction:column;gap:1px}
+.just-done-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:5px;background:#f0fdf4;color:#16a34a;font-size:10px;font-weight:600;width:fit-content}
+.just-done-txt{font-size:10px;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* MOTIVOS BARRA */
+.motivo-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f8fafc}
+.motivo-row:last-child{border-bottom:none}
+.motivo-lbl{font-size:11px;color:var(--text);flex:1}
+.motivo-bar-wrap{width:90px;background:#f1f5f9;border-radius:4px;height:5px}
+.motivo-bar{background:var(--acc);height:5px;border-radius:4px}
+.motivo-qty{font-size:11px;font-weight:700;color:var(--sb);min-width:22px;text-align:right}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:999}
+.modal{background:var(--card);border-radius:12px;padding:22px;width:460px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal h3{font-size:15px;font-weight:800;color:var(--sb);margin-bottom:3px}
+.modal-meta{font-size:11px;color:var(--muted);margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--bord)}
+.fg{margin-bottom:12px}
+.fg label{font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px}
+.fg select,.fg textarea{width:100%;border:1px solid var(--bord);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--text);font-family:inherit}
+.fg textarea{resize:vertical;min-height:70px}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.btn-m{padding:7px 16px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;border:none;font-family:inherit}
+.btn-m.prim{background:var(--sb);color:#fff}
+.btn-m.sec{background:#f1f5f9;color:#374151}
+
+/* PROGRESS */
+.prog-row{margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9}
+.prog-meta{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:4px}
+.prog-bar{background:#f1f5f9;border-radius:20px;height:5px;overflow:hidden}
+.prog-fill{background:var(--acc3);height:5px;border-radius:20px}
+
+/* PUXADA DE ATENÇÃO */
+.alert-banner{background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.alert-banner span{font-size:12px;font-weight:600;color:#92400e}
+.media-squad{display:flex;flex-direction:column;gap:5px}
+.ms-row{display:flex;justify-content:space-between;align-items:center;padding:4px 8px;border-radius:6px;font-size:11px}
+.ms-row.ok{background:#f0fdf4}
+.ms-row.warn{background:#fef3c7}
+.ms-row.bad{background:#fef2f2}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sb">
+  <div class="sb-logo">
+    <div class="sb-logo-row" style="display:flex;align-items:center;gap:10px">
+      <div style="width:34px;height:34px;background:rgba(255,255,255,.15);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px">⚡</div>
+      <div>
+        <div class="sb-logo-name">Equipe de Projetos</div>
+        <div class="sb-logo-sub">Salobo & Igarapé Bahia</div>
+      </div>
+    </div>
+  </div>
+  <div class="sb-proj">
+    <div class="sb-proj-name">Controle Financeiro de Obras CAPEX</div>
+    <div class="sb-proj-sub">VALE BASE METALS — SALOBO</div>
+  </div>
+  <div class="sb-nav-sec">Dotações</div>
+  <div class="sb-item"><span class="ico">🗂</span><span>Visão Geral</span></div>
+  <div class="sb-item"><span class="ico">📋</span><span>Resumo Sub PEP</span></div>
+  <div class="sb-item"><span class="ico">📄</span><span>Dotações</span><span class="sb-badge">56</span></div>
+  <div class="sb-nav-sec">Saúde Capex</div>
+  <div class="sb-item"><span class="ico">❤️</span><span>Dashboard</span></div>
+  <div class="sb-item"><span class="ico">📊</span><span>Saúde do PEP</span></div>
+  <div class="sb-nav-sec">Materiais</div>
+  <div class="sb-item"><span class="ico">📦</span><span>Materiais</span></div>
+  <div class="sb-nav-sec">Frota</div>
+  <div class="sb-item active"><span class="ico">🚧</span><span>Improdutividade</span></div>
+  <div class="sb-item"><span class="ico">🚗</span><span>Telemetria</span></div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">Produtividade Projetos Salobo</div>
+      <div class="topbar-sub">Registro de chegada e atraso das equipes</div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn-act btn-pdf">📄 PDF</button>
+      <button class="btn-act btn-csv">↑ Exportar CSV</button>
+      <button class="btn-act btn-xlsx">↑ Exportar</button>
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="statusbar">
+    <div class="live"><div class="live-dot"></div>LIVE</div>
+    <div class="sb-tick">🕐 <span>14:18:34</span></div>
+    <div class="sb-tick">📋 <span>91 dotações</span></div>
+    <div class="sb-tick">🟢 <span>2 online</span></div>
+    <div class="sb-tick">📅 Período: <span>2025–2026</span></div>
+    <div class="sb-tick">📈 VALE3 <span style="color:#dc2626">R$79.66 (−1.54%)</span></div>
+    <div class="sb-tick">📍 Marabá, Pará · <span>27.2°C — Nublado</span></div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- Upload label -->
+    <div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:14px;padding:6px 14px;background:var(--card);border:1px solid var(--bord);border-radius:7px;font-size:12px;font-weight:600;color:var(--muted)">
+      📂 Atualizar planilha <span style="font-size:10px;background:var(--bg);padding:1px 7px;border-radius:10px">244 registros</span>
+    </div>
+
+    <!-- FILTER BAR -->
+    <div class="filter-bar">
+      <div class="filter-group">
+        <div class="filter-label">Dia</div>
+        <input type="text" class="filter-sel" value="20/06/2026" style="min-width:130px" readonly>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Mês</div>
+        <select class="filter-sel"><option>Todos</option><option>Junho</option></select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Semana</div>
+        <select class="filter-sel"><option>Todas</option></select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Período</div>
+        <select class="filter-sel"><option>Todos</option></select>
+      </div>
+      <div class="filter-sep"></div>
+      <div class="filter-group">
+        <div class="filter-label">Empresa</div>
+        <select class="filter-sel"><option>Todas</option></select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Obra (SAP)</div>
+        <select class="filter-sel"><option>Todas</option></select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Squad</div>
+        <select class="filter-sel"><option>Todos</option></select>
+      </div>
+      <div class="filter-sep"></div>
+      <div class="filter-group">
+        <div class="filter-label">Horário ref.</div>
+        <input type="time" class="filter-sel" value="08:00" style="width:86px">
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Término até</div>
+        <input type="time" class="filter-sel" value="17:00" style="width:86px">
+      </div>
+      <button class="btn-clear" style="align-self:flex-end">✕ Limpar filtros</button>
+    </div>
+
+    <!-- ══ KPI CARDS — com delta (MELHORIA 1) ══ -->
+    <div class="imp-kpi-row">
+      <div class="imp-kpi c-blue">
+        <div class="imp-kpi-lbl">Registros com horário</div>
+        <div class="imp-kpi-val">208</div>
+        <div class="imp-kpi-sub">Chegada ou PTS preenchidos</div>
+        <div><span class="delta up-good">↑ +23</span></div>
+        <div class="delta-vs">vs sem. anterior (185)</div>
+      </div>
+      <div class="imp-kpi c-red">
+        <div class="imp-kpi-lbl">Com atraso</div>
+        <div class="imp-kpi-val">187</div>
+        <div class="imp-kpi-sub">90% do total</div>
+        <div><span class="delta up-bad">↑ +12 atrasos</span></div>
+        <div class="delta-vs">vs sem. anterior (175)</div>
+      </div>
+      <div class="imp-kpi c-orange">
+        <div class="imp-kpi-lbl">Total improdutivo</div>
+        <div class="imp-kpi-val">226h14</div>
+        <div class="imp-kpi-sub">Ref: 08:00 — 13574 min</div>
+        <div><span class="delta dn-good">↓ −18h</span></div>
+        <div class="delta-vs">vs sem. anterior (244h)</div>
+      </div>
+      <div class="imp-kpi c-green">
+        <div class="imp-kpi-lbl">Horas produtivas</div>
+        <div class="imp-kpi-val">1613h46</div>
+        <div class="imp-kpi-sub">88% — base 1840h</div>
+        <div><span class="delta up-good">↑ +2.1%</span></div>
+        <div class="delta-vs">vs sem. anterior (86%)</div>
+      </div>
+      <!-- NOVO KPI -->
+      <div class="imp-kpi c-purple" style="position:relative">
+        <div style="position:absolute;top:8px;right:8px"><span class="new-pill">NOVO</span></div>
+        <div class="imp-kpi-lbl">Média horas produtivas</div>
+        <div class="imp-kpi-val" style="color:#7c3aed">7h44</div>
+        <div class="imp-kpi-sub">por pessoa/dia na seleção</div>
+        <div><span class="delta up-good">↑ +18 min</span></div>
+        <div class="delta-vs">vs sem. anterior (7h26)</div>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="imp-tabs">
+      <div class="imp-tab" id="t-dash" onclick="showTab('dash')">📊 Dashboard</div>
+      <div class="imp-tab" id="t-reg" onclick="showTab('reg')">Registros</div>
+      <div class="imp-tab" id="t-emp" onclick="showTab('emp')" style="color:var(--muted)">Por Empresa</div>
+      <div class="imp-tab" style="color:var(--muted)">Por Obra</div>
+      <div class="imp-tab" style="color:var(--muted)">Por Squad</div>
+      <!-- NOVA ABA -->
+      <div class="imp-tab evo active" id="t-evo" onclick="showTab('evo')">📈 Evolução <span class="new-pill">NOVO</span></div>
+      <div class="imp-tab" style="color:var(--muted)">📅 RDO Diário</div>
+    </div>
+
+    <!-- ═══════════════ TAB: EVOLUÇÃO ═══════════════ -->
+    <div id="tab-evo">
+
+      <div class="alert-banner">
+        <span>⚠️ Visão comparativa: mostra como a equipe está evoluindo semana a semana — identifique se está melhorando ou piorando antes da reunião com gerência.</span>
+      </div>
+
+      <div class="evo-hdr">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--sb)">Comparativo de período</div>
+          <div style="font-size:11px;color:var(--muted)">Período atual vs período anterior</div>
+        </div>
+        <div class="evo-period">
+          <button class="evo-btn">Por dia</button>
+          <button class="evo-btn active">Por semana</button>
+          <button class="evo-btn">Por mês</button>
+        </div>
+      </div>
+
+      <!-- Trend summary cards -->
+      <div class="trend-grid">
+        <div class="trend-c">
+          <div class="trend-c-lbl">Atrasos</div>
+          <div class="trend-c-val">187</div>
+          <div class="trend-c-prev">Sem. anterior: 175</div>
+          <div class="trend-c-delta bad">↑ +6.9% — piorou</div>
+        </div>
+        <div class="trend-c">
+          <div class="trend-c-lbl">Min. improdutivos</div>
+          <div class="trend-c-val">13.574</div>
+          <div class="trend-c-prev">Sem. anterior: 14.640</div>
+          <div class="trend-c-delta good">↓ −7.3% — melhorou</div>
+        </div>
+        <div class="trend-c">
+          <div class="trend-c-lbl">Média de atraso</div>
+          <div class="trend-c-val">1h13</div>
+          <div class="trend-c-prev">Sem. anterior: 1h22</div>
+          <div class="trend-c-delta good">↓ −9min — melhorou</div>
+        </div>
+        <div class="trend-c">
+          <div class="trend-c-lbl" style="color:var(--purple)">Méd. horas produtivas</div>
+          <div class="trend-c-val" style="color:#7c3aed">7h44</div>
+          <div class="trend-c-prev">Sem. anterior: 7h26</div>
+          <div class="trend-c-delta good">↑ +18min — melhorou</div>
+        </div>
+      </div>
+
+      <!-- Destaques -->
+      <div class="g2" style="margin-bottom:12px">
+        <div class="hl bad">
+          <div class="hl-ico">📉</div>
+          <div class="hl-txt">
+            <strong>Atrasos aumentaram 6.9%</strong>
+            <span>Esta semana: 12 atrasos a mais. Atenção às obras G000388 e C022692.</span>
+          </div>
+        </div>
+        <div class="hl good">
+          <div class="hl-ico">📈</div>
+          <div class="hl-txt">
+            <strong>Minutos improdutivos caíram 7.3%</strong>
+            <span>−1.066 min vs sem. anterior. Destaque positivo: Squad USINAS I e II.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gráfico comparativo -->
+      <div class="g21">
+        <div class="c">
+          <div class="c-head">
+            <span class="c-title">Min. improdutivos — semana atual vs anterior (por dia)</span>
+            <span class="c-badge">por dia</span>
+          </div>
+          <div style="display:flex;gap:14px;margin-bottom:8px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b">
+              <div style="width:14px;height:4px;background:rgba(0,156,222,.7);border-radius:2px"></div>Sem. atual (16–22/jun)
+            </div>
+            <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b">
+              <div style="width:14px;height:4px;background:rgba(203,213,225,.7);border-radius:2px"></div>Sem. anterior (09–15/jun)
+            </div>
+          </div>
+          <div class="evo-wrap"><canvas id="chartComp"></canvas></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <!-- Taxa semanal histórica -->
+          <div class="c">
+            <div class="c-head" style="margin-bottom:8px">
+              <span class="c-title">Taxa improdutiva — últimas 4 semanas</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:11px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="color:var(--muted)">Sem. 22 (26/mai)</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div style="width:70px;background:#f1f5f9;border-radius:3px;height:5px"><div style="background:#ef4444;width:85%;height:5px;border-radius:3px"></div></div>
+                  <strong style="color:#dc2626;width:26px">17%</strong>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="color:var(--muted)">Sem. 23 (02/jun)</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div style="width:70px;background:#f1f5f9;border-radius:3px;height:5px"><div style="background:#f59e0b;width:70%;height:5px;border-radius:3px"></div></div>
+                  <strong style="color:#d97706;width:26px">14%</strong>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="color:var(--muted)">Sem. 24 (09/jun)</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div style="width:70px;background:#f1f5f9;border-radius:3px;height:5px"><div style="background:#f59e0b;width:65%;height:5px;border-radius:3px"></div></div>
+                  <strong style="color:#d97706;width:26px">13%</strong>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-weight:700;color:var(--sb)">Sem. 25 ← atual</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div style="width:70px;background:#f1f5f9;border-radius:3px;height:5px"><div style="background:#10b981;width:60%;height:5px;border-radius:3px"></div></div>
+                  <strong style="color:#16a34a;width:26px">12%</strong>
+                </div>
+              </div>
+              <div style="padding:6px 10px;background:#f0fdf4;border-radius:6px;font-size:10px;color:#16a34a;font-weight:600;text-align:center;margin-top:4px">
+                ↓ Tendência de melhora: −5pp em 4 semanas
+              </div>
+            </div>
+          </div>
+          <!-- Média produtiva por squad -->
+          <div class="c">
+            <div class="c-head" style="margin-bottom:8px">
+              <span class="c-title">Méd. horas produtivas/squad <span class="new-pill">NOVO</span></span>
+            </div>
+            <div class="media-squad">
+              <div class="ms-row ok"><span>USINAS I e II</span><strong style="color:#16a34a">8h22</strong></div>
+              <div class="ms-row ok"><span>SLB III</span><strong style="color:#16a34a">8h05</strong></div>
+              <div class="ms-row" style="background:#f8fafc"><span>CPF</span><strong style="color:var(--sb)">7h44</strong></div>
+              <div class="ms-row" style="background:#f8fafc"><span>BR I, II, III</span><strong style="color:var(--sb)">7h31</strong></div>
+              <div class="ms-row warn"><span>PAULO FONTELES</span><strong style="color:#d97706">6h48</strong></div>
+              <div class="ms-row bad"><span>GEOTECNIA</span><strong style="color:#dc2626">5h00</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /tab-evo -->
+
+    <!-- ═══════════════ TAB: REGISTROS ═══════════════ -->
+    <div id="tab-reg" style="display:none">
+      <div class="c">
+        <div class="c-head">
+          <div>
+            <div class="c-title">Registros de chegada</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">187 atrasos registrados · <span style="color:#16a34a;font-weight:700">43 justificados</span> · <span style="color:var(--muted)">144 pendentes</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="new-pill" style="font-size:10px;padding:2px 8px">Coluna Justificativa NOVA</span>
+            <span class="c-badge">208 registros</span>
+          </div>
+        </div>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Empresa</th>
+                <th>Obra (SAP)</th>
+                <th>Squad / Líder</th>
+                <th style="text-align:center">Chegada</th>
+                <th style="text-align:center">PTS</th>
+                <th style="text-align:center">Término</th>
+                <th style="text-align:center">Atraso</th>
+                <th style="text-align:center">Status</th>
+                <th>Justificativa <span class="new-pill">NOVO</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>20/06/2026</td>
+                <td>TOP ANDAIMES LOCAÇÕES</td>
+                <td>C022692</td>
+                <td style="color:var(--muted)">CPF · SILVA</td>
+                <td style="text-align:center;font-weight:700">08:47</td>
+                <td style="text-align:center">09:12</td>
+                <td style="text-align:center">17:00</td>
+                <td style="text-align:center;font-weight:700;color:#d97706">47 min</td>
+                <td style="text-align:center"><span class="tbadge leve">Leve</span></td>
+                <td>
+                  <div class="just-done">
+                    <div class="just-done-pill">✓ Justificado</div>
+                    <div class="just-done-txt">Trânsito na BR-422 — acidente km 18</div>
+                  </div>
+                </td>
+              </tr>
+              <tr style="background:#fef9f9">
+                <td>20/06/2026</td>
+                <td>REDE MONTAGENS ELETROMEC.</td>
+                <td>G000388.02.03</td>
+                <td style="color:var(--muted)">GEOTECNIA · SOUSA</td>
+                <td style="text-align:center;font-weight:700;color:#dc2626">09:34</td>
+                <td style="text-align:center">09:34</td>
+                <td style="text-align:center">17:00</td>
+                <td style="text-align:center;font-weight:700;color:#dc2626">1h34</td>
+                <td style="text-align:center"><span class="tbadge grave">Grave</span></td>
+                <td><button class="just-btn" onclick="document.getElementById('modal-just').style.display='flex'">+ Justificar</button></td>
+              </tr>
+              <tr>
+                <td>20/06/2026</td>
+                <td>LUK ENGENHARIA PROJETOS</td>
+                <td>C022635.02</td>
+                <td style="color:var(--muted)">SLB III · LIMA</td>
+                <td style="text-align:center;font-weight:700;color:#d97706">08:22</td>
+                <td style="text-align:center">08:22</td>
+                <td style="text-align:center">17:00</td>
+                <td style="text-align:center;font-weight:700;color:#d97706">22 min</td>
+                <td style="text-align:center"><span class="tbadge leve">Leve</span></td>
+                <td><button class="just-btn" onclick="document.getElementById('modal-just').style.display='flex'">+ Justificar</button></td>
+              </tr>
+              <tr>
+                <td>19/06/2026</td>
+                <td>PLANGECON MANUTENÇÃO</td>
+                <td>C022651.01.02</td>
+                <td style="color:var(--muted)">BR I, II, III</td>
+                <td style="text-align:center;font-weight:700;color:#16a34a">07:58</td>
+                <td style="text-align:center">07:58</td>
+                <td style="text-align:center">17:00</td>
+                <td style="text-align:center;color:var(--muted)">—</td>
+                <td style="text-align:center"><span class="tbadge ok">No prazo</span></td>
+                <td style="color:var(--muted);font-size:10px">— sem atraso</td>
+              </tr>
+              <tr style="background:#fef9f9">
+                <td>19/06/2026</td>
+                <td>CBSI COMPANHIA BRASILEIRA</td>
+                <td>1370401.03</td>
+                <td style="color:var(--muted)">PAULO FONTELES</td>
+                <td style="text-align:center;font-weight:700;color:#dc2626">10:15</td>
+                <td style="text-align:center">10:15</td>
+                <td style="text-align:center">17:00</td>
+                <td style="text-align:center;font-weight:700;color:#dc2626">2h15</td>
+                <td style="text-align:center"><span class="tbadge grave">Grave</span></td>
+                <td>
+                  <div class="just-done">
+                    <div class="just-done-pill">✓ Justificado</div>
+                    <div class="just-done-txt">Ônibus da empresa quebrou na estrada</div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Progress justificativas -->
+        <div class="prog-row">
+          <div class="prog-meta">
+            <span>Progresso das justificativas de atraso</span>
+            <span style="font-weight:700;color:var(--sb)">43 / 187 — 23%</span>
+          </div>
+          <div class="prog-bar"><div class="prog-fill" style="width:23%"></div></div>
+        </div>
+      </div>
+
+      <!-- Resumo motivos -->
+      <div class="g2" style="margin-top:12px">
+        <div class="c">
+          <div class="c-head" style="margin-bottom:10px">
+            <span class="c-title">Motivos mais frequentes <span class="new-pill">NOVO</span></span>
+            <span class="c-badge">43 justificados</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0">
+            <div class="motivo-row">
+              <span class="motivo-lbl">Trânsito / transporte</span>
+              <div class="motivo-bar-wrap"><div class="motivo-bar" style="width:42%"></div></div>
+              <span class="motivo-qty">18</span>
+            </div>
+            <div class="motivo-row">
+              <span class="motivo-lbl">Problema no canteiro</span>
+              <div class="motivo-bar-wrap"><div class="motivo-bar" style="width:26%"></div></div>
+              <span class="motivo-qty">11</span>
+            </div>
+            <div class="motivo-row">
+              <span class="motivo-lbl">Autorização pendente</span>
+              <div class="motivo-bar-wrap"><div class="motivo-bar" style="width:19%"></div></div>
+              <span class="motivo-qty">8</span>
+            </div>
+            <div class="motivo-row">
+              <span class="motivo-lbl">Saúde / pessoal</span>
+              <div class="motivo-bar-wrap"><div class="motivo-bar" style="width:14%"></div></div>
+              <span class="motivo-qty">6</span>
+            </div>
+          </div>
+        </div>
+        <div class="c">
+          <div class="c-head" style="margin-bottom:10px">
+            <span class="c-title">Atrasos sem justificativa <span class="new-pill" style="background:#f59e0b">PENDENTE</span></span>
+            <span class="c-badge" style="color:#d97706;border-color:#fde68a">144 pendentes</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Registros graves (>1h) que ainda precisam de justificativa:</div>
+          <div style="display:flex;flex-direction:column;gap:5px;font-size:11px">
+            <div style="display:flex;justify-content:space-between;padding:5px 8px;background:#fef2f2;border-radius:6px"><span>REDE MONTAGENS · G000388</span><span style="color:#dc2626;font-weight:700">1h34</span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 8px;background:#fef2f2;border-radius:6px"><span>LUK ENGENHARIA · C022692</span><span style="color:#dc2626;font-weight:700">2h05</span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 8px;background:#fef2f2;border-radius:6px"><span>NPE SERVICE · 1370401</span><span style="color:#dc2626;font-weight:700">1h18</span></div>
+            <div style="text-align:center;font-size:10px;color:var(--muted);padding-top:4px">+ 141 outros pendentes</div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /tab-reg -->
+
+    <!-- TAB DASH (placeholder) -->
+    <div id="tab-dash" style="display:none">
+      <div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">
+        Dashboard original com os gráficos existentes (não alterado neste preview)
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- MODAL JUSTIFICATIVA -->
+<div id="modal-just" class="modal-overlay" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal">
+    <h3>Justificar atraso</h3>
+    <div class="modal-meta">
+      JOÃO PEREIRA · G000388.02.03 · 20/06/2026 · <strong style="color:#dc2626">Atraso: 1h34 — Grave</strong>
+    </div>
+
+    <div class="fg">
+      <label>Categoria do motivo</label>
+      <select>
+        <option value="">Selecione o motivo...</option>
+        <option>Trânsito / problema no transporte</option>
+        <option>Problema de saúde / pessoal</option>
+        <option>Problema no canteiro / obra</option>
+        <option>Integração / treinamento obrigatório</option>
+        <option>Autorização pendente (SAP / NR)</option>
+        <option>Falha na escala / comunicação</option>
+        <option>Caso fortuito / força maior</option>
+        <option>Outro</option>
+      </select>
+    </div>
+
+    <div class="fg">
+      <label>Descrição detalhada</label>
+      <textarea placeholder="Descreva o que aconteceu e por que o trabalhador chegou com atraso..."></textarea>
+    </div>
+
+    <div class="fg">
+      <label>Registrado por</label>
+      <select>
+        <option>Thiago Mendes (você)</option>
+        <option>Fiscal da obra</option>
+        <option>Líder do squad</option>
+      </select>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-m sec" onclick="document.getElementById('modal-just').style.display='none'">Cancelar</button>
+      <button class="btn-m prim" onclick="document.getElementById('modal-just').style.display='none'">✓ Salvar justificativa</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(id) {
+  ['evo','reg','dash'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t===id ? '' : 'none';
+    const el = document.getElementById('t-'+t);
+    if(el){
+      el.classList.toggle('active', t===id);
+      el.classList.toggle('evo', t===id && id==='evo');
+    }
+  });
+}
+
+// Gráfico comparativo semanas
+const ctx = document.getElementById('chartComp').getContext('2d');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: ['Seg 16/06','Ter 17/06','Qua 18/06','Qui 19/06','Sex 20/06','Sáb 21/06'],
+    datasets: [
+      {
+        label: 'Sem. atual',
+        data: [2520, 3180, 1488, 2640, 1548, 372],
+        backgroundColor: 'rgba(0,156,222,0.75)',
+        borderRadius: 3,
+        borderSkipped: false,
+      },
+      {
+        label: 'Sem. anterior',
+        data: [2700, 3500, 2100, 2900, 2400, 480],
+        backgroundColor: 'rgba(203,213,225,0.7)',
+        borderRadius: 3,
+        borderSkipped: false,
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend:{display:false},
+      tooltip:{
+        callbacks:{
+          label: c => ` ${c.dataset.label}: ${Math.round(c.raw/60*10)/10}h`
+        }
+      }
+    },
+    scales: {
+      y:{ticks:{callback:v=>Math.round(v/60)+'h',font:{size:10}},grid:{color:'#f1f5f9'}},
+      x:{grid:{display:false},ticks:{font:{size:10}}}
+    }
+  }
+});
+</script>
+</body>
+</html>
