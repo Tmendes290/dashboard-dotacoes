@@ -1,11 +1,15 @@
 const express = require('express');
 const path = require('path');
+const compression = require('compression');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const SUPA_URL = 'https://ehbiyqqpzqrluvuqrljp.supabase.co';
 const SUPA_SERVICE_KEY = process.env.SUPA_SERVICE_KEY;
+
+// Gzip compression — reduz o index.html de ~1.2MB para ~150KB
+app.use(compression());
 
 // Parse JSON bodies up to 50MB (medido data can be large)
 app.use(express.json({ limit: '50mb' }));
