@@ -7829,7 +7829,23 @@ function impOnMs(id){
   if(id==='ms-imp-emp'){IMP_F_EMPS=sel;updateMsLabel(id,sel,'Todas');}
   if(id==='ms-imp-sap'){IMP_F_SAPS=sel;updateMsLabel(id,sel,'Todas');}
   if(id==='ms-imp-squad'){IMP_F_SQUADS=sel;updateMsLabel(id,sel,'Todos');}
-  if(id==='ms-imp-mes'){IMP_F_MES=sel;updateMsLabel(id,sel);}
+  if(id==='ms-imp-mes'){
+    IMP_F_MES=sel; updateMsLabel(id,sel);
+    // Ao mudar mês, reconstruir semanas filtrando pelo(s) mês(es) selecionado(s)
+    var ySem=new Date().getFullYear();
+    var mesIdxSel=IMP_F_MES.map(function(n){return _IMP_MES_NAMES.indexOf(n);});
+    var weeksToShow=[];
+    for(var wi=1;wi<=52;wi++){
+      var mon=_impISOMonday(wi,ySem);
+      var show=false;
+      if(!mesIdxSel.length){show=true;}
+      else{for(var di=0;di<7;di++){var day=new Date(mon);day.setDate(mon.getDate()+di);if(mesIdxSel.indexOf(day.getMonth())>=0){show=true;break;}}}
+      if(show)weeksToShow.push(wi);
+    }
+    // Limpa seleção de semanas que não pertencem mais ao mês filtrado
+    IMP_F_SEMANA_MS=IMP_F_SEMANA_MS.filter(function(s){return weeksToShow.indexOf(parseInt(s.replace('Sem.','')))>=0;});
+    buildMsDropKV('ms-imp-semana',weeksToShow.map(function(w){var mon=_impISOMonday(w,ySem);var fri=new Date(mon);fri.setDate(mon.getDate()+4);return{value:'Sem.'+w,label:'Sem.'+w+' — '+_impFmt2(mon)+' a '+_impFmt2(fri)};}),IMP_F_SEMANA_MS,'impOnMs');
+  }
   if(id==='ms-imp-semana'){IMP_F_SEMANA_MS=sel;updateMsLabel(id,sel);}
   if(id==='ms-imp-dias'){IMP_F_DIAS=sel;updateMsLabel(id,sel);}
   impApplyFilters();
