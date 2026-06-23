@@ -5891,13 +5891,16 @@ async function renderUsuarios(){
     var result = await supa.from('perfis').select('*').order('criado_em', {ascending: true});
     if(result.error) throw result.error;
     var usuarios = result.data || [];
-    renderUsuariosHTML(el, usuarios);
+    var bloqResult = await supa.from('emails_excluidos').select('email, excluido_em').order('excluido_em', {ascending: false});
+    var bloqueados = (bloqResult.data || []);
+    renderUsuariosHTML(el, usuarios, bloqueados);
   } catch(e) {
     el.innerHTML = '<div style="padding:24px;color:red">Erro ao carregar usuários: ' + e.message + '</div>';
   }
 }
 
-function renderUsuariosHTML(el, usuarios){
+function renderUsuariosHTML(el, usuarios, bloqueados){
+  bloqueados = bloqueados || [];
   var SQUADS = ['USINAS I E II','BRT+FILTRAGEM','GEOTECNIA','MINA','SLB III','CPF','BARRAGEM E DIQUES','PAULO FONTELES','IGARAPÉ BAHIA'];
   var roleLabels = {admin:'Administrador', lider:'Líder', planejador:'Planejador'};
   var roleColors = {admin:'#002F6C', lider:'#007E7A', planejador:'#3CB5E5'};
@@ -5988,6 +5991,25 @@ function renderUsuariosHTML(el, usuarios){
 
   html += '</div>';
 
+  // E-mails bloqueados
+  html += '<div style="margin-top:20px;background:#fff5f5;border:1px solid #fecaca;border-radius:10px;padding:16px">';
+  html += '<div style="font-size:13px;font-weight:700;color:#dc2626;margin-bottom:8px">🚫 E-mails bloqueados (' + bloqueados.length + ')</div>';
+  if(!bloqueados.length){
+    html += '<div style="font-size:12px;color:#94a3b8">Nenhum e-mail bloqueado.</div>';
+  } else {
+    html += '<div style="display:flex;flex-direction:column;gap:6px">';
+    bloqueados.forEach(function(b){
+      var dataStr = b.excluido_em ? new Date(b.excluido_em).toLocaleDateString('pt-BR') : '—';
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #fecaca;border-radius:6px;padding:8px 12px">';
+      html += '<div><div style="font-size:12px;font-weight:600;color:#1e293b">' + b.email + '</div>';
+      html += '<div style="font-size:10px;color:#94a3b8">Excluído em: ' + dataStr + '</div></div>';
+      html += '<button data-email="' + b.email + '" onclick="reabilitarEmail(this.dataset.email)" style="font-size:11px;padding:4px 12px;border-radius:6px;border:1px solid #bbf7d0;background:#f0fdf4;cursor:pointer;font-family:inherit;color:#16a34a;font-weight:600">Reabilitar</button>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
   // Convite
   html += '<div style="margin-top:20px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:16px">';
   html += '<div style="font-size:13px;font-weight:700;color:#0369a1;margin-bottom:6px">&#128232; Convidar novo usuário</div>';
@@ -6064,6 +6086,15 @@ async function excluirUsuarioReal(userId, email){
   }
 }
 
+
+async function reabilitarEmail(email){
+  if(!supa) return;
+  if(!confirm('Reabilitar ' + email + '?\n\nEsta pessoa poderá criar uma nova conta com este e-mail.')) return;
+  var res = await supa.from('emails_excluidos').delete().eq('email', email);
+  if(res.error){ toast('Erro ao reabilitar: ' + res.error.message, 'red'); return; }
+  toast('✔ E-mail reabilitado! ' + email + ' pode se cadastrar novamente.', 'green');
+  renderUsuarios();
+}
 
 // ── ANALYTICS ─────────────────────────────────────────────────────
 function renderAnalytics(){
