@@ -324,12 +324,11 @@ tr:hover td{background:#f8fbff}
     <div class="imp-tabs">
       <div class="imp-tab" id="t-dash" onclick="showTab('dash')">📊 Dashboard</div>
       <div class="imp-tab" id="t-reg" onclick="showTab('reg')">Registros</div>
-      <div class="imp-tab" id="t-emp" onclick="showTab('emp')" style="color:var(--muted)">Por Empresa</div>
-      <div class="imp-tab" style="color:var(--muted)">Por Obra</div>
-      <div class="imp-tab" style="color:var(--muted)">Por Squad</div>
-      <!-- NOVA ABA -->
+      <div class="imp-tab" id="t-emp" onclick="showTab('emp')">Por Empresa</div>
+      <div class="imp-tab" id="t-obra" onclick="showTab('obra')">Por Obra</div>
+      <div class="imp-tab" id="t-squad" onclick="showTab('squad')">Por Squad</div>
       <div class="imp-tab evo active" id="t-evo" onclick="showTab('evo')">📈 Evolução <span class="new-pill">NOVO</span></div>
-      <div class="imp-tab" style="color:var(--muted)">📅 RDO Diário</div>
+      <div class="imp-tab" id="t-rdo" onclick="showTab('rdo')">📅 RDO Diário</div>
     </div>
 
     <!-- ═══════════════ TAB: EVOLUÇÃO ═══════════════ -->
@@ -633,10 +632,162 @@ tr:hover td{background:#f8fbff}
       </div>
     </div><!-- /tab-reg -->
 
-    <!-- TAB DASH (placeholder) -->
+    <!-- ═══════════════ TAB: DASHBOARD ═══════════════ -->
     <div id="tab-dash" style="display:none">
-      <div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">
-        Dashboard original com os gráficos existentes (não alterado neste preview)
+      <div class="g21">
+        <div class="c">
+          <div class="c-head"><span class="c-title">Top obras (SAP) — minutos improdutivos</span><span class="c-badge">10 obras</span></div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Clique em uma barra para filtrar</div>
+          <div style="position:relative;height:220px"><canvas id="chartObras"></canvas></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="c">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Média de atraso</div>
+            <div style="font-size:28px;font-weight:800;color:#b91c1c;line-height:1.1">1h13</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">por registro com atraso</div>
+            <div><span class="delta dn-good">↓ −9min</span></div>
+            <div class="delta-vs">vs sem. anterior (1h22)</div>
+          </div>
+          <div class="c">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Média horas produtivas</div>
+            <div style="font-size:28px;font-weight:800;color:#7c3aed;line-height:1.1">7h44</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">por pessoa/dia na seleção</div>
+            <div><span class="delta up-good">↑ +18min</span></div>
+            <div class="delta-vs">vs sem. anterior (7h26)</div>
+          </div>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="c">
+          <div class="c-head"><span class="c-title">Improdutividade por dia</span><span class="c-badge">8 dias</span></div>
+          <div style="position:relative;height:190px"><canvas id="chartTimeline"></canvas></div>
+        </div>
+        <div class="c">
+          <div class="c-head"><span class="c-title">Distribuição de status</span><span class="c-badge">208 registros</span></div>
+          <div style="position:relative;height:140px;display:flex;align-items:center;justify-content:center"><canvas id="chartStatus"></canvas></div>
+          <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px;font-size:12px">
+            <div style="display:flex;justify-content:space-between"><span style="color:#16a34a">● No prazo</span><strong>21</strong></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#f59e0b">● Leve (≤1h)</span><strong>111</strong></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#ef4444">● Grave (>1h)</span><strong>76</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ TAB: POR EMPRESA ═══════════════ -->
+    <div id="tab-emp" style="display:none">
+      <div class="g2">
+        <div class="c">
+          <div class="c-head"><span class="c-title">Top empresas — minutos improdutivos</span><span class="c-badge">10 empresas</span></div>
+          <div style="position:relative;height:260px"><canvas id="chartEmp"></canvas></div>
+        </div>
+        <div class="c">
+          <div class="c-head"><span class="c-title">Comparativo empresa vs semana anterior <span class="new-pill">NOVO</span></span></div>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:11px">
+            <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:10px;font-weight:700;color:var(--muted)"><span>Empresa</span><span>Atual</span><span>Var.</span></div>
+            <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span>REDE MONTAGENS</span><span style="font-weight:700">4498 min</span><span class="delta up-bad" style="font-size:9px;padding:1px 5px">↑+12%</span></div>
+            <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span>PLANGECON</span><span style="font-weight:700">2852 min</span><span class="delta dn-good" style="font-size:9px;padding:1px 5px">↓−8%</span></div>
+            <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span>TOP ANDAIMES</span><span style="font-weight:700">2245 min</span><span class="delta dn-good" style="font-size:9px;padding:1px 5px">↓−15%</span></div>
+            <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span>LUK ENGENHARIA</span><span style="font-weight:700">1929 min</span><span class="delta up-bad" style="font-size:9px;padding:1px 5px">↑+5%</span></div>
+            <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span>NPE SERVICE</span><span style="font-weight:700">857 min</span><span class="delta dn-good" style="font-size:9px;padding:1px 5px">↓−22%</span></div>
+            <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span>CONSTRUTORA APIA</span><span style="font-weight:700">782 min</span><span class="delta up-bad" style="font-size:9px;padding:1px 5px">↑+3%</span></div>
+            <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:5px 0"><span>TRANSLOCMM</span><span style="font-weight:700">124 min</span><span class="delta dn-good" style="font-size:9px;padding:1px 5px">↓−31%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ TAB: POR OBRA ═══════════════ -->
+    <div id="tab-obra" style="display:none">
+      <div class="c" style="margin-bottom:12px">
+        <div class="c-head"><span class="c-title">Top obras — minutos improdutivos + comparativo <span class="new-pill">NOVO</span></span><span class="c-badge">10 obras</span></div>
+        <div style="position:relative;height:240px"><canvas id="chartObra2"></canvas></div>
+      </div>
+      <div class="g2">
+        <div class="c">
+          <div class="c-head"><span class="c-title">Obras com melhora ↓</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px;font-size:11px">
+            <div style="display:flex;justify-content:space-between;padding:6px 8px;background:#f0fdf4;border-radius:6px"><span>C022635.02 — CR Instalação SPCI</span><span class="delta dn-good" style="font-size:9px;padding:1px 5px">↓−15%</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 8px;background:#f0fdf4;border-radius:6px"><span>C022840 — Implantação Proj. Indv.</span><span class="delta dn-good" style="font-size:9px;padding:1px 5px">↓−22%</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 8px;background:#f0fdf4;border-radius:6px"><span>1370401.03</span><span class="delta dn-good" style="font-size:9px;padding:1px 5px">↓−8%</span></div>
+          </div>
+        </div>
+        <div class="c">
+          <div class="c-head"><span class="c-title">Obras com piora ↑</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px;font-size:11px">
+            <div style="display:flex;justify-content:space-between;padding:6px 8px;background:#fef2f2;border-radius:6px"><span>G000388.02.03 — Coarse Particle</span><span class="delta up-bad" style="font-size:9px;padding:1px 5px">↑+18%</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 8px;background:#fef2f2;border-radius:6px"><span>C022692 — Implantação SPCI</span><span class="delta up-bad" style="font-size:9px;padding:1px 5px">↑+9%</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 8px;background:#fef2f2;border-radius:6px"><span>C022651.01.02 — Calhas Colunas</span><span class="delta up-bad" style="font-size:9px;padding:1px 5px">↑+4%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ TAB: POR SQUAD ═══════════════ -->
+    <div id="tab-squad" style="display:none">
+      <div class="g2">
+        <div class="c">
+          <div class="c-head"><span class="c-title">Por squad — média min. improdutivos/registro</span><span class="c-badge">7 squads</span></div>
+          <div style="position:relative;height:220px"><canvas id="chartSquad"></canvas></div>
+        </div>
+        <div class="c">
+          <div class="c-head"><span class="c-title">Média horas produtivas/squad <span class="new-pill">NOVO</span></span></div>
+          <div class="media-squad">
+            <div class="ms-row ok"><span>USINAS I e II</span><div style="display:flex;align-items:center;gap:8px"><strong style="color:#16a34a">8h22</strong><span class="delta up-good" style="font-size:9px;padding:1px 5px">↑+12min</span></div></div>
+            <div class="ms-row ok"><span>SLB III</span><div style="display:flex;align-items:center;gap:8px"><strong style="color:#16a34a">8h05</strong><span class="delta up-good" style="font-size:9px;padding:1px 5px">↑+8min</span></div></div>
+            <div class="ms-row" style="background:#f8fafc"><span>CPF</span><div style="display:flex;align-items:center;gap:8px"><strong>7h44</strong><span class="delta dn-good" style="font-size:9px;padding:1px 5px">↓−5min</span></div></div>
+            <div class="ms-row" style="background:#f8fafc"><span>BR I, II, III e FILTRAGEM</span><div style="display:flex;align-items:center;gap:8px"><strong>7h31</strong><span class="delta up-good" style="font-size:9px;padding:1px 5px">↑+3min</span></div></div>
+            <div class="ms-row warn"><span>PAULO FONTELES</span><div style="display:flex;align-items:center;gap:8px"><strong style="color:#d97706">6h48</strong><span class="delta dn-bad" style="font-size:9px;padding:1px 5px">↓−14min</span></div></div>
+            <div class="ms-row bad"><span>GEOTECNIA</span><div style="display:flex;align-items:center;gap:8px"><strong style="color:#dc2626">5h00</strong><span class="delta dn-bad" style="font-size:9px;padding:1px 5px">↓−22min</span></div></div>
+            <div class="ms-row" style="background:#f8fafc"><span>MINA</span><div style="display:flex;align-items:center;gap:8px"><strong>7h10</strong><span class="delta up-good" style="font-size:9px;padding:1px 5px">↑+6min</span></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="c" style="margin-top:12px">
+        <div class="c-head"><span class="c-title">Ranking de causas por squad <span class="new-pill">NOVO</span></span></div>
+        <div style="position:relative;height:180px"><canvas id="chartSquadCausa"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ TAB: RDO DIÁRIO ═══════════════ -->
+    <div id="tab-rdo" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--sb)">RDO Diário — 20/06/2026</div>
+          <div style="font-size:11px;color:var(--muted)">Relatório de desempenho do dia</div>
+        </div>
+        <button style="padding:6px 14px;background:var(--sb);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">📄 Exportar PDF</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+        <div class="c" style="text-align:center"><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px">Presentes</div><div style="font-size:24px;font-weight:800;color:var(--sb)">208</div><div style="font-size:10px;color:#16a34a">▲ +23 vs ontem</div></div>
+        <div class="c" style="text-align:center"><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px">Com atraso</div><div style="font-size:24px;font-weight:800;color:#dc2626">187</div><div style="font-size:10px;color:#dc2626">90% do total</div></div>
+        <div class="c" style="text-align:center"><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px">H. Improdutivas</div><div style="font-size:24px;font-weight:800;color:#d97706">226h14</div><div style="font-size:10px;color:#d97706">13.574 min</div></div>
+        <div class="c" style="text-align:center"><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px">H. Produtivas</div><div style="font-size:24px;font-weight:800;color:#16a34a">1613h46</div><div style="font-size:10px;color:#16a34a">88% produtivo</div></div>
+      </div>
+      <div class="g2">
+        <div class="c">
+          <div class="c-head"><span class="c-title">Chegadas por horário</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px;font-size:11px">
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="width:55px;color:var(--muted)">07:00-07:30</span><div style="flex:1;background:#f1f5f9;border-radius:3px;height:6px"><div style="background:#16a34a;width:5%;height:6px;border-radius:3px"></div></div><span style="width:20px;text-align:right;font-weight:700">8</span></div>
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="width:55px;color:var(--muted)">07:30-08:00</span><div style="flex:1;background:#f1f5f9;border-radius:3px;height:6px"><div style="background:#16a34a;width:8%;height:6px;border-radius:3px"></div></div><span style="width:20px;text-align:right;font-weight:700">13</span></div>
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="width:55px;color:#d97706;font-weight:700">08:00-08:30</span><div style="flex:1;background:#f1f5f9;border-radius:3px;height:6px"><div style="background:#f59e0b;width:42%;height:6px;border-radius:3px"></div></div><span style="width:20px;text-align:right;font-weight:700;color:#d97706">72</span></div>
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="width:55px;color:#d97706;font-weight:700">08:30-09:00</span><div style="flex:1;background:#f1f5f9;border-radius:3px;height:6px"><div style="background:#f59e0b;width:35%;height:6px;border-radius:3px"></div></div><span style="width:20px;text-align:right;font-weight:700;color:#d97706">60</span></div>
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="width:55px;color:#dc2626;font-weight:700">09:00-10:00</span><div style="flex:1;background:#f1f5f9;border-radius:3px;height:6px"><div style="background:#ef4444;width:24%;height:6px;border-radius:3px"></div></div><span style="width:20px;text-align:right;font-weight:700;color:#dc2626">41</span></div>
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 0"><span style="width:55px;color:#dc2626;font-weight:700">+10:00</span><div style="flex:1;background:#f1f5f9;border-radius:3px;height:6px"><div style="background:#ef4444;width:8%;height:6px;border-radius:3px"></div></div><span style="width:20px;text-align:right;font-weight:700;color:#dc2626">14</span></div>
+          </div>
+        </div>
+        <div class="c">
+          <div class="c-head"><span class="c-title">Justificativas do dia <span class="new-pill">NOVO</span></span></div>
+          <div style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px"><span>Justificativas registradas</span><span style="font-weight:700;color:var(--sb)">12 / 187</span></div>
+            <div class="prog-bar"><div class="prog-fill" style="width:6%"></div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;font-size:11px">
+            <div style="padding:6px 10px;background:#fef2f2;border-radius:6px;border-left:3px solid #ef4444"><strong>REDE MONTAGENS</strong> — 1h34 de atraso<br><span style="color:var(--muted)">Sem justificativa</span></div>
+            <div style="padding:6px 10px;background:#f0fdf4;border-radius:6px;border-left:3px solid #16a34a"><strong>TOP ANDAIMES</strong> — 47 min<br><span style="color:#16a34a">Trânsito na BR-422</span></div>
+            <div style="padding:6px 10px;background:#fef2f2;border-radius:6px;border-left:3px solid #ef4444"><strong>LUK ENGENHARIA</strong> — 2h05 de atraso<br><span style="color:var(--muted)">Sem justificativa</span></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -688,56 +839,131 @@ tr:hover td{background:#f8fbff}
 </div>
 
 <script>
+const ALL_TABS = ['evo','reg','dash','emp','obra','squad','rdo'];
 function showTab(id) {
-  ['evo','reg','dash'].forEach(t => {
+  ALL_TABS.forEach(t => {
     document.getElementById('tab-'+t).style.display = t===id ? '' : 'none';
     const el = document.getElementById('t-'+t);
     if(el){
       el.classList.toggle('active', t===id);
       el.classList.toggle('evo', t===id && id==='evo');
+      if(t!==id) el.style.color='var(--muted)';
+      else el.style.color='';
     }
+  });
+  if(id==='dash' && !window._chartDashDone) { buildDashCharts(); window._chartDashDone=true; }
+  if(id==='emp'  && !window._chartEmpDone)  { buildEmpChart();  window._chartEmpDone=true; }
+  if(id==='obra' && !window._chartObraDone) { buildObraChart(); window._chartObraDone=true; }
+  if(id==='squad'&& !window._chartSquadDone){ buildSquadCharts(); window._chartSquadDone=true; }
+}
+
+const opts = (yFmt, xFmt) => ({
+  responsive:true, maintainAspectRatio:false,
+  plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.dataset.label||''}: ${yFmt(c.raw)}`}}},
+  scales:{y:{ticks:{callback:yFmt,font:{size:10}},grid:{color:'#f1f5f9'}},x:{grid:{display:false},ticks:{font:{size:10}}}}
+});
+const hBar = (yFmt) => ({
+  responsive:true, maintainAspectRatio:false,
+  indexAxis:'y',
+  plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${yFmt(c.raw)}`}}},
+  scales:{x:{ticks:{callback:yFmt,font:{size:10}},grid:{color:'#f1f5f9'}},y:{grid:{display:false},ticks:{font:{size:10}}}}
+});
+
+// ── Evolução comparativo ──
+new Chart(document.getElementById('chartComp').getContext('2d'), {
+  type:'bar',
+  data:{
+    labels:['Seg 16/06','Ter 17/06','Qua 18/06','Qui 19/06','Sex 20/06','Sáb 21/06'],
+    datasets:[
+      {label:'Sem. atual',   data:[2520,3180,1488,2640,1548,372], backgroundColor:'rgba(0,156,222,.75)',borderRadius:3,borderSkipped:false},
+      {label:'Sem. anterior',data:[2700,3500,2100,2900,2400,480], backgroundColor:'rgba(203,213,225,.7)',borderRadius:3,borderSkipped:false}
+    ]
+  },
+  options: opts(v=>Math.round(v/60)+'h', v=>v)
+});
+
+// ── Dashboard charts (lazy) ──
+function buildDashCharts(){
+  // Top obras
+  new Chart(document.getElementById('chartObras').getContext('2d'), {
+    type:'bar', indexAxis:'y',
+    data:{
+      labels:['G000388.02.03','C022692','C022635.02','C022651.01.02','1370401.03','C022840','C011725','1370401.01','C022783.01.19','1370270.02'],
+      datasets:[{data:[2940,2430,1968,1080,612,612,576,516,498,324],backgroundColor:'rgba(0,156,222,.7)',borderRadius:3,borderSkipped:false}]
+    },
+    options: hBar(v=>Math.round(v/60*10)/10+'h')
+  });
+  // Timeline
+  new Chart(document.getElementById('chartTimeline').getContext('2d'), {
+    type:'bar',
+    data:{
+      labels:['13/06','15/06','16/06','17/06','18/06','19/06','20/06','22/06'],
+      datasets:[
+        {label:'Min. improdutivos',data:[52,2700,2670,3180,1776,1488,1548,1476],backgroundColor:'rgba(249,115,22,.7)',borderRadius:3,yAxisID:'y'},
+        {type:'line',label:'Qtd. atrasos',data:[2,22,44.5,53.1,29.6,24.8,42.6,24.6],borderColor:'#009CDE',borderWidth:2,pointBackgroundColor:'#009CDE',pointRadius:4,tension:.4,yAxisID:'y2',fill:false}
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>v+'min',font:{size:9}},grid:{color:'#f1f5f9'}},y2:{position:'right',ticks:{font:{size:9}},grid:{display:false}},x:{grid:{display:false},ticks:{font:{size:9}}}}}
+  });
+  // Status donut
+  new Chart(document.getElementById('chartStatus').getContext('2d'), {
+    type:'doughnut',
+    data:{labels:['No prazo','Leve (≤1h)','Grave (>1h)'],datasets:[{data:[21,111,76],backgroundColor:['#10b981','#f59e0b','#ef4444'],borderWidth:2,borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.label}: ${c.raw}`}}}}
   });
 }
 
-// Gráfico comparativo semanas
-const ctx = document.getElementById('chartComp').getContext('2d');
-new Chart(ctx, {
-  type: 'bar',
-  data: {
-    labels: ['Seg 16/06','Ter 17/06','Qua 18/06','Qui 19/06','Sex 20/06','Sáb 21/06'],
-    datasets: [
-      {
-        label: 'Sem. atual',
-        data: [2520, 3180, 1488, 2640, 1548, 372],
-        backgroundColor: 'rgba(0,156,222,0.75)',
-        borderRadius: 3,
-        borderSkipped: false,
-      },
-      {
-        label: 'Sem. anterior',
-        data: [2700, 3500, 2100, 2900, 2400, 480],
-        backgroundColor: 'rgba(203,213,225,0.7)',
-        borderRadius: 3,
-        borderSkipped: false,
-      }
-    ]
-  },
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    plugins: {
-      legend:{display:false},
-      tooltip:{
-        callbacks:{
-          label: c => ` ${c.dataset.label}: ${Math.round(c.raw/60*10)/10}h`
-        }
-      }
+// ── Por Empresa chart (lazy) ──
+function buildEmpChart(){
+  new Chart(document.getElementById('chartEmp').getContext('2d'), {
+    type:'bar', indexAxis:'y',
+    data:{
+      labels:['REDE MONTAGENS','PLANGECON','TOP ANDAIMES','LUK ENGENHARIA','NPE SERVICE','CONSTRUTORA APIA','TRANSLOCMM','LYON ENGENHARIA','MGA','CBSI'],
+      datasets:[{data:[4498,2852,2245,1929,857,782,124,120,80,70],backgroundColor:'rgba(0,156,222,.7)',borderRadius:3,borderSkipped:false}]
     },
-    scales: {
-      y:{ticks:{callback:v=>Math.round(v/60)+'h',font:{size:10}},grid:{color:'#f1f5f9'}},
-      x:{grid:{display:false},ticks:{font:{size:10}}}
-    }
-  }
-});
+    options: hBar(v=>v+' min')
+  });
+}
+
+// ── Por Obra chart (lazy) ──
+function buildObraChart(){
+  new Chart(document.getElementById('chartObra2').getContext('2d'), {
+    type:'bar', indexAxis:'y',
+    data:{
+      labels:['G000388.02.03','C022692','C022635.02','C022651.01.02','1370401.03','C022840','C011725','1370401.01','C022783.01.19','1370270.02'],
+      datasets:[
+        {label:'Atual',    data:[2940,2430,1968,1080,612,612,576,516,498,324],backgroundColor:'rgba(0,156,222,.75)',borderRadius:3,borderSkipped:false},
+        {label:'Anterior', data:[2490,2232,2322, 984,720,798,660,594,516,360],backgroundColor:'rgba(203,213,225,.7)',borderRadius:3,borderSkipped:false}
+      ]
+    },
+    options:{...hBar(v=>Math.round(v/60*10)/10+'h'), plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${Math.round(c.raw/60*10)/10}h`}}}}
+  });
+}
+
+// ── Por Squad charts (lazy) ──
+function buildSquadCharts(){
+  new Chart(document.getElementById('chartSquad').getContext('2d'), {
+    type:'bar', indexAxis:'y',
+    data:{
+      labels:['GEOTECNIA','CPF','USINAS I E II','SLB III','BR I, II, III E FILTRAGEM','PAULO FONTELES','MINA'],
+      datasets:[{data:[300,122,85,61,60,33,22],backgroundColor:'rgba(139,92,246,.7)',borderRadius:3,borderSkipped:false}]
+    },
+    options: hBar(v=>v+' min')
+  });
+  new Chart(document.getElementById('chartSquadCausa').getContext('2d'), {
+    type:'bar',
+    data:{
+      labels:['GEOTECNIA','CPF','USINAS I E II','SLB III','BR I, II, III','PAULO FONTELES','MINA'],
+      datasets:[
+        {label:'Trânsito',   data:[120,50,30,20,25,10,8], backgroundColor:'rgba(0,156,222,.8)',  borderRadius:3,borderSkipped:false},
+        {label:'Canteiro',   data:[80, 40,25,15,20,12,6], backgroundColor:'rgba(249,115,22,.7)', borderRadius:3,borderSkipped:false},
+        {label:'Autorização',data:[60, 20,18,14,10,8,5],  backgroundColor:'rgba(139,92,246,.7)', borderRadius:3,borderSkipped:false},
+        {label:'Pessoal',    data:[40, 12,12,12,5,3,3],   backgroundColor:'rgba(245,158,11,.7)', borderRadius:3,borderSkipped:false}
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10}}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},y:{stacked:true,ticks:{font:{size:10}},grid:{color:'#f1f5f9'}}}}
+  });
+}
 </script>
 </body>
 </html>
