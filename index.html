@@ -7231,12 +7231,14 @@ function handleMateriaisUpload(file){
         var sqInfo = (pepCode && typeof getSquadInfo === 'function') ? getSquadInfo(pepCode) : {squad:'',lider:'',planejador:''};
         var pepRef = (pepCode && typeof REF_PEPS !== 'undefined') ? REF_PEPS.find(function(p){ return p[0]===pepCode; }) : null;
         var projetoLabel = pepRef ? pepCode+' — '+pepRef[1] : (projetoRaw||pepCode);
-        var desc = String(mx['Texto breve']||mx['Texto do Item']||mx['Material']||'').trim();
+        var escopoGeral = String(mx['Escopo Geral']||'').trim();
+        // Inclui Escopo Geral no projetoRaw para aparecer abaixo do PEP na coluna Projeto
+        var projetoRawMx = escopoGeral ? (pepCode + ' - ' + escopoGeral) : projetoRaw;
         merged.push({
-          pedido:'', rc:rc, projeto:projetoLabel, projetoRaw:projetoRaw,
-          descricao:desc, qtde:mx['Qtd.solicitada (RC)']||'', unMedida:String(mx['Un. (RC)']||'').trim(),
+          pedido:'', rc:rc, projeto:projetoLabel, projetoRaw:projetoRawMx,
+          descricao:escopoGeral, qtde:mx['Qtd.solicitada (RC)']||'', unMedida:String(mx['Un. (RC)']||'').trim(),
           fornecedor:String(mx['Nome do fornecedor']||'').trim(), situacao:'RC sem pedido',
-          prevEntrega:fmtMatDate(mx['Previsão Entrega']), dataRemessa:'', dataFaturamento:'',
+          prevEntrega:fmtMatDate(mx['Data da solicitação (RC)']), dataRemessa:'', dataFaturamento:'',
           valorUni:mx['Preço avaliação (RC)']||0, valorTotal:mx['Valor total (RC)']||0, observacao:'', comentario:'',
           pep:pepCode, squad:sqInfo.squad||'', lider:sqInfo.lider||'',
           planejador:sqInfo.planejador||'', idFerramenta:String(mx['IDFerramenta']||'').trim()
