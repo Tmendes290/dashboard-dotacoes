@@ -7869,13 +7869,12 @@ function impRebuildMs(){setTimeout(impInitFP,0);
   var squads=[...new Set(IMP_DATA.map(function(d){return impGetSquad(d.sap).squad;}).filter(Boolean))].sort();
   buildMsDrop('ms-imp-emp',empresas,IMP_F_EMPS,'impOnMs');
   buildMsDrop('ms-imp-squad',squads,IMP_F_SQUADS,'impOnMs');
-  // MÊS — apenas meses com dados
-  var mesesIdx=[...new Set(IMP_DATA.map(function(d){return d.dataSortKey?parseInt(d.dataSortKey.split('-')[1])-1:null;}).filter(function(m){return m!==null&&!isNaN(m);}))].sort(function(a,b){return a-b;});
-  buildMsDropKV('ms-imp-mes',mesesIdx.map(function(m){return{value:_IMP_MES_NAMES[m],label:_IMP_MES_NAMES[m]};}),IMP_F_MES,'impOnMs');
-  // SEMANA — apenas semanas com dados
+  // MÊS — sempre todos os 12 meses
+  buildMsDropKV('ms-imp-mes',[0,1,2,3,4,5,6,7,8,9,10,11].map(function(m){return{value:_IMP_MES_NAMES[m],label:_IMP_MES_NAMES[m]};}),IMP_F_MES,'impOnMs');
+  // SEMANA — sempre todas as semanas do ano (1-52)
   var y=new Date().getFullYear();
-  var semNums=[...new Set(IMP_DATA.map(function(d){return d.dataSortKey?_impISOWeekNum(d.dataSortKey):null;}).filter(Boolean))].sort(function(a,b){return a-b;});
-  buildMsDropKV('ms-imp-semana',semNums.map(function(w){var mon=_impISOMonday(w,y);var fri=new Date(mon);fri.setDate(mon.getDate()+4);return{value:'Sem.'+w,label:'Sem.'+w+' — '+_impFmt2(mon)+' a '+_impFmt2(fri)};}),IMP_F_SEMANA_MS,'impOnMs');
+  var allWeeks=[];for(var w=1;w<=52;w++)allWeeks.push(w);
+  buildMsDropKV('ms-imp-semana',allWeeks.map(function(w){var mon=_impISOMonday(w,y);var fri=new Date(mon);fri.setDate(mon.getDate()+4);return{value:'Sem.'+w,label:'Sem.'+w+' — '+_impFmt2(mon)+' a '+_impFmt2(fri)};}),IMP_F_SEMANA_MS,'impOnMs');
   // DIAS da semana — estático
   buildMsDropKV('ms-imp-dias',_IMP_DIA_NAMES.map(function(n){return{value:n,label:n};}),IMP_F_DIAS,'impOnMs');
   // SAP dropdown: value = código, label = "CÓDIGO — Nome do PEP"
