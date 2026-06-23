@@ -488,6 +488,57 @@ tr:hover td{background:#f8fbff}
           </div>
         </div>
       </div>
+      <!-- ── EVOLUÇÃO MÉDIA DE CHEGADA (NOVO) ── -->
+      <div class="c" style="margin-top:14px">
+        <div class="c-head">
+          <div>
+            <span class="c-title">Evolução da média de chegada <span class="new-pill">NOVO</span></span>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Quanto mais cedo a chegada, melhor — verde = melhora, vermelho = piora</div>
+          </div>
+          <div class="evo-period" id="chegada-period-btns">
+            <button class="evo-btn" onclick="switchChegada('dia',this)">Por dia</button>
+            <button class="evo-btn active" onclick="switchChegada('semana',this)">Por semana</button>
+            <button class="evo-btn" onclick="switchChegada('mes',this)">Por mês</button>
+          </div>
+        </div>
+
+        <!-- Linha de tendência rápida -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#16a34a;background:#f0fdf4;border:1px solid #bbf7d0;padding:4px 10px;border-radius:20px">
+            ↓ Chegando mais cedo: −8min vs sem. anterior (08:05 → 07:57)
+          </div>
+          <div style="font-size:11px;color:var(--muted)">Meta: chegada média ≤ 08:00</div>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:14px;font-size:11px">
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:3px;background:#009CDE;display:inline-block;border-radius:2px"></span>Média de chegada</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#ef4444;display:inline-block;border-radius:2px;border-top:2px dashed #ef4444"></span>Meta (08:00)</span>
+          </div>
+        </div>
+
+        <div style="position:relative;height:220px"><canvas id="chartChegada"></canvas></div>
+
+        <!-- Tabela resumo abaixo do gráfico -->
+        <div id="chegada-tabela" style="margin-top:14px;overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:11px">
+            <thead>
+              <tr>
+                <th style="background:#f5f9ff;color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:7px 10px;border-bottom:1px solid var(--bord);text-align:left">Semana</th>
+                <th style="background:#f5f9ff;color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:7px 10px;border-bottom:1px solid var(--bord);text-align:center">Período</th>
+                <th style="background:#f5f9ff;color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:7px 10px;border-bottom:1px solid var(--bord);text-align:center">Méd. Chegada</th>
+                <th style="background:#f5f9ff;color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:7px 10px;border-bottom:1px solid var(--bord);text-align:center">Registros</th>
+                <th style="background:#f5f9ff;color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:7px 10px;border-bottom:1px solid var(--bord);text-align:center">Variação</th>
+                <th style="background:#f5f9ff;color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:7px 10px;border-bottom:1px solid var(--bord);text-align:center">Status</th>
+              </tr>
+            </thead>
+            <tbody id="chegada-tbody">
+              <tr><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;font-weight:700;color:var(--sb)">Sem. 21</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center;color:var(--muted)">19–25/mai</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center;font-weight:800;font-size:13px;color:#dc2626">08:21</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center">178</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center;color:var(--muted)">—</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center"><span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">Acima da meta</span></td></tr>
+              <tr><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;font-weight:700;color:var(--sb)">Sem. 22</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center;color:var(--muted)">26/mai–01/jun</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center;font-weight:800;font-size:13px;color:#dc2626">08:18</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center">192</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center"><span style="color:#16a34a;font-weight:700">↓ −3min</span></td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center"><span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">Acima da meta</span></td></tr>
+              <tr><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;font-weight:700;color:var(--sb)">Sem. 23</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center;color:var(--muted)">02–08/jun</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center;font-weight:800;font-size:13px;color:#d97706">08:13</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center">205</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center"><span style="color:#16a34a;font-weight:700">↓ −5min</span></td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center"><span style="background:#fef3c7;color:#d97706;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">Acima da meta</span></td></tr>
+              <tr><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;font-weight:700;color:var(--sb)">Sem. 24</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center;color:var(--muted)">09–15/jun</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center;font-weight:800;font-size:13px;color:#d97706">08:05</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center">215</td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center"><span style="color:#16a34a;font-weight:700">↓ −8min</span></td><td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center"><span style="background:#fef3c7;color:#d97706;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">Quase na meta</span></td></tr>
+              <tr style="background:#f0f9ff"><td style="padding:7px 10px;font-weight:800;color:var(--sb)">Sem. 25 ← atual</td><td style="padding:7px 10px;text-align:center;color:var(--muted)">16–22/jun</td><td style="padding:7px 10px;text-align:center;font-weight:800;font-size:13px;color:#16a34a">07:57</td><td style="padding:7px 10px;text-align:center">208</td><td style="padding:7px 10px;text-align:center"><span style="color:#16a34a;font-weight:700">↓ −8min</span></td><td style="padding:7px 10px;text-align:center"><span style="background:#f0fdf4;color:#16a34a;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">✓ Dentro da meta</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div><!-- /tab-evo -->
 
     <!-- ═══════════════ TAB: REGISTROS ═══════════════ -->
@@ -945,6 +996,97 @@ const hBar = (yFmt) => ({
   plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${yFmt(c.raw)}`}}},
   scales:{x:{ticks:{callback:yFmt,font:{size:10}},grid:{color:'#f1f5f9'}},y:{grid:{display:false},ticks:{font:{size:10}}}}
 });
+
+// ── Dados de média de chegada ──
+const CHEGADA_DATA = {
+  semana: {
+    labels: ['Sem. 21\n19/mai', 'Sem. 22\n26/mai', 'Sem. 23\n02/jun', 'Sem. 24\n09/jun', 'Sem. 25\n16/jun ←'],
+    values: [501, 498, 493, 485, 477], // minutos desde meia-noite: 08:21=501, 08:18=498...
+    display:['08:21','08:18','08:13','08:05','07:57'],
+    regs:   [178, 192, 205, 215, 208]
+  },
+  dia: {
+    labels: ['Seg 16','Ter 17','Qua 18','Qui 19','Sex 20','Sáb 21','Dom 22'],
+    values: [485, 490, 478, 482, 470, 465, 468],
+    display:['08:05','08:10','07:58','08:02','07:50','07:45','07:48'],
+    regs:   [42, 38, 35, 40, 33, 12, 8]
+  },
+  mes: {
+    labels: ['Jan','Fev','Mar','Abr','Mai','Jun'],
+    values: [525, 520, 515, 510, 500, 482],
+    display:['08:45','08:40','08:35','08:30','08:20','08:02'],
+    regs:   [620, 580, 610, 595, 840, 415]
+  }
+};
+let _chegadaChart = null;
+function buildChegadaChart(tipo) {
+  const d = CHEGADA_DATA[tipo];
+  const meta = 480; // 08:00 em minutos
+  if(_chegadaChart) _chegadaChart.destroy();
+  _chegadaChart = new Chart(document.getElementById('chartChegada').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: d.labels,
+      datasets: [
+        {
+          label: 'Méd. chegada',
+          data: d.values,
+          borderColor: '#009CDE',
+          backgroundColor: 'rgba(0,156,222,.08)',
+          borderWidth: 2.5,
+          pointRadius: 5,
+          pointBackgroundColor: d.values.map(v => v <= meta ? '#16a34a' : '#ef4444'),
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          tension: 0.35,
+          fill: true
+        },
+        {
+          label: 'Meta (08:00)',
+          data: d.labels.map(() => meta),
+          borderColor: '#ef4444',
+          borderWidth: 1.5,
+          borderDash: [5, 4],
+          pointRadius: 0,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              if(ctx.datasetIndex === 1) return ' Meta: 08:00';
+              const i = ctx.dataIndex;
+              return [` Média: ${d.display[i]}`, ` Registros: ${d.regs[i]}`];
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          min: 450, max: 540,
+          ticks: {
+            callback: v => { const h=Math.floor(v/60), m=v%60; return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`; },
+            font: { size: 10 }
+          },
+          grid: { color: '#f1f5f9' }
+        },
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+function switchChegada(tipo, btn) {
+  document.querySelectorAll('#chegada-period-btns .evo-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  buildChegadaChart(tipo);
+}
+
+buildChegadaChart('semana');
 
 // ── Evolução comparativo ──
 new Chart(document.getElementById('chartComp').getContext('2d'), {
