@@ -7643,10 +7643,35 @@ function _matTabelaHtml(data){
     else if(sit.includes('transit')||sit.includes('remessa')) sitColor='#d97706';
     else if(sit.includes('pedido')||sit.includes('rc')) sitColor='#2563eb';
 
-    var dp = _diasParaEntrega(r.prevEntrega, r.situacao);
-    var diasCell = '<td style="padding:8px 10px;text-align:center;white-space:nowrap">'
-      +'<span style="font-size:10px;font-weight:'+dp.fw+';color:'+dp.color+';background:'+dp.bg+';padding:3px 8px;border-radius:20px">'+dp.txt+'</span>'
-      +'</td>';
+    var diasCell;
+    if(sit === 'rc sem pedido'){
+      // Premissa: 45 dias a partir da Data de Solicitação para gerar o pedido
+      if(!r.prevEntrega || r.prevEntrega === '—'){
+        diasCell = '<td style="padding:8px 10px;text-align:center;color:#94a3b8">—</td>';
+      } else {
+        var pS = r.prevEntrega.split('/');
+        var dtSolic = new Date(parseInt(pS[2]), parseInt(pS[1])-1, parseInt(pS[0]));
+        var hojeS = new Date(); hojeS.setHours(0,0,0,0);
+        var decorridos = Math.round((hojeS - dtSolic) / 86400000);
+        var restam = 45 - decorridos;
+        var dcTxt, dcColor, dcBg, dcFw;
+        if(restam < 0){
+          dcTxt = Math.abs(restam)+' dias de desvio'; dcColor='#dc2626'; dcBg='#fef2f2'; dcFw='700';
+        } else if(restam === 0){
+          dcTxt = 'Vence hoje'; dcColor='#d97706'; dcBg='#fef3c7'; dcFw='700';
+        } else {
+          dcTxt = restam+' dias p/ pedido'; dcColor='#2563eb'; dcBg='#eff6ff'; dcFw='600';
+        }
+        diasCell = '<td style="padding:8px 10px;text-align:center;white-space:nowrap">'
+          +'<span style="font-size:10px;font-weight:'+dcFw+';color:'+dcColor+';background:'+dcBg+';padding:3px 8px;border-radius:20px">'+dcTxt+'</span>'
+          +'</td>';
+      }
+    } else {
+      var dp = _diasParaEntrega(r.prevEntrega, r.situacao);
+      diasCell = '<td style="padding:8px 10px;text-align:center;white-space:nowrap">'
+        +'<span style="font-size:10px;font-weight:'+dp.fw+';color:'+dp.color+';background:'+dp.bg+';padding:3px 8px;border-radius:20px">'+dp.txt+'</span>'
+        +'</td>';
+    }
 
     var farolF = (r.farol||'').toUpperCase();
     var farolColor = farolF==='DENTRO_PRAZO'?'#16a34a':farolF==='FORA_PRAZO'?'#dc2626':farolF==='DEVOLVIDA'?'#d97706':'#94a3b8';
