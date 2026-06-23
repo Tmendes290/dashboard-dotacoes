@@ -8340,6 +8340,27 @@ function _impDlPlugin(fmt,axis){
     });
   }};
 }
+function _impDlPluginStacked(){
+  return {id:'impDlSt',afterDatasetsDraw:function(chart){
+    var ctx=chart.ctx;
+    chart.data.datasets.forEach(function(ds,i){
+      var meta=chart.getDatasetMeta(i);
+      meta.data.forEach(function(el,j){
+        var val=ds.data[j];
+        if(!val||val<1) return;
+        var segW=el.x-el.base;
+        if(segW<28) return; // segmento pequeno demais
+        ctx.save();
+        ctx.fillStyle='#fff';
+        ctx.font='700 9px Arial,sans-serif';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.fillText(val+'h',el.base+segW/2,el.y);
+        ctx.restore();
+      });
+    });
+  }};
+}
 
 function impRenderDashboard(){
   if(IMP_TAB!=='dashboard') return;
@@ -8537,7 +8558,7 @@ function impRenderSquads(){
   var sqHoras=list.map(function(s){return Math.round(s.min/60*10)/10;});
   var sqPcts=list.map(function(s){return s.total>0?Math.round(s.at/s.total*100):0;});
   var colMin=sqHoras.map(function(v,i){return sqPcts[i]>75?'rgba(239,68,68,.75)':sqPcts[i]>50?'rgba(245,158,11,.75)':'rgba(14,165,233,.75)';});
-  impSafeChart('imp-chart-sq-min',{type:'bar',data:{labels:sqLabels,datasets:[{data:sqHoras,backgroundColor:colMin,borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+'h improdutivo';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
+  impSafeChart('imp-chart-sq-min',{type:'bar',plugins:[_impDlPlugin(function(v){return v+'h';}, 'y')],data:{labels:sqLabels,datasets:[{data:sqHoras,backgroundColor:colMin,borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+'h improdutivo';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
 
   // ── Gráfico 2: Fatores de atraso (stacked: início, término, almoço) ──
   var fimMin=impGetFimMin();
@@ -8555,7 +8576,7 @@ function impRenderSquads(){
   var dAlm=sqLabels.map(function(s){return h2((causaMap[s]||{a:0}).a||0);});
   var _fmtH=function(v){return v>0?v+'h':'';};
   var _fmtH2=function(v){return v>0?v+'h':'';};
-  impSafeChart('imp-chart-sq-causa',{type:'bar',data:{labels:sqLabels,datasets:[
+  impSafeChart('imp-chart-sq-causa',{type:'bar',plugins:[_impDlPluginStacked()],data:{labels:sqLabels,datasets:[
     {label:'Início',data:dIni,backgroundColor:'rgba(248,113,113,.8)',borderSkipped:false},
     {label:'Término',data:dTer,backgroundColor:'rgba(251,146,60,.8)',borderSkipped:false},
     {label:'Almoço',data:dAlm,backgroundColor:'rgba(167,139,250,.8)',borderSkipped:false}
