@@ -7240,7 +7240,7 @@ function handleMateriaisUpload(file){
           fornecedor:String(mx['Nome do fornecedor']||'').trim(), situacao:'RC sem pedido',
           prevEntrega:fmtMatDate(mx['Data da solicitação (RC)']), dataRemessa:'', dataFaturamento:'',
           valorUni:mx['Preço avaliação (RC)']||0, valorTotal:mx['Valor total (RC)']||0, observacao:'', comentario:'',
-          pep:pepCode, squad:sqInfo.squad||'', lider:String(mx['Líder']||'').trim()||sqInfo.lider||'',
+          pep:pepCode, squad:sqInfo.squad||'', lider:sqInfo.lider||String(mx['Líder']||'').trim()||'',
           planejador:sqInfo.planejador||'', idFerramenta:String(mx['IDFerramenta']||'').trim(),
           farol:String(mx['Farol']||'').trim(), statusCaptura:String(mx['Status da Captura']||'').trim()
         });
