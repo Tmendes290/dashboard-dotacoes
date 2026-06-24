@@ -8673,6 +8673,44 @@ function impRenderEvolucao(){
 
   // Gráfico de chegada
   _impBuildChegadaChart();
+
+  // ── Desvios por Problema Identificado ──────────────────────────
+  var byPid={};var totalComPid=0;
+  IMP_FILTERED.forEach(function(d){
+    if(d.delayMin<=0)return;
+    var pid=(d.problemaId||'').trim();if(!pid)return;
+    if(!byPid[pid])byPid[pid]=0;
+    byPid[pid]++;totalComPid++;
+  });
+  var pidList=Object.entries(byPid).sort(function(a,b){return b[1]-a[1];});
+  var pidColors={'Liderança':'#1e40af','Lideranca':'#1e40af','Clima/Tempo':'#0369a1','Clima':'#0369a1','Maquinário':'#b45309','Maquinario':'#b45309','Logística':'#6d28d9','Logistica':'#6d28d9','Material':'#9d174d','Segurança':'#dc2626','Seguranca':'#dc2626','Mão de obra':'#059669','Mao de obra':'#059669','Outros':'#475569'};
+  var probBadge=document.getElementById('evo-prob-badge');if(probBadge)probBadge.textContent=totalComPid+' desvios classificados';
+  var probEl=document.getElementById('evo-prob-list');
+  if(probEl){
+    var maxPid=pidList.length?pidList[0][1]:1;
+    probEl.innerHTML=pidList.length?pidList.map(function(e){
+      var col2=pidColors[e[0]]||'#009CDE';
+      var bw2=Math.round(e[1]/maxPid*100);
+      var pct2=totalComPid?Math.round(e[1]/totalComPid*100):0;
+      return'<div style="display:flex;flex-direction:column;gap:3px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;font-weight:700;color:var(--text)">'+impEsc(e[0])+'</span><span style="font-size:11px;color:var(--muted)">'+e[1]+' ('+pct2+'%)</span></div>'
+        +'<div style="background:#f1f5f9;border-radius:4px;height:6px"><div style="background:'+col2+';height:6px;border-radius:4px;width:'+bw2+'%"></div></div>'
+        +'</div>';
+    }).join(''):'<div style="font-size:11px;color:var(--muted);text-align:center;padding:16px">Preencha a coluna "Problema Identificado"<br>na planilha para ver este gráfico</div>';
+  }
+
+  // ── Atrasos sem justificativa ───────────────────────────────────
+  var atPend=IMP_FILTERED.filter(function(d){return d.delayMin>60&&!(d.justificativa||'').trim()&&!impIsExcluido(d);});
+  var pendBadge=document.getElementById('evo-pend-badge');if(pendBadge)pendBadge.textContent=atPend.length+' pendentes';
+  var pendEl=document.getElementById('evo-pendentes-list');
+  if(pendEl){
+    var visible=atPend.slice(0,8);
+    pendEl.innerHTML=visible.map(function(d){
+      var sq=(d.squadInfo&&d.squadInfo.squad)||'';
+      return'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;border-radius:5px;background:#fff8f8;border-left:3px solid #ef4444;font-size:11px"><span style="font-weight:600">'+impEsc(d.empresa.slice(0,24))+(sq?' · <span style="font-weight:400;color:var(--muted)">'+impEsc(sq)+'</span>':'')+'</span><button class="just-btn" onclick="impOpenJust('+IMP_FILTERED.indexOf(d)+','+(d.supaId||'null')+')">+ Justificar</button></div>';
+    }).join('')+(atPend.length>8?'<div style="text-align:center;font-size:10px;color:var(--muted);padding-top:6px">+ '+(atPend.length-8)+' outros pendentes</div>':'');
+    if(!visible.length) pendEl.innerHTML='<div style="font-size:11px;color:#16a34a;font-weight:600;text-align:center;padding:12px">✓ Todos os atrasos graves estão justificados!</div>';
+  }
 }
 
 function _impBuildChegadaChart(){
@@ -9045,34 +9083,12 @@ function impGetMotivo(d){
   return'Outros';
 }
 function impRenderRegistrosExtra(){
+  // Apenas atualiza a barra de progresso (os painéis de motivos/pendentes estão na aba Evolução)
   var at=IMP_FILTERED.filter(function(d){return d.delayMin>0&&!impIsExcluido(d);});
   var comJust=at.filter(function(d){return(d.justificativa||'').trim();});
   var pct=at.length?Math.round(comJust.length/at.length*100):0;
-  // Barra de progresso
   var bar=document.getElementById('reg-just-prog-bar');if(bar)bar.style.width=pct+'%';
   var pctEl=document.getElementById('reg-just-prog-pct');if(pctEl)pctEl.textContent=comJust.length+' / '+at.length+' — '+pct+'%';
-  var lblEl=document.getElementById('reg-just-prog-lbl');if(lblEl)lblEl.textContent='Progresso das justificativas de atraso';
-  // Motivos mais frequentes
-  var byM={};
-  comJust.forEach(function(d){var m=impGetMotivo(d);if(m){if(!byM[m])byM[m]=0;byM[m]++;;}});
-  var mList=Object.entries(byM).sort(function(a,b){return b[1]-a[1];});
-  var maxM2=mList.length?mList[0][1]:1;
-  var mEl=document.getElementById('reg-motivos-list');
-  var badge=document.getElementById('reg-motivos-badge');if(badge)badge.textContent=comJust.length+' justificados';
-  if(mEl)mEl.innerHTML=mList.length?mList.map(function(e){
-    var bw2=Math.round(e[1]/maxM2*100);
-    return'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f8fafc"><span style="font-size:11px;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+impEsc(e[0])+'</span><div style="width:90px;background:#f1f5f9;border-radius:4px;height:5px"><div style="background:var(--acc);height:5px;border-radius:4px;width:'+bw2+'%"></div></div><span style="font-size:11px;font-weight:700;color:var(--sb);min-width:22px;text-align:right">'+e[1]+'</span></div>';
-  }).join(''):'<div style="font-size:11px;color:var(--muted);padding:8px 0">Nenhuma justificativa registrada ainda</div>';
-  // Atrasos sem justificativa (> 1h)
-  var pendentes=at.filter(function(d){return d.delayMin>60&&!(d.justificativa||'').trim();}).slice(0,8);
-  var pendBadge=document.getElementById('reg-pend-badge');
-  if(pendBadge){var totPend=at.filter(function(d){return d.delayMin>60&&!(d.justificativa||'').trim();}).length;pendBadge.textContent=totPend+' pendentes';}
-  var pendEl=document.getElementById('reg-pendentes-list');
-  if(pendEl)pendEl.innerHTML=pendentes.length?pendentes.map(function(d){
-    var sq=(d.squadInfo&&d.squadInfo.squad)||'';
-    return'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;border-radius:5px;background:#fff8f8;border-left:3px solid #ef4444;font-size:11px"><span style="font-weight:600">'+impEsc(d.empresa.slice(0,22))+(sq?' · <span style="font-weight:400;color:var(--muted)">'+impEsc(sq)+'</span>':'')+'</span><span style="font-weight:700;color:#dc2626">'+impFmtDelay(d.delayMin)+'</span></div>';
-  }).join('')+(at.filter(function(d){return d.delayMin>60&&!(d.justificativa||'').trim();}).length>8?'<div style="text-align:center;font-size:10px;color:var(--muted);padding-top:6px">+ '+(at.filter(function(d){return d.delayMin>60&&!(d.justificativa||'').trim();}).length-8)+' outros pendentes</div>':'')
-  :'<div style="font-size:11px;color:#16a34a;font-weight:600;padding:8px 0">✓ Todos os atrasos graves estão justificados!</div>';
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -9470,12 +9486,6 @@ async function renderViewImprodutividade(){
   // Barra de progresso justificativas
   +'<div style="padding:8px 14px;border-top:1px solid var(--bord);font-size:10px;color:var(--muted);display:flex;align-items:center;gap:10px"><span id="reg-just-prog-lbl">Progresso das justificativas de atraso</span><div style="flex:1;max-width:220px;background:#f1f5f9;border-radius:20px;height:5px;overflow:hidden"><div id="reg-just-prog-bar" style="height:5px;border-radius:20px;background:#10b981;width:0%"></div></div><span id="reg-just-prog-pct" style="font-weight:700;color:var(--sb)"></span></div>'
   +'</div>'
-  // Painéis: Motivos + Pendentes
-  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">'
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="font-size:12px;font-weight:700;color:var(--text)">Motivos mais frequentes</span><span style="display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">NOVO</span><span style="margin-left:auto;font-size:10px;background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px;color:var(--muted)" id="reg-motivos-badge"></span></div><div id="reg-motivos-list" style="display:flex;flex-direction:column;gap:6px"></div></div>'
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="font-size:12px;font-weight:700;color:var(--text)">Atrasos sem justificativa</span><span style="display:inline-flex;align-items:center;background:#f59e0b;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px" id="reg-pend-badge">PENDENTE</span></div><div style="font-size:10px;color:var(--muted);margin-bottom:8px">Registros graves (&gt;1h) que ainda precisam de justificativa:</div><div id="reg-pendentes-list" style="display:flex;flex-direction:column;gap:4px"></div></div>'
-  +'</div>'
-  +'</div>'
 
   // Tab Empresas
   +'<div id="imp-tab-empresas" style="display:none"><div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700">Por Empresa</span><span style="font-size:11px;color:var(--muted)" id="imp-lbl-emp"></span></div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
@@ -9547,6 +9557,11 @@ async function renderViewImprodutividade(){
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-bottom:14px">'
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Evolução da média de chegada <span style="display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;vertical-align:middle">NOVO</span></span><div style="font-size:11px;color:var(--muted);margin-top:2px">Quanto mais cedo, melhor — verde = antes da meta, vermelho = depois da meta (08:00)</div></div><div style="display:flex;gap:5px" id="chegada-period-btns"><button onclick="impChegadaSetPeriod(\'semana\',this)" class="chegada-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impChegadaSetPeriod(\'dia\',this)" class="chegada-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impChegadaSetPeriod(\'mes\',this)" class="chegada-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div style="position:relative;height:220px"><canvas id="evo-chart-chegada"></canvas></div>'
+  +'</div>'
+  // Painéis: Desvios por Problema Identificado + Atrasos sem justificativa
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Desvios por Problema Identificado</span><span style="margin-left:auto;font-size:10px;background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px;color:var(--muted)" id="evo-prob-badge"></span></div><div id="evo-prob-list" style="display:flex;flex-direction:column;gap:8px"></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="font-size:12px;font-weight:700;color:var(--text)">Atrasos sem justificativa</span><span style="display:inline-flex;align-items:center;background:#f59e0b;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px" id="evo-pend-badge">PENDENTE</span></div><div style="font-size:10px;color:var(--muted);margin-bottom:8px">Registros graves (&gt;1h) que ainda precisam de justificativa:</div><div id="evo-pendentes-list" style="display:flex;flex-direction:column;gap:4px"></div></div>'
   +'</div>'
   +'</div>'
 
