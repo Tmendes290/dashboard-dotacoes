@@ -8306,10 +8306,12 @@ function impRenderCards(refMin){
     impCard('#f59e0b',impFmtDelay(totalMin)||'0 min','Total improdutivo','Ref: '+impToHHMM(refMin)+' — '+totalMin+' min',
       'Soma de todos os minutos de atraso. Cálculo por registro: Atraso = Base − Horário Ref. Ex: chegada 10:30, ref. 08:00 → 150 min improdutivos.',
       prev?'<div>'+_impDeltaHtml(totalMin,prev.totalMin,true,function(v){return impFmtDelay(Math.round(v));})+'</div><div style="font-size:9px;color:var(--muted);margin-top:2px">'+pvs+'</div>':null)+
-    impCard('#10b981',impFmtDelay(totalProdMin)||'0 min','Horas produtivas',pctProd+'% — base '+impFmtDelay(totalEsperadoMin),
+    impCard('#10b981',impFmtDelay(totalProdMin)||'0 min','Horas produtivas',
+      '<div style="margin:4px 0"><div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:#f1f5f9"><div style="width:'+pctProd+'%;background:#10b981"></div><div style="flex:1;background:#ef4444;opacity:.4"></div></div><div style="display:flex;justify-content:space-between;margin-top:3px"><span style="color:#10b981;font-weight:700">'+pctProd+'% produtivo</span><span style="color:#ef4444;font-weight:700">'+pctImp+'% improdutivo</span></div></div>base '+impFmtDelay(totalEsperadoMin),
       'Base por registro: Seg–Qui = 9h, Sex = 8h. Total esperado = '+impFmtDelay(totalEsperadoMin)+'. Horas produtivas = base − total improdutivo ('+impFmtDelay(totalMin)+'). Quanto mais próximo da base, melhor.',
       prev&&prevProd!==null?'<div>'+_impDeltaHtml(totalProdMin,prevProd,false,function(v){return impFmtDelay(Math.round(v));})+'</div><div style="font-size:9px;color:var(--muted);margin-top:2px">'+pvs+'</div>':null)+
-    impCard('#8b5cf6',avgHMin!==null?impFmtDelay(Math.round(avgHMin)):'—','Média horas produtivas','por pessoa/dia na seleção',
+    impCard('#8b5cf6',avgHMin!==null?impFmtDelay(Math.round(avgHMin)):'—','Média horas produtivas',
+      (avgHMin!==null&&periodoBase>0?'<div style="margin:4px 0"><div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:#f1f5f9"><div style="width:'+Math.min(100,Math.round(avgHMin/periodoBase*100))+'%;background:#8b5cf6"></div><div style="flex:1;background:#ef4444;opacity:.4"></div></div><div style="display:flex;justify-content:space-between;margin-top:3px"><span style="color:#8b5cf6;font-weight:700">'+Math.min(100,Math.round(avgHMin/periodoBase*100))+'% do esperado</span></div></div>':'')+'por pessoa/dia na seleção',
       'Média de horas trabalhadas por pessoa (registros com início e término preenchidos). Quanto mais próximo de 9h, melhor.',
       prev&&prevAvgH!==null&&avgHMin!==null?'<div>'+_impDeltaHtml(avgHMin,prevAvgH,false,function(v){return Math.round(v)+' min';})+'</div><div style="font-size:9px;color:var(--muted);margin-top:2px">'+pvs+'</div>':null);
 }
@@ -8385,16 +8387,56 @@ function _impDeltaHtml(curr,prev,higherIsBad,fmtFn){
 function impSetBadge(id,txt){ var el=document.getElementById(id); if(el) el.textContent=txt; }
 
 function impRenderKPIs(){
-  var at=IMP_FILTERED.filter(function(d){return d.delayMin>0;});
+  var validos=IMP_FILTERED.filter(function(d){return !impIsExcluido(d);});
+  var at=validos.filter(function(d){return d.delayMin>0;});
   var avgDelay=at.length?Math.round(at.reduce(function(s,d){return s+d.delayMin;},0)/at.length):null;
-  var comH=IMP_FILTERED.filter(function(d){return d.horasTrab!==null;});
+  var comH=validos.filter(function(d){return d.horasTrab!==null;});
   var avgH=comH.length?comH.reduce(function(s,d){return s+d.horasTrab;},0)/comH.length:null;
-  var comAlm=IMP_FILTERED.filter(function(d){return d.almExcesso!==null;});
+  var comAlm=validos.filter(function(d){return d.almExcesso!==null;});
   var avgAlm=comAlm.length?Math.round(comAlm.reduce(function(s,d){return s+d.almExcesso;},0)/comAlm.length):null;
   var k1=document.getElementById('imp-kpi-delay'),k2=document.getElementById('imp-kpi-hours'),k3=document.getElementById('imp-kpi-lunch');
   if(k1) k1.textContent=avgDelay!==null?impFmtDelay(avgDelay)||'—':'—';
   if(k2) k2.textContent=avgH!==null?(avgH/60).toFixed(1)+'h':'—';
   if(k3) k3.textContent=avgAlm!==null?(avgAlm>0?avgAlm+' min':'Ok'):'—';
+
+  // ── Card de composição da jornada ──────────────────────────────
+  var bdEl=document.getElementById('imp-kpi-breakdown');
+  if(!bdEl||!validos.length) return;
+  var refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
+  var fimStr=(document.getElementById('imp-fim-time')||{}).value||'17:00';
+  var rp=refStr.split(':');var fp=fimStr.split(':');
+  var refMin=parseInt(rp[0])*60+parseInt(rp[1]||0);
+  var fimMin=parseInt(fp[0])*60+parseInt(fp[1]||0);
+  var jornadaMin=Math.max(0,fimMin-refMin);
+  var almMin=60; // padrão 1h almoço
+  var liquidoMin=Math.max(0,jornadaMin-almMin);
+  // Totais (reais dos registros)
+  var totalMin=validos.reduce(function(s,d){return s+(d.delayMin||0);},0);
+  var totalEspMin=validos.reduce(function(s,d){
+    var dow=d.dataSortKey?new Date(d.dataSortKey+'T00:00:00').getDay():1;
+    return s+(dow===5?Math.max(0,jornadaMin-60):jornadaMin);
+  },0);
+  var totalProdMin2=Math.max(0,totalEspMin-totalMin);
+  var pctProd2=totalEspMin>0?Math.round(totalProdMin2/totalEspMin*100):0;
+  var pctImp2=100-pctProd2;
+  // Médias por pessoa
+  var avgImpMin=validos.length?Math.round(totalMin/validos.length):0;
+  var avgProdMin=Math.max(0,liquidoMin-avgImpMin);
+  bdEl.innerHTML=
+    '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:10px">Composição da jornada</div>'
+    +'<div style="font-size:10px;color:var(--muted);margin-bottom:8px">Base: <strong>'+refStr+'</strong> → <strong>'+fimStr+'</strong> = <strong>'+Math.floor(jornadaMin/60)+'h</strong> − 1h almoço = <strong style="color:var(--sb)">'+Math.floor(liquidoMin/60)+'h líquido/pessoa</strong></div>'
+    +'<div style="height:14px;border-radius:7px;overflow:hidden;background:#f1f5f9;margin-bottom:6px;display:flex">'
+      +'<div style="width:'+pctProd2+'%;background:#10b981;transition:width .4s"></div>'
+      +'<div style="flex:1;background:#ef4444;opacity:.7"></div>'
+    +'</div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700;margin-bottom:10px">'
+      +'<span style="color:#10b981">'+pctProd2+'% produtivo</span>'
+      +'<span style="color:#ef4444">'+pctImp2+'% improdutivo</span>'
+    +'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:5px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:4px 8px;border-radius:5px;background:#f0fdf4"><span style="color:#15803d">Produtivo / pessoa</span><strong style="color:#15803d">'+impFmtDelay(avgProdMin)+'</strong></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:4px 8px;border-radius:5px;background:#fef2f2"><span style="color:#dc2626">Improdutivo / pessoa</span><strong style="color:#dc2626">'+impFmtDelay(avgImpMin)+'</strong></div>'
+    +'</div>';
 }
 
 function impChartSap(){
@@ -9448,6 +9490,7 @@ async function renderViewImprodutividade(){
   +'<div style="display:flex;flex-direction:column;gap:12px">'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Média de atraso</div><div id="imp-kpi-delay" style="font-size:28px;font-weight:800;color:#b91c1c;line-height:1.1">—</div><div style="font-size:10px;color:var(--muted);margin-top:2px">por registro com atraso</div></div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Média horas trabalhadas</div><div id="imp-kpi-hours" style="font-size:28px;font-weight:800;color:#1d4ed8;line-height:1.1">—</div><div style="font-size:10px;color:var(--muted);margin-top:2px">horas/pessoa na seleção</div></div>'
+  +'<div id="imp-kpi-breakdown" style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"></div>'
   +'</div>'
   +'</div>'
 
