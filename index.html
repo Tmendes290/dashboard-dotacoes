@@ -8622,8 +8622,10 @@ function impRenderEvolucao(){
   var refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
   var rp=refStr.split(':');var refMin=parseInt(rp[0])*60+parseInt(rp[1]||0);
   var fimMin=impGetFimMin();
+  var dtIni=(document.getElementById('imp-dt-ini')||{}).value||'';
+  var dtFim=(document.getElementById('imp-dt-fim')||{}).value||'';
 
-  // Aplica filtros de empresa/sap/squad mas IGNORA filtro de data para ver tendência histórica
+  // baseData: todos os dados com filtros empresa/sap/squad (sem filtro de data — usado para período anterior)
   var baseData=IMP_DATA.filter(function(d){
     if(d.terminoMin!==null&&d.terminoMin>fimMin)return false;
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
@@ -8632,30 +8634,73 @@ function impRenderEvolucao(){
     return true;
   }).map(function(d){return _impDeriveRow(d,refMin,fimMin);}).filter(function(d){return!impIsExcluido(d);});
 
-  var grupos=_impGroupByPeriod(baseData,_IMP_EVO_PERIOD,refMin).slice(-8); // últimos 8 períodos
-  if(grupos.length<2){
-    var el=document.getElementById('evo-trend-cards');
-    if(el) el.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted);font-size:13px">Dados insuficientes para comparativo. Carregue mais registros.</div>';
-    return;
-  }
-
-  var curr=grupos[grupos.length-1],prev2=grupos[grupos.length-2];
   // Formata label do período
   function fmtKey(k){
-    if(k.includes('-W')){var p=k.split('-W');return'Sem.'+p[1]+'/'+p[0].slice(2);}
-    var p=k.split('-');return['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][parseInt(p[1])-1]+'/'+p[0].slice(2);
+    if(!k)return'—';
+    if(k.indexOf('/')>=0)return k; // já formatado dd/mm/aa
+    if(k.indexOf('-W')>=0){var p=k.split('-W');return'Sem.'+p[1]+'/'+p[0].slice(2);}
+    var p=k.split('-');
+    if(p.length===3)return p[2]+'/'+p[1]+'/'+p[0].slice(2); // data ISO completa
+    return['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][parseInt(p[1])-1]+'/'+p[0].slice(2);
+  }
+  function _isoToBR(s){if(!s)return'—';var p=s.split('-');return p[2]+'/'+p[1]+'/'+p[0].slice(2);}
+
+  var curr,prev2;
+
+  if(dtIni&&dtFim){
+    // ── Modo com filtro de data ──────────────────────────────────
+    // "Atual" = dados filtrados; "Anterior" = mesmo intervalo deslocado para trás
+    function _calcStats(data){
+      var s={atCount:0,totalMin:0,countH:0,totalH:0};
+      data.forEach(function(d){
+        if((d.delayMin||0)>0){s.atCount++;s.totalMin+=d.delayMin;}
+        if(d.horasTrab!==null){s.totalH+=d.horasTrab;s.countH++;}
+      });
+      return s;
+    }
+    var currData=IMP_FILTERED.filter(function(d){return !impIsExcluido(d);});
+    var dIniMs=new Date(dtIni+'T00:00:00').getTime();
+    var dFimMs=new Date(dtFim+'T00:00:00').getTime();
+    var lenMs=dFimMs-dIniMs+86400000;
+    var pFimMs=dIniMs-86400000;
+    var pIniMs=pFimMs-lenMs+86400000;
+    var pIniStr=_impFmt(new Date(pIniMs)),pFimStr=_impFmt(new Date(pFimMs));
+    var prevData=baseData.filter(function(d){return d.dataSortKey>=pIniStr&&d.dataSortKey<=pFimStr;});
+    curr=_calcStats(currData);
+    curr.key=(dtIni===dtFim?_isoToBR(dtIni):_isoToBR(dtIni)+' a '+_isoToBR(dtFim));
+    prev2=_calcStats(prevData);
+    prev2.key=(pIniStr===pFimStr?_isoToBR(pIniStr):_isoToBR(pIniStr)+' a '+_isoToBR(pFimStr));
+  } else {
+    // ── Modo sem filtro de data: últimos 2 grupos históricos ─────
+    var grupos=_impGroupByPeriod(baseData,_IMP_EVO_PERIOD,refMin).slice(-8);
+    if(grupos.length<2){
+      var _el=document.getElementById('evo-trend-cards');
+      if(_el) _el.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted);font-size:13px">Dados insuficientes para comparativo. Carregue mais registros.</div>';
+      return;
+    }
+    curr=grupos[grupos.length-1];prev2=grupos[grupos.length-2];
   }
 
-  // Trend cards
+  // Trend cards com bolinhas coloridas
   function tCard(lbl,currV,prevV,higherIsBad,fmt){
     var diff=currV-prevV;var pct=prevV?Math.round(Math.abs(diff)/prevV*100):0;
     var up=diff>0;var bad=(up&&higherIsBad)||(!up&&!higherIsBad);
     var col=bad?'#dc2626':'#16a34a';
     return'<div style="background:var(--bg);border:1px solid var(--bord);border-radius:8px;padding:12px 14px;text-align:center">'
-      +'<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'+lbl+'</div>'
-      +'<div style="font-size:20px;font-weight:800;color:var(--sb)">'+fmt(currV)+'</div>'
-      +'<div style="font-size:10px;color:var(--muted);margin:2px 0">Período ant.: '+fmt(prevV)+'</div>'
-      +'<div style="font-size:11px;font-weight:700;margin-top:3px;color:'+col+'">'+(up?'↑':'↓')+' '+(up?'+':'−')+pct+'% — '+(bad?'piorou':'melhorou')+'</div>'
+      +'<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">'+lbl+'</div>'
+      +'<div style="display:flex;align-items:center;justify-content:center;gap:5px">'
+        +'<span style="color:#009CDE;font-size:11px;line-height:1">●</span>'
+        +'<span style="font-size:20px;font-weight:800;color:var(--sb)">'+fmt(currV)+'</span>'
+      +'</div>'
+      +'<div style="display:flex;align-items:center;justify-content:center;gap:4px;font-size:10px;color:var(--muted);margin-top:3px">'
+        +'<span style="color:#94a3b8;font-size:11px;line-height:1">●</span>'
+        +'<span>Período ant.: <strong>'+fmt(prevV)+'</strong></span>'
+      +'</div>'
+      +'<div style="font-size:11px;font-weight:700;margin-top:4px;color:'+col+'">'+(up?'↑':'↓')+' '+(up?'+':'−')+pct+'% — '+(bad?'piorou':'melhorou')+'</div>'
+      +'<div style="display:flex;gap:8px;justify-content:center;font-size:9px;color:var(--muted);margin-top:6px;border-top:1px solid var(--bord);padding-top:5px;flex-wrap:wrap">'
+        +'<span><span style="color:#009CDE">●</span> '+fmtKey(curr.key)+'</span>'
+        +'<span><span style="color:#94a3b8">●</span> '+fmtKey(prev2.key)+'</span>'
+      +'</div>'
       +'</div>';
   }
   var avgHCurr=curr.countH?Math.round(curr.totalH/curr.countH):0;
