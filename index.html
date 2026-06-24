@@ -8006,6 +8006,7 @@ function impDesconsiderar(filtIdx,supaId){
   _d.acao='Desconsiderar';
   var orig=IMP_DATA.find(function(d){return d.supaId===supaId;});
   if(orig)orig.acao='Desconsiderar';
+  try{localStorage.setItem('imp_data',JSON.stringify(IMP_DATA));}catch(e){}
   if(supaId&&supa)supa.from('improdutividade').update({acao:'Desconsiderar'}).eq('id',supaId).then(function(r){if(r.error)console.error('[imp] desc save',r.error);});
   try{impApplyFilters();}catch(e){}
   toast('Registro desconsiderado!','#475569');
@@ -8015,6 +8016,7 @@ function impReverterDesc(filtIdx,supaId){
   _d.acao='';
   var orig=IMP_DATA.find(function(d){return d.supaId===supaId;});
   if(orig)orig.acao='';
+  try{localStorage.setItem('imp_data',JSON.stringify(IMP_DATA));}catch(e){}
   if(supaId&&supa)supa.from('improdutividade').update({acao:''}).eq('id',supaId).then(function(r){if(r.error)console.error('[imp] desc revert',r.error);});
   try{impApplyFilters();}catch(e){}
   toast('Registro reativado!','green');
@@ -8024,6 +8026,7 @@ function impRemoverJust(filtIdx,supaId){
   _d.justificativa='';
   var orig=IMP_DATA.find(function(d){return d.supaId===supaId;});
   if(orig)orig.justificativa='';
+  try{localStorage.setItem('imp_data',JSON.stringify(IMP_DATA));}catch(e){}
   if(supaId&&supa)supa.from('improdutividade').update({justificativa:''}).eq('id',supaId).then(function(r){if(r.error)console.error('[imp] just del',r.error);});
   try{impRenderRegistros();}catch(e){}
   toast('Justificativa removida!','red');
@@ -9505,6 +9508,7 @@ function impShowTab(tab,el){
 // ── Render view principal ─────────────────────────────────────────
 async function renderViewImprodutividade(){
   var el=document.getElementById('v-improdutividade'); if(!el) return;
+  var _bgRefresh=false; // se true: já tem dados, vai fazer refresh em background
   if(IMP_DATA.length===0){
     try{
       var _saved=localStorage.getItem('imp_data');
@@ -9524,6 +9528,9 @@ async function renderViewImprodutividade(){
         return;
       }
     }
+  } else {
+    // Já tem dados em memória: renderiza imediatamente e atualiza Supabase em background
+    _bgRefresh=true;
   }
   var jaDados=IMP_DATA.length>0;
 
@@ -9720,6 +9727,18 @@ async function renderViewImprodutividade(){
     impRebuildMs();
     IMP_TAB='dashboard';
     impApplyFilters();
+  }
+
+  // ── Sincronização em background ──────────────────────────────────
+  // Sempre busca dados frescos do Supabase após renderizar.
+  // Garante que todos os usuários vejam atualizações (justificativas,
+  // desconsiderar, etc.) sem precisar recarregar a página manualmente.
+  if(_bgRefresh){
+    setTimeout(async function(){
+      await impLoadFromSupabase();
+      var _still=document.getElementById('imp-cards');
+      if(_still){try{impRebuildMs();impApplyFilters();}catch(e){}}
+    },800);
   }
 }
 
