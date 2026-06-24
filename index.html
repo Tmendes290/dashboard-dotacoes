@@ -8497,7 +8497,7 @@ function _impGroupByPeriod(data,tipo,refMin){
   var byP={};
   data.forEach(function(d){
     if(!d.dataSortKey)return;
-    var key=tipo==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
+    var key=tipo==='mes'?_impMonthKey(d.dataSortKey):tipo==='dia'?d.dataSortKey:_impWeekKey(d.dataSortKey);
     if(!byP[key])byP[key]={key:key,label:'',totalMin:0,atCount:0,totalH:0,countH:0,totalCheg:0,countCheg:0,totalEsp:0,n:0};
     var g=byP[key];g.n++;
     if(d.delayMin>0){g.atCount++;g.totalMin+=d.delayMin;}
@@ -8576,31 +8576,49 @@ function impRenderEvolucao(){
         (diffMin>0?'+':'')+impFmtDelay(Math.abs(diffMin))+' vs '+fmtKey(prev2.key));
   }
 
-  // Gráfico comparativo (por dia dos dois últimos períodos)
+  // Gráfico comparativo — lógica varia por período
   var compBadge=document.getElementById('evo-comp-badge');
-  if(compBadge) compBadge.textContent=fmtKey(prev2.key)+' vs '+fmtKey(curr.key);
-  var allDaysCurr=baseData.filter(function(d){return d.dataSortKey&&(_IMP_EVO_PERIOD==='mes'?_impMonthKey(d.dataSortKey)===curr.key:_impWeekKey(d.dataSortKey)===curr.key);});
-  var allDaysPrev=baseData.filter(function(d){return d.dataSortKey&&(_IMP_EVO_PERIOD==='mes'?_impMonthKey(d.dataSortKey)===prev2.key:_impWeekKey(d.dataSortKey)===prev2.key);});
-  var byDayCurr={},byDayPrev={};
-  allDaysCurr.forEach(function(d){var dd=d.dataSortKey;if(!byDayCurr[dd])byDayCurr[dd]=0;byDayCurr[dd]+=(d.delayMin||0);});
-  allDaysPrev.forEach(function(d){var dd=d.dataSortKey;if(!byDayPrev[dd])byDayPrev[dd]=0;byDayPrev[dd]+=(d.delayMin||0);});
-  var compLabelsCurr=Object.keys(byDayCurr).sort(),compLabelsPrev=Object.keys(byDayPrev).sort();
-  var compLen=Math.max(compLabelsCurr.length,compLabelsPrev.length);
-  var idx=Array.from({length:compLen},function(_,i){return i+1;});
   if(_impEvoCharts.comp)_impEvoCharts.comp.destroy();
   var cvComp=document.getElementById('evo-chart-comp');
   if(cvComp){
-    _impEvoCharts.comp=new Chart(cvComp.getContext('2d'),{type:'bar',
-      data:{labels:idx.map(function(i){return 'Dia '+i;}),
-        datasets:[
-          {label:'Atual',data:idx.map(function(i){return byDayCurr[compLabelsCurr[i-1]]||0;}),backgroundColor:'rgba(0,156,222,.7)',borderRadius:4},
-          {label:'Anterior',data:idx.map(function(i){return byDayPrev[compLabelsPrev[i-1]]||0;}),backgroundColor:'rgba(203,213,225,.6)',borderRadius:4}
-        ]},
-      options:Object.assign({},_impCT,{interaction:{mode:'index',intersect:false},scales:{
-        x:Object.assign({},_impAXX),
-        y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{callback:function(v){return v+'min';}})})
-      }})
-    });
+    if(_IMP_EVO_PERIOD==='dia'){
+      // "Por dia": mostra últimos 30 dias (timeline — sem comparativo)
+      if(compBadge) compBadge.textContent='Últimos 30 dias';
+      var byDayAll={};
+      baseData.filter(function(d){return d.dataSortKey;}).forEach(function(d){if(!byDayAll[d.dataSortKey])byDayAll[d.dataSortKey]=0;byDayAll[d.dataSortKey]+=(d.delayMin||0);});
+      var dayKeys=Object.keys(byDayAll).sort().slice(-30);
+      _impEvoCharts.comp=new Chart(cvComp.getContext('2d'),{type:'bar',
+        data:{labels:dayKeys.map(function(d){var p=d.split('-');return p[2]+'/'+p[1];}),
+          datasets:[{label:'Min. improdutivos',data:dayKeys.map(function(k){return byDayAll[k]||0;}),backgroundColor:'rgba(0,156,222,.7)',borderRadius:4}]},
+        options:Object.assign({},_impCT,{interaction:{mode:'index',intersect:false},scales:{
+          x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{maxRotation:45})}),
+          y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{callback:function(v){return v+'min';}})})
+        }})
+      });
+    } else {
+      // "Por semana" ou "Por mês": atual vs anterior (por dia dentro do período)
+      if(compBadge) compBadge.textContent=fmtKey(prev2.key)+' vs '+fmtKey(curr.key);
+      var _keyFn=_IMP_EVO_PERIOD==='mes'?_impMonthKey:_impWeekKey;
+      var allDaysCurr=baseData.filter(function(d){return d.dataSortKey&&_keyFn(d.dataSortKey)===curr.key;});
+      var allDaysPrev=baseData.filter(function(d){return d.dataSortKey&&_keyFn(d.dataSortKey)===prev2.key;});
+      var byDayCurr={},byDayPrev={};
+      allDaysCurr.forEach(function(d){if(!byDayCurr[d.dataSortKey])byDayCurr[d.dataSortKey]=0;byDayCurr[d.dataSortKey]+=(d.delayMin||0);});
+      allDaysPrev.forEach(function(d){if(!byDayPrev[d.dataSortKey])byDayPrev[d.dataSortKey]=0;byDayPrev[d.dataSortKey]+=(d.delayMin||0);});
+      var compLabelsCurr=Object.keys(byDayCurr).sort(),compLabelsPrev=Object.keys(byDayPrev).sort();
+      var compLen=Math.max(compLabelsCurr.length,compLabelsPrev.length);
+      var idx=Array.from({length:compLen},function(_,i){return i+1;});
+      _impEvoCharts.comp=new Chart(cvComp.getContext('2d'),{type:'bar',
+        data:{labels:idx.map(function(i){return'Dia '+i;}),
+          datasets:[
+            {label:'Atual',data:idx.map(function(i){return byDayCurr[compLabelsCurr[i-1]]||0;}),backgroundColor:'rgba(0,156,222,.7)',borderRadius:4},
+            {label:'Anterior',data:idx.map(function(i){return byDayPrev[compLabelsPrev[i-1]]||0;}),backgroundColor:'rgba(203,213,225,.6)',borderRadius:4}
+          ]},
+        options:Object.assign({},_impCT,{interaction:{mode:'index',intersect:false},scales:{
+          x:Object.assign({},_impAXX),
+          y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{callback:function(v){return v+'min';}})})
+        }})
+      });
+    }
   }
 
   // Média horas produtivas por squad
@@ -8821,6 +8839,7 @@ function impRenderRegistros(){
     }catch(e){console.error('[imp] row '+i,e);}
   });
   tbody.innerHTML=_rows.join('');
+  try{impRenderRegistrosExtra();}catch(e){console.error('[imp] reg-extra',e);}
 }
 
 // ── Empresas ─────────────────────────────────────────────────────
@@ -8896,6 +8915,129 @@ function impRenderSquads(){
     var pc=pct>50?'color:#b91c1c;font-weight:700':pct>20?'color:#d97706;font-weight:600':'color:#15803d';
     return'<tr><td style="font-weight:700">'+impEsc(s.squad)+'</td><td style="font-size:11px;color:var(--muted)">'+impEsc(s.lider)+'</td><td style="text-align:center">'+s.total+'</td><td style="text-align:center;font-weight:700;color:'+(s.at>0?'#b91c1c':'#15803d')+'">'+s.at+'</td><td style="text-align:center;'+pc+'">'+pct+'%</td><td style="text-align:right;font-family:monospace;font-weight:700">'+(s.min>0?s.min+' min':'—')+'</td><td style="text-align:right;font-family:monospace">'+(s.max>0?impFmtDelay(s.max):'—')+'</td><td><div style="background:#e8f4fd;border-radius:4px;height:6px;min-width:60px;margin-top:4px"><div style="background:'+(pct>50?'#ef4444':'#7c3aed')+';border-radius:4px;height:6px;width:'+bw+'%"></div></div></td></tr>';
   }).join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">Squads não mapeados para os SAPs deste período</td></tr>';
+  try{impRenderSquadsExtra();}catch(e){console.error('[imp] sq-extra',e);}
+}
+
+function impRenderSquadsExtra(){
+  // ── Painéis extras: Média horas produtivas/squad + Causas por squad ──
+  var refStr2=(document.getElementById('imp-ref-time')||{}).value||'08:00';
+  var rp2=refStr2.split(':');var refMin2=parseInt(rp2[0])*60+parseInt(rp2[1]||0);
+  var prev2=impGetPrevData(refMin2);
+  // Média horas por squad (atual)
+  var sqHrs={};
+  IMP_FILTERED.forEach(function(d){if(d.horasTrab===null)return;var sq=(d.squadInfo&&d.squadInfo.squad)||'(sem squad)';if(!sqHrs[sq])sqHrs[sq]={t:0,n:0};sqHrs[sq].t+=d.horasTrab;sqHrs[sq].n++;});
+  // Média horas por squad (anterior)
+  var sqHrsPrev={};
+  if(prev2){
+    var prevFiltered=IMP_DATA.filter(function(d){
+      var pE=impGetPrevData._pE,pS=impGetPrevData._pS;
+      // Recalculate prev dates
+      var filtDates2=IMP_FILTERED.map(function(x){return x.dataSortKey;}).filter(Boolean).sort();
+      if(!filtDates2.length)return false;
+      var dMin2=new Date(filtDates2[0]+'T00:00:00'),dMax2=new Date(filtDates2[filtDates2.length-1]+'T00:00:00');
+      var diff2=Math.round((dMax2-dMin2)/86400000)+1;
+      var pe2=new Date(dMin2.getTime()-86400000),ps2=new Date(pe2.getTime()-(diff2-1)*86400000);
+      var peS=pe2.toISOString().slice(0,10),psS=ps2.toISOString().slice(0,10);
+      if(!d.dataSortKey||d.dataSortKey<psS||d.dataSortKey>peS)return false;
+      if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
+      if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
+      var sq2=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq2)<0)return false;
+      return true;
+    }).map(function(d){return _impDeriveRow(d,refMin2,impGetFimMin());});
+    prevFiltered.forEach(function(d){if(d.horasTrab===null)return;var sq=(impGetSquad(d.sap).squad)||'(sem squad)';if(!sqHrsPrev[sq])sqHrsPrev[sq]={t:0,n:0};sqHrsPrev[sq].t+=d.horasTrab;sqHrsPrev[sq].n++;});
+  }
+  var sqHrsList=Object.entries(sqHrs).map(function(e){
+    var avg=Math.round(e[1].t/e[1].n);
+    var prevAvg=sqHrsPrev[e[0]]?Math.round(sqHrsPrev[e[0]].t/sqHrsPrev[e[0]].n):null;
+    var diff=prevAvg!==null?avg-prevAvg:null;
+    return{sq:e[0],avg:avg,diff:diff};
+  }).sort(function(a,b){return b.avg-a.avg;});
+  var sqHrsEl=document.getElementById('sq-hrs-list');
+  if(sqHrsEl){
+    var avgGeral2=IMP_FILTERED.filter(function(d){return d.horasTrab!==null;});
+    var avgGeralV=avgGeral2.length?Math.round(avgGeral2.reduce(function(s,d){return s+d.horasTrab;},0)/avgGeral2.length):480;
+    sqHrsEl.innerHTML=sqHrsList.map(function(s){
+      var col2=s.avg>=avgGeralV?'background:#f0fdf4':s.avg<avgGeralV-60?'background:#fef2f2':'background:#f8fafc';
+      var dlt=s.diff!==null?'<span style="font-size:9px;font-weight:700;color:'+(s.diff>=0?'#16a34a':'#dc2626')+'">'+(s.diff>=0?'+':'')+s.diff+' min</span>':'';
+      return'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;border-radius:6px;font-size:11px;'+col2+'"><span>'+impEsc(s.sq)+'</span><div style="display:flex;align-items:center;gap:6px"><strong style="color:var(--sb)">'+impFmtDelay(s.avg)+'</strong>'+dlt+'</div></div>';
+    }).join('')||'<div style="color:var(--muted);font-size:11px;text-align:center;padding:16px">Nenhum dado de horas trabalhadas</div>';
+  }
+  // Ranking de causas por squad (stacked bar usando problemaId)
+  var causaColors={'Liderança':'#1e40af','Lideranca':'#1e40af','Clima/Tempo':'#0369a1','Clima':'#0369a1','Maquinário':'#b45309','Maquinario':'#b45309','Logística':'#6d28d9','Logistica':'#6d28d9','Material':'#9d174d','Outros':'#475569'};
+  var causasAll={},sqAll=[];
+  IMP_FILTERED.forEach(function(d){
+    if(d.delayMin<=0||!d.problemaId)return;
+    var sq=(d.squadInfo&&d.squadInfo.squad)||'(sem squad)';
+    var pid=d.problemaId||'Outros';
+    if(sqAll.indexOf(sq)<0)sqAll.push(sq);
+    if(!causasAll[pid])causasAll[pid]={};
+    if(!causasAll[pid][sq])causasAll[pid][sq]=0;
+    causasAll[pid][sq]++;
+  });
+  var pidKeys=Object.keys(causasAll);
+  var legendEl=document.getElementById('sq-causas-legend');
+  if(legendEl&&pidKeys.length){
+    legendEl.innerHTML=pidKeys.map(function(p){
+      var c=causaColors[p]||'#009CDE';
+      return'<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#64748b"><span style="width:10px;height:10px;border-radius:2px;background:'+c+';display:inline-block"></span>'+p+'</span>';
+    }).join('');
+  }
+  if(pidKeys.length&&sqAll.length){
+    var dsColors=['#1e40af','#0369a1','#b45309','#6d28d9','#9d174d','#475569','#009CDE','#10b981'];
+    var datasets=pidKeys.map(function(p,i){
+      return{label:p,data:sqAll.map(function(sq){return(causasAll[p]&&causasAll[p][sq])||0;}),backgroundColor:causaColors[p]||dsColors[i%dsColors.length],borderSkipped:false};
+    });
+    impSafeChart('imp-chart-sq-causas-pid',{type:'bar',data:{labels:sqAll,datasets:datasets},
+      options:Object.assign({},_impCT,{plugins:Object.assign({},_impCT.plugins,{legend:{display:false},tooltip:{mode:'index',intersect:false}}),scales:{
+        x:Object.assign({},_impAXX,{stacked:true}),y:Object.assign({},_impAXY,{stacked:true,ticks:Object.assign({},_impAXY.ticks,{stepSize:1,callback:function(v){return v+'';}})})
+      }})});
+  } else {
+    var cv2=document.getElementById('imp-chart-sq-causas-pid');
+    if(cv2)cv2.parentElement.innerHTML='<div style="text-align:center;padding:30px;color:var(--muted);font-size:11px">Preencha a coluna "Problema Identificado" na planilha para ver este gráfico</div>';
+  }
+}
+
+// ── Painéis extras da aba Registros ────────────────────────────────
+function impGetMotivo(d){
+  if(d.problemaId)return d.problemaId;
+  var j=(d.justificativa||'').toLowerCase();if(!j)return null;
+  if(/tr[âa]nsi|[oô]nibus|ve[íi]culo|acidente|estrada|br[-\s]|transporte/.test(j))return'Trânsito/Transporte';
+  if(/autoriza|permiss|pts\b|passe|acesso|libera|crach/.test(j))return'Autorização';
+  if(/canteiro|equipamento|material|m[áa]quina|ferramenta/.test(j))return'Canteiro';
+  if(/sa[úu]de|m[eé]dico|doente|consulta|atestado|pessoal|fam[íi]lia/.test(j))return'Saúde/Pessoal';
+  if(/chuva|clima|vento|neblina|temporal|chuvoso/.test(j))return'Clima/Tempo';
+  if(/lideran[cç]|l[íi]der|planejamento|aloca/.test(j))return'Liderança';
+  return'Outros';
+}
+function impRenderRegistrosExtra(){
+  var at=IMP_FILTERED.filter(function(d){return d.delayMin>0&&!impIsExcluido(d);});
+  var comJust=at.filter(function(d){return(d.justificativa||'').trim();});
+  var pct=at.length?Math.round(comJust.length/at.length*100):0;
+  // Barra de progresso
+  var bar=document.getElementById('reg-just-prog-bar');if(bar)bar.style.width=pct+'%';
+  var pctEl=document.getElementById('reg-just-prog-pct');if(pctEl)pctEl.textContent=comJust.length+' / '+at.length+' — '+pct+'%';
+  var lblEl=document.getElementById('reg-just-prog-lbl');if(lblEl)lblEl.textContent='Progresso das justificativas de atraso';
+  // Motivos mais frequentes
+  var byM={};
+  comJust.forEach(function(d){var m=impGetMotivo(d);if(m){if(!byM[m])byM[m]=0;byM[m]++;;}});
+  var mList=Object.entries(byM).sort(function(a,b){return b[1]-a[1];});
+  var maxM2=mList.length?mList[0][1]:1;
+  var mEl=document.getElementById('reg-motivos-list');
+  var badge=document.getElementById('reg-motivos-badge');if(badge)badge.textContent=comJust.length+' justificados';
+  if(mEl)mEl.innerHTML=mList.length?mList.map(function(e){
+    var bw2=Math.round(e[1]/maxM2*100);
+    return'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f8fafc"><span style="font-size:11px;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+impEsc(e[0])+'</span><div style="width:90px;background:#f1f5f9;border-radius:4px;height:5px"><div style="background:var(--acc);height:5px;border-radius:4px;width:'+bw2+'%"></div></div><span style="font-size:11px;font-weight:700;color:var(--sb);min-width:22px;text-align:right">'+e[1]+'</span></div>';
+  }).join(''):'<div style="font-size:11px;color:var(--muted);padding:8px 0">Nenhuma justificativa registrada ainda</div>';
+  // Atrasos sem justificativa (> 1h)
+  var pendentes=at.filter(function(d){return d.delayMin>60&&!(d.justificativa||'').trim();}).slice(0,8);
+  var pendBadge=document.getElementById('reg-pend-badge');
+  if(pendBadge){var totPend=at.filter(function(d){return d.delayMin>60&&!(d.justificativa||'').trim();}).length;pendBadge.textContent=totPend+' pendentes';}
+  var pendEl=document.getElementById('reg-pendentes-list');
+  if(pendEl)pendEl.innerHTML=pendentes.length?pendentes.map(function(d){
+    var sq=(d.squadInfo&&d.squadInfo.squad)||'';
+    return'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;border-radius:5px;background:#fff8f8;border-left:3px solid #ef4444;font-size:11px"><span style="font-weight:600">'+impEsc(d.empresa.slice(0,22))+(sq?' · <span style="font-weight:400;color:var(--muted)">'+impEsc(sq)+'</span>':'')+'</span><span style="font-weight:700;color:#dc2626">'+impFmtDelay(d.delayMin)+'</span></div>';
+  }).join('')+(at.filter(function(d){return d.delayMin>60&&!(d.justificativa||'').trim();}).length>8?'<div style="text-align:center;font-size:10px;color:var(--muted);padding-top:6px">+ '+(at.filter(function(d){return d.delayMin>60&&!(d.justificativa||'').trim();}).length-8)+' outros pendentes</div>':'')
+  :'<div style="font-size:11px;color:#16a34a;font-weight:600;padding:8px 0">✓ Todos os atrasos graves estão justificados!</div>';
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -9294,7 +9436,16 @@ async function renderViewImprodutividade(){
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap;min-width:200px">Justificativa</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap;min-width:130px">Problema Identificado</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap;min-width:220px">Descrição do Problema</th>'
-  +'</tr></thead><tbody id="imp-tbody-reg"></tbody></table></div></div></div>'
+  +'</tr></thead><tbody id="imp-tbody-reg"></tbody></table></div></div>'
+  // Barra de progresso justificativas
+  +'<div style="padding:8px 14px;border-top:1px solid var(--bord);font-size:10px;color:var(--muted);display:flex;align-items:center;gap:10px"><span id="reg-just-prog-lbl">Progresso das justificativas de atraso</span><div style="flex:1;max-width:220px;background:#f1f5f9;border-radius:20px;height:5px;overflow:hidden"><div id="reg-just-prog-bar" style="height:5px;border-radius:20px;background:#10b981;width:0%"></div></div><span id="reg-just-prog-pct" style="font-weight:700;color:var(--sb)"></span></div>'
+  +'</div>'
+  // Painéis: Motivos + Pendentes
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="font-size:12px;font-weight:700;color:var(--text)">Motivos mais frequentes</span><span style="display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">NOVO</span><span style="margin-left:auto;font-size:10px;background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px;color:var(--muted)" id="reg-motivos-badge"></span></div><div id="reg-motivos-list" style="display:flex;flex-direction:column;gap:6px"></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="font-size:12px;font-weight:700;color:var(--text)">Atrasos sem justificativa</span><span style="display:inline-flex;align-items:center;background:#f59e0b;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px" id="reg-pend-badge">PENDENTE</span></div><div style="font-size:10px;color:var(--muted);margin-bottom:8px">Registros graves (&gt;1h) que ainda precisam de justificativa:</div><div id="reg-pendentes-list" style="display:flex;flex-direction:column;gap:4px"></div></div>'
+  +'</div>'
+  +'</div>'
 
   // Tab Empresas
   +'<div id="imp-tab-empresas" style="display:none"><div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700">Por Empresa</span><span style="font-size:11px;color:var(--muted)" id="imp-lbl-emp"></span></div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
@@ -9333,7 +9484,13 @@ async function renderViewImprodutividade(){
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:right">Total min.</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:right">Maior atraso</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);min-width:90px">Distribuição</th>'
-  +'</tr></thead><tbody id="imp-tbody-squad"></tbody></table></div></div></div></div>'
+  +'</tr></thead><tbody id="imp-tbody-squad"></tbody></table></div></div>'
+  // Grid: Média horas produtivas + Ranking causas
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="font-size:12px;font-weight:700;color:var(--text)">Média horas produtivas/squad</span><span style="display:inline-flex;align-items:center;background:#8b5cf6;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">NOVO</span></div><div id="sq-hrs-list" style="display:flex;flex-direction:column;gap:5px"></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span style="font-size:12px;font-weight:700;color:var(--text)">Ranking de causas por squad</span><span style="display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">NOVO</span></div><div id="sq-causas-legend" style="display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap"></div><div style="position:relative;height:200px"><canvas id="imp-chart-sq-causas-pid"></canvas></div></div>'
+  +'</div>'
+  +'</div>'
 
   // Tab RDO Diário — usa apenas os filtros do topo (De/Até, Empresa, Obra, Squad)
   +'<div id="imp-tab-rdo" style="display:none">'
@@ -9350,7 +9507,7 @@ async function renderViewImprodutividade(){
   // Tab Evolução
   +'<div id="imp-tab-evolucao" style="display:none">'
   +'<div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;margin-bottom:14px"><span style="font-size:22px">⚠️</span><span style="font-size:12px;font-weight:600;color:#92400e">Visão comparativa — mostra como a equipe está evoluindo: identifique se está melhorando ou piorando antes da reunião com gerência.</span></div>'
-  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div><div style="font-size:13px;font-weight:700;color:var(--sb)">Comparativo de período</div><div style="font-size:11px;color:var(--muted)">Período atual vs período anterior — gerado automaticamente pelos filtros acima</div></div><div style="display:flex;gap:6px" id="evo-period-btns"><button onclick="impEvoSetPeriod(\'semana\',this)" class="evo-period-btn active" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impEvoSetPeriod(\'mes\',this)" class="evo-period-btn" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div><div style="font-size:13px;font-weight:700;color:var(--sb)">Comparativo de período</div><div style="font-size:11px;color:var(--muted)">Período atual vs período anterior — gerado automaticamente pelos filtros acima</div></div><div style="display:flex;gap:6px" id="evo-period-btns"><button onclick="impEvoSetPeriod(\'dia\',this)" class="evo-period-btn" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impEvoSetPeriod(\'semana\',this)" class="evo-period-btn active" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impEvoSetPeriod(\'mes\',this)" class="evo-period-btn" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div id="evo-trend-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px"></div>'
   +'<div id="evo-destaques" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px"></div>'
   +'<div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px">'
