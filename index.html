@@ -8001,6 +8001,33 @@ function impSaveJust(supaId,filtIdx,el){
   if(supaId&&supa) supa.from('improdutividade').update({justificativa:texto}).eq('id',supaId).then(function(r){if(r.error)console.error('just save',r.error);});
 }
 
+function impDesconsiderar(filtIdx,supaId){
+  var _d=IMP_FILTERED[filtIdx];if(!_d)return;
+  _d.acao='Desconsiderar';
+  var orig=IMP_DATA.find(function(d){return d.supaId===supaId;});
+  if(orig)orig.acao='Desconsiderar';
+  if(supaId&&supa)supa.from('improdutividade').update({acao:'Desconsiderar'}).eq('id',supaId).then(function(r){if(r.error)console.error('[imp] desc save',r.error);});
+  try{impApplyFilters();}catch(e){}
+  toast('Registro desconsiderado!','#475569');
+}
+function impReverterDesc(filtIdx,supaId){
+  var _d=IMP_FILTERED[filtIdx];if(!_d)return;
+  _d.acao='';
+  var orig=IMP_DATA.find(function(d){return d.supaId===supaId;});
+  if(orig)orig.acao='';
+  if(supaId&&supa)supa.from('improdutividade').update({acao:''}).eq('id',supaId).then(function(r){if(r.error)console.error('[imp] desc revert',r.error);});
+  try{impApplyFilters();}catch(e){}
+  toast('Registro reativado!','green');
+}
+function impRemoverJust(filtIdx,supaId){
+  var _d=IMP_FILTERED[filtIdx];if(!_d)return;
+  _d.justificativa='';
+  var orig=IMP_DATA.find(function(d){return d.supaId===supaId;});
+  if(orig)orig.justificativa='';
+  if(supaId&&supa)supa.from('improdutividade').update({justificativa:''}).eq('id',supaId).then(function(r){if(r.error)console.error('[imp] just del',r.error);});
+  try{impRenderRegistros();}catch(e){}
+  toast('Justificativa removida!','red');
+}
 var _IMP_ACAO_STYLES={
   'Não Iniciada':'background:#fef3c7;color:#92400e;border-color:#fcd34d',
   'Em Andamento':'background:#dbeafe;color:#1e40af;border-color:#93c5fd',
@@ -8936,16 +8963,31 @@ function impRenderRegistros(){
     if(desc.length<=LIM){descCell='<span style="color:var(--muted);font-size:11px;line-height:1.4">'+impEsc(desc||'—')+'</span>';}
     else{descCell='<span style="color:var(--muted);font-size:11px;line-height:1.4" id="imp-ds'+i+'">'+impEsc(desc.slice(0,LIM))+'…</span><span style="color:var(--muted);font-size:11px;line-height:1.4;white-space:pre-wrap;word-break:break-word" id="imp-df'+i+'" style="display:none">'+impEsc(desc)+'</span><button style="background:none;border:none;color:var(--acc);font-size:10px;font-weight:700;cursor:pointer;padding:0;margin-top:2px;display:block;font-family:inherit" id="imp-db'+i+'" onclick="impToggleDesc('+i+')">ver mais ▾</button>';}
     var jid=d.supaId||null;
-    // Justificativa: inline status (no design do preview)
+    // Justificativa: inline status
     var _justTxt=(d.justificativa||'').trim();
+    var _isDesc=(d.acao||'')==='Desconsiderar';
     var justCell;
-    if(dl<=0){
+    if(_isDesc){
+      justCell='<td style="vertical-align:middle;padding:4px 10px"><div class="just-done">'
+        +'<div style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:5px;background:#f1f5f9;color:#475569;font-size:10px;font-weight:600;width:fit-content">⊘ Desconsiderado</div>'
+        +'<button class="just-btn" style="margin-top:3px;border-color:#94a3b8;color:#64748b;font-size:9px;padding:2px 7px" onclick="impReverterDesc('+i+','+(jid?jid:'null')+')">↩ Reverter</button>'
+        +'</div></td>';
+    }else if(dl<=0){
       justCell='<td style="vertical-align:middle;padding:4px 10px;color:var(--muted);font-size:10px">— sem atraso</td>';
     }else if(_justTxt){
       var _preview=_justTxt.length>60?_justTxt.slice(0,60)+'…':_justTxt;
-      justCell='<td style="vertical-align:middle;padding:4px 10px"><div class="just-done"><div class="just-done-pill">✓ Justificado</div><div class="just-done-txt" title="'+impEsc(_justTxt)+'">'+impEsc(_preview)+'</div></div></td>';
+      justCell='<td style="vertical-align:middle;padding:4px 10px"><div class="just-done">'
+        +'<div class="just-done-pill">✓ Justificado</div>'
+        +'<div class="just-done-txt" title="'+impEsc(_justTxt)+'">'+impEsc(_preview)+'</div>'
+        +'<div style="display:flex;gap:4px;margin-top:3px">'
+        +'<button class="just-btn" style="font-size:9px;padding:2px 7px" onclick="impOpenJust('+i+','+(jid?jid:'null')+')">✎ Editar</button>'
+        +'<button class="just-btn" style="font-size:9px;padding:2px 7px;border-color:#ef4444;color:#ef4444" onclick="impRemoverJust('+i+','+(jid?jid:'null')+')">✕ Remover</button>'
+        +'</div></div></td>';
     }else{
-      justCell='<td style="vertical-align:middle;padding:4px 10px"><button class="just-btn" onclick="impOpenJust('+i+','+(jid?jid:'null')+')">+ Justificar</button></td>';
+      justCell='<td style="vertical-align:middle;padding:4px 10px"><div style="display:flex;flex-direction:column;gap:4px">'
+        +'<button class="just-btn" onclick="impOpenJust('+i+','+(jid?jid:'null')+')">+ Justificar</button>'
+        +'<button class="just-btn" style="border-color:#94a3b8;color:#64748b" onclick="impDesconsiderar('+i+','+(jid?jid:'null')+')">⊘ Desconsiderar</button>'
+        +'</div></td>';
     }
     var _pid=(d.problemaId||'').trim();
     var _pidColors={'Liderança':'background:#dbeafe;color:#1e40af','Lideranca':'background:#dbeafe;color:#1e40af','Clima':'background:#e0f2fe;color:#0369a1','Clima/Tempo':'background:#e0f2fe;color:#0369a1','Maquinário':'background:#fef3c7;color:#b45309','Maquinario':'background:#fef3c7;color:#b45309','Logística':'background:#ede9fe;color:#6d28d9','Logistica':'background:#ede9fe;color:#6d28d9','Material':'background:#fce7f3;color:#9d174d','Outros':'background:#f1f5f9;color:#475569'};
