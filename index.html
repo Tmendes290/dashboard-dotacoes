@@ -8195,6 +8195,7 @@ function impApplyFilters(){
   try{impRenderObras();}catch(e){console.error('[imp] obras',e);}
   try{impRenderSquads();}catch(e){console.error('[imp] squads',e);}
   try{if(IMP_TAB==='rdo') rdoImpRender();}catch(e){console.error('[imp] rdo',e);}
+  try{if(IMP_TAB==='evolucao') impRenderEvolucao();}catch(e){console.error('[imp] evolucao',e);}
 }
 
 function impSetChartFilter(type,val){
@@ -8239,7 +8240,6 @@ function impRenderCards(refMin){
   var total=validos.length;
   var at=validos.filter(function(d){return d.delayMin>0;});
   var totalMin=validos.reduce(function(s,d){return s+(d.delayMin||0);},0);
-  // Base dinâmica: período do filtro para Seg–Qui; Sex = 1h menos
   var fimMin=impGetFimMin();
   var periodoBase=Math.max(0,fimMin-refMin);
   var totalEsperadoMin=validos.reduce(function(s,d){
@@ -8249,27 +8249,100 @@ function impRenderCards(refMin){
   var totalProdMin=Math.max(0,totalEsperadoMin-totalMin);
   var pctImp=totalEsperadoMin>0?Math.round(totalMin/totalEsperadoMin*100):0;
   var pctProd=100-pctImp;
+  // Media horas produtivas por pessoa por dia
+  var diasUnicos=Object.keys(validos.reduce(function(m,d){if(d.dataSortKey)m[d.dataSortKey]=1;return m;},{})).length||1;
+  var comH=validos.filter(function(d){return d.horasTrab!==null;});
+  var avgHMin=comH.length?comH.reduce(function(s,d){return s+d.horasTrab;},0)/comH.length:null;
+  // Período anterior
+  var prev=impGetPrevData(refMin);
+  var pvs=prev?'vs ant. ('+prev.label+')':'';
+  var prevProd=prev&&prev.totalEsp>0?prev.totalProd:null;
+  var prevPctProd=prev&&prev.totalEsp>0?(100-prev.pctImp):null;
+  var prevAvgH=prev?prev.avgH:null;
   var el=document.getElementById('imp-cards'); if(!el) return;
   el.innerHTML=
     impCard('var(--acc)',total,'Registros com horário','Chegada ou PTS preenchidos',
-      'Conta os registros que têm ao menos um horário preenchido (Chegada ou PTS). Registros sem nenhum desses dados são ignorados.')+
+      'Conta os registros que têm ao menos um horário preenchido (Chegada ou PTS). Registros sem nenhum desses dados são ignorados.',
+      prev?'<div>'+_impDeltaHtml(total,prev.total,false)+'</div><div style="font-size:9px;color:var(--muted);margin-top:2px">'+pvs+'</div>':null)+
     impCard('#ef4444',at.length,'Com atraso',(total>0?Math.round(at.length/total*100):0)+'% do total',
-      'Registros onde a base (Início, Chegada ou PTS — nessa ordem de prioridade) é posterior ao Horário Ref. definido no filtro acima.')+
+      'Registros onde a base (Início, Chegada ou PTS — nessa ordem de prioridade) é posterior ao Horário Ref. definido no filtro acima.',
+      prev?'<div>'+_impDeltaHtml(at.length,prev.atCount,true)+'</div><div style="font-size:9px;color:var(--muted);margin-top:2px">'+pvs+'</div>':null)+
     impCard('#f59e0b',impFmtDelay(totalMin)||'0 min','Total improdutivo','Ref: '+impToHHMM(refMin)+' — '+totalMin+' min',
-      'Soma de todos os minutos de atraso. Cálculo por registro: Atraso = Base − Horário Ref. Ex: chegada 10:30, ref. 08:00 → 150 min improdutivos.')+
+      'Soma de todos os minutos de atraso. Cálculo por registro: Atraso = Base − Horário Ref. Ex: chegada 10:30, ref. 08:00 → 150 min improdutivos.',
+      prev?'<div>'+_impDeltaHtml(totalMin,prev.totalMin,true,function(v){return impFmtDelay(Math.round(v));})+'</div><div style="font-size:9px;color:var(--muted);margin-top:2px">'+pvs+'</div>':null)+
     impCard('#10b981',impFmtDelay(totalProdMin)||'0 min','Horas produtivas',pctProd+'% — base '+impFmtDelay(totalEsperadoMin),
-      'Base por registro: Seg–Qui = 9h, Sex = 8h. Total esperado = '+impFmtDelay(totalEsperadoMin)+'. Horas produtivas = base − total improdutivo ('+impFmtDelay(totalMin)+'). Quanto mais próximo da base, melhor.')+
-    impCard('#6366f1',pctImp+'%','Taxa improdutiva',pctProd+'% produtivo',
-      'Improdutivo ÷ base × 100. Base: Seg–Qui = 9h/reg., Sex = 8h/reg. Total base = '+impFmtDelay(totalEsperadoMin)+' para '+total+' registros. Quanto menor, melhor.');
+      'Base por registro: Seg–Qui = 9h, Sex = 8h. Total esperado = '+impFmtDelay(totalEsperadoMin)+'. Horas produtivas = base − total improdutivo ('+impFmtDelay(totalMin)+'). Quanto mais próximo da base, melhor.',
+      prev&&prevProd!==null?'<div>'+_impDeltaHtml(totalProdMin,prevProd,false,function(v){return impFmtDelay(Math.round(v));})+'</div><div style="font-size:9px;color:var(--muted);margin-top:2px">'+pvs+'</div>':null)+
+    impCard('#8b5cf6',avgHMin!==null?impFmtDelay(Math.round(avgHMin)):'—','Média horas produtivas','por pessoa/dia na seleção',
+      'Média de horas trabalhadas por pessoa (registros com início e término preenchidos). Quanto mais próximo de 9h, melhor.',
+      prev&&prevAvgH!==null&&avgHMin!==null?'<div>'+_impDeltaHtml(avgHMin,prevAvgH,false,function(v){return Math.round(v)+' min';})+'</div><div style="font-size:9px;color:var(--muted);margin-top:2px">'+pvs+'</div>':null);
 }
-function impCard(cor,val,lbl,sub,info){
+function impCard(cor,val,lbl,sub,info,delta){
   var btn=info?'<div title="'+info+'" style="position:absolute;top:8px;right:8px;width:17px;height:17px;border-radius:50%;background:#e2e8f0;color:#64748b;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:help;flex-shrink:0;line-height:1">!</div>':'';
+  var delt=delta?'<div style="margin-top:6px">'+delta+'</div>':'';
   return'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px;border-top:3px solid '+cor+';position:relative">'
     +btn
     +'<div style="font-size:26px;font-weight:800;line-height:1">'+val+'</div>'
     +'<div style="font-size:11px;color:var(--muted);margin-top:4px;font-weight:500">'+lbl+'</div>'
     +'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+sub+'</div>'
+    +delt
     +'</div>';
+}
+
+// ── Previous-period comparison helpers ────────────────────────────
+function _impDeriveRow(d,refMin,fimMin){
+  var d2=Object.assign({},d);
+  var base=null;
+  if(d2.inicioMin!==null)base=d2.inicioMin;
+  else if(d2.chegadaMin!==null)base=d2.chegadaMin;
+  else if(d2.ptsMin!==null)base=d2.ptsMin;
+  d2.delayMin=base!==null?Math.max(0,base-refMin):null;
+  var almP=(d2.almIniMin!==null&&d2.almFimMin!==null)?(d2.almFimMin-d2.almIniMin):0;
+  d2.horasTrab=(d2.inicioMin!==null&&d2.terminoMin!==null)?d2.terminoMin-d2.inicioMin-almP:null;
+  return d2;
+}
+function _impCalcMetrics(arr,refMin){
+  var fimMin=impGetFimMin();var periodoBase=Math.max(0,fimMin-refMin);
+  var valid=arr.filter(function(d){return!impIsExcluido(d);});
+  var at=valid.filter(function(d){return d.delayMin>0;});
+  var totalMin=valid.reduce(function(s,d){return s+(d.delayMin||0);},0);
+  var totalEsp=valid.reduce(function(s,d){var dow=d.dataSortKey?new Date(d.dataSortKey+'T00:00:00').getDay():1;return s+(dow===5?Math.max(0,periodoBase-60):periodoBase);},0);
+  var comH=valid.filter(function(d){return d.horasTrab!==null;});
+  var comCheg=valid.filter(function(d){return d.chegadaMin!==null;});
+  return{total:valid.length,atCount:at.length,totalMin:totalMin,totalProd:Math.max(0,totalEsp-totalMin),totalEsp:totalEsp,
+    avgDelay:at.length?Math.round(at.reduce(function(s,d){return s+d.delayMin;},0)/at.length):null,
+    avgH:comH.length?comH.reduce(function(s,d){return s+d.horasTrab;},0)/comH.length:null,
+    pctImp:totalEsp>0?Math.round(totalMin/totalEsp*100):0,
+    avgCheg:comCheg.length?comCheg.reduce(function(s,d){return s+d.chegadaMin;},0)/comCheg.length:null};
+}
+function impGetPrevData(refMin){
+  var filtDates=IMP_FILTERED.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
+  if(!filtDates.length)return null;
+  var dMin=new Date(filtDates[0]+'T00:00:00'),dMax=new Date(filtDates[filtDates.length-1]+'T00:00:00');
+  var diffDays=Math.round((dMax-dMin)/86400000)+1;
+  var prevEnd=new Date(dMin.getTime()-86400000),prevStart=new Date(prevEnd.getTime()-(diffDays-1)*86400000);
+  var pE=prevEnd.toISOString().slice(0,10),pS=prevStart.toISOString().slice(0,10);
+  var fimMin=impGetFimMin();
+  var prevRaw=IMP_DATA.filter(function(d){
+    if(!d.dataSortKey||d.dataSortKey<pS||d.dataSortKey>pE)return false;
+    if(d.terminoMin!==null&&d.terminoMin>fimMin)return false;
+    if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
+    if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
+    var sq=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
+    return true;
+  }).map(function(d){return _impDeriveRow(d,refMin,fimMin);});
+  var m=_impCalcMetrics(prevRaw,refMin);
+  m.label=pS.slice(8)+'/'+pS.slice(5,7)+' a '+pE.slice(8)+'/'+pE.slice(5,7);
+  return m;
+}
+function _impDeltaHtml(curr,prev,higherIsBad,fmtFn){
+  if(prev===null||prev===undefined)return'';
+  var diff=curr-prev;
+  if(Math.abs(diff)<0.5)return'<span style="font-size:10px;color:#64748b">= igual ao período anterior</span>';
+  var up=diff>0,bad=(up&&higherIsBad)||(!up&&!higherIsBad);
+  var col=bad?'#dc2626':'#16a34a',bg=bad?'#fef2f2':'#f0fdf4';
+  var raw=fmtFn?fmtFn(Math.abs(diff)):Math.round(Math.abs(diff));
+  return'<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:'+bg+';color:'+col+'">'+(up?'↑':'↓')+' '+(up?'+':'−')+raw+'</span>';
 }
 
 // ── Dashboard Charts ──────────────────────────────────────────────
@@ -8392,6 +8465,214 @@ function impChartProblemas(){
   var vals=list.map(function(e){return e[1];});
   var bgColors=labels.map(function(l){return _pidColors[l]||'rgba(14,165,233,.65)';});
   impSafeChart('imp-chart-prob',{type:'bar',plugins:[_impDlPlugin(function(v){return v+' reg';}, 'y')],data:{labels:labels,datasets:[{data:vals,backgroundColor:bgColors,borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){var pct=total>0?Math.round(c.raw/total*100):0;return c.raw+' registros ('+pct+'%)';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{stepSize:1,callback:function(v){return v+'';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
+}
+
+// ── Evolução Tab ──────────────────────────────────────────────────
+var _IMP_EVO_PERIOD='semana';
+var _IMP_CHEGADA_PERIOD='semana';
+var _impEvoCharts={};
+
+function impEvoSetPeriod(p,btn){
+  _IMP_EVO_PERIOD=p;
+  document.querySelectorAll('.evo-period-btn').forEach(function(b){b.style.background='var(--card)';b.style.color='var(--muted)';});
+  btn.style.background='var(--sb)';btn.style.color='#fff';
+  impRenderEvolucao();
+}
+function impChegadaSetPeriod(p,btn){
+  _IMP_CHEGADA_PERIOD=p;
+  document.querySelectorAll('.chegada-period-btn').forEach(function(b){b.style.background='var(--card)';b.style.color='var(--muted)';});
+  btn.style.background='var(--sb)';btn.style.color='#fff';
+  _impBuildChegadaChart();
+}
+
+function _impWeekKey(dateStr){
+  var d=new Date(dateStr+'T00:00:00');
+  var jan4=new Date(d.getFullYear(),0,4);
+  var w=Math.ceil(((d-jan4)/86400000+jan4.getDay()+1)/7);
+  return d.getFullYear()+'-W'+String(w).padStart(2,'0');
+}
+function _impMonthKey(dateStr){ return dateStr.slice(0,7); }
+function _impGroupByPeriod(data,tipo,refMin){
+  var fimMin=impGetFimMin();var periodoBase=Math.max(0,fimMin-refMin);
+  var byP={};
+  data.forEach(function(d){
+    if(!d.dataSortKey)return;
+    var key=tipo==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
+    if(!byP[key])byP[key]={key:key,label:'',totalMin:0,atCount:0,totalH:0,countH:0,totalCheg:0,countCheg:0,totalEsp:0,n:0};
+    var g=byP[key];g.n++;
+    if(d.delayMin>0){g.atCount++;g.totalMin+=d.delayMin;}
+    if(d.horasTrab!==null){g.totalH+=d.horasTrab;g.countH++;}
+    if(d.chegadaMin!==null){g.totalCheg+=d.chegadaMin;g.countCheg++;}
+    var dow=new Date(d.dataSortKey+'T00:00:00').getDay();
+    g.totalEsp+=(dow===5?Math.max(0,periodoBase-60):periodoBase);
+  });
+  return Object.values(byP).sort(function(a,b){return a.key<b.key?-1:1;});
+}
+
+function impRenderEvolucao(){
+  if(IMP_TAB!=='evolucao')return;
+  var refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
+  var rp=refStr.split(':');var refMin=parseInt(rp[0])*60+parseInt(rp[1]||0);
+  var fimMin=impGetFimMin();
+
+  // Aplica filtros de empresa/sap/squad mas IGNORA filtro de data para ver tendência histórica
+  var baseData=IMP_DATA.filter(function(d){
+    if(d.terminoMin!==null&&d.terminoMin>fimMin)return false;
+    if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
+    if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
+    var sq=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
+    return true;
+  }).map(function(d){return _impDeriveRow(d,refMin,fimMin);}).filter(function(d){return!impIsExcluido(d);});
+
+  var grupos=_impGroupByPeriod(baseData,_IMP_EVO_PERIOD,refMin).slice(-8); // últimos 8 períodos
+  if(grupos.length<2){
+    var el=document.getElementById('evo-trend-cards');
+    if(el) el.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted);font-size:13px">Dados insuficientes para comparativo. Carregue mais registros.</div>';
+    return;
+  }
+
+  var curr=grupos[grupos.length-1],prev2=grupos[grupos.length-2];
+  // Formata label do período
+  function fmtKey(k){
+    if(k.includes('-W')){var p=k.split('-W');return'Sem.'+p[1]+'/'+p[0].slice(2);}
+    var p=k.split('-');return['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][parseInt(p[1])-1]+'/'+p[0].slice(2);
+  }
+
+  // Trend cards
+  function tCard(lbl,currV,prevV,higherIsBad,fmt){
+    var diff=currV-prevV;var pct=prevV?Math.round(Math.abs(diff)/prevV*100):0;
+    var up=diff>0;var bad=(up&&higherIsBad)||(!up&&!higherIsBad);
+    var col=bad?'#dc2626':'#16a34a';
+    return'<div style="background:var(--bg);border:1px solid var(--bord);border-radius:8px;padding:12px 14px;text-align:center">'
+      +'<div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'+lbl+'</div>'
+      +'<div style="font-size:20px;font-weight:800;color:var(--sb)">'+fmt(currV)+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);margin:2px 0">Período ant.: '+fmt(prevV)+'</div>'
+      +'<div style="font-size:11px;font-weight:700;margin-top:3px;color:'+col+'">'+(up?'↑':'↓')+' '+(up?'+':'−')+pct+'% — '+(bad?'piorou':'melhorou')+'</div>'
+      +'</div>';
+  }
+  var avgHCurr=curr.countH?Math.round(curr.totalH/curr.countH):0;
+  var avgHPrev=prev2.countH?Math.round(prev2.totalH/prev2.countH):0;
+  var avgDelCurr=curr.atCount?Math.round(curr.totalMin/curr.atCount):0;
+  var avgDelPrev=prev2.atCount?Math.round(prev2.totalMin/prev2.atCount):0;
+  var el=document.getElementById('evo-trend-cards');
+  if(el) el.innerHTML=
+    tCard('Atrasos',curr.atCount,prev2.atCount,true,function(v){return v+''})+
+    tCard('Min. improdutivos',curr.totalMin,prev2.totalMin,true,function(v){return impFmtDelay(v)||v+'min'})+
+    tCard('Média de atraso',avgDelCurr,avgDelPrev,true,function(v){return impFmtDelay(v)||v+'min'})+
+    tCard('Méd. horas produtivas',avgHCurr,avgHPrev,false,function(v){return impFmtDelay(v)||v+'min'});
+
+  // Destaques
+  var diffAt=curr.atCount-prev2.atCount,diffMin=curr.totalMin-prev2.totalMin;
+  var destEl=document.getElementById('evo-destaques');
+  if(destEl){
+    function destCard(bad2,ico,title,sub){
+      var col2=bad2?'#fef2f2':'#f0fdf4';var bord2=bad2?'#fecaca':'#bbf7d0';
+      return'<div style="border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;background:'+col2+';border:1px solid '+bord2+'"><span style="font-size:22px">'+ico+'</span><div><strong style="font-size:13px;font-weight:800;color:var(--sb);display:block">'+title+'</strong><span style="font-size:11px;color:var(--muted)">'+sub+'</span></div></div>';
+    }
+    destEl.innerHTML=
+      destCard(diffAt>0,'📉','Atrasos '+(diffAt>0?'aumentaram':'reduziram')+' '+(Math.abs(Math.round(diffAt>0?diffAt/prev2.atCount*100:diffAt/prev2.atCount*100))||0)+'%',
+        (diffAt>0?'+':'')+diffAt+' atrasos vs '+fmtKey(prev2.key))+
+      destCard(diffMin>0,'📈','Minutos improdutivos '+(diffMin<0?'caíram':'subiram')+' '+(prev2.totalMin?Math.round(Math.abs(diffMin)/prev2.totalMin*100):0)+'%',
+        (diffMin>0?'+':'')+impFmtDelay(Math.abs(diffMin))+' vs '+fmtKey(prev2.key));
+  }
+
+  // Gráfico comparativo (por dia dos dois últimos períodos)
+  var compBadge=document.getElementById('evo-comp-badge');
+  if(compBadge) compBadge.textContent=fmtKey(prev2.key)+' vs '+fmtKey(curr.key);
+  var allDaysCurr=baseData.filter(function(d){return d.dataSortKey&&(_IMP_EVO_PERIOD==='mes'?_impMonthKey(d.dataSortKey)===curr.key:_impWeekKey(d.dataSortKey)===curr.key);});
+  var allDaysPrev=baseData.filter(function(d){return d.dataSortKey&&(_IMP_EVO_PERIOD==='mes'?_impMonthKey(d.dataSortKey)===prev2.key:_impWeekKey(d.dataSortKey)===prev2.key);});
+  var byDayCurr={},byDayPrev={};
+  allDaysCurr.forEach(function(d){var dd=d.dataSortKey;if(!byDayCurr[dd])byDayCurr[dd]=0;byDayCurr[dd]+=(d.delayMin||0);});
+  allDaysPrev.forEach(function(d){var dd=d.dataSortKey;if(!byDayPrev[dd])byDayPrev[dd]=0;byDayPrev[dd]+=(d.delayMin||0);});
+  var compLabelsCurr=Object.keys(byDayCurr).sort(),compLabelsPrev=Object.keys(byDayPrev).sort();
+  var compLen=Math.max(compLabelsCurr.length,compLabelsPrev.length);
+  var idx=Array.from({length:compLen},function(_,i){return i+1;});
+  if(_impEvoCharts.comp)_impEvoCharts.comp.destroy();
+  var cvComp=document.getElementById('evo-chart-comp');
+  if(cvComp){
+    _impEvoCharts.comp=new Chart(cvComp.getContext('2d'),{type:'bar',
+      data:{labels:idx.map(function(i){return 'Dia '+i;}),
+        datasets:[
+          {label:'Atual',data:idx.map(function(i){return byDayCurr[compLabelsCurr[i-1]]||0;}),backgroundColor:'rgba(0,156,222,.7)',borderRadius:4},
+          {label:'Anterior',data:idx.map(function(i){return byDayPrev[compLabelsPrev[i-1]]||0;}),backgroundColor:'rgba(203,213,225,.6)',borderRadius:4}
+        ]},
+      options:Object.assign({},_impCT,{interaction:{mode:'index',intersect:false},scales:{
+        x:Object.assign({},_impAXX),
+        y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{callback:function(v){return v+'min';}})})
+      }})
+    });
+  }
+
+  // Média horas produtivas por squad
+  var bySq={};
+  baseData.filter(function(d){return d.horasTrab!==null&&(_IMP_EVO_PERIOD==='mes'?_impMonthKey(d.dataSortKey)===curr.key:_impWeekKey(d.dataSortKey)===curr.key);})
+    .forEach(function(d){var sq=(d.squadInfo&&d.squadInfo.squad)||'(sem squad)';if(!bySq[sq])bySq[sq]={t:0,n:0};bySq[sq].t+=d.horasTrab;bySq[sq].n++;});
+  var sqList=Object.entries(bySq).map(function(e){return{sq:e[0],avg:Math.round(e[1].t/e[1].n)};}).sort(function(a,b){return b.avg-a.avg;});
+  var sqEl=document.getElementById('evo-squad-hrs');
+  if(sqEl){
+    var avgGeral=curr.countH?Math.round(curr.totalH/curr.countH):480;
+    sqEl.innerHTML=sqList.slice(0,8).map(function(s){
+      var col2=s.avg>=avgGeral?'background:#f0fdf4':'';if(s.avg<avgGeral-60)col2='background:#fef2f2';
+      return'<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;border-radius:6px;font-size:11px;'+col2+'"><span>'+s.sq+'</span><strong style="color:var(--sb)">'+impFmtDelay(s.avg)+'</strong></div>';
+    }).join('');
+  }
+
+  // Gráfico de chegada
+  _impBuildChegadaChart();
+}
+
+function _impBuildChegadaChart(){
+  var refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
+  var rp=refStr.split(':');var refMin=parseInt(rp[0])*60+parseInt(rp[1]||0);
+  var fimMin=impGetFimMin();
+  var baseData=IMP_DATA.filter(function(d){
+    if(d.terminoMin!==null&&d.terminoMin>fimMin)return false;
+    if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
+    if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
+    var sq=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
+    return true;
+  }).filter(function(d){return d.chegadaMin!==null&&d.dataSortKey;});
+
+  var byP={};
+  baseData.forEach(function(d){
+    var key=_IMP_CHEGADA_PERIOD==='dia'?d.dataSortKey:_IMP_CHEGADA_PERIOD==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
+    if(!byP[key])byP[key]={t:0,n:0,key:key};
+    byP[key].t+=d.chegadaMin;byP[key].n++;
+  });
+  var grupos=Object.values(byP).sort(function(a,b){return a.key<b.key?-1:1;}).slice(-12);
+  if(!grupos.length){impDestroyChart('evo-chart-chegada');return;}
+
+  function fmtK(k){
+    if(k.includes('-W')){var p=k.split('-W');return'Sem.'+parseInt(p[1])+'\n'+p[0];}
+    if(k.length===10){var p=k.split('-');return p[2]+'/'+p[1];}
+    var p=k.split('-');return['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][parseInt(p[1])-1]+'/'+p[0].slice(2);
+  }
+  var meta=480; // 08:00
+  var labels=grupos.map(function(g){return fmtK(g.key);});
+  var vals=grupos.map(function(g){return Math.round(g.t/g.n);});
+  var bgs=vals.map(function(v){return v<=meta?'rgba(22,163,74,.75)':'rgba(239,68,68,.75)';});
+
+  if(_impEvoCharts.chegada)_impEvoCharts.chegada.destroy();
+  var cv=document.getElementById('evo-chart-chegada');
+  if(!cv)return;
+  _impEvoCharts.chegada=new Chart(cv.getContext('2d'),{type:'bar',
+    data:{labels:labels,datasets:[
+      {label:'Méd. chegada',data:vals,backgroundColor:bgs,borderRadius:5,borderSkipped:false,order:2},
+      {type:'line',label:'Meta (08:00)',data:labels.map(function(){return meta;}),borderColor:'#002F6C',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false,order:1}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
+        if(ctx.datasetIndex===1)return' Meta: 08:00';
+        var v=ctx.raw,h=Math.floor(v/60),m=v%60;
+        var diff=v-meta;
+        return[' Média: '+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'),' '+(diff>0?'+':'')+diff+' min '+(diff>0?'acima':'abaixo')+' da meta'];
+      }}}},
+      scales:{
+        y:{min:420,max:600,ticks:{callback:function(v){var h=Math.floor(v/60),m=v%60;return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');},font:{size:10}},grid:{color:'#f1f5f9'}},
+        x:{grid:{display:false},ticks:{font:{size:10}}}
+      }
+    }
+  });
 }
 
 function impChartTimeline(){
@@ -8878,7 +9159,7 @@ function impShowTab(tab,el){
   el.classList.add('active');
   el.style.color='var(--acc)';
   el.style.borderBottomColor='var(--acc)';
-  ['dashboard','registros','empresas','obras','squads','rdo'].forEach(function(t){var d=document.getElementById('imp-tab-'+t);if(d)d.style.display=t===tab?'':'none';});
+  ['dashboard','registros','empresas','obras','squads','rdo','evolucao'].forEach(function(t){var d=document.getElementById('imp-tab-'+t);if(d)d.style.display=t===tab?'':'none';});
   if(tab==='dashboard') impRenderDashboard();
 }
 
@@ -8961,6 +9242,7 @@ async function renderViewImprodutividade(){
   +'<div class="imp-tab" onclick="impShowTab(\'empresas\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">Por Empresa</div>'
   +'<div class="imp-tab" onclick="impShowTab(\'obras\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">Por Obra</div>'
   +'<div class="imp-tab" onclick="impShowTab(\'squads\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">Por Squad</div>'
+  +'<div class="imp-tab" onclick="impShowTab(\'evolucao\',this);impRenderEvolucao();" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">📈 Evolução <span style="display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;vertical-align:middle">NOVO</span></div>'
   +'<div class="imp-tab" onclick="impShowTab(\'rdo\',this);rdoImpRender();" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">📅 RDO Diário</div>'
   +'</div>'
 
@@ -9063,6 +9345,22 @@ async function renderViewImprodutividade(){
   +'<div class="rdo-empty" id="rdo-empty" style="display:none;text-align:center;padding:60px 20px;color:var(--muted)"><div style="font-size:36px;margin-bottom:12px">📭</div><h3 style="font-size:16px;margin-bottom:8px">Nenhum dado com horário</h3><p>Ajuste o filtro de datas acima</p></div>'
   +'<p id="rdo-htrab-note" style="text-align:center;font-size:10px;color:#cbd5e1;margin-top:20px;padding-bottom:16px">H. Trab. = Término − Início − almoço (sem dados: −60 min) &nbsp;·&nbsp; Clique em um squad para ver as obras</p>'
   +'<div id="imp-print-footer" style="display:none;text-align:right;font-size:10px;color:#94a3b8;padding-top:12px;border-top:1px solid #e2e8f0;margin-top:16px">Desenvolvido por: Thiago Mendes Lima</div>'
+  +'</div>'
+
+  // Tab Evolução
+  +'<div id="imp-tab-evolucao" style="display:none">'
+  +'<div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;margin-bottom:14px"><span style="font-size:22px">⚠️</span><span style="font-size:12px;font-weight:600;color:#92400e">Visão comparativa — mostra como a equipe está evoluindo: identifique se está melhorando ou piorando antes da reunião com gerência.</span></div>'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div><div style="font-size:13px;font-weight:700;color:var(--sb)">Comparativo de período</div><div style="font-size:11px;color:var(--muted)">Período atual vs período anterior — gerado automaticamente pelos filtros acima</div></div><div style="display:flex;gap:6px" id="evo-period-btns"><button onclick="impEvoSetPeriod(\'semana\',this)" class="evo-period-btn active" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impEvoSetPeriod(\'mes\',this)" class="evo-period-btn" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
+  +'<div id="evo-trend-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px"></div>'
+  +'<div id="evo-destaques" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px"></div>'
+  +'<div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px">'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;font-weight:700;color:var(--text)">Min. improdutivos — período atual vs anterior</span><span style="font-size:10px;color:var(--muted)" id="evo-comp-badge"></span></div><div style="display:flex;gap:14px;margin-bottom:8px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:14px;height:4px;background:rgba(0,156,222,.7);border-radius:2px"></div>Atual</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:14px;height:4px;background:rgba(203,213,225,.6);border-radius:2px"></div>Anterior</div></div><div style="position:relative;height:200px"><canvas id="evo-chart-comp"></canvas></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">Méd. horas produtivas por squad</div><div id="evo-squad-hrs" style="display:flex;flex-direction:column;gap:5px"></div></div>'
+  +'</div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-bottom:14px">'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Evolução da média de chegada <span style="display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;vertical-align:middle">NOVO</span></span><div style="font-size:11px;color:var(--muted);margin-top:2px">Quanto mais cedo, melhor — verde = antes da meta, vermelho = depois da meta (08:00)</div></div><div style="display:flex;gap:5px" id="chegada-period-btns"><button onclick="impChegadaSetPeriod(\'semana\',this)" class="chegada-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impChegadaSetPeriod(\'dia\',this)" class="chegada-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impChegadaSetPeriod(\'mes\',this)" class="chegada-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
+  +'<div style="position:relative;height:220px"><canvas id="evo-chart-chegada"></canvas></div>'
+  +'</div>'
   +'</div>'
 
   +'</div>' // imp-content
