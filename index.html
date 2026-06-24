@@ -8648,12 +8648,12 @@ function impRenderEvolucao(){
   if(destEl){
     function destCard(bad2,ico,title,sub){
       var col2=bad2?'#fef2f2':'#f0fdf4';var bord2=bad2?'#fecaca':'#bbf7d0';
-      return'<div style="border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;background:'+col2+';border:1px solid '+bord2+'"><span style="font-size:22px">'+ico+'</span><div><strong style="font-size:13px;font-weight:800;color:var(--sb);display:block">'+title+'</strong><span style="font-size:11px;color:var(--muted)">'+sub+'</span></div></div>';
+      return'<div style="border-radius:8px;padding:12px 14px;background:'+col2+';border:1px solid '+bord2+'"><strong style="font-size:13px;font-weight:800;color:var(--sb);display:block">'+title+'</strong><span style="font-size:11px;color:var(--muted)">'+sub+'</span></div>';
     }
     destEl.innerHTML=
-      destCard(diffAt>0,'📉','Atrasos '+(diffAt>0?'aumentaram':'reduziram')+' '+(Math.abs(Math.round(diffAt>0?diffAt/prev2.atCount*100:diffAt/prev2.atCount*100))||0)+'%',
+      destCard(diffAt>0,'','Atrasos '+(diffAt>0?'aumentaram':'reduziram')+' '+(Math.abs(Math.round(diffAt>0?diffAt/prev2.atCount*100:diffAt/prev2.atCount*100))||0)+'%',
         (diffAt>0?'+':'')+diffAt+' atrasos vs '+fmtKey(prev2.key))+
-      destCard(diffMin>0,'📈','Minutos improdutivos '+(diffMin<0?'caíram':'subiram')+' '+(prev2.totalMin?Math.round(Math.abs(diffMin)/prev2.totalMin*100):0)+'%',
+      destCard(diffMin>0,'','Minutos improdutivos '+(diffMin<0?'caíram':'subiram')+' '+(prev2.totalMin?Math.round(Math.abs(diffMin)/prev2.totalMin*100):0)+'%',
         (diffMin>0?'+':'')+impFmtDelay(Math.abs(diffMin))+' vs '+fmtKey(prev2.key));
   }
 
@@ -9592,7 +9592,7 @@ async function renderViewImprodutividade(){
 
   // Tab Evolução
   +'<div id="imp-tab-evolucao" style="display:none">'
-  +'<div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;margin-bottom:14px"><span style="font-size:22px">⚠️</span><span style="font-size:12px;font-weight:600;color:#92400e">Visão comparativa — mostra como a equipe está evoluindo: identifique se está melhorando ou piorando antes da reunião com gerência.</span></div>'
+  +''
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div><div style="font-size:13px;font-weight:700;color:var(--sb)">Comparativo de período</div><div style="font-size:11px;color:var(--muted)">Período atual vs período anterior — gerado automaticamente pelos filtros acima</div></div><div style="display:flex;gap:6px" id="evo-period-btns"><button onclick="impEvoSetPeriod(\'dia\',this)" class="evo-period-btn" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impEvoSetPeriod(\'semana\',this)" class="evo-period-btn active" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impEvoSetPeriod(\'mes\',this)" class="evo-period-btn" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div id="evo-trend-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px"></div>'
   +'<div id="evo-destaques" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px"></div>'
