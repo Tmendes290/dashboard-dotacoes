@@ -8668,8 +8668,10 @@ function impRenderEvolucao(){
     var prevData=baseData.filter(function(d){return d.dataSortKey>=pIniStr&&d.dataSortKey<=pFimStr;});
     curr=_calcStats(currData);
     curr.key=(dtIni===dtFim?_isoToBR(dtIni):_isoToBR(dtIni)+' a '+_isoToBR(dtFim));
+    curr._isoIni=dtIni;curr._isoFim=dtFim;
     prev2=_calcStats(prevData);
     prev2.key=(pIniStr===pFimStr?_isoToBR(pIniStr):_isoToBR(pIniStr)+' a '+_isoToBR(pFimStr));
+    prev2._isoIni=pIniStr;prev2._isoFim=pFimStr;
   } else {
     // ── Modo sem filtro de data: últimos 2 grupos históricos ─────
     var grupos=_impGroupByPeriod(baseData,_IMP_EVO_PERIOD,refMin).slice(-8);
@@ -8722,10 +8724,12 @@ function impRenderEvolucao(){
       var col2=bad2?'#fef2f2':'#f0fdf4';var bord2=bad2?'#fecaca':'#bbf7d0';
       return'<div style="border-radius:8px;padding:12px 14px;background:'+col2+';border:1px solid '+bord2+'"><strong style="font-size:13px;font-weight:800;color:var(--sb);display:block">'+title+'</strong><span style="font-size:11px;color:var(--muted)">'+sub+'</span></div>';
     }
+    var _pctAt=prev2.atCount>0?Math.abs(Math.round(diffAt/prev2.atCount*100)):0;
+    var _pctMin=prev2.totalMin>0?Math.round(Math.abs(diffMin)/prev2.totalMin*100):0;
     destEl.innerHTML=
-      destCard(diffAt>0,'','Atrasos '+(diffAt>0?'aumentaram':'reduziram')+' '+(Math.abs(Math.round(diffAt>0?diffAt/prev2.atCount*100:diffAt/prev2.atCount*100))||0)+'%',
+      destCard(diffAt>0,'','Atrasos '+(diffAt>0?'aumentaram':'reduziram')+' '+_pctAt+'%',
         (diffAt>0?'+':'')+diffAt+' atrasos vs '+fmtKey(prev2.key))+
-      destCard(diffMin>0,'','Minutos improdutivos '+(diffMin<0?'caíram':'subiram')+' '+(prev2.totalMin?Math.round(Math.abs(diffMin)/prev2.totalMin*100):0)+'%',
+      destCard(diffMin>0,'','Minutos improdutivos '+(diffMin<0?'caíram':'subiram')+' '+_pctMin+'%',
         (diffMin>0?'+':'')+impFmtDelay(Math.abs(diffMin))+' vs '+fmtKey(prev2.key));
   }
 
@@ -8751,9 +8755,16 @@ function impRenderEvolucao(){
     } else {
       // "Por semana" ou "Por mês": atual vs anterior (por dia dentro do período)
       if(compBadge) compBadge.textContent=fmtKey(prev2.key)+' vs '+fmtKey(curr.key);
-      var _keyFn=_IMP_EVO_PERIOD==='mes'?_impMonthKey:_impWeekKey;
-      var allDaysCurr=baseData.filter(function(d){return d.dataSortKey&&_keyFn(d.dataSortKey)===curr.key;});
-      var allDaysPrev=baseData.filter(function(d){return d.dataSortKey&&_keyFn(d.dataSortKey)===prev2.key;});
+      var allDaysCurr,allDaysPrev;
+      if(curr._isoIni){
+        // Modo com filtro de data: filtra por intervalo ISO
+        allDaysCurr=baseData.filter(function(d){return d.dataSortKey&&d.dataSortKey>=curr._isoIni&&d.dataSortKey<=curr._isoFim;});
+        allDaysPrev=baseData.filter(function(d){return d.dataSortKey&&d.dataSortKey>=prev2._isoIni&&d.dataSortKey<=prev2._isoFim;});
+      } else {
+        var _keyFn=_IMP_EVO_PERIOD==='mes'?_impMonthKey:_impWeekKey;
+        allDaysCurr=baseData.filter(function(d){return d.dataSortKey&&_keyFn(d.dataSortKey)===curr.key;});
+        allDaysPrev=baseData.filter(function(d){return d.dataSortKey&&_keyFn(d.dataSortKey)===prev2.key;});
+      }
       var byDayCurr={},byDayPrev={};
       allDaysCurr.forEach(function(d){if(!byDayCurr[d.dataSortKey])byDayCurr[d.dataSortKey]=0;byDayCurr[d.dataSortKey]+=(d.delayMin||0);});
       allDaysPrev.forEach(function(d){if(!byDayPrev[d.dataSortKey])byDayPrev[d.dataSortKey]=0;byDayPrev[d.dataSortKey]+=(d.delayMin||0);});
@@ -8776,7 +8787,10 @@ function impRenderEvolucao(){
 
   // Média horas produtivas por squad
   var bySq={};
-  baseData.filter(function(d){return d.horasTrab!==null&&(_IMP_EVO_PERIOD==='mes'?_impMonthKey(d.dataSortKey)===curr.key:_impWeekKey(d.dataSortKey)===curr.key);})
+  var _sqFilter=curr._isoIni
+    ? function(d){return d.horasTrab!==null&&d.dataSortKey>=curr._isoIni&&d.dataSortKey<=curr._isoFim;}
+    : function(d){return d.horasTrab!==null&&(_IMP_EVO_PERIOD==='mes'?_impMonthKey(d.dataSortKey)===curr.key:_impWeekKey(d.dataSortKey)===curr.key);};
+  baseData.filter(_sqFilter)
     .forEach(function(d){var sq=(d.squadInfo&&d.squadInfo.squad)||'(sem squad)';if(!bySq[sq])bySq[sq]={t:0,n:0};bySq[sq].t+=d.horasTrab;bySq[sq].n++;});
   var sqList=Object.entries(bySq).map(function(e){return{sq:e[0],avg:Math.round(e[1].t/e[1].n)};}).sort(function(a,b){return b.avg-a.avg;});
   var sqEl=document.getElementById('evo-squad-hrs');
