@@ -7918,7 +7918,7 @@ async function impSaveToSupabase(){
     IMP_DATA.forEach(function(d){if(d.justificativa) justMap[impRowKey(d)]=d.justificativa;});
     await supa.from('improdutividade').delete().neq('id',0);
     var acaoMap={};IMP_DATA.forEach(function(d){if(d.acao) acaoMap[impRowKey(d)]=d.acao;});
-    var rows=IMP_DATA.map(function(d){return{data_sort_key:d.dataSortKey,data_str:d.dataStr,empresa:d.empresa,sap:d.sap,produto:d.produto,descricao:d.descricao,projeto:d.projeto||null,fiscal:d.fiscal||null,chegada_min:d.chegadaMin,pts_min:d.ptsMin,inicio_min:d.inicioMin,alm_ini_min:d.almIniMin,alm_fim_min:d.almFimMin,termino_min:d.terminoMin,justificativa:justMap[impRowKey(d)]||null,acao:acaoMap[impRowKey(d)]||null};});
+    var rows=IMP_DATA.map(function(d){return{data_sort_key:d.dataSortKey,data_str:d.dataStr,empresa:d.empresa,sap:d.sap,produto:d.produto,descricao:d.descricao,projeto:d.projeto||null,fiscal:d.fiscal||null,chegada_min:d.chegadaMin,pts_min:d.ptsMin,inicio_min:d.inicioMin,alm_ini_min:d.almIniMin,alm_fim_min:d.almFimMin,termino_min:d.terminoMin,justificativa:justMap[impRowKey(d)]||null,acao:acaoMap[impRowKey(d)]||null,problema_id:d.problemaId||null,desc_problema:d.descProblema||null};});
     var allInserted=[];
     for(var i=0;i<rows.length;i+=500){var res=await supa.from('improdutividade').insert(rows.slice(i,i+500)).select('id,data_sort_key,empresa,sap,chegada_min');if(res.error)throw res.error;if(res.data)allInserted=allInserted.concat(res.data);}
     // Mapear IDs de volta ao IMP_DATA
@@ -7941,7 +7941,7 @@ async function impLoadFromSupabase(){
     var {data,error}=await supa.from('improdutividade').select('*').order('data_sort_key',{ascending:true});
     if(error){ _IMP_LOAD_ERR='Supabase error: '+JSON.stringify(error); return; }
     if(!data||!data.length){ _IMP_LOAD_ERR='Tabela vazia (0 linhas)'; return; }
-    IMP_DATA=data.map(function(r){return{supaId:r.id,dataStr:r.data_str,dataSortKey:r.data_sort_key,empresa:r.empresa||'',sap:r.sap||'',produto:r.produto||'',descricao:r.descricao||'',projeto:r.projeto||'',fiscal:r.fiscal||'',chegadaMin:r.chegada_min,ptsMin:r.pts_min,inicioMin:r.inicio_min,almIniMin:r.alm_ini_min,almFimMin:r.alm_fim_min,terminoMin:r.termino_min,justificativa:r.justificativa||'',acao:r.acao||''};});
+    IMP_DATA=data.map(function(r){return{supaId:r.id,dataStr:r.data_str,dataSortKey:r.data_sort_key,empresa:r.empresa||'',sap:r.sap||'',produto:r.produto||'',descricao:r.descricao||'',projeto:r.projeto||'',fiscal:r.fiscal||'',chegadaMin:r.chegada_min,ptsMin:r.pts_min,inicioMin:r.inicio_min,almIniMin:r.alm_ini_min,almFimMin:r.alm_fim_min,terminoMin:r.termino_min,justificativa:r.justificativa||'',acao:r.acao||'',problemaId:r.problema_id||'',descProblema:r.desc_problema||''};});
     var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
     IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
     impBuildSapNomes();impBuildProjSquad();
@@ -8110,7 +8110,7 @@ function impProcessData(rows){
     var almIni=impTimeToMin(row['Alm_ini']||row['Alm_Ini']||row['alm_ini']||null);
     var almFim=impTimeToMin(row['Alm_fim']||row['Alm_Fim']||row['alm_fim']||null);
     var termino=impTimeToMin(row['Termino']||row['Término']||row['termino']||null);
-    var _item={supaId:null,dataStr:dataStr,dataSortKey:dataSortKey,empresa:String(row['Empresa']||'—').trim(),sap:sap,produto:produto,descricao:String(row['Descrição']||row['Descricao']||'').trim(),projeto:String(row['Projeto']||row['projeto']||'').trim(),fiscal:String(row['Fiscal']||row['fiscal']||'').trim(),chegadaMin:chegada,ptsMin:pts,inicioMin:inicio,almIniMin:almIni,almFimMin:almFim,terminoMin:termino,justificativa:''};
+    var _item={supaId:null,dataStr:dataStr,dataSortKey:dataSortKey,empresa:String(row['Empresa']||'—').trim(),sap:sap,produto:produto,descricao:String(row['Descrição']||row['Descricao']||'').trim(),projeto:String(row['Projeto']||row['projeto']||'').trim(),fiscal:String(row['Fiscal']||row['fiscal']||'').trim(),chegadaMin:chegada,ptsMin:pts,inicioMin:inicio,almIniMin:almIni,almFimMin:almFim,terminoMin:termino,justificativa:'',descProblema:String(row['Descrição do Problema']||row['Descricao do Problema']||'').trim(),problemaId:String(row['Problema Identificado']||'').trim()};
     _item.justificativa=oldJustMap[impRowKey(_item)]||'';
     _item.acao=oldAcaoMap[impRowKey(_item)]||'';
     IMP_DATA.push(_item);
@@ -8371,6 +8371,27 @@ function impRenderDashboard(){
   impChartSquads();
   impChartFaixa();
   impChartObras();
+  impChartProblemas();
+}
+
+function impChartProblemas(){
+  var byP={};
+  IMP_FILTERED.forEach(function(d){
+    var p=(d.problemaId||'').trim();
+    if(!p||d.delayMin<=0) return;
+    if(!byP[p]) byP[p]=0;
+    byP[p]++;
+  });
+  var list=Object.entries(byP).sort(function(a,b){return b[1]-a[1];});
+  var total=list.reduce(function(s,e){return s+e[1];},0);
+  var badge=document.getElementById('imp-badge-prob');
+  if(badge) badge.textContent=total+' classificados';
+  if(!list.length){impDestroyChart('imp-chart-prob');return;}
+  var _pidColors={'Liderança':'rgba(30,64,175,.75)','Lideranca':'rgba(30,64,175,.75)','Clima':'rgba(3,105,161,.75)','Clima/Tempo':'rgba(3,105,161,.75)','Maquinário':'rgba(180,83,9,.75)','Maquinario':'rgba(180,83,9,.75)','Logística':'rgba(109,40,217,.75)','Logistica':'rgba(109,40,217,.75)','Material':'rgba(157,23,77,.75)','Outros':'rgba(71,85,105,.75)'};
+  var labels=list.map(function(e){return e[0];});
+  var vals=list.map(function(e){return e[1];});
+  var bgColors=labels.map(function(l){return _pidColors[l]||'rgba(14,165,233,.65)';});
+  impSafeChart('imp-chart-prob',{type:'bar',plugins:[_impDlPlugin(function(v){return v+' reg';}, 'y')],data:{labels:labels,datasets:[{data:vals,backgroundColor:bgColors,borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){var pct=total>0?Math.round(c.raw/total*100):0;return c.raw+' registros ('+pct+'%)';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{stepSize:1,callback:function(v){return v+'';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:10}})})}})});
 }
 
 function impChartTimeline(){
@@ -8509,7 +8530,13 @@ function impRenderRegistros(){
     }else{
       justCell='<td></td>';
     }
-    _rows.push('<tr style="'+trStyle+'"><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-size:11px;vertical-align:middle;min-width:130px"><div style="font-family:\'Courier New\',monospace;color:var(--acc2);font-weight:700;white-space:nowrap">'+impEsc(d.sap)+'</div>'+(impGetObraNome(d.sap)?'<div style="font-size:10px;color:var(--muted);line-height:1.3;white-space:normal;max-width:180px;margin-top:2px">'+impEsc(impGetObraNome(d.sap))+'</div>':'')+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almI+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almF+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+term+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td>'+acaoCell+justCell+'</tr>');
+    var _pid=(d.problemaId||'').trim();
+    var _pidColors={'Liderança':'background:#dbeafe;color:#1e40af','Lideranca':'background:#dbeafe;color:#1e40af','Clima':'background:#e0f2fe;color:#0369a1','Clima/Tempo':'background:#e0f2fe;color:#0369a1','Maquinário':'background:#fef3c7;color:#b45309','Maquinario':'background:#fef3c7;color:#b45309','Logística':'background:#ede9fe;color:#6d28d9','Logistica':'background:#ede9fe;color:#6d28d9','Material':'background:#fce7f3;color:#9d174d','Outros':'background:#f1f5f9;color:#475569'};
+    var _pidStyle=_pidColors[_pid]||(_pid?'background:#f1f5f9;color:#475569':'');
+    var problemaCell=_pid?'<td style="vertical-align:middle;padding:4px 8px"><span style="'+_pidStyle+';border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;white-space:nowrap">'+impEsc(_pid)+'</span></td>':'<td style="text-align:center;color:#ccc;vertical-align:middle">—</td>';
+    var _dp=(d.descProblema||'').trim();
+    var descProbCell=_dp?'<td style="vertical-align:middle;padding:4px 10px;font-size:11px;color:var(--text);max-width:260px;line-height:1.4">'+impEsc(_dp)+'</td>':'<td style="text-align:center;color:#ccc;vertical-align:middle">—</td>';
+    _rows.push('<tr style="'+trStyle+'"><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td><td style="font-size:11px;vertical-align:middle;min-width:130px"><div style="font-family:\'Courier New\',monospace;color:var(--acc2);font-weight:700;white-space:nowrap">'+impEsc(d.sap)+'</div>'+(impGetObraNome(d.sap)?'<div style="font-size:10px;color:var(--muted);line-height:1.3;white-space:normal;max-width:180px;margin-top:2px">'+impEsc(impGetObraNome(d.sap))+'</div>':'')+'</td><td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almI+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+almF+'</td><td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+term+'</td><td style="text-align:center;vertical-align:middle">'+baseChip+'</td><td style="text-align:center;font-weight:700;vertical-align:middle">'+atrasoCell+'</td><td style="text-align:center;vertical-align:middle">'+statusBadge+'</td>'+acaoCell+justCell+problemaCell+descProbCell+'</tr>');
     }catch(e){console.error('[imp] row '+i,e);}
   });
   tbody.innerHTML=_rows.join('');
@@ -8957,8 +8984,9 @@ async function renderViewImprodutividade(){
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Top empresas — minutos improdutivos</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-emp"></span></div><div style="position:relative;height:240px"><canvas id="imp-chart-emp"></canvas></div></div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Por squad — média de min. improdutivos/registro</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-sq"></span></div><div style="position:relative;height:240px"><canvas id="imp-chart-sq"></canvas></div></div>'
   +'</div>'
-  +'<div style="margin-bottom:16px">'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Distribuição por faixa de chegada</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-faixa"></span></div><div style="position:relative;height:190px"><canvas id="imp-chart-faixa"></canvas></div><div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#10b981;flex-shrink:0"></div>No prazo (≤08:00)</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#f59e0b;flex-shrink:0"></div>Leve atraso</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>Atrasado</div></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span style="font-size:12px;font-weight:700;color:var(--text)">Desvios por problema identificado</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-prob"></span></div><div style="font-size:10px;color:var(--muted);margin-bottom:8px">Registros com atraso que possuem problema classificado</div><div style="position:relative;height:190px"><canvas id="imp-chart-prob"></canvas></div></div>'
   +'</div>'
   +'</div>'
 
@@ -8982,6 +9010,8 @@ async function renderViewImprodutividade(){
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Status</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap;min-width:140px">Ação</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap;min-width:200px">Justificativa</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap;min-width:130px">Problema Identificado</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap;min-width:220px">Descrição do Problema</th>'
   +'</tr></thead><tbody id="imp-tbody-reg"></tbody></table></div></div></div>'
 
   // Tab Empresas
