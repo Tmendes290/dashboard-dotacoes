@@ -564,6 +564,65 @@ function rebuildChart(){
   buildChartObras();
   renderAll();
 }
+// Plugin: valores dentro dos segmentos + total acima da barra
+function makeBarLabelsPlugin(){
+  return {
+    id:'barLabels',
+    afterDraw(chart){
+      const ctx=chart.ctx;
+      const dark=document.body.classList.contains('dark');
+      const ink=dark?'#dde6f0':'#1a2a40';
+
+      // valores dentro de cada segmento
+      chart.data.datasets.forEach((ds,di)=>{
+        if(ds.type==='line')return;
+        const meta=chart.getDatasetMeta(di);
+        if(meta.hidden)return;
+        meta.data.forEach((bar,xi)=>{
+          const v=ds.data[xi];
+          if(!v)return;
+          const {x,y,base}=bar.getProps(['x','y','base'],true);
+          const h=Math.abs(base-y);
+          if(h<14)return;
+          ctx.save();
+          ctx.fillStyle='rgba(255,255,255,.93)';
+          ctx.font='700 9px Inter,sans-serif';
+          ctx.textAlign='center';
+          ctx.textBaseline='middle';
+          ctx.fillText(v,x,(y+base)/2);
+          ctx.restore();
+        });
+      });
+
+      // total acima de cada coluna empilhada
+      const fdi=chart.data.datasets.findIndex(ds=>ds.type!=='line');
+      if(fdi<0)return;
+      chart.getDatasetMeta(fdi).data.forEach((bar,xi)=>{
+        const total=chart.data.datasets.reduce((s,ds,di)=>{
+          if(ds.type==='line'||chart.getDatasetMeta(di).hidden)return s;
+          return s+(ds.data[xi]||0);
+        },0);
+        if(!total)return;
+        let minY=Infinity;
+        chart.data.datasets.forEach((ds,di)=>{
+          if(ds.type==='line'||chart.getDatasetMeta(di).hidden||!ds.data[xi])return;
+          const py=chart.getDatasetMeta(di).data[xi].getProps(['y'],true).y;
+          if(py<minY)minY=py;
+        });
+        if(minY===Infinity)return;
+        const bx=bar.getProps(['x'],true).x;
+        ctx.save();
+        ctx.fillStyle=ink;
+        ctx.font='bold 10px Inter,sans-serif';
+        ctx.textAlign='center';
+        ctx.textBaseline='bottom';
+        ctx.fillText(total,bx,minY-2);
+        ctx.restore();
+      });
+    }
+  };
+}
+
 function buildChart(){
   const c=getChartColors();
   const ctx=document.getElementById('chartEfetivo').getContext('2d');
@@ -601,7 +660,8 @@ function buildChart(){
         yR:{position:'right',grid:{display:false},ticks:{color:c.tick,font:{size:10}},
             title:{display:true,text:'Total',color:c.tick,font:{size:10}}}
       }
-    }
+    },
+    plugins:[makeBarLabelsPlugin()]
   });
 }
 buildChart();
@@ -642,7 +702,8 @@ function buildChartObras(){
         y:{stacked:true,grid:{color:c.grid},ticks:{color:c.tick,font:{size:10,family:'Inter'},stepSize:5},
            title:{display:true,text:'Obras',color:c.tick,font:{size:10}}}
       }
-    }
+    },
+    plugins:[makeBarLabelsPlugin()]
   });
 }
 buildChartObras();
