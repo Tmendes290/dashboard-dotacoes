@@ -14,6 +14,26 @@
 }
 body.dark{--bg:#0d1b2e;--card:#162032;--text:#dde6f0;--muted:#7a9ab8;--bord:#253d5c}
 body.dark .topbar,body.dark .filters,body.dark .kpi,body.dark .cc,body.dark table{background:var(--card)!important}
+/* PRINT / PDF */
+@media print{
+  @page{size:A3 landscape;margin:8mm 10mm}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  body{height:auto!important;overflow:visible!important;display:block!important;width:100%!important;background:#fff!important}
+  .sb,.sb-toggle{display:none!important}
+  .main{display:block!important;height:auto!important;overflow:visible!important}
+  .topbar{border-bottom:2px solid #002F6C!important;padding:6px 16px!important;height:auto!important;break-after:avoid;page-break-after:avoid}
+  .topbar-actions{display:none!important}
+  .content{overflow:visible!important;height:auto!important;padding:8px 14px!important;gap:8px!important;display:block!important}
+  .filters{display:none!important}
+  .cc{break-inside:avoid;margin-bottom:6px}
+  .chart-h240{height:180px!important}
+  .kpi-row{break-inside:avoid}
+  .tbl-wrap{overflow:visible!important;max-height:none!important}
+  .tbl-wrap.max-h{max-height:none!important}
+  #emp-editor{display:none!important}
+  .btn-outline[onclick*="toggleTheme"]{display:none!important}
+  .sec{break-after:avoid;page-break-after:avoid;margin-top:6px}
+}
 /* EMBED MODE: hides own nav when running inside iframe */
 body.embedded .sb,body.embedded .sb-toggle{display:none!important}
 body.embedded .main{height:100vh}
@@ -227,6 +247,7 @@ body.dark .cc-badge{background:var(--bg)}
       <div class="topbar-sub">PCT1 · Rev01 · Período: ago/2026 – out/2027 · 222 obras · 9 squads</div>
     </div>
     <div class="topbar-actions">
+      <button class="btn btn-outline" onclick="window.print()" style="gap:5px" title="Exportar PDF (Ctrl+P)">🖨️ PDF</button>
       <button class="btn btn-outline" onclick="toggleTheme()" id="btn-theme">🌙</button>
       <a class="btn btn-dark" href="/">← Dashboard</a>
     </div>
