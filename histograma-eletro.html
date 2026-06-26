@@ -945,6 +945,51 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 let supa=null;
 try{ supa=supabase.createClient(SUPA_URL,SUPA_KEY); }catch(e){}
 
+// ── SUPABASE REALTIME ─────────────────────────────────────────────────────
+let _rtTimer=null;
+function _rtDelay(fn){clearTimeout(_rtTimer);_rtTimer=setTimeout(fn,150);}
+
+function initRealtime(){
+  if(!supa)return;
+  supa.channel('histograma-rt')
+    // Nova obra / disciplina adicionada por outro admin
+    .on('postgres_changes',{event:'*',schema:'public',table:'histograma_virt_entries'},p=>{
+      const r=p.new;
+      if(r&&p.eventType!=='DELETE'){
+        const ex=PROJETOS.find(x=>x.Disciplina===r.disciplina&&x.Squad===r.squad&&x.Projeto===r.projeto);
+        if(!ex){
+          PROJETOS.push({
+            Projeto:r.projeto,Squad:r.squad,Disciplina:r.disciplina,
+            Empresa:r.empresa||'',MesesAtivos:r.meses_ativos||'',
+            Eq:Array.isArray(r.eq)?r.eq:Array(17).fill(0)
+          });
+        }else{
+          if(Array.isArray(r.eq))ex.Eq=r.eq;
+          ex.MesesAtivos=r.meses_ativos||ex.MesesAtivos;
+          ex.Empresa=r.empresa||ex.Empresa;
+        }
+      }
+      _rtDelay(()=>renderAll());
+    })
+    // Equipe editada por outro admin
+    .on('postgres_changes',{event:'*',schema:'public',table:'histograma_eq_overrides'},p=>{
+      const r=p.new;
+      if(r&&p.eventType!=='DELETE'&&PROJETOS[r.projeto_idx]?.Eq){
+        PROJETOS[r.projeto_idx].Eq[r.mes_idx]=r.equipe;
+      }
+      _rtDelay(()=>renderAll());
+    })
+    // Empresa editada por outro admin
+    .on('postgres_changes',{event:'*',schema:'public',table:'histograma_emp_overrides'},p=>{
+      const r=p.new;
+      if(r&&PROJETOS[r.projeto_idx]){
+        PROJETOS[r.projeto_idx].Empresa=r.empresa;
+      }
+      _rtDelay(()=>renderAll());
+    })
+    .subscribe();
+}
+
 // ── EDIÇÃO DE EQUIPE (Gantt) ──────────────────────────────────────────────
 const EQ_OVERRIDES_KEY='histo_eq_ov';
 let _editEqPidx=-1,_editEqMi=-1;
@@ -1344,11 +1389,12 @@ document.addEventListener('click',function(e){
 if(new URLSearchParams(location.search).get('embed')==='1'){
   document.body.classList.add('embedded');
 }
-localStorage.removeItem('histo_virt_entries'); // limpa cache antigo (migrado para Supabase)
+localStorage.removeItem('histo_virt_entries');
 initEqOrigSums();
 loadEmpresaOverrides();
 loadEquipeOverrides();
-loadVirtualEntries();  // carrega entradas CIVIL/novas do Supabase
+loadVirtualEntries();
+initRealtime(); // escuta mudanças em tempo real de todos os admins
 renderAll();
 </script>
 
