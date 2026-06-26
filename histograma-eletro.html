@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Histograma CTT Eletromecânico — Vale Base Metals</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -812,27 +813,65 @@ function renderAll(){
   renderGantt();
   renderSquadTable(filtered);
 }
+// ── SUPABASE ──────────────────────────────────────────────────────────────
+const SUPA_URL='https://ehbiyqqpzqrluvuqrljp.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoYml5cXFwenFybHV2dXFybGpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzMjM3MTcsImV4cCI6MjA5NDg5OTcxN30.lW_Jdc7SC7FKh9OJPBCYdfN-QMXFTYGjterU3eWOFTc';
+let supa=null;
+try{ supa=supabase.createClient(SUPA_URL,SUPA_KEY); }catch(e){}
+
 // ── EDIÇÃO DE EMPRESA ─────────────────────────────────────────────────────
 const EMP_OVERRIDES_KEY='histo_emp_ov';
 let _editPidx=-1;
 
-function loadEmpresaOverrides(){
+async function loadEmpresaOverrides(){
+  // 1. Apply localStorage first (instant, offline-safe)
   try{
     const s=localStorage.getItem(EMP_OVERRIDES_KEY);
-    if(!s)return;
-    Object.entries(JSON.parse(s)).forEach(([k,v])=>{
-      const i=parseInt(k);
-      if(PROJETOS[i]!==undefined)PROJETOS[i].Empresa=v;
+    if(s)Object.entries(JSON.parse(s)).forEach(([k,v])=>{
+      const i=parseInt(k);if(PROJETOS[i]!==undefined)PROJETOS[i].Empresa=v;
     });
   }catch(e){}
+  // 2. Fetch from Supabase and override (source of truth)
+  if(!supa)return;
+  try{
+    const{data,error}=await supa.from('histograma_emp_overrides').select('projeto_idx,empresa');
+    if(error||!data)return;
+    const fresh={};
+    data.forEach(r=>{
+      const i=r.projeto_idx;
+      if(PROJETOS[i]!==undefined){PROJETOS[i].Empresa=r.empresa;fresh[i]=r.empresa;}
+    });
+    // Sync localStorage with Supabase values
+    localStorage.setItem(EMP_OVERRIDES_KEY,JSON.stringify(fresh));
+    renderAll();
+  }catch(e){}
 }
-function saveEmpresaOverride(pidx,emp){
+
+async function saveEmpresaOverride(pidx,emp){
+  // Save to localStorage immediately
   try{
     const s=localStorage.getItem(EMP_OVERRIDES_KEY);
     const obj=s?JSON.parse(s):{};
     obj[pidx]=emp;
     localStorage.setItem(EMP_OVERRIDES_KEY,JSON.stringify(obj));
   }catch(e){}
+  // Upsert to Supabase
+  if(!supa)return;
+  try{
+    await supa.from('histograma_emp_overrides').upsert(
+      {projeto_idx:pidx,empresa:emp,projeto_nome:PROJETOS[pidx]?.Projeto||'',disciplina:PROJETOS[pidx]?.Disciplina||''},
+      {onConflict:'projeto_idx'}
+    );
+  }catch(e){}
+}
+
+async function resetEmpresaOverridesAll(){
+  if(!confirm('Desfazer TODAS as alterações de empresa para todos os usuários?'))return;
+  if(supa){
+    try{ await supa.from('histograma_emp_overrides').delete().neq('projeto_idx',-1); }catch(e){}
+  }
+  localStorage.removeItem(EMP_OVERRIDES_KEY);
+  location.reload();
 }
 function editEmpresa(evt,pidx){
   evt.stopPropagation();
@@ -871,10 +910,7 @@ function closeEmpEditor(){
   _editPidx=-1;
   document.getElementById('emp-editor').style.display='none';
 }
-function resetEmpresaOverrides(){
-  localStorage.removeItem(EMP_OVERRIDES_KEY);
-  location.reload();
-}
+function resetEmpresaOverrides(){ resetEmpresaOverridesAll(); }
 document.addEventListener('click',function(e){
   const ed=document.getElementById('emp-editor');
   if(ed&&ed.style.display!=='none'&&!ed.contains(e.target))closeEmpEditor();
