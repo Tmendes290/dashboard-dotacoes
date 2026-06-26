@@ -886,6 +886,9 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <!-- IMPRODUTIVIDADE -->
     <div class="sb-nav-sec imp-only">Fiscalização</div>
     <div class="sb-item imp-only" data-view="improdutividade" data-label="Improdutividade"><span class="ico">⏱</span><span class="sb-label">Produtividade</span></div>
+    <!-- PLANEJAMENTO (admin only) -->
+    <div class="sb-nav-sec admin-only">Planejamento</div>
+    <div class="sb-item admin-only" data-view="histograma" data-label="Histograma CTT"><span class="ico">📈</span><span class="sb-label">Histograma CTT</span></div>
     <!-- FROTA -->
     <div class="sb-nav-sec">Frota</div>
     <div class="sb-item" data-view="velocidade"><span class="ico">🚗</span><span class="sb-label">Telemetria <span class="sb-badge" style="background:#ef4444">!</span></span></div>
@@ -1168,6 +1171,9 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="v-improdutividade" class="hidden"></div>
     <div id="v-velocidade" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
       <iframe id="vel-iframe" style="width:100%;flex:1;border:none;display:block" allowfullscreen></iframe>
+    </div>
+    <div id="v-histograma" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+      <iframe id="histograma-frame" src="about:blank" style="width:100%;flex:1;border:none;display:block" allowfullscreen></iframe>
     </div>
   </div>
 </div>
@@ -1969,9 +1975,14 @@ function pdfAction(){
 }
 function setView(id){
   currentView=id;
-  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-velocidade'].forEach(v=>document.getElementById(v).classList.add('hidden'));
+  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-velocidade','v-histograma'].forEach(v=>document.getElementById(v).classList.add('hidden'));
   document.getElementById('v-'+id).classList.remove('hidden');
-  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','velocidade'].includes(id));
+  // Lazy-load histograma iframe on first visit
+  if(id==='histograma'){
+    const fr=document.getElementById('histograma-frame');
+    if(!fr.src||fr.src==='about:blank')fr.src='/histograma-eletro.html?embed=1';
+  }
+  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','velocidade','histograma'].includes(id));
   if(id==='improdutividade'){
     var _mImp=VIEW_META['improdutividade'];
     var _ptImp=document.getElementById('page-title');if(_ptImp)_ptImp.textContent=_mImp.title;

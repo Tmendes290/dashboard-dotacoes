@@ -1,0 +1,885 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Histograma CTT Eletromecânico — Vale Base Metals</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --sb:#002F6C;--sb2:#004A9E;--acc:#009CDE;--acc2:#0073B6;--acc3:#10b981;
+  --bg:#EEF4FB;--card:#fff;--text:#1a2a40;--muted:#5a7a99;--bord:#d0dff0;
+  --warn:#f59e0b;--danger:#ef4444;--purple:#8b5cf6;
+}
+body.dark{--bg:#0d1b2e;--card:#162032;--text:#dde6f0;--muted:#7a9ab8;--bord:#253d5c}
+body.dark .topbar,body.dark .filters,body.dark .kpi,body.dark .cc,body.dark table{background:var(--card)!important}
+/* EMBED MODE: hides own nav when running inside iframe */
+body.embedded .sb,body.embedded .sb-toggle{display:none!important}
+body.embedded .main{height:100vh}
+body.embedded .topbar{display:none!important}
+body.embedded{overflow:hidden}
+body.dark thead th{background:var(--bg)!important;color:var(--muted)!important;border-color:var(--bord)!important}
+body.dark tbody tr{background:var(--card)!important}
+body.dark tbody tr:hover{background:rgba(255,255,255,.05)!important}
+body.dark td{color:var(--text)!important;border-color:var(--bord)!important}
+body.dark input,body.dark select{background:var(--bg)!important;color:var(--text)!important;border-color:var(--bord)!important}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden;width:100vw}
+/* SIDEBAR */
+.sb{width:220px;min-width:220px;background:var(--sb);display:flex;flex-direction:column;height:100vh;overflow-y:auto;transition:width .2s,min-width .2s;position:relative;z-index:100;flex-shrink:0}
+.sb.collapsed{width:54px;min-width:54px}
+.sb.collapsed .sb-label,.sb.collapsed .sb-proj,.sb.collapsed .sb-nav-sec,.sb.collapsed .sb-name,.sb.collapsed .sb-tagline{display:none!important}
+.sb.collapsed .sb-item{padding:10px 0;justify-content:center}
+.sb.collapsed .sb-item .ico{width:54px;text-align:center;font-size:16px}
+.sb.collapsed .sb-item:hover::after{content:attr(data-label);position:absolute;left:58px;top:50%;transform:translateY(-50%);background:#1e3a5f;color:#fff;padding:5px 10px;border-radius:6px;font-size:12px;white-space:nowrap;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.sb-toggle{position:absolute;right:-11px;top:20px;width:22px;height:22px;background:var(--acc);border-radius:50%;border:2px solid #fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;z-index:200;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:transform .2s}
+.sb.collapsed .sb-toggle{transform:rotate(180deg)}
+.sb-logo{padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,.07)}
+.sb-logo-row{display:flex;align-items:center;gap:10px}
+.sb-icon{width:34px;height:34px;background:var(--acc);border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;color:#fff;flex-shrink:0}
+.sb-name{font-size:12px;font-weight:700;color:#fff;line-height:1.3}
+.sb-tagline{font-size:9px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:2px;margin-top:2px}
+.sb-proj{padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.07)}
+.sb-proj-lbl{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:rgba(255,255,255,.3);margin-bottom:3px}
+.sb-proj-name{font-size:11px;color:rgba(255,255,255,.65);font-weight:500;line-height:1.4}
+.sb-proj-tag{font-size:10px;color:var(--acc);font-weight:700;text-transform:uppercase;margin-top:4px}
+.sb-nav{padding:10px 0;flex:1}
+.sb-nav-sec{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:rgba(255,255,255,.22);padding:10px 16px 5px}
+.sb-item{display:flex;align-items:center;gap:9px;padding:9px 16px;cursor:pointer;font-size:13px;font-weight:500;color:rgba(255,255,255,.5);transition:all .15s;position:relative;text-decoration:none}
+.sb-item:hover{background:rgba(255,255,255,.05);color:rgba(255,255,255,.85)}
+.sb-item.active{background:var(--sb2);color:#fff}
+.sb-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--acc);border-radius:0 2px 2px 0}
+.sb-item .ico{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+.sb-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,.07);font-size:10px;color:rgba(255,255,255,.35)}
+/* MAIN */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:var(--card);border-bottom:1px solid var(--bord);border-top:3px solid var(--acc);padding:0 24px;height:54px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.topbar-title{font-size:16px;font-weight:800;letter-spacing:-.3px}
+.topbar-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.topbar-actions{display:flex;gap:8px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:none;cursor:pointer;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;border-radius:5px;transition:all .15s;text-decoration:none}
+.btn-dark{background:var(--sb);color:#fff}.btn-dark:hover{background:var(--sb2)}
+.btn-orange{background:var(--acc);color:#fff}.btn-orange:hover{filter:brightness(1.1)}
+.btn-outline{background:transparent;border:1px solid var(--bord);color:var(--muted)}.btn-outline:hover{border-color:var(--acc);color:var(--acc)}
+.content{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;display:flex;flex-direction:column;gap:12px}
+/* KPI */
+.kpi-row{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.kpi{background:var(--card);border-radius:6px;border:1px solid var(--bord);padding:14px 16px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.kpi.blue::before{background:var(--acc2)}.kpi.green::before{background:var(--acc3)}.kpi.orange::before{background:var(--acc)}.kpi.red::before{background:var(--danger)}.kpi.purple::before{background:var(--purple)}.kpi.navy::before{background:var(--sb)}
+.kpi-lbl{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:6px;font-weight:700}
+.kpi-val{font-size:24px;font-weight:900;color:var(--text);letter-spacing:-1px;line-height:1}
+.kpi.blue .kpi-val{color:var(--acc)}.kpi.green .kpi-val{color:var(--acc3)}.kpi.orange .kpi-val{color:var(--acc)}.kpi.red .kpi-val{color:var(--danger)}.kpi.purple .kpi-val{color:var(--purple)}.kpi.navy .kpi-val{color:var(--sb)}
+.kpi-sub{font-size:10px;color:var(--muted);margin-top:4px}
+/* CHART CARD */
+.cc{background:var(--card);border-radius:6px;border:1px solid var(--bord);padding:16px 18px}
+.cc-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.cc-title{font-size:12px;font-weight:800;color:var(--text)}
+.cc-badge{font-size:10px;color:var(--muted);background:var(--bg);padding:2px 8px;border-radius:4px;font-weight:600}
+.chart-h240{height:240px;position:relative}
+/* FILTERS */
+.filters{background:var(--card);border-radius:6px;border:1px solid var(--bord);padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.fg{display:flex;flex-direction:column;gap:3px}
+.fg label{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);font-weight:700}
+select{background:var(--bg);border:1px solid var(--bord);color:var(--text);padding:5px 10px;font-family:'Inter',sans-serif;font-size:12px;font-weight:500;outline:none;cursor:pointer;border-radius:4px;transition:border-color .15s;min-width:140px}
+select:focus{border-color:var(--acc)}
+/* MULTI-SELECT DROPDOWN */
+.ms-wrap{position:relative}
+.ms-btn{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--bord);color:var(--text);padding:5px 10px 5px 12px;font-family:'Inter',sans-serif;font-size:12px;font-weight:500;cursor:pointer;border-radius:4px;min-width:190px;transition:border-color .15s;width:100%}
+.ms-btn:hover,.ms-btn.open{border-color:var(--acc)}
+.ms-btn-lbl{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ms-arrow{font-size:8px;color:var(--muted);transition:transform .2s;flex-shrink:0}
+.ms-btn.open .ms-arrow{transform:rotate(180deg)}
+.ms-cnt{display:inline-flex;align-items:center;justify-content:center;background:var(--acc);color:#fff;border-radius:10px;font-size:9px;font-weight:700;min-width:17px;height:17px;padding:0 4px;flex-shrink:0}
+.ms-drop{position:absolute;top:calc(100% + 4px);left:0;background:var(--card);border:1px solid var(--bord);border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.13);z-index:600;min-width:210px;padding:5px 0;display:none;max-height:280px;overflow-y:auto}
+.ms-drop.open{display:block}
+.ms-opt{display:flex;align-items:center;gap:9px;padding:7px 13px;cursor:pointer;font-size:12px;font-weight:500;color:var(--text);transition:background .1s;white-space:nowrap;user-select:none}
+.ms-opt:hover{background:var(--bg)}
+.ms-opt input[type=checkbox]{accent-color:var(--acc);width:13px;height:13px;cursor:pointer;flex-shrink:0;pointer-events:none}
+.ms-opt.ms-all{color:var(--muted);font-size:11px;border-bottom:1px solid var(--bord);margin-bottom:3px;padding-bottom:9px}
+body.dark .ms-btn{background:var(--bg)}
+body.dark .ms-drop{background:var(--card);border-color:var(--bord);box-shadow:0 6px 20px rgba(0,0,0,.35)}
+body.dark .ms-opt:hover{background:rgba(255,255,255,.05)}
+/* HOJE badge no gantt */
+.hoje-th{background:linear-gradient(to bottom,rgba(0,156,222,.12),rgba(0,156,222,.04))!important;color:var(--acc)!important;font-weight:800!important;border-left:2px solid var(--acc)!important;border-right:2px solid var(--acc)!important}
+.hoje-th::after{content:'HOJE';display:block;font-size:7px;letter-spacing:.5px;color:var(--acc);font-weight:700}
+td.hoje-col{border-left:1px solid rgba(0,156,222,.3)!important;border-right:1px solid rgba(0,156,222,.3)!important;background:rgba(0,156,222,.03)}
+/* SECTION SEPARATOR */
+.sec{display:flex;align-items:center;gap:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--muted)}
+.sec::after{content:'';flex:1;height:1px;background:var(--bord)}
+/* TABLE */
+.tbl-wrap{overflow-x:auto;overflow-y:auto}
+.tbl-wrap.max-h{max-height:480px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{position:sticky;top:0;background:var(--bg);border-bottom:2px solid var(--bord);padding:7px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);font-weight:700;white-space:nowrap;z-index:2}
+thead th.center{text-align:center}
+tbody tr{border-bottom:1px solid var(--bord);transition:background .1s}
+tbody tr:hover{background:var(--bg)}
+td{padding:5px 10px;vertical-align:middle}
+td.center{text-align:center}
+.pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700}
+.pill-blue{background:#dbeafe;color:#1e40af}
+.pill-yellow{background:#fef9c3;color:#a16207}
+.pill-green{background:#dcfce7;color:#15803d}
+/* GANTT SPECIFIC */
+.gantt-squad-hdr td{background:var(--bg)!important;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:7px 10px!important}
+.gantt-squad-hdr td.g-proj{color:var(--text)!important}
+td.g-proj{font-size:11px;color:var(--text);min-width:210px;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 10px!important}
+td.g-disc{min-width:80px;max-width:80px}
+td.g-month{min-width:36px;max-width:36px;text-align:center;padding:2px!important}
+.g-cell{display:flex;align-items:center;justify-content:center;height:18px;border-radius:3px;margin:0 1px}
+.g-eq{font-size:9px;font-weight:700;color:#fff;min-width:18px;padding:0 2px;letter-spacing:-.3px}
+.g-mec{background:#009CDE}
+.g-ele{background:#f59e0b}
+.g-and{background:#10b981}
+/* HEATMAP TABLE */
+.hm-val{display:inline-flex;align-items:center;justify-content:center;border-radius:4px;min-width:38px;padding:2px 4px;font-size:11px;font-weight:700;color:#fff}
+.count-badge{display:inline-flex;align-items:center;justify-content:center;border-radius:4px;min-width:22px;padding:1px 5px;font-size:10px;font-weight:700;color:#fff;background:var(--muted)}
+/* LEGENDA */
+.leg{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+.leg-i{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);font-weight:500}
+.leg-d{width:12px;height:12px;border-radius:2px;flex-shrink:0}
+/* EMPRESA PILLS */
+.pill-emp{font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;white-space:nowrap}
+.emp-MILPLAN{background:#dbeafe;color:#1e40af}
+.emp-LUK-CT-EXISTENTE{background:#ede9fe;color:#5b21b6}
+.emp-LUK-CT-NOVO{background:#e0f2fe;color:#0369a1}
+.emp-REDE{background:#dcfce7;color:#15803d}
+.emp-REDE-CT-EXISTENTE{background:#ccfbf1;color:#0f766e}
+.emp-OMEGA{background:#fef9c3;color:#a16207}
+.emp-A-DEFINIR{background:#f1f5f9;color:#475569}
+.emp-vazio{background:#f1f5f9;color:#94a3b8}
+body.dark .emp-MILPLAN{background:#1e3a5f;color:#60a5fa}
+body.dark .emp-LUK-CT-EXISTENTE{background:#2e1065;color:#c4b5fd}
+body.dark .emp-LUK-CT-NOVO{background:#0c4a6e;color:#7dd3fc}
+body.dark .emp-REDE{background:#064e3b;color:#6ee7b7}
+body.dark .emp-REDE-CT-EXISTENTE{background:#042f2e;color:#5eead4}
+body.dark .emp-OMEGA{background:#3d2900;color:#fbbf24}
+body.dark .emp-A-DEFINIR{background:#1e293b;color:#94a3b8}
+td.g-emp{min-width:100px;max-width:100px;text-align:center;padding:4px 6px!important}
+.emp-editable{cursor:pointer;transition:filter .12s}
+.emp-editable:hover{filter:brightness(.88);outline:1.5px dashed rgba(0,0,0,.25);outline-offset:1px}
+/* BADGE PICO */
+.pico-tag{background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.5px;margin-left:6px}
+body.dark .pico-tag{background:#451a03;color:#fde68a}
+body.dark .pill-blue{background:#1e3a5f;color:#60a5fa}
+body.dark .pill-yellow{background:#3d2900;color:#fbbf24}
+body.dark .pill-green{background:#064e3b;color:#6ee7b7}
+body.dark .cc-badge{background:var(--bg)}
+/* RESPONSIVE */
+@media(max-width:900px){.kpi-row{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:600px){.kpi-row{grid-template-columns:repeat(2,1fr)}.sb{display:none}}
+</style>
+</head>
+<body>
+<script>if(localStorage.getItem('theme')==='dark')document.body.classList.add('dark');</script>
+
+<!-- SIDEBAR -->
+<aside class="sb" id="sidebar">
+  <button class="sb-toggle" onclick="toggleSb()" title="Recolher/expandir">‹</button>
+  <div class="sb-logo">
+    <div class="sb-logo-row">
+      <div class="sb-icon">V</div>
+      <div>
+        <div class="sb-name">Vale Base Metals</div>
+        <div class="sb-tagline">Salobo · Igarapé Bahia</div>
+      </div>
+    </div>
+  </div>
+  <div class="sb-proj">
+    <div class="sb-proj-lbl">Módulo</div>
+    <div class="sb-proj-name">Histograma CTT Eletromecânico PCT1</div>
+    <div class="sb-proj-tag">Rev. 01 · jun/26 – out/27</div>
+  </div>
+  <nav class="sb-nav">
+    <div class="sb-nav-sec sb-label">Navegação</div>
+    <div class="sb-item active" data-label="Histograma">
+      <span class="ico">📊</span><span class="sb-label">Histograma</span>
+    </div>
+    <a class="sb-item" href="/" data-label="Dashboard">
+      <span class="ico">🏠</span><span class="sb-label">Voltar ao Dashboard</span>
+    </a>
+    <div class="sb-nav-sec sb-label">Disciplinas</div>
+    <div class="sb-item" data-label="Mecânica" onclick="setDisc('MECÂNICA')">
+      <span class="ico" style="color:#009CDE">●</span><span class="sb-label">Mecânica (98 obras)</span>
+    </div>
+    <div class="sb-item" data-label="Elétrica" onclick="setDisc('ELÉTRICA')">
+      <span class="ico" style="color:#f59e0b">●</span><span class="sb-label">Elétrica (76 obras)</span>
+    </div>
+    <div class="sb-item" data-label="Andaime" onclick="setDisc('ANDAIME')">
+      <span class="ico" style="color:#10b981">●</span><span class="sb-label">Andaime (48 obras)</span>
+    </div>
+    <div class="sb-item" data-label="Todas" onclick="setDisc('')">
+      <span class="ico">⚡</span><span class="sb-label">Todas as disciplinas</span>
+    </div>
+  </nav>
+  <div class="sb-footer sb-label">
+    Fonte: HISTOGRAMA CTT ELETROMECÂNICO PCT1_Rev01.xlsx
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">Histograma CTT Eletromecânico</div>
+      <div class="topbar-sub">PCT1 · Rev01 · Período: ago/2026 – out/2027 · 222 obras · 9 squads</div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-outline" onclick="toggleTheme()" id="btn-theme">🌙</button>
+      <a class="btn btn-dark" href="/">← Dashboard</a>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- KPI CARDS -->
+    <div class="kpi-row">
+      <div class="kpi orange">
+        <div class="kpi-lbl">Pico de Efetivo</div>
+        <div class="kpi-val" id="kpi-pico-val">481<span class="pico-tag" id="kpi-pico-tag">nov/26</span></div>
+        <div class="kpi-sub" id="kpi-pico-sub">máximo simultâneo</div>
+      </div>
+      <div class="kpi blue">
+        <div class="kpi-lbl">Efetivo Fev/27</div>
+        <div class="kpi-val" id="kpi-fev-val">460</div>
+        <div class="kpi-sub" id="kpi-fev-sub">2º pico · fev/2027</div>
+      </div>
+      <div class="kpi navy">
+        <div class="kpi-lbl">Mecânica</div>
+        <div class="kpi-val" id="kpi-mec-val">98</div>
+        <div class="kpi-sub" id="kpi-mec-sub">obras · pico 330 fev/27</div>
+      </div>
+      <div class="kpi" style="border-top:3px solid #f59e0b">
+        <div class="kpi-lbl">Elétrica</div>
+        <div class="kpi-val" id="kpi-ele-val" style="color:#f59e0b">76</div>
+        <div class="kpi-sub" id="kpi-ele-sub">obras · pico 152 ago/26</div>
+      </div>
+      <div class="kpi green">
+        <div class="kpi-lbl">Andaime</div>
+        <div class="kpi-val" id="kpi-and-val">48</div>
+        <div class="kpi-sub" id="kpi-and-sub">obras · pico 36 nov/26</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Total de Obras</div>
+        <div class="kpi-val" id="kpi-tot-val">222</div>
+        <div class="kpi-sub" id="kpi-tot-sub">15 meses de atividade</div>
+      </div>
+    </div>
+
+    <!-- GRÁFICO EFETIVO MENSAL -->
+    <div class="cc">
+      <div class="cc-hdr">
+        <div class="cc-title">Efetivo Mensal por Disciplina</div>
+        <div class="cc-badge">ago/26 → out/27</div>
+      </div>
+      <div class="chart-h240"><canvas id="chartEfetivo"></canvas></div>
+      <div class="leg">
+        <div class="leg-i"><div class="leg-d" style="background:#009CDE"></div>Mecânica (11 col/equipe)</div>
+        <div class="leg-i"><div class="leg-d" style="background:#f59e0b"></div>Elétrica (9 col/equipe)</div>
+        <div class="leg-i"><div class="leg-d" style="background:#10b981"></div>Andaime (6 col/equipe)</div>
+        <div class="leg-i"><div class="leg-d" style="background:#475569;border-radius:50%"></div>Total (linha)</div>
+      </div>
+    </div>
+
+    <!-- GRÁFICO OBRAS ATIVAS -->
+    <div class="cc">
+      <div class="cc-hdr">
+        <div class="cc-title">Obras Ativas por Mês</div>
+        <div class="cc-badge">quantidade de obras simultâneas</div>
+      </div>
+      <div class="chart-h240"><canvas id="chartObras"></canvas></div>
+      <div class="leg">
+        <div class="leg-i"><div class="leg-d" style="background:#009CDE"></div>Mecânica</div>
+        <div class="leg-i"><div class="leg-d" style="background:#f59e0b"></div>Elétrica</div>
+        <div class="leg-i"><div class="leg-d" style="background:#10b981"></div>Andaime</div>
+        <div class="leg-i" style="font-size:10px;color:var(--muted);margin-left:8px">Frentes de trabalho abertas simultaneamente — diferente do efetivo total</div>
+      </div>
+    </div>
+
+    <!-- FILTROS GANTT -->
+    <div class="sec">Gantt de Obras por Mês</div>
+    <div class="filters">
+      <div class="fg">
+        <label>Squad</label>
+        <div class="ms-wrap" id="ms-squad">
+          <button class="ms-btn" id="ms-squad-btn" type="button" onclick="toggleMs('ms-squad')">
+            <span class="ms-btn-lbl" id="ms-squad-lbl">Todos os Squads</span>
+            <span class="ms-arrow">▼</span>
+          </button>
+          <div class="ms-drop" id="ms-squad-drop">
+            <label class="ms-opt ms-all"><input type="checkbox" id="ms-squad-all" checked onchange="msToggleAll('squad')"> Todos os Squads</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-squad-cb" value="Usinas I e II" checked onchange="msChange('squad')"> Usinas I e II</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-squad-cb" value="SLB III" checked onchange="msChange('squad')"> SLB III</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-squad-cb" value="Britagens" checked onchange="msChange('squad')"> Britagens</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-squad-cb" value="CPF" checked onchange="msChange('squad')"> CPF</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-squad-cb" value="Mina" checked onchange="msChange('squad')"> Mina</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-squad-cb" value="Geotecnia" checked onchange="msChange('squad')"> Geotecnia</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-squad-cb" value="Paulo Fonteles" checked onchange="msChange('squad')"> Paulo Fonteles</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-squad-cb" value="Barragem" checked onchange="msChange('squad')"> Barragem</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-squad-cb" value="Dique de Sela I" checked onchange="msChange('squad')"> Dique de Sela I</label>
+          </div>
+        </div>
+      </div>
+      <div class="fg">
+        <label>Disciplina</label>
+        <div class="ms-wrap" id="ms-disc">
+          <button class="ms-btn" id="ms-disc-btn" type="button" onclick="toggleMs('ms-disc')">
+            <span class="ms-btn-lbl" id="ms-disc-lbl">Todas as Disciplinas</span>
+            <span class="ms-arrow">▼</span>
+          </button>
+          <div class="ms-drop" id="ms-disc-drop">
+            <label class="ms-opt ms-all"><input type="checkbox" id="ms-disc-all" checked onchange="msToggleAll('disc')"> Todas as Disciplinas</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-disc-cb" value="MECÂNICA" checked onchange="msChange('disc')"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#009CDE;margin-right:2px"></span> Mecânica</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-disc-cb" value="ELÉTRICA" checked onchange="msChange('disc')"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#f59e0b;margin-right:2px"></span> Elétrica</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-disc-cb" value="ANDAIME" checked onchange="msChange('disc')"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#10b981;margin-right:2px"></span> Andaime</label>
+          </div>
+        </div>
+      </div>
+      <div class="fg">
+        <label>Empresa</label>
+        <div class="ms-wrap" id="ms-emp">
+          <button class="ms-btn" id="ms-emp-btn" type="button" onclick="toggleMs('ms-emp')">
+            <span class="ms-btn-lbl" id="ms-emp-lbl">Todas as Empresas</span>
+            <span class="ms-arrow">▼</span>
+          </button>
+          <div class="ms-drop" id="ms-emp-drop">
+            <label class="ms-opt ms-all"><input type="checkbox" id="ms-emp-all" checked onchange="msToggleAll('emp')"> Todas as Empresas</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-emp-cb" value="MILPLAN" checked onchange="msChange('emp')"><span class="pill-emp emp-MILPLAN" style="margin-right:2px">MIL</span> MILPLAN</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-emp-cb" value="LUK - CT EXISTENTE" checked onchange="msChange('emp')"><span class="pill-emp emp-LUK-CT-EXISTENTE" style="margin-right:2px">LUK</span> LUK - CT Existente</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-emp-cb" value="LUK - CT NOVO" checked onchange="msChange('emp')"><span class="pill-emp emp-LUK-CT-NOVO" style="margin-right:2px">LUK-N</span> LUK - CT Novo</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-emp-cb" value="REDE" checked onchange="msChange('emp')"><span class="pill-emp emp-REDE" style="margin-right:2px">REDE</span> REDE</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-emp-cb" value="REDE - CT EXISTENTE" checked onchange="msChange('emp')"><span class="pill-emp emp-REDE-CT-EXISTENTE" style="margin-right:2px">REDE-E</span> REDE - CT Existente</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-emp-cb" value="ÔMEGA" checked onchange="msChange('emp')"><span class="pill-emp emp-OMEGA" style="margin-right:2px">ÔMEGA</span> ÔMEGA</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-emp-cb" value="A DEFINIR" checked onchange="msChange('emp')"><span class="pill-emp emp-A-DEFINIR" style="margin-right:2px">???</span> A Definir</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-emp-cb" value="" checked onchange="msChange('emp')"><span class="pill-emp emp-vazio" style="margin-right:2px">—</span> Sem empresa</label>
+          </div>
+        </div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+        <span id="ganttCount" style="font-size:11px;color:var(--muted)"></span>
+        <button class="btn btn-outline" onclick="msReset()">Limpar filtros</button>
+      </div>
+    </div>
+
+    <!-- GANTT TABLE -->
+    <div class="cc" style="padding:0">
+      <div class="tbl-wrap max-h">
+        <table id="ganttTable">
+          <thead>
+            <tr>
+              <th class="g-proj">Obra / Projeto</th>
+              <th class="g-emp center">Empresa</th>
+              <th class="g-disc center">Disc.</th>
+              <th class="g-month center hoje-th">jun/26</th>
+              <th class="g-month center">jul/26</th>
+              <th class="g-month center">ago/26</th>
+              <th class="g-month center">set/26</th>
+              <th class="g-month center">out/26</th>
+              <th class="g-month center" style="background:#fef9c3;color:#92400e">nov/26 ▲</th>
+              <th class="g-month center">dez/26</th>
+              <th class="g-month center">jan/27</th>
+              <th class="g-month center" style="background:#eff6ff">fev/27</th>
+              <th class="g-month center">mar/27</th>
+              <th class="g-month center">abr/27</th>
+              <th class="g-month center">mai/27</th>
+              <th class="g-month center">jun/27</th>
+              <th class="g-month center">jul/27</th>
+              <th class="g-month center">ago/27</th>
+              <th class="g-month center">set/27</th>
+              <th class="g-month center">out/27</th>
+            </tr>
+          </thead>
+          <tbody id="ganttBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SECAO TABELA SQUAD x MES -->
+    <div class="sec">Efetivo por Squad · Mês</div>
+    <div class="cc" style="padding:0">
+      <div class="tbl-wrap">
+        <table id="squadTable"></table>
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--muted);padding:4px 2px">
+      * Mecânica = 11 col/equipe · Elétrica = 9 · Andaime = 6 · Valores são estimativas consolidadas de efetivo total por squad no mês.
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+// ── UTILS ──────────────────────────────────────────────────────────────
+function toggleSb(){
+  const sb=document.getElementById('sidebar');
+  sb.classList.toggle('collapsed');
+  localStorage.setItem('hist_sb_col',sb.classList.contains('collapsed')?'1':'0');
+}
+function toggleTheme(){
+  const dark=document.body.classList.toggle('dark');
+  document.getElementById('btn-theme').textContent=dark?'☀':'🌙';
+  localStorage.setItem('theme',dark?'dark':'light');
+  rebuildChart();
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  if(localStorage.getItem('hist_sb_col')==='1')document.getElementById('sidebar').classList.add('collapsed');
+  if(document.body.classList.contains('dark'))document.getElementById('btn-theme').textContent='☀';
+});
+function setDisc(d){
+  const cbs=document.querySelectorAll('.ms-disc-cb');
+  cbs.forEach(cb=>{cb.checked=!d||cb.value===d;});
+  msChange('disc');
+}
+// ── MULTI-SELECT ──────────────────────────────────────────────────────────
+function toggleMs(id){
+  const btn=document.getElementById(id+'-btn');
+  const drop=document.getElementById(id+'-drop');
+  const open=drop.classList.contains('open');
+  document.querySelectorAll('.ms-drop.open').forEach(d=>d.classList.remove('open'));
+  document.querySelectorAll('.ms-btn.open').forEach(b=>b.classList.remove('open'));
+  if(!open){drop.classList.add('open');btn.classList.add('open');}
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.ms-wrap')){
+    document.querySelectorAll('.ms-drop.open').forEach(d=>d.classList.remove('open'));
+    document.querySelectorAll('.ms-btn.open').forEach(b=>b.classList.remove('open'));
+  }
+});
+function msToggleAll(type){
+  const allCb=document.getElementById('ms-'+type+'-all');
+  document.querySelectorAll('.ms-'+type+'-cb').forEach(cb=>cb.checked=allCb.checked);
+  msUpdateLabel(type);renderAll();
+}
+function msChange(type){
+  const cbs=[...document.querySelectorAll('.ms-'+type+'-cb')];
+  const allCb=document.getElementById('ms-'+type+'-all');
+  allCb.checked=cbs.every(cb=>cb.checked);
+  msUpdateLabel(type);renderAll();
+}
+function msUpdateLabel(type){
+  const cbs=[...document.querySelectorAll('.ms-'+type+'-cb')];
+  const checked=cbs.filter(cb=>cb.checked);
+  const lbl=document.getElementById('ms-'+type+'-lbl');
+  const btn=document.getElementById('ms-'+type+'-btn');
+  const countEl=btn.querySelector('.ms-cnt');
+  if(countEl)countEl.remove();
+  if(checked.length===cbs.length){
+    lbl.textContent=type==='squad'?'Todos os Squads':type==='emp'?'Todas as Empresas':'Todas as Disciplinas';
+  } else if(checked.length===0){
+    lbl.textContent='Nenhum selecionado';
+  } else if(checked.length===1){
+    lbl.textContent=checked[0].value;
+  } else {
+    lbl.textContent=checked.length+' selecionados';
+    const cnt=document.createElement('span');cnt.className='ms-cnt';cnt.textContent=checked.length;
+    btn.insertBefore(cnt,btn.querySelector('.ms-arrow'));
+  }
+}
+function msReset(){
+  ['squad','disc','emp'].forEach(t=>{
+    document.querySelectorAll('.ms-'+t+'-cb').forEach(cb=>cb.checked=true);
+    document.getElementById('ms-'+t+'-all').checked=true;
+    msUpdateLabel(t);
+  });
+  renderAll();
+}
+function msGetSelected(type){
+  return [...document.querySelectorAll('.ms-'+type+'-cb')].filter(cb=>cb.checked).map(cb=>cb.value);
+}
+function empClass(e){
+  if(!e)return'emp-vazio';
+  const m={'MILPLAN':'emp-MILPLAN','LUK - CT EXISTENTE':'emp-LUK-CT-EXISTENTE','LUK - CT NOVO':'emp-LUK-CT-NOVO','REDE':'emp-REDE','REDE - CT EXISTENTE':'emp-REDE-CT-EXISTENTE','ÔMEGA':'emp-OMEGA','A DEFINIR':'emp-A-DEFINIR'};
+  return m[e]||'emp-vazio';
+}
+function empShort(e){
+  if(!e)return'—';
+  const m={'MILPLAN':'MILPLAN','LUK - CT EXISTENTE':'LUK-E','LUK - CT NOVO':'LUK-N','REDE':'REDE','REDE - CT EXISTENTE':'REDE-E','ÔMEGA':'ÔMEGA','A DEFINIR':'?'};
+  return m[e]||e;
+}
+
+// ── DADOS ──────────────────────────────────────────────────────────────
+const MESES_CHART=['ago/26','set/26','out/26','nov/26','dez/26','jan/27','fev/27','mar/27','abr/27','mai/27','jun/27','jul/27','ago/27','set/27','out/27'];
+const MEC_TOT=[308,242,275,297,121,253,330,286,275,209,198,121,99,66,0];
+const ELE_TOT=[152,140,136,148,96,92,112,104,104,80,48,40,32,24,8];
+const AND_TOT=[18,24,30,36,30,24,18,18,30,18,6,0,0,0,0];
+
+const GANTT_MESES=['jun/26','jul/26','ago/26','set/26','out/26','nov/26','dez/26','jan/27','fev/27','mar/27','abr/27','mai/27','jun/27','jul/27','ago/27','set/27','out/27'];
+
+const SQUAD_MESES=['ago/26','set/26','out/26','nov/26','dez/26','jan/27','fev/27','mar/27','abr/27','mai/27','jun/27','jul/27','ago/27','set/27'];
+const SQUADS=['Usinas I e II','SLB III','Britagens','CPF','Mina','Geotecnia','Paulo Fonteles','Barragem','Dique de Sela I'];
+const SQUAD_EF={
+  'Usinas I e II':[218,187,256,365,148,233,250,158,173,104,59,39,28,0],
+  'SLB III':      [52,78,58,41,30,26,26,26,0,0,0,0,0,0],
+  'Britagens':    [143,163,196,222,144,172,209,188,197,175,173,121,103,90],
+  'CPF':          [45,34,54,112,55,0,0,0,0,0,0,0,0,0],
+  'Mina':         [11,77,42,42,31,0,0,0,0,0,0,0,0,0],
+  'Geotecnia':    [0,20,0,0,0,33,51,51,42,0,0,0,0,0],
+  'Paulo Fonteles':[0,40,66,66,26,26,26,26,0,0,0,0,0,0],
+  'Barragem':     [0,0,11,11,0,0,0,0,0,0,0,0,0,0],
+  'Dique de Sela I':[0,9,0,0,0,0,0,0,0,0,0,0,0,0],
+};
+
+const DISC_CLASS={'MECÂNICA':'g-mec','ELÉTRICA':'g-ele','ANDAIME':'g-and'};
+const DISC_COLOR={'MECÂNICA':'#009CDE','ELÉTRICA':'#f59e0b','ANDAIME':'#10b981'};
+const DISC_PILL={'MECÂNICA':'pill-blue','ELÉTRICA':'pill-yellow','ANDAIME':'pill-green'};
+
+const PROJETOS=[{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022635 - SPCI USINAS I E II - NOVO CTT","MesesAtivos":"ago/26,set/26,out/26,nov/26,dez/26,jan/27,fev/27,mar/27,abr/27,mai/27,jun/27,jul/27,ago/27","Eq":[0,0,1,1,1,1,1,5,5,5,4,4,4,3,2,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"LUK - CT NOVO","Projeto":"G000412.08.01 - Novo Sistema de Bombeamento de Cal","MesesAtivos":"ago/26,set/26,out/26,nov/26,dez/26,jan/27,fev/27","Eq":[0,0,2,2,2,3,3,3,2,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"G000412.08.02 - Inst de Nova Tanque de Leite de Cal","MesesAtivos":"fev/27","Eq":[0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C028287 - OVERHAUL DOS ESPESSADORES 2019-01/11","MesesAtivos":"jan/27,fev/27,mar/27,abr/27","Eq":[0,0,0,0,0,0,0,1,2,2,3,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"CC1370270 - REFORMA DO SÉTIMO ANDAR - PRÉDIO DA MOAGEM","MesesAtivos":"dez/26","Eq":[0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 11","MesesAtivos":"ago/26,set/26,out/26,nov/26","Eq":[0,0,2,2,2,3,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 12","MesesAtivos":"ago/26,set/26,out/26,nov/26","Eq":[0,0,2,2,2,3,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 01 - BP-2014-01","MesesAtivos":"fev/27","Eq":[0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 01 - BP-2014-03","MesesAtivos":"fev/27","Eq":[0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 01 - BP-2014-06","MesesAtivos":"jan/27","Eq":[0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 01 - BP-2014-02","MesesAtivos":"jan/27","Eq":[0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C018736 - MODERNIZAÇÃO COURRIER","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C018747 - MODERNIZAÇÃO DO PSI 300 - OBSOLESCÊNCIA","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C018753 - PROJ. ADEQUAÇÃO ENERGIA INCIDENTE (SUBESTAÇÕES)","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022792.01.03 - MELHORIA SISTEMA DE REFRIGERAÇÃO SLB - AQUISIÇÃO E INSTALAÇÃO DE ETA USINA","MesesAtivos":"set/26,out/26","Eq":[0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022651.01.01 - REPOTENCIAMENTO DA FLOTAÇÃO (CALHAS CIRCULAR)","MesesAtivos":"ago/26,out/26,nov/26","Eq":[0,0,3,0,3,3,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"SLB III","Empresa":"MILPLAN","Projeto":"C028043 - RECIRCULAÇÃO DRENAG FLOTAÇÃO SALOBO III","MesesAtivos":"ago/26,set/26,out/26","Eq":[0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"SLB III","Empresa":"MILPLAN","Projeto":"1370270 - PLATAFORMA DOS SENSORES DE NIVEIS","MesesAtivos":"set/26,out/26,nov/26","Eq":[0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"SLB III","Empresa":"MILPLAN","Projeto":"1370270 - MONTAGEM DE CONTENÇÃO METÁLICA SE-8011SA-01 SLB III","MesesAtivos":"ago/26,set/26","Eq":[0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Plataforma emenda correia TCLD (TR-2007-01)","MesesAtivos":"jan/27,fev/27","Eq":[0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Plataforma emenda correia TR-2003-01","MesesAtivos":"abr/27,mai/27","Eq":[0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Plataforma emenda correia TR-2005-01","MesesAtivos":"out/26,nov/26","Eq":[0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Plataforma emenda correia TR-2005-02","MesesAtivos":"mar/27,abr/27","Eq":[0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Plataforma emenda correia TR-2005-03","MesesAtivos":"abr/27,mai/27","Eq":[0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SR-Extrator Sucata TR-2001-01","MesesAtivos":"ago/26,set/26","Eq":[0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SR-Extrator Sucata TR-2001-11","MesesAtivos":"ago/26,set/26","Eq":[0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"AQ. BALANÇA INTEGRADORA BL-2003-01","MesesAtivos":"jul/26,ago/26","Eq":[0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI CASA DE BOMBAS","MesesAtivos":"set/26,out/26,nov/26,dez/26,jan/27","Eq":[0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI TR-2005-02","MesesAtivos":"jan/27,fev/27,mar/27,abr/27,mai/27,jun/27","Eq":[0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI TR-2005-03","MesesAtivos":"fev/27,mar/27,abr/27,mai/27,jun/27","Eq":[0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI TR-2005-01","MesesAtivos":"fev/27,mar/27,abr/27,mai/27,jun/27","Eq":[0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI TR-2003-01","MesesAtivos":"mar/27,abr/27,mai/27,jun/27","Eq":[0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI TR-2001-01","MesesAtivos":"mai/27,jun/27,jul/27,ago/27,set/27","Eq":[0,0,0,0,0,0,0,0,0,0,0,0,5,1,1,1,1,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI TR-2001-11","MesesAtivos":"jun/27,jul/27,ago/27,set/27","Eq":[0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI REDE DE ALIMENTAÇÃO 8\"","MesesAtivos":"fev/27,mar/27,abr/27,mai/27","Eq":[0,0,0,0,0,0,0,0,1,1,1,0,5,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI TR-2104SA-03","MesesAtivos":"fev/27,mar/27,abr/27,mai/27","Eq":[0,0,0,0,0,0,0,0,1,1,1,0,5,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI TR-2104SA-02","MesesAtivos":"fev/27,mar/27,abr/27,mai/27","Eq":[0,0,0,0,0,0,0,0,1,1,1,0,5,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI TR-2103SA-01","MesesAtivos":"mai/27,jun/27,jul/27,ago/27","Eq":[0,0,0,0,0,0,0,0,0,0,0,0,5,1,1,1,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI TR-2104SA-01","MesesAtivos":"mai/27,jun/27,jul/27,ago/27,set/27","Eq":[0,0,0,0,0,0,0,0,0,0,0,0,5,1,1,1,1,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI TR-2101SA-01","MesesAtivos":"jun/27,jul/27,ago/27,set/27","Eq":[0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"EXECUÇÃO - BR-2005-21","MesesAtivos":"jan/27,fev/27","Eq":[0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"EXECUÇÃO - BR-2005-01","MesesAtivos":"fev/27,mar/27","Eq":[0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"EXECUÇÃO - BR-2005-02","MesesAtivos":"mar/27,abr/27","Eq":[0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Cabine de vulcanização","MesesAtivos":"ago/26,set/26","Eq":[0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"PLATAFORMA DE ACESSO MEDIDOR DE VAZÃO - ES-2020-01","MesesAtivos":"nov/26,dez/26,jan/27,fev/27,mar/27","Eq":[0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"PLATAFORMA CIRCULAR - ES-2020-01","MesesAtivos":"dez/26,jan/27,fev/27,mar/27,abr/27,mai/27","Eq":[0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"PLATAFORMA SUPERIOR - ES-2020-01","MesesAtivos":"dez/26,jan/27,fev/27,mar/27,abr/27,mai/27,jun/27","Eq":[0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Inst. Extrator de Sucata TR-2003-01 A (MEIO)","MesesAtivos":"jan/27,fev/27,mar/27,abr/27","Eq":[0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Inst. Extrator de Sucata TR-2003-01 B (DESCARGA)","MesesAtivos":"ago/26,set/26,out/26","Eq":[0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Inst. Extrator de Sucata TR-2005-01","MesesAtivos":"ago/26,set/26,out/26,nov/26,dez/26","Eq":[0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Inst. Extrator de Sucata TR-2005-02","MesesAtivos":"ago/26,set/26,out/26,nov/26","Eq":[0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"TRECHO 01 - SALOBO III AO TIE IN 02","MesesAtivos":"out/26,nov/26,dez/26,jan/27,fev/27,mar/27,abr/27,mai/27,jun/27","Eq":[0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"TRECHO 02 - TIE IN 02 AO TRECHO DE AGUA RECUPERADA SLB I e II (TIE IN 03)","MesesAtivos":"mai/27,jun/27,jul/27","Eq":[0,0,0,0,0,0,0,0,0,0,0,2,1,1,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"TRECHO 03 - TIE IN 02 AS BRITAGENS","MesesAtivos":"mai/27,jun/27,jul/27,ago/27,set/27","Eq":[0,0,0,0,0,0,0,0,0,0,0,1,2,2,2,2,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"LUK - CT EXISTENTE","Projeto":"ENCLAUSURAMENTO UNIDADES HIDRÁULICAS BRI PRI. SLB I E II","MesesAtivos":"jun/26","Eq":[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI TR-0101SA-01","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI TR-0101SA-02","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI TR-0101SA-03","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI TR-0101SA-04","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,5,0,5,0,5,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI TR-0101SA-05","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,5,0,5,0,5,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI CASA DE BOMBAS 01","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,5,0,5,0,5,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI CASA DE BOMBAS 02","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,5,0,5,0,5,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"Caminho Seguro - Britagens","MesesAtivos":"jun/26,jul/26,ago/26","Eq":[1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"MODERNIZAÇÃO COMPRESSORES ETEBR","MesesAtivos":"jul/26,ago/26","Eq":[0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"A DEFINIR","Projeto":"Ponte Rolante da Filtragem (PR-2020SA-02)","MesesAtivos":"nov/26,dez/26","Eq":[0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"A DEFINIR","Projeto":"Tubulação Pipe-Rack (revestimento linha PMC)","MesesAtivos":"nov/26,dez/26","Eq":[0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"A DEFINIR","Projeto":"Tie-In linha de ar (4\")","MesesAtivos":"nov/26,dez/26","Eq":[0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"A DEFINIR","Projeto":"Troca vasos comunicantes – células de flotação","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,7,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"A DEFINIR","Projeto":"Tubulação PMC interna (alimentadores, caixas, ciclones)","MesesAtivos":"ago/26,set/26,out/26,nov/26,dez/26","Eq":[0,0,3,3,3,3,3,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"MILPLAN","Projeto":"Desmontagem Galpão de Caldeiraria","MesesAtivos":"out/26,nov/26","Eq":[0,0,0,0,2,2,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"MILPLAN","Projeto":"Prédio Administrado (Steel Framing)","MesesAtivos":"out/26,nov/26,dez/26","Eq":[0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"MILPLAN","Projeto":"Montagem ferramentaria","MesesAtivos":"ago/26","Eq":[0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"MILPLAN","Projeto":"DEPÓSITO DE LUBRIFICANTES","MesesAtivos":"ago/26","Eq":[0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"MILPLAN","Projeto":"Containers + Alimentação EPI","MesesAtivos":"ago/26","Eq":[0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"A DEFINIR","Projeto":"Substituição Hidrociclone (CI-2305SA-01)","MesesAtivos":"nov/26,dez/26","Eq":[0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"A DEFINIR","Projeto":"Tie-In Distribuidor (DI-2306SA-01)","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"A DEFINIR","Projeto":"Tie-in Headher – água recuperada","MesesAtivos":"set/26","Eq":[0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"MILPLAN","Projeto":"Repotenciamento TCLD (TR-04 E 05)","MesesAtivos":"jul/26,ago/26,set/26","Eq":[0,3,6,2,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"CPF","Empresa":"LUK - CT EXISTENTE","Projeto":"Repotenciamento TCLD (TR-01, 02 E 03)","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[5,9,9,2,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Dique de Sela I","Empresa":"MILPLAN","Projeto":"Montagem de rede de comunicação","MesesAtivos":"set/26","Eq":[0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Barragem","Empresa":"MILPLAN","Projeto":"Retirada de interferencias - Montagem de header de tubulação","MesesAtivos":"out/26,nov/26","Eq":[0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Barragem","Empresa":"REDE - CT EXISTENTE","Projeto":"Corte e retirada de tubulações","MesesAtivos":"jul/26","Eq":[0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Geotecnia","Empresa":"MILPLAN","Projeto":"Passagem de fauna - passagem aerea","MesesAtivos":"ago/26,set/26","Eq":[0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Geotecnia","Empresa":"MILPLAN","Projeto":"Soleiras 3, 2 A e 2B","MesesAtivos":"jan/27,fev/27,mar/27,abr/27","Eq":[0,0,0,0,0,0,0,3,3,3,3,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Mina","Empresa":"REDE - CT EXISTENTE","Projeto":"Restaurante Beija-flor","MesesAtivos":"jul/26,ago/26,set/26,out/26","Eq":[0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Mina","Empresa":"MILPLAN","Projeto":"Área de transição de material - CMU","MesesAtivos":"jul/26,ago/26","Eq":[0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Mina","Empresa":"REDE - CT EXISTENTE","Projeto":"Desvio de tubulação de Efluentes","MesesAtivos":"ago/26,set/26","Eq":[0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Mina","Empresa":"MILPLAN","Projeto":"Galpão do Kimbo","MesesAtivos":"ago/26,set/26","Eq":[0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Mina","Empresa":"MILPLAN","Projeto":"Tancagem de água para aspersão fixa Mina","MesesAtivos":"out/26,nov/26,dez/26","Eq":[0,0,0,0,2,2,2,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Mina","Empresa":"MILPLAN","Projeto":"Troca de estrutura metálica de galpão - PAIOL","MesesAtivos":"set/26,out/26","Eq":[0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Mina","Empresa":"MILPLAN","Projeto":"Recuperação e adequação da Tubulação SPCI Paiol","MesesAtivos":"out/26","Eq":[0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Mina","Empresa":"MILPLAN","Projeto":"Galpão R2 - Troca da calha","MesesAtivos":"out/26","Eq":[0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Mina","Empresa":"MILPLAN","Projeto":"SÃO Armazem","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Paulo Fonteles","Empresa":"A DEFINIR","Projeto":"SPCI + SPDA Pátio de Carretas","MesesAtivos":"set/26,out/26,nov/26,dez/26,jan/27,fev/27,mar/27","Eq":[0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Paulo Fonteles","Empresa":"LUK - CT EXISTENTE","Projeto":"CAS - Montagem da Casa de Bombas","MesesAtivos":"set/26","Eq":[0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"SLB III","Empresa":"MILPLAN","Projeto":"SIST. CÂMERAS ESPECIALISTA FLT SLB III","MesesAtivos":"jan/27,fev/27,mar/27","Eq":[0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Paulo Fonteles","Empresa":"A DEFINIR","Projeto":"Arara Azul","MesesAtivos":"out/26,nov/26","Eq":[0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"MECÂNICA","Squad":"Paulo Fonteles","Empresa":"ÔMEGA","Projeto":"Data Center (DIMB)","MesesAtivos":"out/26,nov/26","Eq":[0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"C022635 - SPCI USINAS I E II - NOVO CTT","MesesAtivos":"ago/26,set/26,out/26,nov/26,dez/26,jan/27,fev/27,mar/27,abr/27,mai/27,jun/27,jul/27,ago/27","Eq":[0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"G000412.08.01 - Novo Sistema de Bombeamento de Cal","MesesAtivos":"ago/26,set/26,out/26,nov/26,dez/26,jan/27,fev/27","Eq":[0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"G000412.08.02 - Inst de Nova Tanque de Leite de Cal","MesesAtivos":"jan/27,fev/27,mar/27,abr/27,mai/27","Eq":[0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"C028287 - OVERHAUL DOS ESPESSADORES 2019-01/11","MesesAtivos":"jan/27,fev/27,mar/27,abr/27","Eq":[0,0,0,0,0,0,0,1,2,2,3,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"CC1370270 - REFORMA DO SÉTIMO ANDAR - PRÉDIO DA MOAGEM","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 11","MesesAtivos":"ago/26,set/26,out/26,nov/26","Eq":[0,0,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 12","MesesAtivos":"ago/26,set/26,out/26,nov/26","Eq":[0,0,2,2,2,3,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 01 - BP-2014-01","MesesAtivos":"dez/26","Eq":[0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 01 - BP-2014-03","MesesAtivos":"dez/26","Eq":[0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 01 - BP-2014-06","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 01 - BP-2014-02","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"C018753 - PROJ. ADEQUAÇÃO ENERGIA INCIDENTE (SUBESTAÇÕES)","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"C022792.01.03 - MELHORIA SISTEMA DE REFRIGERAÇÃO SLB - AQUISIÇÃO E INSTALAÇÃO DE ETA USINA","MesesAtivos":"ago/26,set/26,out/26","Eq":[0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"C022651.01.01 - REPOTENCIAMENTO DA FLOTAÇÃO (CALHAS CIRCULAR)","MesesAtivos":"ago/26,out/26,nov/26","Eq":[0,0,3,0,3,3,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Usinas I e II","Empresa":"","Projeto":"C028651.01 - SUBST. CABOS DE ALIMENTAÇÃO - ALIMENTADORES PARA SUBESTAÇÃO PRINCIPAL TRECHO 01","MesesAtivos":"ago/26,set/26,out/26,nov/26,dez/26,jan/27,fev/27,mar/27,abr/27,mai/27","Eq":[0,0,2,2,2,2,2,2,2,2,2,2,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"SLB III","Empresa":"","Projeto":"C028043 - RECIRCULAÇÃO DRENAG FLOTAÇÃO SALOBO III","MesesAtivos":"ago/26,set/26,out/26,nov/26,dez/26","Eq":[0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"SLB III","Empresa":"","Projeto":"1370270 - PLATAFORMA DOS SENSORES DE NIVEIS","MesesAtivos":"set/26,out/26,nov/26,dez/26","Eq":[0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"SLB III","Empresa":"","Projeto":"1370270 - MONTAGEM DE CONTENÇÃO METÁLICA SE-8011SA-01 SLB III","MesesAtivos":"ago/26,set/26,out/26","Eq":[0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Plataforma emenda correia TCLD (TR-2007-01)","MesesAtivos":"jan/27,fev/27","Eq":[0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Plataforma emenda correia TR-2003-01","MesesAtivos":"abr/27,mai/27","Eq":[0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Plataforma emenda correia TR-2005-01","MesesAtivos":"out/26,nov/26","Eq":[0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Plataforma emenda correia TR-2005-02","MesesAtivos":"mar/27,abr/27","Eq":[0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Plataforma emenda correia TR-2005-03","MesesAtivos":"abr/27,mai/27","Eq":[0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SR-Extrator Sucata TR-2001-01","MesesAtivos":"ago/26,set/26","Eq":[0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SR-Extrator Sucata TR-2001-11","MesesAtivos":"set/26,out/26","Eq":[0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"REDE","Projeto":"AQ. BALANÇA INTEGRADORA BL-2003-01","MesesAtivos":"jul/26,ago/26","Eq":[0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SPCI CASA DE BOMBAS","MesesAtivos":"nov/26,dez/26,jan/27","Eq":[0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"UPGRADE SIST. HIDRAULICO/ALIVIO - MP1000 (BR-2005-21)","MesesAtivos":"nov/26,dez/26","Eq":[0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"ELAB E INST DE PLATAFORMA AREA FILTRAGEM","MesesAtivos":"out/26,nov/26,dez/26,jan/27,fev/27,mar/27,abr/27,mai/27,jun/27","Eq":[0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"AT-INSTALAÇÃO DE EXTRATOR SUCATA TR BRI1","MesesAtivos":"ago/26,set/26,out/26,nov/26,dez/26,jan/27,fev/27,mar/27,abr/27","Eq":[0,0,2,2,2,2,2,1,1,1,1,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"REDE","Projeto":"SPCI TR-0101SA-01","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,25,0,25,0,25,0,25,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"REDE","Projeto":"SPCI TR-0101SA-02","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,25,0,25,0,25,0,25,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"REDE","Projeto":"SPCI TR-0101SA-03","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,25,0,25,0,25,0,25,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"REDE","Projeto":"SPCI TR-0101SA-04","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,25,0,25,0,25,0,25,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"REDE","Projeto":"SPCI TR-0101SA-05","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,25,0,25,0,25,0,25,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"REDE","Projeto":"SPCI CASA DE BOMBAS 01","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,25,0,25,0,25,0,25,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"REDE","Projeto":"SPCI CASA DE BOMBAS 02","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,5,0,5,0,5,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"REDE","Projeto":"Caminho Seguro - Britagens","MesesAtivos":"jun/26,jul/26,ago/26","Eq":[1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"REDE","Projeto":"MODERNIZAÇÃO COMPRESSORES ETEBR","MesesAtivos":"jul/26,ago/26","Eq":[0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Britagens","Empresa":"REDE","Projeto":"Modernização Sistema Elétrico Rompedores","MesesAtivos":"jun/26,jul/26,ago/26","Eq":[1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"CPF","Empresa":"","Projeto":"Repotenciamento TCLD","MesesAtivos":"ago/26,set/26,out/26,nov/26","Eq":[0,0,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Mina","Empresa":"","Projeto":"Restaurante Beija-flor","MesesAtivos":"ago/26","Eq":[0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Mina","Empresa":"","Projeto":"Desvio de tubulação de Efluentes","MesesAtivos":"set/26","Eq":[0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Mina","Empresa":"","Projeto":"Tancagem de água para aspersão fixa Mina","MesesAtivos":"set/26,out/26","Eq":[0,0,0,0,5,0,5,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Mina","Empresa":"","Projeto":"Troca de estrutura metálica de galpão - PAIOL","MesesAtivos":"out/26","Eq":[0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"Paulo Fonteles","Empresa":"","Projeto":"SPCI + SPDA Pátio de Carretas","MesesAtivos":"out/26,nov/26,dez/26,jan/27,fev/27,mar/27","Eq":[0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"SLB III","Empresa":"","Projeto":"SIST. CÂMERAS ESPECIALISTA FLT SLB III","MesesAtivos":"jan/27,fev/27,mar/27","Eq":[0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0]},{"Disciplina":"ANDAIME","Squad":"CPF","Empresa":"","Projeto":"Demolição do prédio da ferramentaria","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022635 - SPCI USINAS I E II - NOVO CTT","MesesAtivos":"out/26,nov/26,mar/27,abr/27,mai/27,jun/27","Eq":[0,0,0,0,1,1,0,0,0,1,1,1,1,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Usinas I e II","Empresa":"LUK - CT EXISTENTE","Projeto":"G000412.08.01 - Novo Sistema de Bombeamento de Cal","MesesAtivos":"nov/26,dez/26,jan/27,fev/27","Eq":[0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"G000412.08.02 - Inst de Nova Tanque de Leite de Cal","MesesAtivos":"mar/27,abr/27","Eq":[0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C028287 - OVERHAUL DOS ESPESSADORES 2019-01/11","MesesAtivos":"abr/27","Eq":[0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"CC1370270 - REFORMA DO SÉTIMO ANDAR - PRÉDIO DA MOAGEM","MesesAtivos":"nov/26,dez/26","Eq":[0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Usinas I e II","Empresa":"LUK - CT EXISTENTE","Projeto":"C018750 - REFORMA DA OFICINA AVANÇADA","MesesAtivos":"ago/26,set/26","Eq":[0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 11","MesesAtivos":"out/26,nov/26","Eq":[0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - LINHA 12","MesesAtivos":"out/26,nov/26","Eq":[0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022640 - INDIVDUALIZAÇÃO DAS LINHAS DA MOAGEM - BOMBAS","MesesAtivos":"jan/27,fev/27","Eq":[0,0,0,0,0,0,0,2,2,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C022792.01.03 - MELHORIA SISTEMA DE REFRIGERAÇÃO SLB - AQUISIÇÃO E INSTALAÇÃO DE ETA USINA","MesesAtivos":"set/26,out/26,nov/26","Eq":[0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Usinas I e II","Empresa":"MILPLAN","Projeto":"C028651.01 - SUBST. CABOS DE ALIMENTAÇÃO - ALIMENTADORES PARA SUBESTAÇÃO PRINCIPAL TRECHO 01","MesesAtivos":"ago/26,set/26,out/26,nov/26,dez/26,jan/27,fev/27,mar/27,abr/27,mai/27","Eq":[0,0,3,3,3,3,3,3,3,3,3,3,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"SLB III","Empresa":"MILPLAN","Projeto":"C028043 - RECIRCULAÇÃO DRENAG FLOTAÇÃO SALOBO III","MesesAtivos":"ago/26,set/26,out/26,nov/26,dez/26","Eq":[0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"SLB III","Empresa":"MILPLAN","Projeto":"1370270 - PLATAFORMA DOS SENSORES DE NIVEIS","MesesAtivos":"set/26,out/26,nov/26,dez/26","Eq":[0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"SLB III","Empresa":"MILPLAN","Projeto":"1370270 - MONTAGEM DE CONTENÇÃO METÁLICA SE-8011SA-01 SLB III","MesesAtivos":"ago/26,set/26","Eq":[0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SR-Extrator Sucata TR-2001-01","MesesAtivos":"set/26,out/26","Eq":[0,0,0,0,5,0,5,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SR-Extrator Sucata TR-2001-11","MesesAtivos":"set/26,out/26","Eq":[0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SR-Extrator Sucata TR-2103SA-01","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SR-Extrator Sucata TR-2101SA-01","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"SR-Extrator Sucata TR-2104SA-02","MesesAtivos":"nov/26,dez/26","Eq":[0,0,0,0,0,0,5,0,5,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"CR-Detector de Metais - 2103SA-01","MesesAtivos":"set/26","Eq":[0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"CR-Detector de Metais - 2104SA-02","MesesAtivos":"set/26","Eq":[0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"CR-Detector de Metais - TR-2001-11","MesesAtivos":"ago/26","Eq":[0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"CR-Detector de Metais - 2101SA-01","MesesAtivos":"set/26","Eq":[0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"CR-Detector de Metais - TR-2001-01","MesesAtivos":"ago/26","Eq":[0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"AQ. BALANÇA INTEGRADORA BL-2003-01","MesesAtivos":"jul/26,ago/26","Eq":[0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Implantação SPCI Transportadores BRIT","MesesAtivos":"nov/26,dez/26,jan/27,fev/27,mar/27,abr/27,mai/27,jun/27,jul/27,ago/27,set/27","Eq":[0,0,0,0,0,1,1,2,2,2,2,2,2,2,2,2,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"UPGRADE SIST. HIDRAULICO/ALIVIO - MP1000 (BR-21)","MesesAtivos":"jun/27","Eq":[0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"EXECUÇÃO - BR-2005-21","MesesAtivos":"jan/27,fev/27","Eq":[0,0,0,0,0,0,0,0,5,1,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"EXECUÇÃO - BR-2005-01","MesesAtivos":"mar/27,abr/27,mai/27","Eq":[0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"EXECUÇÃO - BR-2005-02","MesesAtivos":"abr/27,mai/27","Eq":[0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Cabine de vulcanização","MesesAtivos":"ago/26,set/26,out/26,nov/26,dez/26","Eq":[0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Inst. Extrator de Sucata TR-2003-01 A (MEIO)","MesesAtivos":"jan/27,fev/27,mar/27,abr/27","Eq":[0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Inst. Extrator de Sucata TR-2003-01 B (DESCARGA)","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Inst. Extrator de Sucata TR-2005-01","MesesAtivos":"set/26,out/26,nov/26,dez/26","Eq":[0,0,0,0,5,0,5,0,5,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Inst. Extrator de Sucata TR-2005-02","MesesAtivos":"set/26,out/26","Eq":[0,0,0,0,5,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Detector deSucata TR-2005-01 A","MesesAtivos":"out/26","Eq":[0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Detector deSucata TR-2005-01 B","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Detector deSucata TR-2003-01 A","MesesAtivos":"ago/26","Eq":[0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"Detector deSucata TR-2003-01 B","MesesAtivos":"set/26","Eq":[0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"TRECHO 01 - SALOBO III AO TIE IN 02","MesesAtivos":"nov/26,dez/26,jan/27,fev/27,mar/27,abr/27","Eq":[0,0,0,0,0,0,5,0,5,2,2,1,1,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"TRECHO 02 - TIE IN 02 AO TRECHO DE AGUA RECUPERADA SLB I e II (TIE IN 03)","MesesAtivos":"mai/27,jun/27,jul/27,ago/27","Eq":[0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"MILPLAN","Projeto":"TRECHO 03 - TIE IN 02 AS BRITAGENS","MesesAtivos":"mai/27,jun/27,jul/27,ago/27,set/27,out/27","Eq":[0,0,0,0,0,0,0,0,0,0,0,1,1,2,1,1,1]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"LUK - CT EXISTENTE","Projeto":"SIST MON. REDES DE COMUNICAÇÃO SE-2105SA-01","MesesAtivos":"ago/26","Eq":[0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI TR-0101SA-01","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,25,0,25,0,25,0,25,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI TR-0101SA-02","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,25,0,25,0,25,0,25,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI TR-0101SA-03","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,25,0,25,0,25,0,25,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI TR-0101SA-04","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,25,0,25,0,25,0,25,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI TR-0101SA-05","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,25,0,25,0,25,0,25,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI CASA DE BOMBAS 01","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,25,0,25,0,25,0,25,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"SPCI CASA DE BOMBAS 02","MesesAtivos":"jun/26,jul/26,ago/26,set/26","Eq":[0,5,0,5,0,5,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"Modernização Sistema Elétrico Rompedores","MesesAtivos":"jun/26,jul/26,ago/26","Eq":[1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Britagens","Empresa":"REDE - CT EXISTENTE","Projeto":"MODERNIZAÇÃO COMPRESSORES ETEBR","MesesAtivos":"ago/26","Eq":[0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"CPF","Empresa":"A DEFINIR","Projeto":"Tubulação Pipe-Rack(revestimento linha PMC)","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"CPF","Empresa":"MILPLAN","Projeto":"Repotenciamento TCLD (TR-04 E 05)","MesesAtivos":"ago/26","Eq":[0,0,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"CPF","Empresa":"LUK - CT EXISTENTE","Projeto":"Repotenciamento TCLD (TR-01, 02 E 03)","MesesAtivos":"ago/26","Eq":[0,0,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"CPF","Empresa":"MILPLAN","Projeto":"Desmontagem Galpão","MesesAtivos":"out/26","Eq":[0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"CPF","Empresa":"MILPLAN","Projeto":"Prédio Administrativo(Steel Framing)","MesesAtivos":"nov/26,dez/26","Eq":[0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"CPF","Empresa":"MILPLAN","Projeto":"Montagem Ferramentaria","MesesAtivos":"ago/26","Eq":[0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"CPF","Empresa":"MILPLAN","Projeto":"Containers + Alimentação EPI","MesesAtivos":"ago/26","Eq":[0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"CPF","Empresa":"LUK - CT NOVO","Projeto":"Rede Aérea 13,8 kV (montagem e desmontagem)","MesesAtivos":"nov/26,dez/26","Eq":[0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"CPF","Empresa":"A DEFINIR","Projeto":"Substituição Hidrociclone(CI-2305SA-01)","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Mina","Empresa":"REDE - CT EXISTENTE","Projeto":"Restaurante Beija-flor","MesesAtivos":"jul/26,ago/26,set/26,out/26","Eq":[0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Mina","Empresa":"MILPLAN","Projeto":"Área de transição de material - CMU","MesesAtivos":"ago/26","Eq":[0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Mina","Empresa":"REDE - CT EXISTENTE","Projeto":"Desvio de tubulação de Efluentes","MesesAtivos":"ago/26,set/26","Eq":[0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Mina","Empresa":"MILPLAN","Projeto":"Galpão do Kimbo","MesesAtivos":"set/26","Eq":[0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Mina","Empresa":"MILPLAN","Projeto":"Tancagem de água para aspersão fixa Mina","MesesAtivos":"out/26,nov/26,dez/26","Eq":[0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Mina","Empresa":"MILPLAN","Projeto":"Troca de estrutura metálica de galpão - PAIOL","MesesAtivos":"set/26,out/26","Eq":[0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Geotecnia","Empresa":"MILPLAN","Projeto":"Passagem de fauna - passagem aerea","MesesAtivos":"ago/26,set/26","Eq":[0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Geotecnia","Empresa":"MILPLAN","Projeto":"Soleiras 3, 2 A e 2B","MesesAtivos":"fev/27,mar/27,abr/27","Eq":[0,0,0,0,0,0,0,0,2,2,1,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Dique de Sela I","Empresa":"MILPLAN","Projeto":"Montagem de rede de comunicação","MesesAtivos":"set/26","Eq":[0,0,0,1,5,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Paulo Fonteles","Empresa":"A DEFINIR","Projeto":"SPCI + SPDA Pátio de Carretas","MesesAtivos":"set/26,out/26,nov/26,dez/26,jan/27,fev/27,mar/27","Eq":[0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Paulo Fonteles","Empresa":"LUK - CT EXISTENTE","Projeto":"CAS - Montagem da Casa de Bombas","MesesAtivos":"set/26","Eq":[0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"SLB III","Empresa":"MILPLAN","Projeto":"SIST. CÂMERAS ESPECIALISTA FLT SLB III","MesesAtivos":"jan/27,fev/27,mar/27","Eq":[0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Paulo Fonteles","Empresa":"ÔMEGA","Projeto":"Data Center (DIMB)","MesesAtivos":"out/26,nov/26","Eq":[0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"Paulo Fonteles","Empresa":"A DEFINIR","Projeto":"Arara Azul","MesesAtivos":"out/26,nov/26","Eq":[0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"CPF","Empresa":"MILPLAN","Projeto":"Demolição do prédio da ferramentaria","MesesAtivos":"nov/26","Eq":[0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0]},{"Disciplina":"ELÉTRICA","Squad":"CPF","Empresa":"A DEFINIR","Projeto":"Tie-in Headher – água recuperada","MesesAtivos":"set/26","Eq":[0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0]}];
+
+// ── GRÁFICO ──────────────────────────────────────────────────────────────
+let chart = null;
+function getChartColors(){
+  const dark=document.body.classList.contains('dark');
+  return {grid:dark?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)',tick:dark?'#7a9ab8':'#5a7a99',tooltip:{bg:dark?'#162032':'#fff',border:dark?'#253d5c':'#d0dff0',title:dark?'#dde6f0':'#1a2a40',body:dark?'#7a9ab8':'#5a7a99'}};
+}
+let chartObras=null;
+function rebuildChart(){
+  if(chart){chart.destroy();chart=null;}
+  if(chartObras){chartObras.destroy();chartObras=null;}
+  buildChart();
+  buildChartObras();
+  renderAll();
+}
+function buildChart(){
+  const c=getChartColors();
+  const ctx=document.getElementById('chartEfetivo').getContext('2d');
+  chart=new Chart(ctx,{
+    data:{
+      labels:MESES_CHART,
+      datasets:[
+        {type:'bar',label:'Mecânica',data:MEC_TOT,backgroundColor:'#009CDE',stack:'s'},
+        {type:'bar',label:'Elétrica',data:ELE_TOT,backgroundColor:'#f59e0b',stack:'s'},
+        {type:'bar',label:'Andaime',data:AND_TOT,backgroundColor:'#10b981',stack:'s'},
+        {type:'line',label:'Total',data:MEC_TOT.map((v,i)=>v+ELE_TOT[i]+AND_TOT[i]),
+         borderColor:'#002F6C',backgroundColor:'transparent',borderWidth:2.5,
+         pointRadius:4,pointBackgroundColor:'#002F6C',tension:.3,yAxisID:'yR'}
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:c.tooltip.bg,borderColor:c.tooltip.border,borderWidth:1,
+          titleColor:c.tooltip.title,bodyColor:c.tooltip.body,
+          callbacks:{afterBody:items=>{
+            const i=items[0].dataIndex;
+            const ds=chart.data.datasets;
+            const t=(ds[0].data[i]||0)+(ds[1].data[i]||0)+(ds[2].data[i]||0);
+            return `Total: ${t} colaboradores${MESES_CHART[i]==='nov/26'?' ▲ PICO':''}`;
+          }}
+        }
+      },
+      scales:{
+        x:{stacked:true,grid:{color:c.grid},ticks:{color:c.tick,font:{size:10,family:'Inter'}}},
+        y:{stacked:true,grid:{color:c.grid},ticks:{color:c.tick,font:{size:10,family:'Inter'}},
+           title:{display:true,text:'Efetivo',color:c.tick,font:{size:10}}},
+        yR:{position:'right',grid:{display:false},ticks:{color:c.tick,font:{size:10}},
+            title:{display:true,text:'Total',color:c.tick,font:{size:10}}}
+      }
+    }
+  });
+}
+buildChart();
+
+// ── GRÁFICO OBRAS ATIVAS ───────────────────────────────────────────────────
+function buildChartObras(){
+  const c=getChartColors();
+  const mecA=GANTT_MESES.map(m=>PROJETOS.filter(p=>p.Disciplina==='MECÂNICA'&&p.MesesAtivos.split(',').includes(m)).length);
+  const eleA=GANTT_MESES.map(m=>PROJETOS.filter(p=>p.Disciplina==='ELÉTRICA'&&p.MesesAtivos.split(',').includes(m)).length);
+  const andA=GANTT_MESES.map(m=>PROJETOS.filter(p=>p.Disciplina==='ANDAIME'&&p.MesesAtivos.split(',').includes(m)).length);
+  const ctx=document.getElementById('chartObras').getContext('2d');
+  chartObras=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:GANTT_MESES,
+      datasets:[
+        {label:'Mecânica',data:mecA,backgroundColor:'rgba(0,156,222,.8)',stack:'s'},
+        {label:'Elétrica',data:eleA,backgroundColor:'rgba(245,158,11,.8)',stack:'s'},
+        {label:'Andaime',data:andA,backgroundColor:'rgba(16,185,129,.8)',stack:'s'},
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:c.tooltip.bg,borderColor:c.tooltip.border,borderWidth:1,
+          titleColor:c.tooltip.title,bodyColor:c.tooltip.body,
+          callbacks:{afterBody:items=>{
+            const i=items[0].dataIndex;
+            const ds=chartObras.data.datasets;
+            return `Total: ${(ds[0].data[i]||0)+(ds[1].data[i]||0)+(ds[2].data[i]||0)} obras ativas`;
+          }}
+        }
+      },
+      scales:{
+        x:{stacked:true,grid:{color:c.grid},ticks:{color:c.tick,font:{size:10,family:'Inter'}}},
+        y:{stacked:true,grid:{color:c.grid},ticks:{color:c.tick,font:{size:10,family:'Inter'},stepSize:5},
+           title:{display:true,text:'Obras',color:c.tick,font:{size:10}}}
+      }
+    }
+  });
+}
+buildChartObras();
+
+// ── GANTT ─────────────────────────────────────────────────────────────────
+const HOJE_MES='jun/26';
+function renderGantt(){
+  const selSquads=new Set(msGetSelected('squad'));
+  const selDiscs=new Set(msGetSelected('disc'));
+  const selEmps=new Set(msGetSelected('emp'));
+  const filtered=PROJETOS.filter(p=>selSquads.has(p.Squad)&&selDiscs.has(p.Disciplina)&&selEmps.has(p.Empresa));
+  document.getElementById('ganttCount').textContent=filtered.length+' obras';
+
+  const bySquad={};
+  filtered.forEach(p=>{if(!bySquad[p.Squad])bySquad[p.Squad]=[];bySquad[p.Squad].push(p);});
+
+  const tbody=document.getElementById('ganttBody');
+  tbody.innerHTML='';
+
+  const orderedSquads=SQUADS.filter(s=>bySquad[s]);
+  Object.keys(bySquad).forEach(s=>{if(!orderedSquads.includes(s))orderedSquads.push(s);});
+
+  orderedSquads.forEach(squad=>{
+    const projs=bySquad[squad];
+    const htr=document.createElement('tr');
+    htr.className='gantt-squad-hdr';
+    htr.innerHTML=`<td class="g-proj g-squad-hdr">${squad} <span style="font-size:9px;font-weight:400;color:var(--muted)">(${projs.length} obras)</span></td><td class="g-emp"></td><td class="g-disc center"></td>${GANTT_MESES.map(m=>`<td class="g-month${m===HOJE_MES?' hoje-col':''}"></td>`).join('')}`;
+    tbody.appendChild(htr);
+
+    projs.forEach(p=>{
+      const cls=DISC_CLASS[p.Disciplina];
+      const tr=document.createElement('tr');
+      const pills=`<span class="pill ${DISC_PILL[p.Disciplina]}" style="font-size:9px">${p.Disciplina==='MECÂNICA'?'MEC':p.Disciplina==='ELÉTRICA'?'ELE':'AND'}</span>`;
+      const pidx=PROJETOS.indexOf(p);
+      const empPill=`<span class="pill-emp ${empClass(p.Empresa)} emp-editable" title="Empresa: ${p.Empresa||'sem empresa'} · Clique para alterar" onclick="editEmpresa(event,${pidx})">${empShort(p.Empresa)||'—'}</span>`;
+      const cells=GANTT_MESES.map((m,mi)=>{
+        const hj=m===HOJE_MES?' hoje-col':'';
+        const eq=p.Eq?p.Eq[mi]:0;
+        if(!eq||eq===0)return`<td class="g-month${hj}"></td>`;
+        const num=Number.isInteger(eq)?eq:(eq%1===0?eq:eq.toFixed(1));
+        return`<td class="g-month${hj}"><span class="g-cell ${cls} g-eq" title="${p.Empresa?p.Empresa+' · ':''}${p.Projeto} · ${eq} equipe${eq!==1?'s':''}">${num}</span></td>`;
+      }).join('');
+      tr.innerHTML=`<td class="g-proj" title="${p.Projeto}">${p.Projeto}</td><td class="g-emp center">${empPill}</td><td class="g-disc center">${pills}</td>${cells}`;
+      tbody.appendChild(tr);
+    });
+  });
+}
+// ── TABELA SQUAD x MÊS (dinâmica) ────────────────────────────────────────
+const SQUAD_EF_MAX=Math.max(...Object.values(SQUAD_EF).map(a=>Math.max(...a)));
+function heatBg(v,mx){
+  const p=v/mx;
+  if(p>=.75)return '#ef4444';
+  if(p>=.5)return '#f97316';
+  if(p>=.3)return '#009CDE';
+  if(p>=.1)return '#10b981';
+  return '#94a3b8';
+}
+function renderSquadTable(filtered){
+  const selSquads=new Set(msGetSelected('squad'));
+  const tbl=document.getElementById('squadTable');
+  let h='<thead><tr><th>Squad</th>';
+  SQUAD_MESES.forEach(m=>{
+    const pico=m==='nov/26';
+    h+=`<th class="center"${pico?' style="color:#f59e0b"':''}>${m}${pico?' ▲':''}</th>`;
+  });
+  h+='<th class="center">Total período</th></tr></thead><tbody>';
+  const grandTotal=new Array(SQUAD_MESES.length).fill(0);
+  SQUADS.forEach(sq=>{
+    if(!selSquads.has(sq))return;
+    const sqVals=SQUAD_EF[sq];if(!sqVals)return;
+    const scaledVals=SQUAD_MESES.map((m,mi)=>{
+      const totalInSq=PROJETOS.filter(p=>p.Squad===sq&&p.MesesAtivos.split(',').includes(m)).length;
+      const filtInSq=filtered.filter(p=>p.Squad===sq&&p.MesesAtivos.split(',').includes(m)).length;
+      const ratio=totalInSq>0?filtInSq/totalInSq:0;
+      return Math.round(sqVals[mi]*ratio);
+    });
+    const tot=scaledVals.reduce((a,b)=>a+b,0);
+    h+=`<tr><td style="font-weight:600">${sq}</td>`;
+    scaledVals.forEach((v,mi)=>{
+      grandTotal[mi]+=v;
+      if(v>0)h+=`<td class="center"><span class="hm-val" style="background:${heatBg(v,SQUAD_EF_MAX)}">${v}</span></td>`;
+      else h+=`<td class="center" style="color:var(--muted)">—</td>`;
+    });
+    h+=`<td class="center"><strong>${tot.toLocaleString('pt-BR')}</strong></td></tr>`;
+  });
+  const grandTotSum=grandTotal.reduce((a,b)=>a+b,0);
+  h+='<tr style="border-top:2px solid var(--bord)"><td style="font-weight:800;color:var(--text)">TOTAL GERAL</td>';
+  grandTotal.forEach((v,i)=>{
+    const pico=i===3;
+    h+=`<td class="center"><span class="hm-val" style="background:${pico?'#ef4444':heatBg(v,SQUAD_EF_MAX)};${pico?'outline:2px solid #92400e':''};">${v}</span></td>`;
+  });
+  h+=`<td class="center"><strong>${grandTotSum.toLocaleString('pt-BR')}</strong></td></tr></tbody>`;
+  tbl.innerHTML=h;
+}
+
+// ── RENDER ALL ────────────────────────────────────────────────────────────
+function renderAll(){
+  const selSquads=new Set(msGetSelected('squad'));
+  const selDiscs=new Set(msGetSelected('disc'));
+  const selEmps=new Set(msGetSelected('emp'));
+  const filtered=PROJETOS.filter(p=>selSquads.has(p.Squad)&&selDiscs.has(p.Disciplina)&&selEmps.has(p.Empresa));
+
+  // ── Efetivo filtrado por mês (proporcional) ──
+  const mecFilt=MESES_CHART.map((m,mi)=>{
+    const tot=PROJETOS.filter(p=>p.Disciplina==='MECÂNICA'&&p.MesesAtivos.split(',').includes(m)).length;
+    const fil=filtered.filter(p=>p.Disciplina==='MECÂNICA'&&p.MesesAtivos.split(',').includes(m)).length;
+    return tot>0?Math.round(MEC_TOT[mi]*fil/tot):0;
+  });
+  const eleFilt=MESES_CHART.map((m,mi)=>{
+    const tot=PROJETOS.filter(p=>p.Disciplina==='ELÉTRICA'&&p.MesesAtivos.split(',').includes(m)).length;
+    const fil=filtered.filter(p=>p.Disciplina==='ELÉTRICA'&&p.MesesAtivos.split(',').includes(m)).length;
+    return tot>0?Math.round(ELE_TOT[mi]*fil/tot):0;
+  });
+  const andFilt=MESES_CHART.map((m,mi)=>{
+    const tot=PROJETOS.filter(p=>p.Disciplina==='ANDAIME'&&p.MesesAtivos.split(',').includes(m)).length;
+    const fil=filtered.filter(p=>p.Disciplina==='ANDAIME'&&p.MesesAtivos.split(',').includes(m)).length;
+    return tot>0?Math.round(AND_TOT[mi]*fil/tot):0;
+  });
+  const totFilt=mecFilt.map((v,i)=>v+eleFilt[i]+andFilt[i]);
+
+  // ── KPI Cards ──
+  const picoVal=Math.max(...totFilt);
+  const picoIdx=totFilt.indexOf(picoVal);
+  const picoMes=MESES_CHART[picoIdx]||'—';
+  const fevIdx=MESES_CHART.indexOf('fev/27');
+  const fevVal=totFilt[fevIdx]||0;
+  const mecObras=filtered.filter(p=>p.Disciplina==='MECÂNICA').length;
+  const eleObras=filtered.filter(p=>p.Disciplina==='ELÉTRICA').length;
+  const andObras=filtered.filter(p=>p.Disciplina==='ANDAIME').length;
+  const mecPicoEf=Math.max(...mecFilt);
+  const mecPicoMes=MESES_CHART[mecFilt.indexOf(mecPicoEf)]||'—';
+  const elePicoEf=Math.max(...eleFilt);
+  const elePicoMes=MESES_CHART[eleFilt.indexOf(elePicoEf)]||'—';
+  const andPicoEf=Math.max(...andFilt);
+  const andPicoMes=MESES_CHART[andFilt.indexOf(andPicoEf)]||'—';
+  const totObras=filtered.length;
+  const mesesAtv=new Set(filtered.flatMap(p=>p.MesesAtivos.split(','))).size;
+  document.getElementById('kpi-pico-val').innerHTML=picoVal+'<span class="pico-tag" id="kpi-pico-tag">'+picoMes+'</span>';
+  document.getElementById('kpi-pico-sub').textContent='máximo simultâneo';
+  document.getElementById('kpi-fev-val').textContent=fevVal;
+  document.getElementById('kpi-fev-sub').textContent='efetivo · fev/2027';
+  document.getElementById('kpi-mec-val').textContent=mecObras;
+  document.getElementById('kpi-mec-sub').textContent='obras · pico '+mecPicoEf+' '+mecPicoMes;
+  document.getElementById('kpi-ele-val').textContent=eleObras;
+  document.getElementById('kpi-ele-sub').textContent='obras · pico '+elePicoEf+' '+elePicoMes;
+  document.getElementById('kpi-and-val').textContent=andObras;
+  document.getElementById('kpi-and-sub').textContent='obras · pico '+andPicoEf+' '+andPicoMes;
+  document.getElementById('kpi-tot-val').textContent=totObras;
+  document.getElementById('kpi-tot-sub').textContent=mesesAtv+' meses de atividade';
+
+  // ── Gráfico Efetivo ──
+  chart.data.datasets[0].data=mecFilt;
+  chart.data.datasets[1].data=eleFilt;
+  chart.data.datasets[2].data=andFilt;
+  chart.data.datasets[3].data=totFilt;
+  chart.update('none');
+
+  // ── Gráfico Obras Ativas ──
+  const mecA=GANTT_MESES.map(m=>filtered.filter(p=>p.Disciplina==='MECÂNICA'&&p.MesesAtivos.split(',').includes(m)).length);
+  const eleA=GANTT_MESES.map(m=>filtered.filter(p=>p.Disciplina==='ELÉTRICA'&&p.MesesAtivos.split(',').includes(m)).length);
+  const andA=GANTT_MESES.map(m=>filtered.filter(p=>p.Disciplina==='ANDAIME'&&p.MesesAtivos.split(',').includes(m)).length);
+  chartObras.data.datasets[0].data=mecA;
+  chartObras.data.datasets[1].data=eleA;
+  chartObras.data.datasets[2].data=andA;
+  chartObras.update('none');
+
+  // ── Gantt + Squad table ──
+  renderGantt();
+  renderSquadTable(filtered);
+}
+// ── EDIÇÃO DE EMPRESA ─────────────────────────────────────────────────────
+const EMP_OVERRIDES_KEY='histo_emp_ov';
+let _editPidx=-1;
+
+function loadEmpresaOverrides(){
+  try{
+    const s=localStorage.getItem(EMP_OVERRIDES_KEY);
+    if(!s)return;
+    Object.entries(JSON.parse(s)).forEach(([k,v])=>{
+      const i=parseInt(k);
+      if(PROJETOS[i]!==undefined)PROJETOS[i].Empresa=v;
+    });
+  }catch(e){}
+}
+function saveEmpresaOverride(pidx,emp){
+  try{
+    const s=localStorage.getItem(EMP_OVERRIDES_KEY);
+    const obj=s?JSON.parse(s):{};
+    obj[pidx]=emp;
+    localStorage.setItem(EMP_OVERRIDES_KEY,JSON.stringify(obj));
+  }catch(e){}
+}
+function editEmpresa(evt,pidx){
+  evt.stopPropagation();
+  _editPidx=pidx;
+  const ed=document.getElementById('emp-editor');
+  const inp=document.getElementById('emp-ei');
+  const dl=document.getElementById('emp-dl');
+  const emps=[...new Set(PROJETOS.map(p=>p.Empresa).filter(e=>e!==null&&e!==undefined))].sort();
+  dl.innerHTML=emps.map(e=>`<option value="${e.replace(/"/g,'&quot;')}">`).join('');
+  inp.value=PROJETOS[pidx].Empresa||'';
+  const r=evt.target.getBoundingClientRect();
+  ed.style.left=Math.min(r.left,window.innerWidth-230)+'px';
+  ed.style.top=(r.bottom+6)+'px';
+  ed.style.display='block';
+  setTimeout(()=>{inp.focus();inp.select();},40);
+}
+function confirmEmpresaEdit(){
+  if(_editPidx<0)return;
+  const newEmp=document.getElementById('emp-ei').value.trim();
+  PROJETOS[_editPidx].Empresa=newEmp;
+  saveEmpresaOverride(_editPidx,newEmp);
+  if(!document.querySelector(`.ms-emp-cb[value="${newEmp.replace(/"/g,'\\"')}"]`)){
+    addEmpresaToFilter(newEmp);
+  }
+  closeEmpEditor();
+  renderAll();
+}
+function addEmpresaToFilter(emp){
+  const drop=document.getElementById('ms-emp-drop');
+  const lbl=document.createElement('label');
+  lbl.className='ms-opt';
+  lbl.innerHTML=`<input type="checkbox" class="ms-emp-cb" value="${emp.replace(/"/g,'&quot;')}" checked onchange="msChange('emp')"><span class="pill-emp ${empClass(emp)}" style="margin-right:2px">${empShort(emp)}</span> ${emp}`;
+  drop.appendChild(lbl);
+}
+function closeEmpEditor(){
+  _editPidx=-1;
+  document.getElementById('emp-editor').style.display='none';
+}
+function resetEmpresaOverrides(){
+  localStorage.removeItem(EMP_OVERRIDES_KEY);
+  location.reload();
+}
+document.addEventListener('click',function(e){
+  const ed=document.getElementById('emp-editor');
+  if(ed&&ed.style.display!=='none'&&!ed.contains(e.target))closeEmpEditor();
+});
+
+// Embed mode: hide own nav when opened inside the main dashboard
+if(new URLSearchParams(location.search).get('embed')==='1'){
+  document.body.classList.add('embedded');
+}
+loadEmpresaOverrides();
+renderAll();
+</script>
+
+<!-- EMPRESA EDITOR POPUP -->
+<div id="emp-editor" style="display:none;position:fixed;z-index:9999;background:var(--card);border:1px solid var(--acc);border-radius:8px;padding:12px 14px;box-shadow:0 6px 24px rgba(0,0,0,.18);min-width:220px">
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px;font-weight:700">Alterar empresa</div>
+  <input id="emp-ei" list="emp-dl" autocomplete="off"
+    style="width:100%;background:var(--bg);border:1px solid var(--bord);color:var(--text);padding:6px 10px;font-family:Inter,sans-serif;font-size:12px;border-radius:4px;outline:none"
+    placeholder="Selecione ou digite..."
+    onkeydown="if(event.key==='Enter')confirmEmpresaEdit();if(event.key==='Escape')closeEmpEditor()">
+  <datalist id="emp-dl"></datalist>
+  <div style="display:flex;gap:6px;margin-top:10px">
+    <button onclick="confirmEmpresaEdit()" class="btn btn-orange" style="flex:1;padding:6px;font-size:11px">Confirmar</button>
+    <button onclick="closeEmpEditor()" class="btn btn-outline" style="padding:6px;font-size:11px">✕</button>
+    <button onclick="resetEmpresaOverrides()" class="btn btn-outline" style="padding:6px;font-size:10px;color:var(--danger);border-color:var(--danger)" title="Desfazer todas as alterações">↺</button>
+  </div>
+</div>
+</body>
+</html>
