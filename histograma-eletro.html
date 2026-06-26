@@ -196,6 +196,20 @@ td.g-emp{min-width:100px;max-width:100px;text-align:center;padding:4px 6px!impor
 .eq-editable:hover{filter:brightness(1.18);outline:1.5px solid rgba(255,255,255,.8);outline-offset:1px}
 td:hover .g-cell-empty{opacity:.25!important;background:#009CDE}
 .eq-editor-popup{position:fixed;z-index:9999;background:var(--card);border:1.5px solid var(--acc);border-radius:8px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.18);min-width:190px}
+/* Modal Adicionar Obra */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10000;display:flex;align-items:center;justify-content:center}
+.modal-box{background:var(--card);border-radius:10px;padding:24px 28px;width:520px;max-width:95vw;box-shadow:0 16px 48px rgba(0,0,0,.28);max-height:92vh;overflow-y:auto}
+.modal-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:18px;display:flex;align-items:center;justify-content:space-between}
+.modal-field{margin-bottom:14px}
+.modal-label{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);font-weight:700;margin-bottom:5px;display:block}
+.modal-input{width:100%;background:var(--bg);border:1px solid var(--bord);color:var(--text);padding:8px 10px;font-family:Inter,sans-serif;font-size:12px;border-radius:5px;outline:none;box-sizing:border-box}
+.modal-input:focus{border-color:var(--acc)}
+.modal-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.disc-row{display:grid;grid-template-columns:auto 1fr 80px;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--bord)}
+.disc-row:last-child{border-bottom:none}
+.disc-badge{display:inline-flex;align-items:center;justify-content:center;width:36px;height:22px;border-radius:4px;font-size:10px;font-weight:700;color:#fff}
+.disc-check{width:15px;height:15px;cursor:pointer;accent-color:var(--acc)}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:14px;border-top:1px solid var(--bord)}
 /* BADGE PICO */
 .pico-tag{background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.5px;margin-left:6px}
 body.dark .pico-tag{background:#451a03;color:#fde68a}
@@ -401,6 +415,7 @@ body.dark .cc-badge{background:var(--bg)}
       </div>
       <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
         <span id="ganttCount" style="font-size:11px;color:var(--muted)"></span>
+        <button class="btn btn-dark" onclick="openAddObraModal()" style="gap:5px">+ Adicionar Obra</button>
         <button class="btn btn-outline" onclick="document.getElementById('xlsx-input').click()" title="Importar planilha Excel atualizada" style="gap:5px">📥 Importar Planilha</button>
         <button class="btn btn-outline" onclick="msReset()">Limpar filtros</button>
       </div>
@@ -1010,6 +1025,107 @@ async function saveVirtualEntry(entry){
   }catch(ex){}
 }
 
+// ── MODAL ADICIONAR OBRA ──────────────────────────────────────────────────
+function openAddObraModal(){
+  // Popula selects
+  const sqSel=document.getElementById('ao-squad');
+  sqSel.innerHTML='<option value="">— Selecione —</option>';
+  SQUADS.forEach(s=>{sqSel.innerHTML+=`<option value="${s}">${s}</option>`;});
+
+  const iniSel=document.getElementById('ao-inicio');
+  const fimSel=document.getElementById('ao-fim');
+  iniSel.innerHTML='';fimSel.innerHTML='';
+  GANTT_MESES.forEach(m=>{
+    iniSel.innerHTML+=`<option value="${m}">${m}</option>`;
+    fimSel.innerHTML+=`<option value="${m}">${m}</option>`;
+  });
+  iniSel.value='ago/26';fimSel.value='out/27';
+
+  // Datalist empresas
+  const dl=document.getElementById('ao-emp-dl');
+  dl.innerHTML=[...new Set(PROJETOS.map(p=>p.Empresa).filter(Boolean))].sort()
+    .map(e=>`<option value="${e.replace(/"/g,'&quot;')}">`).join('');
+
+  // Limpa campos
+  document.getElementById('ao-nome').value='';
+  document.getElementById('ao-emp').value='';
+  ['mec','ele','and','civ'].forEach(d=>{
+    document.getElementById('ao-'+d+'-chk').checked=false;
+    document.getElementById('ao-'+d+'-qt').disabled=true;
+    document.getElementById('ao-'+d+'-qt').value=1;
+  });
+
+  // Ativa/desativa input de quantidade ao marcar checkbox
+  ['mec','ele','and','civ'].forEach(d=>{
+    const chk=document.getElementById('ao-'+d+'-chk');
+    const qt=document.getElementById('ao-'+d+'-qt');
+    chk.onchange=()=>{qt.disabled=!chk.checked;if(chk.checked)qt.focus();};
+  });
+
+  document.getElementById('add-obra-modal').style.display='flex';
+  document.getElementById('ao-nome').focus();
+}
+
+function closeAddObraModal(){
+  document.getElementById('add-obra-modal').style.display='none';
+}
+
+async function confirmAddObra(){
+  const nome=(document.getElementById('ao-nome').value||'').trim();
+  const squad=document.getElementById('ao-squad').value;
+  const emp=(document.getElementById('ao-emp').value||'').trim();
+  const inicio=document.getElementById('ao-inicio').value;
+  const fim=document.getElementById('ao-fim').value;
+
+  if(!nome){alert('Informe o nome da obra.');return;}
+  if(!squad){alert('Selecione o Squad.');return;}
+
+  const iniIdx=GANTT_MESES.indexOf(inicio);
+  const fimIdx=GANTT_MESES.indexOf(fim);
+  if(iniIdx<0||fimIdx<0||fimIdx<iniIdx){alert('Período inválido.');return;}
+
+  const discMap=[
+    {id:'mec',disc:'MECÂNICA'},
+    {id:'ele',disc:'ELÉTRICA'},
+    {id:'and',disc:'ANDAIME'},
+    {id:'civ',disc:'CIVIL'}
+  ];
+  const selected=discMap.filter(d=>document.getElementById('ao-'+d.id+'-chk').checked);
+  if(selected.length===0){alert('Marque ao menos uma disciplina.');return;}
+
+  const mesesAtivos=GANTT_MESES.slice(iniIdx,fimIdx+1).join(',');
+
+  for(const{id,disc}of selected){
+    const qt=Math.max(1,parseInt(document.getElementById('ao-'+id+'-qt').value)||1);
+    const eq=Array(17).fill(0);
+    for(let i=iniIdx;i<=fimIdx;i++)eq[i]=qt;
+
+    // Verifica se já existe esta obra+disciplina
+    const exists=PROJETOS.find(p=>p.Projeto===nome&&p.Disciplina===disc&&p.Squad===squad);
+    if(exists){
+      // Atualiza Eq
+      for(let i=iniIdx;i<=fimIdx;i++){if(!exists.Eq)exists.Eq=Array(17).fill(0);exists.Eq[i]=qt;}
+      const ms=new Set(exists.MesesAtivos.split(','));
+      GANTT_MESES.slice(iniIdx,fimIdx+1).forEach(m=>ms.add(m));
+      exists.MesesAtivos=[...ms].join(',');
+      await saveVirtualEntry(exists);
+    }else{
+      const newEntry={Projeto:nome,Squad:squad,Disciplina:disc,Empresa:emp,MesesAtivos:mesesAtivos,Eq:eq};
+      PROJETOS.push(newEntry);
+      await saveVirtualEntry(newEntry);
+    }
+  }
+
+  // Adiciona empresa ao filtro se for nova
+  if(emp&&!document.querySelector(`.ms-emp-cb[value="${emp.replace(/"/g,'\\"')}"]`)){
+    addEmpresaToFilter(emp);
+  }
+
+  closeAddObraModal();
+  initEqOrigSums();
+  renderAll();
+}
+
 function setEqDisc(btn){
   document.querySelectorAll('.eq-disc-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
@@ -1250,6 +1366,90 @@ renderAll();
     <button onclick="resetEmpresaOverrides()" class="btn btn-outline" style="padding:6px;font-size:10px;color:var(--danger);border-color:var(--danger)" title="Desfazer todas as alterações">↺</button>
   </div>
 </div>
+<!-- MODAL ADICIONAR OBRA -->
+<div id="add-obra-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeAddObraModal()">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span>Adicionar Obra</span>
+      <button onclick="closeAddObraModal()" class="btn btn-outline" style="padding:4px 10px;font-size:11px">✕</button>
+    </div>
+
+    <div class="modal-field">
+      <label class="modal-label">Nome da Obra *</label>
+      <input id="ao-nome" class="modal-input" placeholder="Ex: Reforma Correia TR-200..." autocomplete="off">
+    </div>
+
+    <div class="modal-row">
+      <div class="modal-field">
+        <label class="modal-label">Squad *</label>
+        <select id="ao-squad" class="modal-input">
+          <option value="">— Selecione —</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Empresa</label>
+        <input id="ao-emp" class="modal-input" list="ao-emp-dl" placeholder="Nome da empresa" autocomplete="off">
+        <datalist id="ao-emp-dl"></datalist>
+      </div>
+    </div>
+
+    <div class="modal-row">
+      <div class="modal-field">
+        <label class="modal-label">Início *</label>
+        <select id="ao-inicio" class="modal-input"></select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Fim *</label>
+        <select id="ao-fim" class="modal-input"></select>
+      </div>
+    </div>
+
+    <div class="modal-field">
+      <label class="modal-label" style="margin-bottom:8px">Disciplinas e Quantidades de Equipes</label>
+      <div id="ao-discs">
+        <div class="disc-row">
+          <input type="checkbox" class="disc-check" id="ao-mec-chk">
+          <label for="ao-mec-chk" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <span class="disc-badge" style="background:#009CDE">MEC</span>
+            <span style="font-size:12px;color:var(--text)">Mecânica</span>
+          </label>
+          <input id="ao-mec-qt" type="number" min="1" max="99" value="1" class="modal-input" style="text-align:center;padding:5px" disabled>
+        </div>
+        <div class="disc-row">
+          <input type="checkbox" class="disc-check" id="ao-ele-chk">
+          <label for="ao-ele-chk" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <span class="disc-badge" style="background:#f59e0b">ELE</span>
+            <span style="font-size:12px;color:var(--text)">Elétrica</span>
+          </label>
+          <input id="ao-ele-qt" type="number" min="1" max="99" value="1" class="modal-input" style="text-align:center;padding:5px" disabled>
+        </div>
+        <div class="disc-row">
+          <input type="checkbox" class="disc-check" id="ao-and-chk">
+          <label for="ao-and-chk" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <span class="disc-badge" style="background:#10b981">AND</span>
+            <span style="font-size:12px;color:var(--text)">Andaime</span>
+          </label>
+          <input id="ao-and-qt" type="number" min="1" max="99" value="1" class="modal-input" style="text-align:center;padding:5px" disabled>
+        </div>
+        <div class="disc-row">
+          <input type="checkbox" class="disc-check" id="ao-civ-chk">
+          <label for="ao-civ-chk" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <span class="disc-badge" style="background:#6366f1">CIV</span>
+            <span style="font-size:12px;color:var(--text)">Civil</span>
+          </label>
+          <input id="ao-civ-qt" type="number" min="1" max="99" value="1" class="modal-input" style="text-align:center;padding:5px" disabled>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:8px">Marque as disciplinas e defina a quantidade de equipes para cada uma. O mesmo valor será distribuído em todos os meses do período.</div>
+    </div>
+
+    <div class="modal-footer">
+      <button onclick="closeAddObraModal()" class="btn btn-outline" style="padding:8px 18px">Cancelar</button>
+      <button onclick="confirmAddObra()" class="btn btn-orange" style="padding:8px 22px;font-size:13px">✓ Adicionar</button>
+    </div>
+  </div>
+</div>
+
 <!-- EQUIPE EDITOR POPUP -->
 <div id="eq-editor" class="eq-editor-popup" style="display:none">
   <div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px;font-weight:700">Editar equipe</div>
