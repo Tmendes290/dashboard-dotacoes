@@ -979,25 +979,34 @@ async function saveEquipeOverride(pidx,mi,val){
   }catch(e){}
 }
 
-// Entradas virtuais (novas disciplinas criadas pelo usuário via UI)
-const VIRT_ENTRIES_KEY='histo_virt_entries';
-function loadVirtualEntries(){
+// Entradas virtuais (novas disciplinas criadas via UI — sync Supabase)
+async function loadVirtualEntries(){
+  if(!supa)return;
   try{
-    const s=localStorage.getItem(VIRT_ENTRIES_KEY);
-    if(!s)return;
-    JSON.parse(s).forEach(e=>{
-      const exists=PROJETOS.find(p=>p.Disciplina===e.Disciplina&&p.Squad===e.Squad&&p.Projeto===e.Projeto);
-      if(!exists)PROJETOS.push({...e,Eq:[...e.Eq]});
+    const{data,error}=await supa.from('histograma_virt_entries').select('projeto,squad,disciplina,empresa,meses_ativos,eq');
+    if(error||!data)return;
+    data.forEach(r=>{
+      const exists=PROJETOS.find(p=>p.Disciplina===r.disciplina&&p.Squad===r.squad&&p.Projeto===r.projeto);
+      if(!exists)PROJETOS.push({
+        Projeto:r.projeto,Squad:r.squad,Disciplina:r.disciplina,
+        Empresa:r.empresa||'',MesesAtivos:r.meses_ativos||'',
+        Eq:Array.isArray(r.eq)?r.eq:Array(17).fill(0)
+      });
     });
+    renderAll();
   }catch(ex){}
 }
-function saveVirtualEntry(entry){
+async function saveVirtualEntry(entry){
+  if(!supa)return;
   try{
-    const s=localStorage.getItem(VIRT_ENTRIES_KEY);
-    const arr=s?JSON.parse(s):[];
-    const idx=arr.findIndex(e=>e.Disciplina===entry.Disciplina&&e.Squad===entry.Squad&&e.Projeto===entry.Projeto);
-    if(idx>=0)arr[idx]=entry;else arr.push(entry);
-    localStorage.setItem(VIRT_ENTRIES_KEY,JSON.stringify(arr));
+    await supa.from('histograma_virt_entries').upsert(
+      {
+        projeto:entry.Projeto,squad:entry.Squad,disciplina:entry.Disciplina,
+        empresa:entry.Empresa||'',meses_ativos:entry.MesesAtivos||'',
+        eq:entry.Eq||[]
+      },
+      {onConflict:'projeto,squad,disciplina'}
+    );
   }catch(ex){}
 }
 
@@ -1219,10 +1228,11 @@ document.addEventListener('click',function(e){
 if(new URLSearchParams(location.search).get('embed')==='1'){
   document.body.classList.add('embedded');
 }
-loadVirtualEntries();  // restaura entradas criadas via UI (nova disciplina, ex: CIVIL)
-initEqOrigSums();      // captura somas originais antes de qualquer override
+localStorage.removeItem('histo_virt_entries'); // limpa cache antigo (migrado para Supabase)
+initEqOrigSums();
 loadEmpresaOverrides();
-loadEquipeOverrides(); // aplica overrides de Eq (localStorage primeiro, depois Supabase)
+loadEquipeOverrides();
+loadVirtualEntries();  // carrega entradas CIVIL/novas do Supabase
 renderAll();
 </script>
 
