@@ -6,6 +6,7 @@
 <title>Histograma CTT Eletromecânico — Vale Base Metals</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -180,6 +181,10 @@ body.dark .emp-A-DEFINIR{background:#1e293b;color:#94a3b8}
 td.g-emp{min-width:100px;max-width:100px;text-align:center;padding:4px 6px!important}
 .emp-editable{cursor:pointer;transition:filter .12s}
 .emp-editable:hover{filter:brightness(.88);outline:1.5px dashed rgba(0,0,0,.25);outline-offset:1px}
+.eq-editable{cursor:pointer;transition:filter .12s,outline .1s}
+.eq-editable:hover{filter:brightness(1.18);outline:1.5px solid rgba(255,255,255,.8);outline-offset:1px}
+td:hover .g-cell-empty{opacity:.25!important;background:#009CDE}
+.eq-editor-popup{position:fixed;z-index:9999;background:var(--card);border:1.5px solid var(--acc);border-radius:8px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.18);min-width:190px}
 /* BADGE PICO */
 .pico-tag{background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.5px;margin-left:6px}
 body.dark .pico-tag{background:#451a03;color:#fde68a}
@@ -248,6 +253,8 @@ body.dark .cc-badge{background:var(--bg)}
       <div class="topbar-sub">PCT1 · Rev01 · Período: ago/2026 – out/2027 · 222 obras · 9 squads</div>
     </div>
     <div class="topbar-actions">
+      <input type="file" id="xlsx-input" accept=".xlsx,.xls" style="display:none" onchange="importPlanilha(this.files[0]);this.value=''">
+      <button class="btn btn-outline" onclick="document.getElementById('xlsx-input').click()" title="Importar planilha Excel atualizada">📥 Importar</button>
       <button class="btn btn-outline" onclick="window.print()" style="gap:5px" title="Exportar PDF (Ctrl+P)">🖨️ PDF</button>
       <button class="btn btn-outline" onclick="toggleTheme()" id="btn-theme">🌙</button>
       <a class="btn btn-dark" href="/">← Dashboard</a>
@@ -529,6 +536,10 @@ const ELE_TOT=[152,140,136,148,96,92,112,104,104,80,48,40,32,24,8];
 const AND_TOT=[18,24,30,36,30,24,18,18,30,18,6,0,0,0,0];
 
 const GANTT_MESES=['jun/26','jul/26','ago/26','set/26','out/26','nov/26','dez/26','jan/27','fev/27','mar/27','abr/27','mai/27','jun/27','jul/27','ago/27','set/27','out/27'];
+// EQ_ORIG_SUM: soma original dos Eq por disciplina/mês — calculado ANTES de qualquer override
+// Serve de base de calibração para escalar MEC_TOT quando equipes são editadas
+const EQ_ORIG_SUM={MEC:Array(17).fill(0),ELE:Array(17).fill(0),AND:Array(17).fill(0)};
+// preenchido após PROJETOS ser definido (ver initEqOrigSums)
 
 const SQUAD_MESES=['ago/26','set/26','out/26','nov/26','dez/26','jan/27','fev/27','mar/27','abr/27','mai/27','jun/27','jul/27','ago/27','set/27'];
 const SQUADS=['Usinas I e II','SLB III','Britagens','CPF','Mina','Geotecnia','Paulo Fonteles','Barragem','Dique de Sela I'];
@@ -742,9 +753,9 @@ function renderGantt(){
       const cells=GANTT_MESES.map((m,mi)=>{
         const hj=m===HOJE_MES?' hoje-col':'';
         const eq=p.Eq?p.Eq[mi]:0;
-        if(!eq||eq===0)return`<td class="g-month${hj}"></td>`;
+        if(!eq||eq===0)return`<td class="g-month${hj}"><span class="g-cell-empty" onclick="editEquipe(event,${pidx},${mi})" title="Sem equipe · Clique para adicionar" style="display:block;width:100%;height:18px;cursor:pointer;border-radius:3px;opacity:0"></span></td>`;
         const num=Number.isInteger(eq)?eq:(eq%1===0?eq:eq.toFixed(1));
-        return`<td class="g-month${hj}"><span class="g-cell ${cls} g-eq" title="${p.Empresa?p.Empresa+' · ':''}${p.Projeto} · ${eq} equipe${eq!==1?'s':''}">${num}</span></td>`;
+        return`<td class="g-month${hj}"><span class="g-cell ${cls} g-eq eq-editable" onclick="editEquipe(event,${pidx},${mi})" title="${p.Empresa?p.Empresa+' · ':''}${p.Projeto} · ${eq} equipe${eq!==1?'s':''} · Clique para editar">${num}</span></td>`;
       }).join('');
       tr.innerHTML=`<td class="g-proj" title="${p.Projeto}">${p.Projeto}</td><td class="g-emp center">${empPill}</td><td class="g-disc center">${pills}</td>${cells}`;
       tbody.appendChild(tr);
@@ -799,6 +810,15 @@ function renderSquadTable(filtered){
   tbl.innerHTML=h;
 }
 
+function initEqOrigSums(){
+  EQ_ORIG_SUM.MEC.fill(0);EQ_ORIG_SUM.ELE.fill(0);EQ_ORIG_SUM.AND.fill(0);
+  PROJETOS.forEach(p=>{
+    const k=p.Disciplina==='MECÂNICA'?'MEC':p.Disciplina==='ELÉTRICA'?'ELE':p.Disciplina==='ANDAIME'?'AND':null;
+    if(!k||!p.Eq)return;
+    p.Eq.forEach((v,mi)=>{EQ_ORIG_SUM[k][mi]+=v;});
+  });
+}
+
 // ── RENDER ALL ────────────────────────────────────────────────────────────
 function renderAll(){
   const selSquads=new Set(msGetSelected('squad'));
@@ -806,22 +826,24 @@ function renderAll(){
   const selEmps=new Set(msGetSelected('emp'));
   const filtered=PROJETOS.filter(p=>selSquads.has(p.Squad)&&selDiscs.has(p.Disciplina)&&selEmps.has(p.Empresa));
 
-  // ── Efetivo filtrado por mês (proporcional) ──
-  const mecFilt=MESES_CHART.map((m,mi)=>{
-    const tot=PROJETOS.filter(p=>p.Disciplina==='MECÂNICA'&&p.MesesAtivos.split(',').includes(m)).length;
-    const fil=filtered.filter(p=>p.Disciplina==='MECÂNICA'&&p.MesesAtivos.split(',').includes(m)).length;
-    return tot>0?Math.round(MEC_TOT[mi]*fil/tot):0;
-  });
-  const eleFilt=MESES_CHART.map((m,mi)=>{
-    const tot=PROJETOS.filter(p=>p.Disciplina==='ELÉTRICA'&&p.MesesAtivos.split(',').includes(m)).length;
-    const fil=filtered.filter(p=>p.Disciplina==='ELÉTRICA'&&p.MesesAtivos.split(',').includes(m)).length;
-    return tot>0?Math.round(ELE_TOT[mi]*fil/tot):0;
-  });
-  const andFilt=MESES_CHART.map((m,mi)=>{
-    const tot=PROJETOS.filter(p=>p.Disciplina==='ANDAIME'&&p.MesesAtivos.split(',').includes(m)).length;
-    const fil=filtered.filter(p=>p.Disciplina==='ANDAIME'&&p.MesesAtivos.split(',').includes(m)).length;
-    return tot>0?Math.round(AND_TOT[mi]*fil/tot):0;
-  });
+  // ── Efetivo filtrado por mês (proporcional + calibrado por Eq atual) ──
+  // MESES_CHART[ci] = GANTT_MESES[ci+2] (offset 2: GANTT começa jun/26, CHART começa ago/26)
+  function calcFilt(disc,baseTot,eqKey){
+    return MESES_CHART.map((m,ci)=>{
+      const gi=ci+2; // índice GANTT_MESES correspondente
+      // Escala o total base se equipes foram editadas
+      const curSum=PROJETOS.filter(p=>p.Disciplina===disc).reduce((s,p)=>s+(p.Eq?p.Eq[gi]||0:0),0);
+      const origSum=EQ_ORIG_SUM[eqKey][gi];
+      const adj=origSum>0?Math.round(baseTot[ci]*curSum/origSum):baseTot[ci];
+      // Filtro proporcional por obras ativas
+      const tot=PROJETOS.filter(p=>p.Disciplina===disc&&p.MesesAtivos.split(',').includes(m)).length;
+      const fil=filtered.filter(p=>p.Disciplina===disc&&p.MesesAtivos.split(',').includes(m)).length;
+      return tot>0?Math.round(adj*fil/tot):0;
+    });
+  }
+  const mecFilt=calcFilt('MECÂNICA',MEC_TOT,'MEC');
+  const eleFilt=calcFilt('ELÉTRICA',ELE_TOT,'ELE');
+  const andFilt=calcFilt('ANDAIME',AND_TOT,'AND');
   const totFilt=mecFilt.map((v,i)=>v+eleFilt[i]+andFilt[i]);
 
   // ── KPI Cards ──
@@ -879,6 +901,128 @@ const SUPA_URL='https://ehbiyqqpzqrluvuqrljp.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoYml5cXFwenFybHV2dXFybGpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzMjM3MTcsImV4cCI6MjA5NDg5OTcxN30.lW_Jdc7SC7FKh9OJPBCYdfN-QMXFTYGjterU3eWOFTc';
 let supa=null;
 try{ supa=supabase.createClient(SUPA_URL,SUPA_KEY); }catch(e){}
+
+// ── EDIÇÃO DE EQUIPE (Gantt) ──────────────────────────────────────────────
+const EQ_OVERRIDES_KEY='histo_eq_ov';
+let _editEqPidx=-1,_editEqMi=-1;
+
+async function loadEquipeOverrides(){
+  try{
+    const s=localStorage.getItem(EQ_OVERRIDES_KEY);
+    if(s)Object.entries(JSON.parse(s)).forEach(([k,v])=>{
+      const [pi,mi]=k.split('_').map(Number);
+      if(PROJETOS[pi]&&PROJETOS[pi].Eq)PROJETOS[pi].Eq[mi]=v;
+    });
+  }catch(e){}
+  if(!supa)return;
+  try{
+    const{data,error}=await supa.from('histograma_eq_overrides').select('projeto_idx,mes_idx,equipe');
+    if(error||!data)return;
+    const fresh={};
+    data.forEach(r=>{
+      if(PROJETOS[r.projeto_idx]&&PROJETOS[r.projeto_idx].Eq){
+        PROJETOS[r.projeto_idx].Eq[r.mes_idx]=r.equipe;
+        fresh[`${r.projeto_idx}_${r.mes_idx}`]=r.equipe;
+      }
+    });
+    localStorage.setItem(EQ_OVERRIDES_KEY,JSON.stringify(fresh));
+    renderAll();
+  }catch(e){}
+}
+
+async function saveEquipeOverride(pidx,mi,val){
+  try{
+    const s=localStorage.getItem(EQ_OVERRIDES_KEY);
+    const obj=s?JSON.parse(s):{};
+    if(val===null||val===undefined)delete obj[`${pidx}_${mi}`];
+    else obj[`${pidx}_${mi}`]=val;
+    localStorage.setItem(EQ_OVERRIDES_KEY,JSON.stringify(obj));
+  }catch(e){}
+  if(!supa)return;
+  try{
+    if(val===null||val===undefined){
+      await supa.from('histograma_eq_overrides').delete().eq('projeto_idx',pidx).eq('mes_idx',mi);
+    }else{
+      await supa.from('histograma_eq_overrides').upsert(
+        {projeto_idx:pidx,mes_idx:mi,equipe:val,projeto_nome:PROJETOS[pidx]?.Projeto||'',mes_nome:GANTT_MESES[mi]||''},
+        {onConflict:'projeto_idx,mes_idx'}
+      );
+    }
+  }catch(e){}
+}
+
+function editEquipe(evt,pidx,mi){
+  evt.stopPropagation();
+  _editEqPidx=pidx;_editEqMi=mi;
+  const cur=PROJETOS[pidx].Eq?PROJETOS[pidx].Eq[mi]:0;
+  const ed=document.getElementById('eq-editor');
+  const x=Math.min(evt.clientX-40,window.innerWidth-180);
+  const y=Math.max(evt.clientY-60,8);
+  ed.style.left=x+'px';ed.style.top=y+'px';ed.style.display='block';
+  const inp=document.getElementById('eq-ei');
+  inp.value=cur||'';inp.focus();inp.select();
+}
+
+async function confirmEquipeEdit(){
+  const v=parseFloat(document.getElementById('eq-ei').value);
+  if(isNaN(v)||v<0){closeEqEditor();return;}
+  const rounded=Math.round(v*10)/10;
+  if(!PROJETOS[_editEqPidx].Eq)PROJETOS[_editEqPidx].Eq=Array(17).fill(0);
+  PROJETOS[_editEqPidx].Eq[_editEqMi]=rounded;
+  await saveEquipeOverride(_editEqPidx,_editEqMi,rounded);
+  closeEqEditor();
+  renderAll();
+}
+
+function closeEqEditor(){
+  document.getElementById('eq-editor').style.display='none';
+  _editEqPidx=-1;_editEqMi=-1;
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeEqEditor();
+  if(e.key==='Enter'&&_editEqPidx>=0)confirmEquipeEdit();
+});
+
+// ── IMPORTAR PLANILHA ─────────────────────────────────────────────────────
+function importPlanilha(file){
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      let updated=0;
+      const DISC_SHEETS=['MECÂNICA','ELÉTRICA','ANDAIME'];
+      DISC_SHEETS.forEach(disc=>{
+        const ws=wb.Sheets[disc];if(!ws)return;
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:0});
+        rows.forEach(row=>{
+          const code=(row[0]||'').toString().trim();
+          if(!code||code.length<5)return;
+          const idx=PROJETOS.findIndex(p=>p.Disciplina===disc&&p.Projeto.startsWith(code));
+          if(idx<0)return;
+          const newEq=Array(17).fill(0);
+          for(let ci=0;ci<17;ci++){
+            const v=parseFloat(row[9+ci]);
+            newEq[ci]=isNaN(v)||v<0?0:v;
+          }
+          PROJETOS[idx].Eq=newEq;
+          updated++;
+        });
+      });
+      // Limpa overrides pois a planilha está atualizada
+      localStorage.removeItem(EQ_OVERRIDES_KEY);
+      if(supa)supa.from('histograma_eq_overrides').delete().neq('projeto_idx',-1).catch(()=>{});
+      // Recalibra somas originais com os novos dados
+      initEqOrigSums();
+      renderAll();
+      alert(`✓ Importação concluída: ${updated} projeto(s) atualizado(s).`);
+    }catch(err){
+      alert('Erro ao processar a planilha: '+err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
 
 // ── EDIÇÃO DE EMPRESA ─────────────────────────────────────────────────────
 const EMP_OVERRIDES_KEY='histo_emp_ov';
@@ -981,7 +1125,9 @@ document.addEventListener('click',function(e){
 if(new URLSearchParams(location.search).get('embed')==='1'){
   document.body.classList.add('embedded');
 }
+initEqOrigSums();      // captura somas originais antes de qualquer override
 loadEmpresaOverrides();
+loadEquipeOverrides(); // aplica overrides de Eq (localStorage primeiro, depois Supabase)
 renderAll();
 </script>
 
@@ -998,6 +1144,18 @@ renderAll();
     <button onclick="closeEmpEditor()" class="btn btn-outline" style="padding:6px;font-size:11px">✕</button>
     <button onclick="resetEmpresaOverrides()" class="btn btn-outline" style="padding:6px;font-size:10px;color:var(--danger);border-color:var(--danger)" title="Desfazer todas as alterações">↺</button>
   </div>
+</div>
+<!-- EQUIPE EDITOR POPUP -->
+<div id="eq-editor" class="eq-editor-popup" style="display:none">
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px;font-weight:700">Quantidade de equipes</div>
+  <input id="eq-ei" type="number" min="0" max="99" step="1" placeholder="0"
+    style="width:100%;background:var(--bg);border:1px solid var(--bord);color:var(--text);padding:6px 10px;font-family:Inter,sans-serif;font-size:13px;border-radius:4px;outline:none;text-align:center"
+    onfocus="this.select()">
+  <div style="display:flex;gap:6px;margin-top:10px">
+    <button onclick="confirmEquipeEdit()" class="btn btn-orange" style="flex:1;padding:6px;font-size:11px">Confirmar</button>
+    <button onclick="closeEqEditor()" class="btn btn-outline" style="padding:6px;font-size:11px">✕</button>
+  </div>
+  <div style="font-size:9px;color:var(--muted);margin-top:6px;text-align:center">Enter confirma · Esc cancela</div>
 </div>
 </body>
 </html>
