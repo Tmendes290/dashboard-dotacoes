@@ -8879,9 +8879,10 @@ function _impBuildChegadaChart(){
   var grupos=Object.values(byP).sort(function(a,b){return a.key<b.key?-1:1;}).slice(-12);
   if(!grupos.length){impDestroyChart('evo-chart-chegada');return;}
 
+  var _diasSem=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
   function fmtK(k){
     if(k.includes('-W')){var p=k.split('-W');return'Sem.'+parseInt(p[1])+'\n'+p[0];}
-    if(k.length===10){var p=k.split('-');return p[2]+'/'+p[1];}
+    if(k.length===10){var p=k.split('-');var ds=_diasSem[new Date(k+'T12:00:00').getDay()];return ds+'\n'+p[2]+'/'+p[1];}
     var p=k.split('-');return['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][parseInt(p[1])-1]+'/'+p[0].slice(2);
   }
   var meta=480; // 08:00
