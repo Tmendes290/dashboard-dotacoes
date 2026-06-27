@@ -3686,12 +3686,57 @@ function setProgress(pct,msg){
 // ─────────────────────────────────────────────────────────────────
 // EXPORT CSV
 // ─────────────────────────────────────────────────────────────────
+function _minToHHMM(min){if(min===null||min===undefined)return'';var h=Math.floor(min/60),m=min%60;return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');}
+
 function exportCSV(){
-  const res=filterRes();
-  const h=['Ano','PEP','Sub PEP','Empresa','Aprovado (R$)','Ag.Aprovacao (R$)','Total Dotado (R$)','Medido (R$)','Saldo (R$)','% Comprometido'];
-  const rows=res.map(r=>[r.ANO,r.PEP,r.SUB_PEP,'"'+r.EMPRESA+'"',r.TOTAL_APROV.toFixed(2),r.TOTAL_AG.toFixed(2),r.TOTAL.toFixed(2),r.MEDIDO.toFixed(2),r.SALDO.toFixed(2),(r.FAROL*100).toFixed(1)+'%'].join(';'));
-  const csv='\uFEFF'+[h.join(';'),...rows].join('\n');
-  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='dotacoes_resumo.csv';a.click();
+  var now=new Date().toLocaleDateString('pt-BR');
+  var h,rows,fname;
+
+  if(currentView==='resumo'||currentView==='overview'||currentView==='analytics'){
+    var res=filterRes();
+    h=['Ano','PEP','Nome PEP','Sub PEP','Empresa','Squad','Lider','Aprovado (R$)','Ag. Aprovacao (R$)','Total Dotado (R$)','Medido (R$)','Saldo (R$)','Farol %'];
+    rows=res.map(function(r){return[r.ANO,r.PEP,getPepName(r.PEP),r.SUB_PEP||'','"'+r.EMPRESA+'"',getSquad(r.PEP),getLider(r.PEP),r.TOTAL_APROV.toFixed(2),r.TOTAL_AG.toFixed(2),r.TOTAL.toFixed(2),r.MEDIDO.toFixed(2),r.SALDO.toFixed(2),(r.FAROL*100).toFixed(1)+'%'].join(';');});
+    fname='resumo_sub_pep';
+  } else if(currentView==='dotacoes'){
+    var dot=filterDot();
+    h=['Ano','PEP','Nome PEP','Sub PEP','Empresa','Valor (R$)','Tipo','Status','Data Emissao','Observacao'];
+    rows=dot.map(function(d){return[d.ANO,d.PEP,getPepName(d.PEP),d.SUB_PEP||'','"'+d.EMPRESA+'"',d.TOTAL.toFixed(2),d.TIPO||'',d.STATUS,d.DATA_EMISSAO||'','"'+(d.OBS||'')+'"'].join(';');});
+    fname='dotacoes';
+  } else if(currentView==='alertas'){
+    var cpx=STATE.capex||[];
+    var fcpx=cpx.filter(function(r){return fPeps.length?fPeps.indexOf(r.pep)>=0:true;}).filter(function(r){return fEmps.length?fEmps.some(function(e){return r.empresa.toUpperCase().includes(e.toUpperCase())||e.toUpperCase().includes(r.empresa.toUpperCase());}):true;});
+    h=['PEP','Nome PEP','Empresa','Grupo','CAPEX Total (R$)','Contratado (R$)','Pago (R$)','A Contratar (R$)','A Pagar (R$)','% Uso','Status'];
+    rows=fcpx.map(function(r){var pct=r.capex>0?(r.contratado/r.capex*100):0;return[r.pep,getPepName(r.pep),'"'+r.empresa+'"',r.grupo||'',r.capex.toFixed(2),r.contratado.toFixed(2),r.pago.toFixed(2),r.a_contratar.toFixed(2),r.a_pagar.toFixed(2),pct.toFixed(1)+'%',pct<80?'Normal':pct<100?'Atencao':'Critico'].join(';');});
+    fname='capex_projetos';
+  } else if(currentView==='saude-pep'){
+    var cpx2=STATE.capex||[];var pepSet={};cpx2.forEach(function(r){pepSet[r.pep]=true;});
+    var peps=Object.keys(pepSet).filter(function(p){return fPeps.length?fPeps.indexOf(p)>=0:true;}).sort();
+    h=['PEP','Nome PEP','Squad','Lider','Planejador','CAPEX Total (R$)','Contratado (R$)','Pago (R$)','% Uso','Situacao'];
+    rows=peps.map(function(p){
+      var pr=cpx2.filter(function(r){return r.pep===p;});
+      var totCap=(STATE.capexPorPep||{})[p]||pr.reduce(function(s,r){return s+r.capex;},0);
+      var totCont=pr.reduce(function(s,r){return s+r.contratado;},0);
+      var totPago=pr.reduce(function(s,r){return s+r.pago;},0);
+      var pct=totCap>0?Math.min((totCont/totCap)*100,100):0;
+      return[p,getPepName(p),getSquad(p),getLider(p),getPlanejador(p),totCap.toFixed(2),totCont.toFixed(2),totPago.toFixed(2),pct.toFixed(1)+'%',pct<80?'Normal':pct<100?'Atencao':'Critico'].join(';');
+    });
+    fname='saude_pep';
+  } else if(currentView==='materiais'){
+    var mats=applyMatFilters();
+    h=['Pedido','RC','Projeto','PEP','Squad','Descricao','Qtde','Un. Medida','Fornecedor','Situacao','Prev. Entrega','Data Remessa','Data Faturamento','Valor Unit. (R$)','Valor Total (R$)','Observacao','Comentario'];
+    rows=mats.map(function(m){return[m.pedido||'',m.rc||'','"'+(m.projeto||'')+'"',m.pep||'',getSquad(m.pep||''),'"'+(m.descricao||'')+'"',m.qtde||'',m.unMedida||'','"'+(m.fornecedor||'')+'"',m.situacao||'',m.prevEntrega||'',m.dataRemessa||'',m.dataFaturamento||'',(parseFloat(m.valorUni)||0).toFixed(2),(parseFloat(m.valorTotal)||0).toFixed(2),'"'+(m.observacao||'')+'"','"'+(m.comentario||'')+'"'].join(';');});
+    fname='materiais';
+  } else if(currentView==='improdutividade'){
+    var impD=IMP_FILTERED.length?IMP_FILTERED:IMP_DATA;
+    h=['Data','Empresa','SAP','Produto','Chegada','PTS','Inicio','Alm. Ini','Alm. Fim','Termino','Justificativa','Acao','Prob. ID','Desc. Problema'];
+    rows=impD.map(function(d){return[d.dataStr||d.dataSortKey||'',d.empresa||'',d.sap||'','"'+(d.produto||d.descricao||'')+'"',_minToHHMM(d.chegadaMin),_minToHHMM(d.ptsMin),_minToHHMM(d.inicioMin),_minToHHMM(d.almIniMin),_minToHHMM(d.almFimMin),_minToHHMM(d.terminoMin),'"'+(d.justificativa||'')+'"','"'+(d.acao||'')+'"',d.problemaId||'','"'+(d.descProblema||'')+'"'].join(';');});
+    fname='improdutividade';
+  } else {
+    toast('Esta aba nao possui dados para exportar','red');return;
+  }
+
+  var csv='\uFEFF'+[h.join(';')].concat(rows).join('\n');
+  var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download=fname+'_'+now.replace(/\//g,'-')+'.csv';a.click();
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -5506,142 +5551,103 @@ function exportExcel(){
     document.head.appendChild(s);
     return;
   }
-  var wb = XLSX.utils.book_new();
-  var dot = filterDot();
-  var res = buildResumo();
-  var now = new Date().toLocaleDateString('pt-BR');
+  var wb=XLSX.utils.book_new();
+  var now=new Date().toLocaleDateString('pt-BR');
+  function addSheet(name,hdr,rows,widths){var ws=XLSX.utils.aoa_to_sheet([hdr].concat(rows));if(widths)ws['!cols']=widths.map(function(w){return{wch:w};});XLSX.utils.book_append_sheet(wb,ws,name);}
+  var exportFname='';
 
-  // ── ABA 1: KPIs ────────────────────────────────────────────────
-  var totalAprov = dot.filter(function(d){return d.STATUS==='Aprovada';}).reduce(function(s,d){return s+d.TOTAL;},0);
-  var totalAg    = dot.filter(function(d){return d.STATUS==='Ag. Aprovação';}).reduce(function(s,d){return s+d.TOTAL;},0);
-  var totalMed   = dot.reduce(function(s,d){
-    var k=d.SUB_PEP+'|'+d.EMPRESA+'|'+d.ANO;
-    return s+(STATE.medido[k]||0);
-  },0);
-  var saldo = totalAprov - totalMed;
+  if(currentView==='resumo'||currentView==='overview'||currentView==='analytics'){
+    var dot=filterDot();var res=filterRes();
+    var tAprov=dot.filter(function(d){return d.STATUS==='Aprovada';}).reduce(function(s,d){return s+d.TOTAL;},0);
+    var tMed=res.reduce(function(s,r){return s+r.MEDIDO;},0);
+    addSheet('KPIs',['Indicador','Valor','Data'],[
+      ['Total Dotado (Aprovado)',tAprov,now],['Total Medido',tMed,now],['Saldo',tAprov-tMed,now],
+      ['Qtd. Dotacoes Aprovadas',dot.filter(function(d){return d.STATUS==='Aprovada';}).length,now],
+      ['Qtd. Ag. Aprovacao',dot.filter(function(d){return d.STATUS==='Ag. Aprovação';}).length,now],
+      ['Alertas ge 90%',res.filter(function(r){return r.FAROL>=0.9;}).length,now]
+    ],[30,20,12]);
+    addSheet('Resumo Sub PEP',['#','PEP','Nome PEP','Sub PEP','Nome Sub PEP','Empresa','Squad','Lider','Aprovado (R$)','Ag. Aprovacao (R$)','Total Dotado (R$)','Medido (R$)','Saldo (R$)','Farol %'],
+      res.map(function(r,i){return[i+1,r.PEP,getPepName(r.PEP),r.SUB_PEP||'',getSubPepName(r.SUB_PEP),r.EMPRESA,getSquad(r.PEP),getLider(r.PEP),r.TOTAL_APROV,r.TOTAL_AG,r.TOTAL,r.MEDIDO,r.SALDO,(r.FAROL*100).toFixed(1)+'%'];}),
+      [4,12,30,16,30,25,15,20,18,18,18,18,18,10]);
+    addSheet('Dotacoes',['#','Data Emissao','Ano','PEP','Nome PEP','Sub PEP','Nome Sub PEP','Cod CPX','Empresa','Squad','Lider','Valor (R$)','Tipo','Status','Observacao'],
+      dot.map(function(d,i){return[i+1,d.DATA_EMISSAO||'',d.ANO,d.PEP,getPepName(d.PEP),d.SUB_PEP||'',getSubPepName(d.SUB_PEP),d.COD_CPX||'',d.EMPRESA,getSquad(d.PEP),getLider(d.PEP),d.TOTAL,d.TIPO||'',d.STATUS,d.OBS||''];}),
+      [4,14,6,12,35,16,35,10,30,15,20,18,12,15,30]);
+    exportFname='Dotacoes_ValeBaseMetals';
 
-  var kpiData = [
-    ['INDICADOR','VALOR','DATA'],
-    ['Total Dotado (Aprovado)', totalAprov, now],
-    ['Total Aguardando Aprovação', totalAg, now],
-    ['Total Medido (Gasto)', totalMed, now],
-    ['Saldo Disponível', saldo, now],
-    ['Qtd. Dotações Aprovadas', dot.filter(function(d){return d.STATUS==='Aprovada';}).length, now],
-    ['Qtd. Ag. Aprovação', dot.filter(function(d){return d.STATUS==='Ag. Aprovação';}).length, now],
-    ['Alertas ≥90%', res.filter(function(r){return r.FAROL>=0.9;}).length, now],
-  ];
-  var wsKpi = XLSX.utils.aoa_to_sheet(kpiData);
-  wsKpi['!cols'] = [{wch:30},{wch:20},{wch:12}];
-  XLSX.utils.book_append_sheet(wb, wsKpi, 'KPIs');
+  } else if(currentView==='dotacoes'){
+    var dot2=filterDot();
+    addSheet('Dotacoes',['#','Data Emissao','Ano','PEP','Nome PEP','Sub PEP','Nome Sub PEP','Cod CPX','Empresa','Squad','Lider','Valor (R$)','Tipo','Status','Observacao'],
+      dot2.map(function(d,i){return[i+1,d.DATA_EMISSAO||'',d.ANO,d.PEP,getPepName(d.PEP),d.SUB_PEP||'',getSubPepName(d.SUB_PEP),d.COD_CPX||'',d.EMPRESA,getSquad(d.PEP),getLider(d.PEP),d.TOTAL,d.TIPO||'',d.STATUS,d.OBS||''];}),
+      [4,14,6,12,35,16,35,10,30,15,20,18,12,15,30]);
+    exportFname='Dotacoes';
 
-  // ── ABA 2: DOTAÇÕES ────────────────────────────────────────────
-  var dotHead = ['#','Data Emissão','Ano','PEP','Nome PEP','Sub PEP','Nome Sub PEP',
-                 'Cód CPX','Empresa','Valor Solicitado (R$)','Tipo','Status','Observação'];
-  var dotRows = dot.map(function(d,i){
-    return [
-      i+1,
-      d.DATA_EMISSAO||'',
-      d.ANO,
-      d.PEP,
-      getPepName(d.PEP),
-      d.SUB_PEP||'',
-      getSubPepName(d.SUB_PEP),
-      d.COD_CPX||'',
-      d.EMPRESA,
-      d.TOTAL,
-      d.TIPO||'',
-      d.STATUS,
-      d.OBS||''
-    ];
-  });
-  var wsDot = XLSX.utils.aoa_to_sheet([dotHead].concat(dotRows));
-  wsDot['!cols'] = [{wch:4},{wch:14},{wch:6},{wch:12},{wch:35},{wch:16},{wch:35},
-                    {wch:10},{wch:30},{wch:20},{wch:12},{wch:15},{wch:30}];
-  XLSX.utils.book_append_sheet(wb, wsDot, 'Dotações');
-
-  // ── ABA 3: RESUMO SUB PEP ──────────────────────────────────────
-  var resHead = ['#','PEP','Nome PEP','Sub PEP','Nome Sub PEP','Empresa',
-                 'Aprovado (R$)','Ag. Aprovação (R$)','Total Dotado (R$)',
-                 'Medido (R$)','Saldo (R$)','Farol %'];
-  var resRows = res.map(function(r,i){
-    return [
-      i+1,
-      r.PEP, getPepName(r.PEP),
-      r.SUB_PEP||'', getSubPepName(r.SUB_PEP),
-      r.EMPRESA,
-      r.TOTAL_APROV,
-      r.TOTAL_AG,
-      r.TOTAL,
-      r.MEDIDO,
-      r.SALDO,
-      (r.FAROL*100).toFixed(1)+'%'
-    ];
-  });
-  var wsRes = XLSX.utils.aoa_to_sheet([resHead].concat(resRows));
-  wsRes['!cols'] = [{wch:4},{wch:12},{wch:30},{wch:16},{wch:30},{wch:25},
-                    {wch:18},{wch:18},{wch:18},{wch:18},{wch:18},{wch:10}];
-  XLSX.utils.book_append_sheet(wb, wsRes, 'Resumo Sub PEP');
-
-  // ── ABA 4: ALERTAS ─────────────────────────────────────────────
-  var alerts = res.filter(function(r){return r.FAROL>=0.9;}).sort(function(a,b){return b.FAROL-a.FAROL;});
-  var altHead = ['#','PEP','Nome PEP','Sub PEP','Nome Sub PEP','Empresa',
-                 'Total Dotado (R$)','Medido (R$)','Saldo (R$)','Farol %',
-                 'Motivo','Causa','Solução','Responsável','Status Análise','Data Análise'];
-  var altRows = [];
-  alerts.forEach(function(r,i){
-    var key = (r.PEP+'_'+(r.SUB_PEP||'')+'_'+r.EMPRESA).replace(/[^a-zA-Z0-9_]/g,'_');
-    var obsList = (STATE.obsAlertas||{})[key] || [];
-    if(!Array.isArray(obsList)) obsList = [obsList];
-    if(obsList.length === 0){
-      altRows.push([i+1, r.PEP, getPepName(r.PEP), r.SUB_PEP||'', getSubPepName(r.SUB_PEP),
-        r.EMPRESA, r.TOTAL, r.MEDIDO, r.SALDO, (r.FAROL*100).toFixed(1)+'%',
-        '','','','','','']);
-    } else {
-      obsList.forEach(function(ob, j){
-        altRows.push([j===0?i+1:'', j===0?r.PEP:'', j===0?getPepName(r.PEP):'',
-          j===0?r.SUB_PEP||'':'', j===0?getSubPepName(r.SUB_PEP):'',
-          j===0?r.EMPRESA:'',
-          j===0?r.TOTAL:'', j===0?r.MEDIDO:'', j===0?r.SALDO:'',
-          j===0?(r.FAROL*100).toFixed(1)+'%':'',
-          ob.motivo||'', ob.causa||'', ob.solucao||'',
-          ob.responsavel||'', ob.status||'', ob.data||'']);
-      });
+  } else if(currentView==='alertas'){
+    var cpxE=STATE.capex||[];
+    var fcpxE=cpxE.filter(function(r){return fPeps.length?fPeps.indexOf(r.pep)>=0:true;}).filter(function(r){return fEmps.length?fEmps.some(function(e){return r.empresa.toUpperCase().includes(e.toUpperCase())||e.toUpperCase().includes(r.empresa.toUpperCase());}):true;});
+    addSheet('CAPEX Projetos',['#','PEP','Nome PEP','Empresa','Grupo','CAPEX Total (R$)','Contratado (R$)','Pago (R$)','A Contratar (R$)','A Pagar (R$)','% Uso','Status'],
+      fcpxE.map(function(r,i){var pct=r.capex>0?(r.contratado/r.capex*100):0;return[i+1,r.pep,getPepName(r.pep),r.empresa,r.grupo||'',r.capex,r.contratado,r.pago,r.a_contratar,r.a_pagar,pct.toFixed(1)+'%',pct<80?'Normal':pct<100?'Atencao':'Critico'];}),
+      [4,12,30,25,20,18,18,18,18,18,10,12]);
+    var alertsE=getCapexAlerts(filterRes());
+    if(alertsE.length){
+      addSheet('Irregularidades',['#','PEP','Nome PEP','Empresa','Grupo','Contratado (R$)','Pago (R$)','A Pagar (R$)','Motivo'],
+        alertsE.map(function(r,i){return[i+1,r.PEP,getPepName(r.PEP),r.EMPRESA,r.GRUPO||'',r.TOTAL_APROV,r.MEDIDO,r.SALDO,alertReason(r)||''];}),
+        [4,12,30,25,20,18,18,18,30]);
     }
-  });
-  var wsAlt = XLSX.utils.aoa_to_sheet([altHead].concat(altRows));
-  wsAlt['!cols'] = [{wch:4},{wch:12},{wch:30},{wch:16},{wch:30},{wch:25},
-                    {wch:18},{wch:18},{wch:18},{wch:10},
-                    {wch:30},{wch:30},{wch:35},{wch:20},{wch:15},{wch:12}];
-  XLSX.utils.book_append_sheet(wb, wsAlt, 'Alertas');
+    exportFname='CAPEX_Projetos';
 
-  // ── ABA 5: REGULARIZAR SALDO ───────────────────────────────────
-  var capex = STATE.capex || [];
-  if(capex.length > 0){
-    var divs = calcDivergencias();
-    var regHead = ['#','PEP','Nome PEP','Empresa CAPEX','Grupo','Empresa Sistema',
-                   'CAPEX Total (R$)','Contratado (R$)','Pago (R$)',
-                   'A Contratar (R$)','Total Dotado (R$)','Saldo (R$)','Situação'];
-    var regRows = divs.map(function(r,i){
-      return [
-        i+1,
-        r.pep, getPepName(r.pep),
-        r.empresa_capex, r.grupo||'',
-        r.empresa_dot||'Sem dotação no sistema',
-        r.capex_total, r.contratado, r.pago,
-        r.a_contratar, r.dotado, r.saldo,
-        r.saldo >= 0 ? 'Coberto' : 'Descoberto'
-      ];
-    });
-    var wsReg = XLSX.utils.aoa_to_sheet([regHead].concat(regRows));
-    wsReg['!cols'] = [{wch:4},{wch:12},{wch:30},{wch:20},{wch:22},{wch:30},
-                      {wch:18},{wch:18},{wch:18},{wch:18},{wch:18},{wch:18},{wch:12}];
-    XLSX.utils.book_append_sheet(wb, wsReg, 'Regularizar Saldo');
+  } else if(currentView==='saude-pep'){
+    var cpxS=STATE.capex||[];var pepSetS={};cpxS.forEach(function(r){pepSetS[r.pep]=true;});
+    var pepsS=Object.keys(pepSetS).filter(function(p){return fPeps.length?fPeps.indexOf(p)>=0:true;}).sort();
+    addSheet('Saude do PEP',['#','PEP','Nome PEP','Squad','Lider','Planejador','CAPEX Total (R$)','Contratado (R$)','Pago (R$)','A Contratar (R$)','% Uso','Situacao'],
+      pepsS.map(function(p,i){
+        var pr=cpxS.filter(function(r){return r.pep===p;});
+        var totCap=(STATE.capexPorPep||{})[p]||pr.reduce(function(s,r){return s+r.capex;},0);
+        var totCont=pr.reduce(function(s,r){return s+r.contratado;},0);
+        var totPago=pr.reduce(function(s,r){return s+r.pago;},0);
+        var totAContr=pr.reduce(function(s,r){return s+r.a_contratar;},0);
+        var pct=totCap>0?Math.min((totCont/totCap)*100,100):0;
+        return[i+1,p,getPepName(p),getSquad(p),getLider(p),getPlanejador(p),totCap,totCont,totPago,totAContr,pct.toFixed(1)+'%',pct<80?'Normal':pct<100?'Atencao':'Critico'];
+      }),[4,12,30,15,20,20,18,18,18,18,10,12]);
+    exportFname='Saude_PEP';
+
+  } else if(currentView==='materiais'){
+    var matsE=applyMatFilters();
+    addSheet('Materiais',['#','Pedido','RC','Projeto','PEP','Squad','Descricao','Qtde','Un. Medida','Fornecedor','Situacao','Prev. Entrega','Data Remessa','Data Faturamento','Valor Unit. (R$)','Valor Total (R$)','Observacao','Comentario'],
+      matsE.map(function(m,i){return[i+1,m.pedido||'',m.rc||'',m.projeto||'',m.pep||'',getSquad(m.pep||''),m.descricao||'',m.qtde||'',m.unMedida||'',m.fornecedor||'',m.situacao||'',m.prevEntrega||'',m.dataRemessa||'',m.dataFaturamento||'',parseFloat(m.valorUni)||0,parseFloat(m.valorTotal)||0,m.observacao||'',m.comentario||''];}),
+      [4,10,10,30,12,15,35,6,10,25,20,15,15,15,15,15,25,25]);
+    exportFname='Materiais';
+
+  } else if(currentView==='improdutividade'){
+    var impDE=IMP_FILTERED.length?IMP_FILTERED:IMP_DATA;
+    addSheet('Improdutividade',['#','Data','Empresa','SAP','Produto','Chegada','PTS','Inicio','Alm. Ini','Alm. Fim','Termino','Justificativa','Acao','Prob. ID','Desc. Problema'],
+      impDE.map(function(d,i){return[i+1,d.dataStr||d.dataSortKey||'',d.empresa||'',d.sap||'',d.produto||d.descricao||'',_minToHHMM(d.chegadaMin),_minToHHMM(d.ptsMin),_minToHHMM(d.inicioMin),_minToHHMM(d.almIniMin),_minToHHMM(d.almFimMin),_minToHHMM(d.terminoMin),d.justificativa||'',d.acao||'',d.problemaId||'',d.descProblema||''];}),
+      [4,12,20,15,30,8,8,8,8,8,8,30,20,10,30]);
+    exportFname='Improdutividade';
+
+  } else {
+    toast('Esta aba nao possui dados para exportar','red');return;
   }
 
-  // ── GERAR ARQUIVO ──────────────────────────────────────────────
-  var fname = 'Dotacoes_ValeBaseMetals_'+now.replace(/\//g,'-')+'.xlsx';
-  XLSX.writeFile(wb, fname);
-  toast('Excel exportado com sucesso!', 'green');
+  // -- legado: manter abas extras para overview (alertas + regularizar)
+  if(currentView==='overview'){
+    var resOv=filterRes();
+    var dot3=filterDot();
+    var alertsOv=resOv.filter(function(r){return r.FAROL>=0.9;}).sort(function(a,b){return b.FAROL-a.FAROL;});
+    var altHead=['#','PEP','Nome PEP','Sub PEP','Nome Sub PEP','Empresa','Total Dotado (R$)','Medido (R$)','Saldo (R$)','Farol %','Motivo','Causa','Solucao','Responsavel','Status Analise','Data Analise'];
+    var altRows=[];
+    alertsOv.forEach(function(r,i){var key=(r.PEP+'_'+(r.SUB_PEP||'')+'_'+r.EMPRESA).replace(/[^a-zA-Z0-9_]/g,'_');var obsList=(STATE.obsAlertas||{})[key]||[];if(!Array.isArray(obsList))obsList=[obsList];if(!obsList.length){altRows.push([i+1,r.PEP,getPepName(r.PEP),r.SUB_PEP||'',getSubPepName(r.SUB_PEP),r.EMPRESA,r.TOTAL,r.MEDIDO,r.SALDO,(r.FAROL*100).toFixed(1)+'%','','','','','','']);}else{obsList.forEach(function(ob,j){altRows.push([j===0?i+1:'',j===0?r.PEP:'',j===0?getPepName(r.PEP):'',j===0?r.SUB_PEP||'':'',j===0?getSubPepName(r.SUB_PEP):'',j===0?r.EMPRESA:'',j===0?r.TOTAL:'',j===0?r.MEDIDO:'',j===0?r.SALDO:'',j===0?(r.FAROL*100).toFixed(1)+'%':'',ob.motivo||'',ob.causa||'',ob.solucao||'',ob.responsavel||'',ob.status||'',ob.data||'']);});}});
+    addSheet('Alertas',altHead,altRows,[4,12,30,16,30,25,18,18,18,10,30,30,35,20,15,12]);
+    var cpxOv=STATE.capex||[];
+    if(cpxOv.length){
+      var divsOv=calcDivergencias();
+      addSheet('Regularizar Saldo',['#','PEP','Nome PEP','Empresa CAPEX','Grupo','Empresa Sistema','CAPEX Total (R$)','Contratado (R$)','Pago (R$)','A Contratar (R$)','Total Dotado (R$)','Saldo (R$)','Situacao'],
+        divsOv.map(function(r,i){return[i+1,r.pep,getPepName(r.pep),r.empresa_capex,r.grupo||'',r.empresa_dot||'Sem dotacao',r.capex_total,r.contratado,r.pago,r.a_contratar,r.dotado,r.saldo,r.saldo>=0?'Coberto':'Descoberto'];}),
+        [4,12,30,20,22,30,18,18,18,18,18,18,12]);
+    }
+  }
+
+  XLSX.writeFile(wb,exportFname+'_'+now.replace(/\//g,'-')+'.xlsx');
+  toast('Excel exportado com sucesso!','green');
 }
 
 
