@@ -8997,6 +8997,159 @@ function impChartObras(){
   impSafeChart('imp-chart-obras',{type:'bar',plugins:[_impDlPlugin(function(v){return v+'h';}, 'y')],data:{labels:dispLabels,datasets:[{data:dataH,backgroundColor:sapCodes.map(function(s){return IMP_CHART_F.sap===s?'rgba(14,165,233,1)':'rgba(14,165,233,.65)';}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{indexAxis:'y',onClick:function(ev,els){if(els.length)impSetChartFilter('sap',sapCodes[els[0].index]);},plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+'h improdutivo';}}}}) ,scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'h';}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{font:{size:9}})})}})});
 }
 
+// ── Drill-down KPI ────────────────────────────────────────────────
+var _impDrillMode='delay'; // 'delay' | 'hours'
+var _impDrillTab='dia';    // 'dia' | 'obra'
+
+function impDrillOpen(mode){
+  _impDrillMode=mode;
+  _impDrillTab='dia';
+  var modal=document.getElementById('imp-drill-modal');
+  if(!modal){
+    modal=document.createElement('div');
+    modal.id='imp-drill-modal';
+    modal.style.cssText='position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+    modal.innerHTML='<div id="imp-drill-box" style="background:var(--card);border-radius:12px;padding:24px;width:min(780px,94vw);max-height:80vh;overflow-y:auto;position:relative;box-shadow:0 8px 32px rgba(0,0,0,.25)">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
+        +'<span id="imp-drill-title" style="font-size:14px;font-weight:700;color:var(--text)"></span>'
+        +'<button onclick="impDrillClose()" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--muted)">✕</button>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;margin-bottom:14px">'
+        +'<button id="imp-drill-tab-dia" onclick="impDrillSetTab(\'dia\')" style="padding:4px 14px;border-radius:20px;border:1px solid var(--acc);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Por Dia</button>'
+        +'<button id="imp-drill-tab-obra" onclick="impDrillSetTab(\'obra\')" style="padding:4px 14px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;background:var(--bg);color:var(--muted)">Por Obra</button>'
+      +'</div>'
+      +'<div id="imp-drill-body"></div>'
+    +'</div>';
+    modal.addEventListener('click',function(e){if(e.target===modal)impDrillClose();});
+    document.body.appendChild(modal);
+  } else {
+    modal.style.display='flex';
+  }
+  impDrillRender();
+}
+function impDrillClose(){
+  var m=document.getElementById('imp-drill-modal');
+  if(m) m.style.display='none';
+}
+function impDrillSetTab(t){
+  _impDrillTab=t;
+  ['dia','obra'].forEach(function(k){
+    var btn=document.getElementById('imp-drill-tab-'+k);
+    if(!btn) return;
+    if(k===t){ btn.style.background='var(--acc)'; btn.style.color='#fff'; btn.style.borderColor='var(--acc)'; }
+    else { btn.style.background='var(--bg)'; btn.style.color='var(--muted)'; btn.style.borderColor='var(--bord)'; }
+  });
+  impDrillRender();
+}
+function impDrillRender(){
+  var title=document.getElementById('imp-drill-title');
+  var body=document.getElementById('imp-drill-body');
+  if(!title||!body) return;
+  var isDelay=_impDrillMode==='delay';
+  title.textContent=isDelay?'Detalhamento — Média de Atraso':'Detalhamento — Média Horas Trabalhadas';
+  var data=IMP_FILTERED||[];
+  var rows='', th='', thStyle='padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);white-space:nowrap';
+  var tdStyle='padding:7px 10px;font-size:11px;border-bottom:1px solid var(--bord);vertical-align:middle';
+  var tdC=tdStyle+';text-align:center;font-family:monospace';
+
+  if(_impDrillTab==='dia'){
+    var byDay={};
+    data.forEach(function(d){
+      var k=d.dataStr||'';
+      if(!byDay[k]) byDay[k]={dia:k,total:0,comAtraso:0,totalDelay:0,comH:0,totalH:0,maxDelay:0};
+      byDay[k].total++;
+      if(d.delayMin>0){ byDay[k].comAtraso++; byDay[k].totalDelay+=d.delayMin; if(d.delayMin>byDay[k].maxDelay) byDay[k].maxDelay=d.delayMin; }
+      if(d.horasTrab!==null&&d.horasTrab!==undefined){ byDay[k].comH++; byDay[k].totalH+=d.horasTrab; }
+    });
+    var list=Object.values(byDay).sort(function(a,b){
+      if(isDelay) return (b.comAtraso?b.totalDelay/b.comAtraso:0)-(a.comAtraso?a.totalDelay/a.comAtraso:0);
+      return (b.comH?b.totalH/b.comH:0)-(a.comH?a.totalH/a.comH:0);
+    });
+    if(isDelay){
+      th='<tr><th style="'+thStyle+'">Data</th><th style="'+thStyle+';text-align:center">Registros</th><th style="'+thStyle+';text-align:center">Com atraso</th><th style="'+thStyle+';text-align:center">Média atraso</th><th style="'+thStyle+';text-align:center">Máx atraso</th><th style="'+thStyle+';text-align:center">Semáforo</th></tr>';
+      list.forEach(function(r){
+        var avg=r.comAtraso?Math.round(r.totalDelay/r.comAtraso):0;
+        var pct=r.total?Math.round(r.comAtraso/r.total*100):0;
+        var badge=pct>=80?'🔴':pct>=50?'🟡':'🟢';
+        var avgFmt=avg?impFmtDelay(avg):'—';
+        var maxFmt=r.maxDelay?impFmtDelay(r.maxDelay):'—';
+        rows+='<tr><td style="'+tdStyle+'">'+r.dia+'</td>'
+          +'<td style="'+tdC+'">'+r.total+'</td>'
+          +'<td style="'+tdC+'">'+r.comAtraso+' <span style="color:var(--muted);font-size:9px">('+pct+'%)</span></td>'
+          +'<td style="'+tdC+';color:'+(avg>90?'#b91c1c':avg>60?'#d97706':'#16a34a')+'">'+avgFmt+'</td>'
+          +'<td style="'+tdC+';color:#b91c1c">'+maxFmt+'</td>'
+          +'<td style="'+tdC+'">'+badge+'</td></tr>';
+      });
+    } else {
+      var meta=8*60; // 8h em minutos
+      th='<tr><th style="'+thStyle+'">Data</th><th style="'+thStyle+';text-align:center">Registros</th><th style="'+thStyle+';text-align:center">Com H.Trab</th><th style="'+thStyle+';text-align:center">Média H.Trab</th><th style="'+thStyle+';text-align:center">vs Meta (8h)</th><th style="'+thStyle+';text-align:center">Semáforo</th></tr>';
+      list.forEach(function(r){
+        var avg=r.comH?Math.round(r.totalH/r.comH):null;
+        var avgFmt=avg!==null?impFmtDelay(avg):'—';
+        var diff=avg!==null?avg-meta:null;
+        var diffFmt=diff!==null?(diff>=0?'+':'')+impFmtDelay(Math.abs(diff)):'—';
+        var diffColor=diff===null?'var(--muted)':diff>=-30?'#16a34a':'#b91c1c';
+        var badge=diff===null?'—':diff>=-30?'🟢':diff>=-60?'🟡':'🔴';
+        rows+='<tr><td style="'+tdStyle+'">'+r.dia+'</td>'
+          +'<td style="'+tdC+'">'+r.comH+'</td>'
+          +'<td style="'+tdC+'">'+r.comH+' / '+r.total+'</td>'
+          +'<td style="'+tdC+';color:#1d4ed8">'+avgFmt+'</td>'
+          +'<td style="'+tdC+';color:'+diffColor+'">'+diffFmt+'</td>'
+          +'<td style="'+tdC+'">'+badge+'</td></tr>';
+      });
+    }
+  } else {
+    // Por Obra
+    var byObra={};
+    data.forEach(function(d){
+      var k=d.sap||'—';
+      if(!byObra[k]) byObra[k]={sap:k,nome:impGetObraNome(k)||'',total:0,comAtraso:0,totalDelay:0,comH:0,totalH:0,maxDelay:0};
+      byObra[k].total++;
+      if(d.delayMin>0){ byObra[k].comAtraso++; byObra[k].totalDelay+=d.delayMin; if(d.delayMin>byObra[k].maxDelay) byObra[k].maxDelay=d.delayMin; }
+      if(d.horasTrab!==null&&d.horasTrab!==undefined){ byObra[k].comH++; byObra[k].totalH+=d.horasTrab; }
+    });
+    var listO=Object.values(byObra).sort(function(a,b){
+      if(isDelay) return (b.comAtraso?b.totalDelay/b.comAtraso:0)-(a.comAtraso?a.totalDelay/a.comAtraso:0);
+      return (b.comH?b.totalH/b.comH:0)-(a.comH?a.totalH/a.comH:0);
+    });
+    if(isDelay){
+      th='<tr><th style="'+thStyle+'">Obra (SAP)</th><th style="'+thStyle+';text-align:center">Registros</th><th style="'+thStyle+';text-align:center">Com atraso</th><th style="'+thStyle+';text-align:center">Média atraso</th><th style="'+thStyle+';text-align:center">Máx atraso</th></tr>';
+      listO.forEach(function(r){
+        var avg=r.comAtraso?Math.round(r.totalDelay/r.comAtraso):0;
+        var pct=r.total?Math.round(r.comAtraso/r.total*100):0;
+        var avgFmt=avg?impFmtDelay(avg):'—';
+        var maxFmt=r.maxDelay?impFmtDelay(r.maxDelay):'—';
+        var avgColor=avg>90?'#b91c1c':avg>60?'#d97706':'#16a34a';
+        var label=r.nome?r.sap+' — '+r.nome.slice(0,40):r.sap;
+        rows+='<tr><td style="'+tdStyle+';font-size:10px">'+label+'</td>'
+          +'<td style="'+tdC+'">'+r.total+'</td>'
+          +'<td style="'+tdC+'">'+r.comAtraso+' <span style="color:var(--muted);font-size:9px">('+pct+'%)</span></td>'
+          +'<td style="'+tdC+';color:'+avgColor+'">'+avgFmt+'</td>'
+          +'<td style="'+tdC+';color:#b91c1c">'+maxFmt+'</td></tr>';
+      });
+    } else {
+      var metaO=8*60;
+      th='<tr><th style="'+thStyle+'">Obra (SAP)</th><th style="'+thStyle+';text-align:center">Registros</th><th style="'+thStyle+';text-align:center">Com H.Trab</th><th style="'+thStyle+';text-align:center">Média H.Trab</th><th style="'+thStyle+';text-align:center">vs Meta (8h)</th></tr>';
+      listO.forEach(function(r){
+        var avg=r.comH?Math.round(r.totalH/r.comH):null;
+        var avgFmt=avg!==null?impFmtDelay(avg):'—';
+        var diff=avg!==null?avg-metaO:null;
+        var diffFmt=diff!==null?(diff>=0?'+':'')+impFmtDelay(Math.abs(diff)):'—';
+        var diffColor=diff===null?'var(--muted)':diff>=-30?'#16a34a':'#b91c1c';
+        var label=r.nome?r.sap+' — '+r.nome.slice(0,40):r.sap;
+        rows+='<tr><td style="'+tdStyle+';font-size:10px">'+label+'</td>'
+          +'<td style="'+tdC+'">'+r.total+'</td>'
+          +'<td style="'+tdC+'">'+r.comH+'</td>'
+          +'<td style="'+tdC+';color:#1d4ed8">'+avgFmt+'</td>'
+          +'<td style="'+tdC+';color:'+diffColor+'">'+diffFmt+'</td></tr>';
+      });
+    }
+  }
+  if(!rows) rows='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">Sem dados para exibir</td></tr>';
+  body.innerHTML='<table style="width:100%;border-collapse:collapse"><thead>'+th+'</thead><tbody>'+rows+'</tbody></table>';
+  impDrillSetTab(_impDrillTab);
+}
+
 // ── Registros ────────────────────────────────────────────────────
 function impToggleDesc(i){
   var s=document.getElementById('imp-ds'+i),f=document.getElementById('imp-df'+i),b=document.getElementById('imp-db'+i);
@@ -9610,8 +9763,8 @@ async function renderViewImprodutividade(){
   +'<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;font-weight:700;color:var(--text)">Top obras (SAP) — minutos improdutivos</span><div style="display:flex;align-items:center;gap:8px"><button onclick="impFiltrarTop10Obras()" style="padding:3px 10px;border:1px solid var(--acc);border-radius:20px;font-size:10px;font-weight:700;cursor:pointer;background:#eff6ff;color:var(--acc);font-family:inherit">🔝 Filtrar top 10</button><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-obras"></span></div></div><div style="font-size:10px;color:var(--muted);margin-bottom:8px">Clique em uma barra para filtrar por aquela obra</div><div style="position:relative;height:220px"><canvas id="imp-chart-obras"></canvas></div></div>'
   +'<div style="display:flex;flex-direction:column;gap:12px">'
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Média de atraso</div><div id="imp-kpi-delay" style="font-size:28px;font-weight:800;color:#b91c1c;line-height:1.1">—</div><div style="font-size:10px;color:var(--muted);margin-top:2px">por registro com atraso</div></div>'
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Média horas trabalhadas</div><div id="imp-kpi-hours" style="font-size:28px;font-weight:800;color:#1d4ed8;line-height:1.1">—</div><div id="imp-kpi-hours-sub" style="font-size:10px;color:var(--muted);margin-top:2px">horas/pessoa (entrada e saída)</div></div>'
+  +'<div onclick="impDrillOpen(\'delay\')" style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow=\'0 0 0 2px #b91c1c40\'" onmouseout="this.style.boxShadow=\'\'"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Média de atraso</div><div id="imp-kpi-delay" style="font-size:28px;font-weight:800;color:#b91c1c;line-height:1.1">—</div><div style="font-size:10px;color:var(--muted);margin-top:2px">por registro com atraso</div></div><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:4px;padding:2px 6px;margin-top:2px">🔍 detalhar</span></div></div>'
+  +'<div onclick="impDrillOpen(\'hours\')" style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow=\'0 0 0 2px #1d4ed840\'" onmouseout="this.style.boxShadow=\'\'"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px">Média horas trabalhadas</div><div id="imp-kpi-hours" style="font-size:28px;font-weight:800;color:#1d4ed8;line-height:1.1">—</div><div id="imp-kpi-hours-sub" style="font-size:10px;color:var(--muted);margin-top:2px">horas/pessoa (entrada e saída)</div></div><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:4px;padding:2px 6px;margin-top:2px">🔍 detalhar</span></div></div>'
   +'<div id="imp-kpi-breakdown" style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"></div>'
   +'</div>'
   +'</div>'
