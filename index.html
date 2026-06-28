@@ -703,15 +703,28 @@ input,select,textarea{font-size:16px!important} /* prevent iOS zoom on focus */
 
 @media(max-width:768px){
 
-  /* ── BOTTOM NAV ── */
+  /* ── LAYOUT: inner-scroll — content rola sozinho, body fica parado ── */
+  /* Isso elimina o jank causado pelo position:fixed do nav inferior       */
+  html,body{height:100%;overflow:hidden}
+  .main{
+    height:100vh;height:100dvh;
+    display:flex!important;flex-direction:column!important;
+    overflow:hidden!important;min-height:0!important;
+  }
+  .content{
+    flex:1!important;min-height:0!important;
+    overflow-y:auto!important;overflow-x:hidden!important;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-y:contain;
+  }
+
+  /* ── BOTTOM NAV — flex item normal, não fixed (sem repaint no scroll) ── */
   #mob-bnav{
-    display:flex;
-    position:fixed;bottom:0;left:0;right:0;
-    height:60px;
+    display:flex;flex-shrink:0;
+    height:calc(56px + env(safe-area-inset-bottom,0px));
     background:var(--card,#fff);
     border-top:1px solid var(--bord,#e2e8f0);
-    z-index:150;
-    box-shadow:0 -4px 20px rgba(0,0,0,.09);
+    box-shadow:0 -2px 12px rgba(0,0,0,.07);
     padding-bottom:env(safe-area-inset-bottom,0px);
   }
   .mbn{
@@ -720,7 +733,6 @@ input,select,textarea{font-size:16px!important} /* prevent iOS zoom on focus */
     color:var(--muted,#94a3b8);padding:6px 0 4px;
     font-family:Inter,sans-serif;
     -webkit-tap-highlight-color:transparent;touch-action:manipulation;
-    transition:color .15s;
   }
   .mbn.bn-on{color:var(--acc,#002F6C)}
   .mbn.bn-on::before{
@@ -738,9 +750,6 @@ input,select,textarea{font-size:16px!important} /* prevent iOS zoom on focus */
     display:none;
   }
   .mbn-bdg:not(:empty){display:block}
-
-  /* ── CONTENT: espaço extra para o bottom nav ── */
-  .content{padding-bottom:calc(68px + env(safe-area-inset-bottom,0px))!important}
 
   /* ── TOPBAR: só PDF no mobile (CSV e Excel ficam no menu lateral) ── */
   .topbar-actions .btn-orange{display:none!important}
@@ -2345,7 +2354,8 @@ function renderOverview(dot,res){
   // ── GRÁFICOS ─────────────────────────────────────────────────────
   setTimeout(function(){
     if(typeof Chart==='undefined'){setTimeout(function(){render();},500);return;}
-    var CT={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}};
+    var isMob=window.innerWidth<=768;
+    var CT={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},animation:isMob?false:{}};
     var AXX={ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'rgba(0,0,0,.04)'}};
     var AXY={ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'rgba(0,0,0,.05)'}};
     function fK(v){if(!v||v===0)return'R$ 0';var a=Math.abs(v),s=v<0?'-':'';if(a>=1e6)return s+'R$ '+(a/1e6).toFixed(1)+'M';if(a>=1e3)return s+'R$ '+(a/1e3).toFixed(0)+'K';return s+'R$ '+a.toFixed(0);}
