@@ -698,56 +698,55 @@ input,select,textarea{font-size:16px!important} /* prevent iOS zoom on focus */
    Tudo aqui só ativa em telas <= 768px; desktop não é afetado.
 ═══════════════════════════════════════════════════════════════ */
 
-/* Bottom nav: escondido por padrão (desktop) */
-#mob-bnav{display:none}
+/* Mobile header wrapper — transparente no desktop, sticky no mobile */
+.mob-hdr{display:contents}
+/* Tab strip — oculta no desktop */
+#mob-tabs{display:none}
 
 @media(max-width:768px){
 
-  /* ── LAYOUT: body-scroll (preserva Chart.js) + GPU compositing no nav ── */
-  /* O nav usa position:fixed mas em sua própria camada GPU (sem repaint)   */
-  .content{padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}
+  /* ── MOBILE HEADER: wrapper sticky integrado (topbar + tabs juntos) ── */
+  .mob-hdr{
+    display:block;
+    position:sticky;top:0;z-index:100;
+  }
+  /* O topbar já não precisa de position:sticky próprio — o wrapper faz isso */
+  .topbar{position:relative!important}
 
-  /* ── BOTTOM NAV — position:fixed com camada GPU isolada ── */
-  #mob-bnav{
+  /* ── TAB STRIP — barra de abas deslizável no topo ── */
+  #mob-tabs{
     display:flex;
-    position:fixed;bottom:0;left:0;right:0;
-    height:56px;
-    background:var(--card,#fff);
-    border-top:1px solid var(--bord,#e2e8f0);
-    box-shadow:0 -2px 12px rgba(0,0,0,.07);
-    padding-bottom:env(safe-area-inset-bottom,0px);
-    /* GPU compositing — elimina repaint no scroll sem quebrar Chart.js */
-    transform:translateZ(0);
-    -webkit-transform:translateZ(0);
-    will-change:transform;
-    backface-visibility:hidden;
-    -webkit-backface-visibility:hidden;
+    background:#002F6C;
+    overflow-x:auto;scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+    padding:0 6px;gap:0;
+    border-top:1px solid rgba(255,255,255,.08);
   }
-  .mbn{
-    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:3px;background:none;border:none;cursor:pointer;position:relative;
-    color:var(--muted,#94a3b8);padding:6px 0 4px;
-    font-family:Inter,sans-serif;
-    -webkit-tap-highlight-color:transparent;touch-action:manipulation;
+  #mob-tabs::-webkit-scrollbar{display:none}
+  .mtab{
+    flex-shrink:0;
+    padding:8px 11px;
+    font-size:10px;font-weight:600;
+    color:rgba(255,255,255,.5);
+    border:none;background:none;cursor:pointer;
+    white-space:nowrap;
+    border-bottom:2px solid transparent;
+    display:flex;align-items:center;gap:4px;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+    transition:color .15s,border-color .15s;
   }
-  .mbn.bn-on{color:var(--acc,#002F6C)}
-  .mbn.bn-on::before{
-    content:'';position:absolute;top:0;left:22%;right:22%;
-    height:2px;background:var(--acc,#002F6C);border-radius:0 0 2px 2px;
-  }
-  .mbn-ic{font-size:17px;line-height:1}
-  .mbn-lb{font-size:8.5px;font-weight:600;letter-spacing:.1px}
-  .mbn-bdg{
-    position:absolute;top:3px;right:8px;
+  .mtab.mt-on{color:#fff;border-bottom-color:#60a5fa}
+  .mtab-bdg{
     background:#ef4444;color:#fff;
     font-size:7px;font-weight:700;
     padding:1px 4px;border-radius:8px;
     min-width:14px;text-align:center;
     display:none;
   }
-  .mbn-bdg:not(:empty){display:block}
+  .mtab-bdg:not(:empty){display:inline-block}
 
-  /* ── TOPBAR: só PDF no mobile (CSV e Excel ficam no menu lateral) ── */
+  /* ── TOPBAR: só PDF no mobile ── */
   .topbar-actions .btn-orange{display:none!important}
   .topbar-actions [style*="1D6F42"]{display:none!important}
 
@@ -759,7 +758,7 @@ input,select,textarea{font-size:16px!important} /* prevent iOS zoom on focus */
   .filters::-webkit-scrollbar{display:none}
   .fg{flex-shrink:0}
 
-  /* ── TABELAS: indicador de scroll à direita ── */
+  /* ── TABELAS: fade indicando scroll horizontal ── */
   .tbl-wrap,.tw{position:relative}
   .tbl-wrap::after,.tw::after{
     content:'';pointer-events:none;
@@ -767,8 +766,11 @@ input,select,textarea{font-size:16px!important} /* prevent iOS zoom on focus */
     background:linear-gradient(to right,transparent,rgba(255,255,255,.85));
     border-radius:0 0 8px 0;
   }
+  .dark .tbl-wrap::after,.dark .tw::after{
+    background:linear-gradient(to right,transparent,rgba(15,23,42,.85));
+  }
 
-  /* ── VISÃO GERAL: gráficos em coluna única com altura adequada ── */
+  /* ── VISÃO GERAL: gráficos em coluna única ── */
   .g-280{grid-template-columns:1fr!important}
   .g3{grid-template-columns:1fr!important}
   [id="ov-pep"]{min-height:200px}
@@ -776,25 +778,15 @@ input,select,textarea{font-size:16px!important} /* prevent iOS zoom on focus */
   [id="ov-emp"]{min-height:160px}
   [id="ov-scurve"]{min-height:160px}
 
-  /* ── ALERT STRIP: chips em wrap ── */
+  /* ── KPI / ALERT ── */
   .als-chips,.chips{flex-wrap:wrap!important}
-
-  /* ── KPI CARDS da visão geral ── */
   .kpi-row{grid-template-columns:1fr 1fr!important}
   .kpi-val{font-size:18px!important}
 
-  /* ── SAÚDE DO PEP: cards empilhados ── */
-  .sp-pep-card{margin-bottom:8px}
-
-  /* ── IMPRODUTIVIDADE: espaçamento ── */
+  /* ── IMPRODUTIVIDADE ── */
   #imp-controls-bar{flex-wrap:wrap!important;gap:6px!important}
 
-  /* ── DARK MODE: gradiente da tabela em dark ── */
-  .dark .tbl-wrap::after,.dark .tw::after{
-    background:linear-gradient(to right,transparent,rgba(15,23,42,.85));
-  }
-
-  /* Esconde o botão de fechar sidebar no mobile (overlay já faz isso) */
+  /* ── SIDEBAR toggle oculto no mobile (overlay fecha) ── */
   .sb-toggle{display:none!important}
 }
 
@@ -1019,6 +1011,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
 
 <!-- MAIN -->
 <div class="main">
+  <div class="mob-hdr">
   <div class="topbar">
     <button class="mob-menu-btn" id="mob-menu-btn" onclick="toggleSidebar()" aria-label="Menu">
       <span></span><span></span><span></span>
@@ -1035,6 +1028,17 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
       <button class="btn" style="background:#1D6F42;color:#fff" onclick="exportExcel()">📗 Exportar Excel</button>
     </div>
   </div>
+  <!-- MOBILE TAB STRIP — hidden on desktop via CSS -->
+  <div id="mob-tabs">
+    <button class="mtab mt-on" data-mt="overview" onclick="setView('overview')">🏠 Início</button>
+    <button class="mtab" data-mt="dotacoes" onclick="setView('dotacoes')">📋 Dotações<span class="mtab-bdg" id="mtab-bdg-dot"></span></button>
+    <button class="mtab" data-mt="resumo" onclick="setView('resumo')">📉 Resumo</button>
+    <button class="mtab" data-mt="alertas" onclick="setView('alertas')">📊 Capex</button>
+    <button class="mtab" data-mt="saude-pep" onclick="setView('saude-pep')">🩺 Saúde</button>
+    <button class="mtab" data-mt="materiais" onclick="setView('materiais')">📦 Materiais</button>
+    <button class="mtab" data-mt="improdutividade" onclick="setView('improdutividade')">⏱ Produtiv.</button>
+  </div>
+  </div><!-- /mob-hdr -->
   <div class="statusbar-wrap">
     <!-- Static left anchors -->
     <div class="sb-static">
@@ -1281,14 +1285,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
       <iframe id="histograma-frame" src="about:blank" style="width:100%;flex:1;border:none;display:block" allowfullscreen></iframe>
     </div>
   </div>
-  <!-- BOTTOM NAV — mobile only -->
-  <nav id="mob-bnav">
-    <button class="mbn bn-on" data-bn="overview" onclick="setView('overview')"><span class="mbn-ic">🏠</span><span class="mbn-lb">Início</span></button>
-    <button class="mbn" data-bn="dotacoes" onclick="setView('dotacoes')"><span class="mbn-ic">📋</span><span class="mbn-lb">Dotações</span><span class="mbn-bdg" id="mbn-bdg-dot"></span></button>
-    <button class="mbn" data-bn="resumo" onclick="setView('resumo')"><span class="mbn-ic">📉</span><span class="mbn-lb">Resumo</span><span class="mbn-bdg" id="mbn-bdg-res"></span></button>
-    <button class="mbn" data-bn="materiais" onclick="setView('materiais')"><span class="mbn-ic">📦</span><span class="mbn-lb">Materiais</span></button>
-    <button class="mbn" data-bn="improdutividade" onclick="setView('improdutividade')"><span class="mbn-ic">⏱</span><span class="mbn-lb">Produtiv.</span></button>
-  </nav>
+
 </div>
 
 <!-- TOAST -->
@@ -2061,10 +2058,8 @@ function updateStatus(dot,res){
   const nb=document.getElementById('nb-alerta');if(nb){nb.textContent=na;nb.className='sb-badge '+(na>0?'red':'green');}
   var _su=document.getElementById('sb-updated');if(_su)_su.textContent=new Date().toLocaleDateString('pt-BR')+' '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   // bottom nav badges
-  var _bdDot=document.getElementById('mbn-bdg-dot');
+  var _bdDot=document.getElementById('mtab-bdg-dot');
   if(_bdDot){_bdDot.textContent=dot.length>0?dot.length:'';}
-  var _bdRes=document.getElementById('mbn-bdg-res');
-  if(_bdRes){var _nOver=res.filter(function(r){return r.FAROL>=1;}).length;_bdRes.textContent=_nOver>0?_nOver:'';}
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -2092,8 +2087,8 @@ function pdfAction(){
   }
 }
 function _syncBnav(id){
-  document.querySelectorAll('.mbn').forEach(function(btn){
-    btn.classList.toggle('bn-on', btn.dataset.bn===id);
+  document.querySelectorAll('.mtab').forEach(function(btn){
+    btn.classList.toggle('mt-on', btn.dataset.mt===id);
   });
   // fecha sidebar no mobile ao trocar aba
   if(window.innerWidth<=768){
@@ -2103,7 +2098,6 @@ function _syncBnav(id){
     if(sb){sb.classList.remove('open');}
     if(ov){ov.classList.remove('show');}
     if(btn){btn.classList.remove('open');}
-    // scroll ao topo da página
     window.scrollTo(0,0);
   }
 }
