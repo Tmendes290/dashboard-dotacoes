@@ -703,29 +703,25 @@ input,select,textarea{font-size:16px!important} /* prevent iOS zoom on focus */
 
 @media(max-width:768px){
 
-  /* ── LAYOUT: inner-scroll — content rola sozinho, body fica parado ── */
-  /* Isso elimina o jank causado pelo position:fixed do nav inferior       */
-  html,body{height:100%;overflow:hidden}
-  .main{
-    height:100vh;height:100dvh;
-    display:flex!important;flex-direction:column!important;
-    overflow:hidden!important;min-height:0!important;
-  }
-  .content{
-    flex:1!important;min-height:0!important;
-    overflow-y:auto!important;overflow-x:hidden!important;
-    -webkit-overflow-scrolling:touch;
-    overscroll-behavior-y:contain;
-  }
+  /* ── LAYOUT: body-scroll (preserva Chart.js) + GPU compositing no nav ── */
+  /* O nav usa position:fixed mas em sua própria camada GPU (sem repaint)   */
+  .content{padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}
 
-  /* ── BOTTOM NAV — flex item normal, não fixed (sem repaint no scroll) ── */
+  /* ── BOTTOM NAV — position:fixed com camada GPU isolada ── */
   #mob-bnav{
-    display:flex;flex-shrink:0;
-    height:calc(56px + env(safe-area-inset-bottom,0px));
+    display:flex;
+    position:fixed;bottom:0;left:0;right:0;
+    height:56px;
     background:var(--card,#fff);
     border-top:1px solid var(--bord,#e2e8f0);
     box-shadow:0 -2px 12px rgba(0,0,0,.07);
     padding-bottom:env(safe-area-inset-bottom,0px);
+    /* GPU compositing — elimina repaint no scroll sem quebrar Chart.js */
+    transform:translateZ(0);
+    -webkit-transform:translateZ(0);
+    will-change:transform;
+    backface-visibility:hidden;
+    -webkit-backface-visibility:hidden;
   }
   .mbn{
     flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -2107,9 +2103,8 @@ function _syncBnav(id){
     if(sb){sb.classList.remove('open');}
     if(ov){ov.classList.remove('show');}
     if(btn){btn.classList.remove('open');}
-    // scroll ao topo do conteúdo
-    var ct=document.querySelector('.content');
-    if(ct)ct.scrollTo(0,0);
+    // scroll ao topo da página
+    window.scrollTo(0,0);
   }
 }
 function setView(id){
