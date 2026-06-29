@@ -1134,6 +1134,16 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
           <option>Reprovada</option>
         </select>
       </div>
+      <!-- CÓD CPX multi -->
+      <div class="fg" style="min-width:120px"><label>Cód. CPX</label>
+        <div class="ms-wrap" id="ms-cpx">
+          <div class="ms-input" onclick="toggleMs('ms-cpx')">
+            <span class="ms-label" id="ms-cpx-label">Todos</span>
+            <span style="color:var(--muted);font-size:10px">▾</span>
+          </div>
+          <div class="ms-drop" id="ms-cpx-drop" style="display:none"></div>
+        </div>
+      </div>
       <!-- Squad multi -->
       <div class="fg" style="min-width:160px"><label>Squad</label>
         <div class="ms-wrap" id="ms-squad">
@@ -1677,7 +1687,7 @@ let fSquad='',fLider='',fPlanejador='';
 let fMedMes=''; // filtro de mês para o medido no Resumo Sub PEP
 let fFarol=''; // filtro de comprometimento: '' | '75' | '100'
 // Filtros com seleção múltipla
-let fPeps=[],fEmps=[],fSquads=[],fLiders=[],fPlanejadores=[];
+let fPeps=[],fEmps=[],fSquads=[],fLiders=[],fPlanejadores=[],fCodCpxs=[];
 let fRegPeps=[],fRegEmps=[],fRegSquads=[],fRegLiders=[],fRegPlanejadores=[];
 // Alias para compatibilidade
 var fPep='', fEmp='';
@@ -1888,6 +1898,7 @@ function buildResumo(useFilters=false){
       if(fSquads.length && fSquads.indexOf(sq)<0) return false;
       if(fLiders.length && fLiders.indexOf(ld)<0) return false;
       if(fPlanejadores.length && fPlanejadores.indexOf(pl)<0) return false;
+      if(fCodCpxs.length && fCodCpxs.indexOf(d.COD_CPX)<0) return false;
       return true;
     });
   }
@@ -1919,6 +1930,7 @@ function filterDot(){
     if(fSquads.length && fSquads.indexOf(sq) < 0) return false;
     if(fLiders.length && fLiders.indexOf(ld) < 0) return false;
     if(fPlanejadores.length && fPlanejadores.indexOf(pl) < 0) return false;
+    if(fCodCpxs.length && fCodCpxs.indexOf(d.COD_CPX) < 0) return false;
     return true;
   });
 }
@@ -2026,7 +2038,7 @@ function applyFilterSquad(){
 function resetFilter(){
   fSquad='';fLider='';fPlanejador='';
   if(typeof window !== 'undefined') window._anFarolFilter='';
-  fPeps=[];fEmps=[];fSquads=[];fLiders=[];fPlanejadores=[];fStatus='';fAno='';fFarol='';
+  fPeps=[];fEmps=[];fSquads=[];fLiders=[];fPlanejadores=[];fCodCpxs=[];fStatus='';fAno='';fFarol='';
   var anoEl=document.getElementById('f-ano'); if(anoEl) anoEl.value='';
   var stEl=document.getElementById('f-status'); if(stEl) stEl.value='';
   populateFilters();
@@ -4472,6 +4484,7 @@ function onMsChange(id){
   } else {
     if(effectiveId === 'ms-pep')   fPeps = selected;
     else if(effectiveId === 'ms-emp')   fEmps = selected;
+    else if(effectiveId === 'ms-cpx')   fCodCpxs = selected;
     else if(effectiveId === 'ms-squad') fSquads = selected;
     else if(effectiveId === 'ms-lider') fLiders = selected;
     else if(effectiveId === 'ms-plan')  fPlanejadores = selected;
@@ -4491,6 +4504,7 @@ function updateMsLabel(id, selected){
   var defaults = {
     'ms-pep': 'Todos os PEPs...',
     'ms-emp': 'Todas as empresas...',
+    'ms-cpx': 'Todos',
     'ms-reg-emp': 'Todas as Empresas...',
     'ms-squad': 'Todos os Squads',
     'ms-lider': 'Todos',
@@ -4612,9 +4626,28 @@ function populateMultiSelects(){
   fPlanejadores = fPlanejadores.filter(function(p){ return plans.indexOf(p) >= 0; });
   buildMsDrop('ms-plan', plans, fPlanejadores, onMsChange);
 
+  // ── CÓD CPX: filtrado pelos filtros ativos ──
+  var cpxSet = {};
+  dots.forEach(function(d){
+    if(!d.COD_CPX) return;
+    if(fPeps.length && fPeps.indexOf(d.PEP) < 0) return;
+    if(fEmps.length && !fEmps.some(function(e){ return d.EMPRESA.toUpperCase().includes(e.toUpperCase()); })) return;
+    if(fSquads.length || fLiders.length || fPlanejadores.length){
+      var sq = getSquad(d.SUB_PEP||d.PEP), ld = getLider(d.SUB_PEP||d.PEP), pl = getPlanejador(d.SUB_PEP||d.PEP);
+      if(fSquads.length && fSquads.indexOf(sq) < 0) return;
+      if(fLiders.length && fLiders.indexOf(ld) < 0) return;
+      if(fPlanejadores.length && fPlanejadores.indexOf(pl) < 0) return;
+    }
+    cpxSet[d.COD_CPX] = true;
+  });
+  var cpxs = Object.keys(cpxSet).sort(function(a,b){ return Number(a)-Number(b); });
+  fCodCpxs = fCodCpxs.filter(function(c){ return cpxSet[c]; });
+  buildMsDrop('ms-cpx', cpxs, fCodCpxs, onMsChange);
+
   // Update labels
   updateMsLabel('ms-pep', fPeps);
   updateMsLabel('ms-emp', fEmps);
+  updateMsLabel('ms-cpx', fCodCpxs);
   updateMsLabel('ms-squad', fSquads);
   updateMsLabel('ms-lider', fLiders);
   updateMsLabel('ms-plan', fPlanejadores);
