@@ -5407,11 +5407,20 @@ async function handleWbsSquadUpload(file){
       var ws=wb.Sheets[wb.SheetNames[0]];
       var data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
       if(data.length<2){toast('Planilha vazia','red');return;}
-      var hdr=data[0].map(function(h){return String(h).trim().toUpperCase().replace(/\s+/g,'_');});
+      // Detecta linha de cabeçalho nas primeiras 10 linhas
+      var hdrRowIdx=0, hdr=[];
+      for(var ri=0;ri<Math.min(data.length,10);ri++){
+        var cand=data[ri].map(function(h){return String(h).trim().toUpperCase().replace(/\s+/g,'_');});
+        if(cand.some(function(h){return h==='PEP'||h==='SUB_PEP'||h==='WBS_ELEMENT'||h==='WBS'||h==='SQUAD';})){
+          hdr=cand; hdrRowIdx=ri; break;
+        }
+      }
+      if(!hdr.length) hdr=data[0].map(function(h){return String(h).trim().toUpperCase().replace(/\s+/g,'_');});
 
       // Detecta colunas
       var iProjeto = hdr.findIndex(function(h){return h==='PROJETO'||h.includes('PROJETO');});
-      var iWbs     = hdr.findIndex(function(h){return h==='WBS_ELEMENT'||h.includes('WBS');});
+      var iWbs     = hdr.findIndex(function(h){return h==='WBS_ELEMENT'||h.includes('WBS')||h==='SUB_PEP'||(h.includes('SUB')&&h.includes('PEP'));});
+      if(iWbs<0) iWbs = hdr.findIndex(function(h){return h==='PEP';});
       var iDesc    = hdr.findIndex(function(h){return h.includes('DESCRI');});
       var iSquad   = hdr.findIndex(function(h){return h.includes('SQUAD')||h.includes('AREA')||h.includes('FRENTE');});
       // Lider de Projeto: inclui LIDER mas exclui qualquer coluna com PLANE (PLANEJAMENTO)
@@ -5419,10 +5428,10 @@ async function handleWbsSquadUpload(file){
       // Planejador: match exato ou coluna com PLANEJA que não seja LIDER
       var iPlan    = hdr.findIndex(function(h){return h==='PLANEJADOR'||(h.includes('PLANEJA')&&!h.includes('LIDER')&&!h.includes('LÍDER'));});
 
-      if(iWbs<0){toast('Coluna WBS_ELEMENT não encontrada. Verifique o cabeçalho.','red');return;}
+      if(iWbs<0){toast('Colunas encontradas: '+hdr.filter(function(h){return h;}).join(', '),'red');return;}
 
       var wbsRows=[], sqRows=[], wbsCount=0, sqCount=0;
-      data.slice(1).forEach(function(row){
+      data.slice(hdrRowIdx+1).forEach(function(row){
         var wbs=String(row[iWbs]||'').trim();
         if(!wbs) return;
         var projeto=iProjeto>=0?String(row[iProjeto]||'').trim():'';
