@@ -8834,11 +8834,13 @@ function impRenderAderenciaFiscais(){
 
 function impRenderAderSquads(){
   if(IMP_TAB!=='evolucao')return;
-  var chartEl=document.getElementById('evo-ader-sq-chart');
-  var rankEl=document.getElementById('evo-ader-sq-ranking');
+  var gridEl=document.getElementById('evo-ader-sq-grid');
   var kpiEl=document.getElementById('evo-ader-sq-kpis');
   var subEl=document.getElementById('evo-sq-subtitle');
-  if(!chartEl||!rankEl)return;
+  var perEl=document.getElementById('evo-sq-period');
+  var legEl=document.getElementById('evo-sq-legend');
+  if(!gridEl)return;
+  if(_impAderSqChart){_impAderSqChart.destroy();_impAderSqChart=null;}
   var allRecs=IMP_DATA.filter(function(d){
     if(!d.fiscal||!d.fiscal.trim())return false;
     if(!d.dataSortKey)return false;
@@ -8850,7 +8852,7 @@ function impRenderAderSquads(){
     if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
     return true;
   });
-  if(!allRecs.length){if(rankEl)rankEl.innerHTML='';return;}
+  if(!allRecs.length){gridEl.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--muted);font-size:12px">Preencha a coluna "Fiscal" na planilha para ver este painel.</div>';return;}
   var daySet={};allRecs.forEach(function(d){daySet[d.dataSortKey]=1;});
   var totalDays=Object.keys(daySet).length;
   if(!totalDays)return;
@@ -8863,74 +8865,50 @@ function impRenderAderSquads(){
     squadData[sq].days[d.fiscal.trim()][d.dataSortKey]=1;
   });
   function sqPct(sq){var fs=Object.keys(squadData[sq].fiscais);var tot=fs.length*totalDays;if(!tot)return 0;var pres=fs.reduce(function(s,f){return s+Object.keys(squadData[sq].days[f]||{}).length;},0);return Math.round(pres/tot*100);}
-  function sqColor(p){if(p>=80)return'rgba(22,163,74,.9)';if(p>=60)return'rgba(37,99,235,.9)';if(p>=40)return'rgba(194,65,12,.9)';return'rgba(220,38,38,.9)';}
+  function sqSolidColor(p){if(p>=80)return'#16a34a';if(p>=60)return'#2563eb';if(p>=40)return'#c2410c';return'#dc2626';}
   function sqTextColor(p){if(p>=80)return'#15803d';if(p>=60)return'#1d4ed8';if(p>=40)return'#c2410c';return'#dc2626';}
+  function sqBgColor(p){if(p>=80)return'#f0fdf4';if(p>=60)return'#eff6ff';if(p>=40)return'#fff7ed';return'#fef2f2';}
+  function sqBdColor(p){if(p>=80)return'#bbf7d0';if(p>=60)return'#bfdbfe';if(p>=40)return'#fed7aa';return'#fecaca';}
   function sqLabel(p){if(p>=80)return'Ótimo';if(p>=60)return'Bom';if(p>=40)return'Atenção';return'Crítico';}
-  function sqLabelBg(p){if(p>=80)return'#f0fdf4';if(p>=60)return'#eff6ff';if(p>=40)return'#fff7ed';return'#fef2f2';}
   var sorted=Object.keys(squadData).map(function(sq){return{sq:sq,pct:sqPct(sq),n:Object.keys(squadData[sq].fiscais).length};}).sort(function(a,b){return b.pct-a.pct;});
-  // KPIs
+  // Subtítulo e período
   var fiscalSet={};allRecs.forEach(function(d){fiscalSet[d.fiscal.trim()]=1;});
   var nFiscais=Object.keys(fiscalSet).length;
-  var avgPct=sorted.length?Math.round(sorted.reduce(function(s,x){return s+x.pct;},0)/sorted.length):0;
-  var countOtimo=sorted.filter(function(x){return x.pct>=80;}).length;
-  var countCrit=sorted.filter(function(x){return x.pct<40;}).length;
   function fmtD(s){var p=s.split('-');return p[2]+'/'+p[1]+'/'+p[0].slice(2);}
-  if(subEl&&IMP_DT_MIN&&IMP_DT_MAX){subEl.textContent=fmtD(IMP_DT_MIN)+' – '+fmtD(IMP_DT_MAX)+' · '+nFiscais+' fiscais · '+sorted.length+' squads · '+totalDays+' dias úteis';}
-  if(kpiEl){
-    function chip(val,lbl,col,bg){return'<div style="display:flex;flex-direction:column;align-items:center;padding:8px 16px;border-radius:8px;background:'+bg+';border:1px solid '+col+'22;min-width:80px"><span style="font-size:20px;font-weight:800;color:'+col+'">'+val+'</span><span style="font-size:9px;color:'+col+';font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:1px;text-align:center;line-height:1.2">'+lbl+'</span></div>';}
-    kpiEl.innerHTML=chip(avgPct+'%','Média geral',sqTextColor(avgPct),sqLabelBg(avgPct))+chip(countOtimo,'Squads ótimos','#15803d','#f0fdf4')+chip(countCrit,'Squads críticos','#dc2626','#fef2f2');
-  }
-  // Plugins
-  var dlBig={id:'dlBig',afterDatasetsDraw:function(chart){
-    var ctx=chart.ctx;
-    chart.data.datasets.forEach(function(ds,di){
-      var meta=chart.getDatasetMeta(di);if(meta.hidden)return;
-      meta.data.forEach(function(el,j){
-        var v=ds.data[j];if(v===null||v===undefined)return;
-        ctx.save();ctx.fillStyle='#0f172a';ctx.font='700 12px Inter,Arial,sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(v+'%',el.x,el.y-5);ctx.restore();
-      });
-    });
-  }};
-  var metaLine={id:'metaLine',afterDraw:function(chart){
-    var ctx=chart.ctx;var ys=chart.scales.y;if(!ys)return;
-    var y=ys.getPixelForValue(80);var l=chart.chartArea.left,r=chart.chartArea.right;
-    ctx.save();ctx.strokeStyle='#002F6C';ctx.lineWidth=1.5;ctx.setLineDash([6,4]);
-    ctx.beginPath();ctx.moveTo(l,y);ctx.lineTo(r,y);ctx.stroke();
-    ctx.fillStyle='#002F6C';ctx.font='700 10px Inter,Arial,sans-serif';ctx.textAlign='left';ctx.textBaseline='bottom';ctx.fillText('Meta 80%',l+4,y-3);
-    ctx.restore();
-  }};
-  if(_impAderSqChart){_impAderSqChart.destroy();_impAderSqChart=null;}
-  _impAderSqChart=new Chart(chartEl.getContext('2d'),{
-    type:'bar',
-    plugins:[dlBig,metaLine],
-    data:{
-      labels:sorted.map(function(s){return s.sq;}),
-      datasets:[{label:'Aderência (%)',data:sorted.map(function(s){return s.pct;}),backgroundColor:sorted.map(function(s){return sqColor(s.pct);}),borderRadius:7,barThickness:44}]
-    },
-    options:Object.assign({},_impCT,{scales:{
-      y:Object.assign({},_impAXY,{min:0,max:110,grid:{color:'#f1f5f9'},ticks:Object.assign({},_impAXY.ticks,{stepSize:20,callback:function(v){return v<=100?v+'%':''}})}),
-      x:Object.assign({},_impAXX,{ticks:{font:{size:10},color:'#64748b',maxRotation:0,callback:function(val,idx){var lbl=sorted[idx]?sorted[idx].sq:'';if(lbl.length<=14)return lbl;var words=lbl.split(' ');var lines=[''];words.forEach(function(w){var cur=lines[lines.length-1];if(cur&&(cur+' '+w).length>13)lines.push(w);else lines[lines.length-1]=(cur?cur+' ':'')+w;});return lines;}}})
-    }})
-  });
-  // Ranking com barra de progresso
+  if(subEl)subEl.textContent=nFiscais+' fiscais · '+sorted.length+' squads · '+totalDays+' dias úteis analisados';
+  if(perEl&&IMP_DT_MIN&&IMP_DT_MAX)perEl.textContent=fmtD(IMP_DT_MIN)+' – '+fmtD(IMP_DT_MAX);
+  // KPI chips
+  var avgPct=sorted.length?Math.round(sorted.reduce(function(s,x){return s+x.pct;},0)/sorted.length):0;
+  var cOtimo=sorted.filter(function(x){return x.pct>=80;}).length;
+  var cBom=sorted.filter(function(x){return x.pct>=60&&x.pct<80;}).length;
+  var cAtenc=sorted.filter(function(x){return x.pct>=40&&x.pct<60;}).length;
+  var cCrit=sorted.filter(function(x){return x.pct<40;}).length;
+  function chip(val,lbl,tc,bg,bd){return'<div style="flex:1;min-width:80px;padding:12px 14px;border-radius:10px;background:'+bg+';border:1px solid '+bd+';display:flex;flex-direction:column;align-items:center;gap:4px"><span style="font-size:24px;font-weight:900;line-height:1;color:'+tc+'">'+val+'</span><span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;text-align:center;line-height:1.35;color:'+tc+';opacity:.85">'+lbl+'</span></div>';}
+  if(kpiEl)kpiEl.innerHTML=chip(avgPct+'%','Média<br>Geral',sqTextColor(avgPct),sqBgColor(avgPct),sqBdColor(avgPct))+chip(cOtimo,'Ótimos<br>≥ 80%','#15803d','#f0fdf4','#bbf7d0')+chip(cBom,'Bons<br>60–79%','#1d4ed8','#eff6ff','#bfdbfe')+chip(cAtenc,'Atenção<br>40–59%','#c2410c','#fff7ed','#fed7aa')+chip(cCrit,'Críticos<br>&lt; 40%','#dc2626','#fef2f2','#fecaca')+chip(nFiscais,'Total<br>Fiscais','#475569','#f8fafc','#e2e8f0');
+  // Cards de squad
   var medals=['🥇','🥈','🥉'];
-  rankEl.innerHTML='<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Ranking</div>'
-    +sorted.map(function(s,i){
-      var c=sqTextColor(s.pct);var bg=sqLabelBg(s.pct);var lbl=sqLabel(s.pct);
-      return'<div style="padding:10px 12px;border-radius:8px;background:var(--bg);border:1px solid var(--bord);margin-bottom:6px">'
-        +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">'
-        +'<div style="display:flex;align-items:center;gap:6px">'
-        +(i<3?'<span style="font-size:14px">'+medals[i]+'</span>':'<span style="font-size:11px;font-weight:700;color:var(--muted);min-width:18px;text-align:center">'+(i+1)+'.</span>')
-        +'<div><div style="font-size:11px;font-weight:700;color:var(--text);line-height:1.2">'+impEsc(s.sq)+'</div>'
-        +'<div style="display:flex;align-items:center;gap:4px;margin-top:2px">'
-        +'<span style="font-size:9px;color:var(--muted)">'+s.n+' fiscal'+(s.n>1?'is':'')+'</span>'
-        +'<span style="font-size:9px;font-weight:700;color:'+c+';background:'+bg+';padding:1px 6px;border-radius:8px">'+lbl+'</span>'
-        +'</div></div></div>'
-        +'<span style="font-size:17px;font-weight:800;color:'+c+'">'+s.pct+'%</span>'
-        +'</div>'
-        +'<div style="height:5px;border-radius:3px;background:#e2e8f0"><div style="height:5px;border-radius:3px;background:'+c+';width:'+s.pct+'%"></div></div>'
-        +'</div>';
-    }).join('');
+  gridEl.innerHTML=sorted.map(function(s,i){
+    var tc=sqTextColor(s.pct);var bg=sqBgColor(s.pct);var bd=sqBdColor(s.pct);var sc=sqSolidColor(s.pct);var lbl=sqLabel(s.pct);
+    var rankHtml=i<3?'<span style="font-size:18px;line-height:1">'+medals[i]+'</span>':'<span style="font-size:13px;font-weight:800;color:#cbd5e1">'+( i+1)+'.</span>';
+    return'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px 14px;position:relative;overflow:hidden" onmouseover="this.style.boxShadow=\'0 6px 20px rgba(0,0,0,.1)\';this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.boxShadow=\'none\';this.style.transform=\'none\'">'
+      +'<div style="position:absolute;top:0;left:0;right:0;height:5px;border-radius:12px 12px 0 0;background:'+sc+'"></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;margin-top:2px">'+rankHtml+'<span style="font-size:30px;font-weight:900;line-height:1;color:'+tc+'">'+s.pct+'%</span></div>'
+      +'<div style="font-size:11px;font-weight:700;color:#334155;line-height:1.35;margin-bottom:11px;min-height:30px">'+impEsc(s.sq)+'</div>'
+      +'<div style="position:relative;margin-bottom:16px">'
+      +'<div style="height:7px;background:#e2e8f0;border-radius:4px;overflow:visible;position:relative">'
+      +'<div style="height:100%;border-radius:4px;background:'+sc+';width:'+s.pct+'%"></div>'
+      +'<div style="position:absolute;top:-4px;left:80%;width:2px;height:15px;background:#002F6C;border-radius:1px;z-index:2"></div>'
+      +'</div>'
+      +'<div style="position:absolute;top:14px;left:80%;transform:translateX(-50%);font-size:8px;color:#002F6C;font-weight:700;white-space:nowrap">meta 80%</div>'
+      +'</div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center">'
+      +'<span style="font-size:10px;color:#94a3b8;font-weight:600">'+s.n+' fiscal'+(s.n>1?'is':'')+'</span>'
+      +'<span style="font-size:9px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.3px;background:'+bg+';color:'+tc+'">'+lbl+'</span>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+  // Legenda
+  if(legEl)legEl.innerHTML='<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;display:inline-block"></span><strong style="color:#15803d">≥80% Ótimo</strong></span>'+'<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#2563eb;display:inline-block"></span><strong style="color:#1d4ed8">60–79% Bom</strong></span>'+'<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#c2410c;display:inline-block"></span><strong style="color:#c2410c">40–59% Atenção</strong></span>'+'<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#dc2626;display:inline-block"></span><strong style="color:#dc2626">&lt;40% Crítico</strong></span>'+'<span style="margin-left:auto;color:#94a3b8">A linha ▌em cada barra indica a meta de 80%</span>';
 }
 
 function _impWeekKey(dateStr){
@@ -10293,19 +10271,15 @@ async function renderViewImprodutividade(){
   +'<div id="evo-ader-table" style="overflow-x:auto"></div>'
   +'</div>'
 
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:10px;padding:18px 20px;margin-top:14px">'
-  +'<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">'
-  +'<div>'
-  +'<div style="font-size:14px;font-weight:800;color:var(--sb);letter-spacing:-.2px">Comparativo entre Squads</div>'
-  +'<div id="evo-sq-subtitle" style="font-size:10px;color:var(--muted);margin-top:2px;font-style:italic">Aderência média por squad</div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:12px;padding:20px 22px;margin-top:14px">'
+  +'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #f1f5f9">'
+  +'<div><div style="font-size:16px;font-weight:800;color:var(--sb);letter-spacing:-.3px">Comparativo entre Squads</div>'
+  +'<div id="evo-sq-subtitle" style="font-size:11px;color:var(--muted);margin-top:4px;font-style:italic">Aderência média por squad</div></div>'
+  +'<div id="evo-sq-period" style="font-size:11px;font-weight:700;color:var(--sb);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:4px 12px;white-space:nowrap"></div>'
   +'</div>'
-  +'<div id="evo-ader-sq-kpis" style="display:flex;gap:8px;flex-wrap:wrap"></div>'
-  +'</div>'
-  +'<div style="display:flex;gap:20px;align-items:flex-start">'
-  +'<div style="flex:1;min-width:0;position:relative;height:260px"><canvas id="evo-ader-sq-chart"></canvas></div>'
-  +'<div id="evo-ader-sq-ranking" style="width:220px;flex-shrink:0;max-height:280px;overflow-y:auto"></div>'
-  +'</div>'
-  +'<div style="margin-top:10px;font-size:9px;color:var(--muted)">Legenda: <span style="color:#15803d;font-weight:700">≥80% ótimo</span> · <span style="color:#1d4ed8;font-weight:700">60–79% bom</span> · <span style="color:#c2410c;font-weight:700">40–59% atenção</span> · <span style="color:#dc2626;font-weight:700">&lt;40% crítico</span></div>'
+  +'<div id="evo-ader-sq-kpis" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px"></div>'
+  +'<div id="evo-ader-sq-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px"></div>'
+  +'<div id="evo-sq-legend" style="margin-top:16px;font-size:9.5px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;align-items:center"></div>'
   +'</div>'
   +'</div>'
 
