@@ -8835,9 +8835,10 @@ function impRenderAderenciaFiscais(){
     var colors=totals.map(function(t){if(t>=90)return'rgba(22,163,74,.85)';if(t>=75)return'rgba(37,99,235,.85)';if(t>=50)return'rgba(161,98,7,.85)';return'rgba(220,38,38,.85)';});
     _impAderChart=new Chart(chartEl.getContext('2d'),{
       type:'bar',
+      plugins:[_impDlPlugin(function(v){return v+'%';},'y')],
       data:{labels:fiscais,datasets:[{label:'Aderência total (%)',data:totals,backgroundColor:colors,borderRadius:5,barThickness:22}]},
       options:Object.assign({},_impCT,{indexAxis:'y',scales:{
-        x:Object.assign({},_impAXX,{min:0,max:100,ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'%';}})}),
+        x:Object.assign({},_impAXX,{min:0,max:105,ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v<=100?v+'%':''}})}),
         y:Object.assign({},_impAXY)
       }})
     });
