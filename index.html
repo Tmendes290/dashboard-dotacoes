@@ -8181,7 +8181,6 @@ function impInitFP(){
   if(impFP){impFP.destroy();impFP=null;}
   var ini=document.getElementById('imp-dt-ini'),fim=document.getElementById('imp-dt-fim');
   impFP=flatpickr(el,{mode:'range',dateFormat:'d/m/Y',locale:'pt',allowInput:false,
-    defaultDate:[ini?ini.value:IMP_DT_MIN,fim?fim.value:IMP_DT_MAX],
     onChange:function(dates){
       if(dates.length===2){
         var a=document.getElementById('imp-dt-ini'),b=document.getElementById('imp-dt-fim');
