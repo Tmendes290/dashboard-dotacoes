@@ -8713,7 +8713,7 @@ function impChartProblemas(){
 var _IMP_EVO_PERIOD='semana';
 var _IMP_CHEGADA_PERIOD='semana';
 var _IMP_ADER_PERIOD='semana';
-var _IMP_ADER_SQUAD='';
+var _IMP_ADER_SQUADS=[];
 var _impEvoCharts={};
 var _impAderChart=null;
 
@@ -8735,8 +8735,12 @@ function impAderSetPeriod(p,btn){
   btn.style.background='var(--sb)';btn.style.color='#fff';
   impRenderAderenciaFiscais();
 }
-function impAderSquadChange(val){
-  _IMP_ADER_SQUAD=val;
+function impAderSquadMs(id){
+  var checks=document.querySelectorAll('#'+id+'-drop input[type=checkbox]');
+  _IMP_ADER_SQUADS=[];
+  checks.forEach(function(c){if(c.checked)_IMP_ADER_SQUADS.push(c.value);});
+  var lbl=document.getElementById(id+'-label');
+  if(lbl)lbl.textContent=_IMP_ADER_SQUADS.length?_IMP_ADER_SQUADS.length+' squad(s)':'Todos';
   impRenderAderenciaFiscais();
 }
 function impRenderAderenciaFiscais(){
@@ -8750,13 +8754,15 @@ function impRenderAderenciaFiscais(){
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
     var sq=impGetSquad(d.sap).squad;
     if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
-    if(_IMP_ADER_SQUAD&&sq!==_IMP_ADER_SQUAD)return false;
+    if(_IMP_ADER_SQUADS.length&&_IMP_ADER_SQUADS.indexOf(sq)<0)return false;
     return true;
   });
-  // Popula select de squad com todos os squads disponíveis (sem filtro de squad local)
+  // Popula ms-drop de squad
   var _sqOpts={}; IMP_DATA.filter(function(d){return d.fiscal&&d.fiscal.trim()&&d.dataSortKey;}).forEach(function(d){var sq=impGetSquad(d.sap).squad;if(sq)_sqOpts[sq]=1;});
-  var _sqSel=document.getElementById('evo-ader-squad-sel');
-  if(_sqSel){var _sqHtml='<option value="">Todos os squads</option>';Object.keys(_sqOpts).sort().forEach(function(sq){_sqHtml+='<option value="'+impEsc(sq)+'"'+(sq===_IMP_ADER_SQUAD?' selected':'')+'>'+impEsc(sq)+'</option>';});_sqSel.innerHTML=_sqHtml;}
+  var _allSquads=Object.keys(_sqOpts).sort();
+  buildMsDrop('ms-ader-squad',_allSquads,_IMP_ADER_SQUADS,'impAderSquadMs');
+  var _lbl=document.getElementById('ms-ader-squad-label');
+  if(_lbl)_lbl.textContent=_IMP_ADER_SQUADS.length?_IMP_ADER_SQUADS.length+' squad(s)':'Todos';
   var badge=document.getElementById('evo-ader-badge');
   var tableEl=document.getElementById('evo-ader-table');
   var chartEl=document.getElementById('evo-ader-chart');
@@ -10115,7 +10121,7 @@ async function renderViewImprodutividade(){
   +'<div><span style="font-size:12px;font-weight:700;color:var(--text)">Aderência dos Fiscais</span>'
   +'<span id="evo-ader-badge" style="margin-left:8px;font-size:10px;background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px;color:var(--muted)"></span></div>'
   +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
-  +'<select id="evo-ader-squad-sel" onchange="impAderSquadChange(this.value)" style="border:1px solid var(--bord);border-radius:5px;padding:3px 8px;font-size:11px;font-family:inherit;color:var(--text);background:#fff;cursor:pointer"><option value="">Todos os squads</option></select>'
+  +'<div class="ms-wrap" id="ms-ader-squad" style="min-width:160px"><div class="ms-input" onclick="toggleMs(\'ms-ader-squad\')"><span class="ms-label" id="ms-ader-squad-label">Todos</span><span>▾</span></div><div class="ms-drop" id="ms-ader-squad-drop" style="display:none"></div></div>'
   +'<div style="width:1px;height:20px;background:var(--bord)"></div>'
   +'<button onclick="impAderSetPeriod(\'semana\',this)" class="evo-ader-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button>'
   +'<button onclick="impAderSetPeriod(\'mes\',this)" class="evo-ader-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button>'
