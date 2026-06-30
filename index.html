@@ -9999,7 +9999,13 @@ async function renderViewImprodutividade(){
     setTimeout(async function(){
       await impLoadFromSupabase();
       var _still=document.getElementById('imp-cards');
-      if(_still){try{impRebuildMs();impApplyFilters();}catch(e){}}
+      if(_still){try{
+        var _ini=document.getElementById('imp-dt-ini');
+        var _fim=document.getElementById('imp-dt-fim');
+        if(_ini) _ini.value=IMP_DT_MIN;
+        if(_fim) _fim.value=IMP_DT_MAX;
+        impRebuildMs();impApplyFilters();
+      }catch(e){}}
     },800);
   }
 }
