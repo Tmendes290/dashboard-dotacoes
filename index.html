@@ -8712,7 +8712,9 @@ function impChartProblemas(){
 // ── Evolução Tab ──────────────────────────────────────────────────
 var _IMP_EVO_PERIOD='semana';
 var _IMP_CHEGADA_PERIOD='semana';
+var _IMP_ADER_PERIOD='semana';
 var _impEvoCharts={};
+var _impAderChart=null;
 
 function impEvoSetPeriod(p,btn){
   _IMP_EVO_PERIOD=p;
@@ -8725,6 +8727,102 @@ function impChegadaSetPeriod(p,btn){
   document.querySelectorAll('.chegada-period-btn').forEach(function(b){b.style.background='var(--card)';b.style.color='var(--muted)';});
   btn.style.background='var(--sb)';btn.style.color='#fff';
   _impBuildChegadaChart();
+}
+function impAderSetPeriod(p,btn){
+  _IMP_ADER_PERIOD=p;
+  document.querySelectorAll('.evo-ader-btn').forEach(function(b){b.style.background='var(--card)';b.style.color='var(--muted)';});
+  btn.style.background='var(--sb)';btn.style.color='#fff';
+  impRenderAderenciaFiscais();
+}
+function impRenderAderenciaFiscais(){
+  if(IMP_TAB!=='evolucao')return;
+  var allRecs=IMP_DATA.filter(function(d){
+    if(!d.fiscal||!d.fiscal.trim())return false;
+    if(!d.dataSortKey)return false;
+    var dow=new Date(d.dataSortKey+'T00:00:00').getDay();
+    if(dow===0||dow===6)return false;
+    if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
+    if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
+    var sq=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
+    return true;
+  });
+  var badge=document.getElementById('evo-ader-badge');
+  var tableEl=document.getElementById('evo-ader-table');
+  var chartEl=document.getElementById('evo-ader-chart');
+  if(!allRecs.length){
+    if(tableEl)tableEl.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Preencha a coluna "Fiscal" na planilha para ver a aderência.</div>';
+    return;
+  }
+  var keyFn=_IMP_ADER_PERIOD==='mes'?_impMonthKey:_impWeekKey;
+  var periodSet={};
+  allRecs.forEach(function(d){periodSet[keyFn(d.dataSortKey)]=1;});
+  var periods=Object.keys(periodSet).sort();
+  var periodDays={};
+  periods.forEach(function(p){periodDays[p]={};});
+  allRecs.forEach(function(d){var p=keyFn(d.dataSortKey);periodDays[p][d.dataSortKey]=1;});
+  var fiscalSet={};
+  allRecs.forEach(function(d){fiscalSet[d.fiscal.trim()]=1;});
+  var fiscais=Object.keys(fiscalSet).sort();
+  var fiscalData={};
+  fiscais.forEach(function(f){fiscalData[f]={};periods.forEach(function(p){fiscalData[f][p]={};});});
+  allRecs.forEach(function(d){
+    var f=d.fiscal.trim();var p=keyFn(d.dataSortKey);
+    if(fiscalData[f]&&fiscalData[f][p])fiscalData[f][p][d.dataSortKey]=1;
+  });
+  function getPct(f,p){var total=Object.keys(periodDays[p]).length;if(!total)return null;return Math.round(Object.keys(fiscalData[f][p]).length/total*100);}
+  function getTotalPct(f){var allD=0,fiscD=0;periods.forEach(function(p){allD+=Object.keys(periodDays[p]).length;fiscD+=Object.keys(fiscalData[f][p]).length;});return allD?Math.round(fiscD/allD*100):0;}
+  fiscais.sort(function(a,b){return getTotalPct(b)-getTotalPct(a);});
+  if(badge)badge.textContent=fiscais.length+' fiscais · '+periods.length+' períodos';
+  function pctColor(pct){
+    if(pct===null)return{bg:'var(--bg)',text:'var(--muted)',brd:'var(--bord)'};
+    if(pct===0)return{bg:'#fef2f2',text:'#dc2626',brd:'#fecaca'};
+    if(pct<50)return{bg:'#fff7ed',text:'#c2410c',brd:'#fed7aa'};
+    if(pct<75)return{bg:'#fefce8',text:'#a16207',brd:'#fef08a'};
+    if(pct<90)return{bg:'#eff6ff',text:'#1d4ed8',brd:'#bfdbfe'};
+    return{bg:'#f0fdf4',text:'#15803d',brd:'#bbf7d0'};
+  }
+  function periodLabel(p){
+    if(_IMP_ADER_PERIOD==='mes'){
+      var parts=p.split('-');var ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+      return'<div style="font-weight:800">'+ms[parseInt(parts[1])-1]+'</div><div>'+parts[0].slice(2)+'</div>';
+    }
+    var wp=p.split('-W');var y=parseInt(wp[0]),w=parseInt(wp[1]);
+    var mon=_impISOMonday(w,y);var fri=new Date(mon);fri.setDate(mon.getDate()+4);
+    var pad=function(n){return String(n).padStart(2,'0');};
+    return'<div style="font-weight:800">S'+w+'</div><div>'+pad(mon.getDate())+'/'+pad(mon.getMonth()+1)+'–'+pad(fri.getDate())+'/'+pad(fri.getMonth()+1)+'</div>';
+  }
+  var thS='background:#1e3a5f;color:#fff;font-size:10px;font-weight:700;padding:7px 8px;text-align:center;white-space:nowrap;min-width:64px';
+  var html='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'
+    +'<th style="'+thS+';text-align:left;min-width:130px;position:sticky;left:0;z-index:2">Fiscal</th>';
+  periods.forEach(function(p){html+='<th style="'+thS+'">'+periodLabel(p)+'</th>';});
+  html+='<th style="'+thS+';background:#0f2744">Total</th></tr></thead><tbody>';
+  fiscais.forEach(function(f,fi){
+    var rowBg=fi%2===0?'#fff':'#f8fafc';
+    html+='<tr>';
+    html+='<td style="padding:6px 10px;font-weight:600;color:var(--text);border-right:1px solid var(--bord);position:sticky;left:0;z-index:1;background:'+rowBg+';white-space:nowrap">'+impEsc(f)+'</td>';
+    periods.forEach(function(p){
+      var pct=getPct(f,p);var c=pctColor(pct);
+      html+='<td style="padding:5px;text-align:center;background:'+rowBg+'"><div style="background:'+c.bg+';color:'+c.text+';border:1px solid '+c.brd+';border-radius:5px;padding:3px 5px;font-weight:700">'+(pct!==null?pct+'%':'—')+'</div></td>';
+    });
+    var tot=getTotalPct(f);var ct=pctColor(tot);
+    html+='<td style="padding:5px;text-align:center;background:'+rowBg+'"><div style="background:'+ct.bg+';color:'+ct.text+';border:2px solid '+ct.brd+';border-radius:6px;padding:4px 7px;font-weight:800;font-size:12px">'+tot+'%</div></td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table>';
+  if(tableEl)tableEl.innerHTML=html;
+  if(chartEl&&typeof Chart!=='undefined'){
+    if(_impAderChart){_impAderChart.destroy();_impAderChart=null;}
+    var totals=fiscais.map(function(f){return getTotalPct(f);});
+    var colors=totals.map(function(t){if(t>=90)return'rgba(22,163,74,.8)';if(t>=75)return'rgba(37,99,235,.8)';if(t>=50)return'rgba(161,98,7,.8)';return'rgba(220,38,38,.8)';});
+    _impAderChart=new Chart(chartEl.getContext('2d'),{
+      type:'bar',
+      data:{labels:fiscais,datasets:[{label:'Aderência total (%)',data:totals,backgroundColor:colors,borderRadius:5}]},
+      options:Object.assign({},_impCT,{indexAxis:'y',scales:{
+        x:Object.assign({},_impAXX,{min:0,max:100,ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v+'%';}})}),
+        y:Object.assign({},_impAXY)
+      }})
+    });
+  }
 }
 
 function _impWeekKey(dateStr){
@@ -8976,6 +9074,7 @@ function impRenderEvolucao(){
     }).join('')+(atPend.length>8?'<div style="text-align:center;font-size:10px;color:var(--muted);padding-top:6px">+ '+(atPend.length-8)+' outros pendentes</div>':'');
     if(!visible.length) pendEl.innerHTML='<div style="font-size:11px;color:#16a34a;font-weight:600;text-align:center;padding:12px">✓ Todos os atrasos graves estão justificados!</div>';
   }
+  impRenderAderenciaFiscais();
 }
 
 function _impBuildChegadaChart(){
@@ -9997,6 +10096,17 @@ async function renderViewImprodutividade(){
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-bottom:14px">'
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Evolução da média de chegada <span style="display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;vertical-align:middle">NOVO</span></span><div style="font-size:11px;color:var(--muted);margin-top:2px">Quanto mais cedo, melhor — verde = antes da meta, vermelho = depois da meta (08:00)</div></div><div style="display:flex;gap:5px" id="chegada-period-btns"><button onclick="impChegadaSetPeriod(\'semana\',this)" class="chegada-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impChegadaSetPeriod(\'dia\',this)" class="chegada-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impChegadaSetPeriod(\'mes\',this)" class="chegada-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div style="position:relative;height:220px"><canvas id="evo-chart-chegada"></canvas></div>'
+  +'</div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px">'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+  +'<div><span style="font-size:12px;font-weight:700;color:var(--text)">Aderência dos Fiscais</span>'
+  +'<span id="evo-ader-badge" style="margin-left:8px;font-size:10px;background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px;color:var(--muted)"></span></div>'
+  +'<div style="display:flex;gap:5px">'
+  +'<button onclick="impAderSetPeriod(\'semana\',this)" class="evo-ader-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button>'
+  +'<button onclick="impAderSetPeriod(\'mes\',this)" class="evo-ader-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button>'
+  +'</div></div>'
+  +'<div id="evo-ader-table" style="overflow-x:auto;margin-bottom:14px"></div>'
+  +'<div style="position:relative;height:280px"><canvas id="evo-ader-chart"></canvas></div>'
   +'</div>'
   +'</div>'
 
