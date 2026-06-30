@@ -8828,22 +8828,7 @@ function impRenderAderenciaFiscais(){
   });
   html+='</tbody></table>';
   if(tableEl)tableEl.innerHTML=html;
-  if(chartEl&&typeof Chart!=='undefined'){
-    if(_impAderChart){_impAderChart.destroy();_impAderChart=null;}
-    var chartH=Math.max(fiscais.length*38+60,180);
-    var wrap=chartEl.parentElement;if(wrap)wrap.style.height=chartH+'px';
-    var totals=fiscais.map(function(f){return getTotalPct(f);});
-    var colors=totals.map(function(t){if(t>=90)return'rgba(22,163,74,.85)';if(t>=75)return'rgba(37,99,235,.85)';if(t>=50)return'rgba(161,98,7,.85)';return'rgba(220,38,38,.85)';});
-    _impAderChart=new Chart(chartEl.getContext('2d'),{
-      type:'bar',
-      plugins:[_impDlPlugin(function(v){return v+'%';},'y')],
-      data:{labels:fiscais,datasets:[{label:'Aderência total (%)',data:totals,backgroundColor:colors,borderRadius:5,barThickness:22}]},
-      options:Object.assign({},_impCT,{indexAxis:'y',scales:{
-        x:Object.assign({},_impAXX,{min:0,max:105,ticks:Object.assign({},_impAXX.ticks,{callback:function(v){return v<=100?v+'%':''}})}),
-        y:Object.assign({},_impAXY)
-      }})
-    });
-  }
+  if(_impAderChart){_impAderChart.destroy();_impAderChart=null;}
   impRenderAderSquads();
 }
 
@@ -10305,8 +10290,7 @@ async function renderViewImprodutividade(){
   +'<button onclick="impAderSetPeriod(\'semana\',this)" class="evo-ader-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button>'
   +'<button onclick="impAderSetPeriod(\'mes\',this)" class="evo-ader-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button>'
   +'</div></div>'
-  +'<div id="evo-ader-table" style="overflow-x:auto;margin-bottom:14px"></div>'
-  +'<div style="position:relative;height:280px"><canvas id="evo-ader-chart"></canvas></div>'
+  +'<div id="evo-ader-table" style="overflow-x:auto"></div>'
   +'</div>'
 
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:10px;padding:18px 20px;margin-top:14px">'
