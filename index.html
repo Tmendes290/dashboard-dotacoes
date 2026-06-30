@@ -8714,6 +8714,7 @@ var _IMP_EVO_PERIOD='semana';
 var _IMP_CHEGADA_PERIOD='semana';
 var _IMP_ADER_PERIOD='semana';
 var _IMP_ADER_SQUADS=[];
+var _impAderSqChart=null;
 var _impEvoCharts={};
 var _impAderChart=null;
 
@@ -8843,6 +8844,71 @@ function impRenderAderenciaFiscais(){
       }})
     });
   }
+  impRenderAderSquads();
+}
+
+function impRenderAderSquads(){
+  if(IMP_TAB!=='evolucao')return;
+  var chartEl=document.getElementById('evo-ader-sq-chart');
+  var rankEl=document.getElementById('evo-ader-sq-ranking');
+  if(!chartEl||!rankEl)return;
+  var allRecs=IMP_DATA.filter(function(d){
+    if(!d.fiscal||!d.fiscal.trim())return false;
+    if(!d.dataSortKey)return false;
+    var dow=new Date(d.dataSortKey+'T00:00:00').getDay();
+    if(dow===0||dow===6)return false;
+    if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
+    if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
+    var sq=impGetSquad(d.sap).squad;
+    if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
+    return true;
+  });
+  if(!allRecs.length){rankEl.innerHTML='';return;}
+  var daySet={};allRecs.forEach(function(d){daySet[d.dataSortKey]=1;});
+  var totalDays=Object.keys(daySet).length;
+  if(!totalDays)return;
+  var squadData={};
+  allRecs.forEach(function(d){
+    var sq=impGetSquad(d.sap).squad||'Sem squad';
+    if(!squadData[sq])squadData[sq]={fiscais:{},days:{}};
+    squadData[sq].fiscais[d.fiscal.trim()]=1;
+    if(!squadData[sq].days[d.fiscal.trim()])squadData[sq].days[d.fiscal.trim()]={};
+    squadData[sq].days[d.fiscal.trim()][d.dataSortKey]=1;
+  });
+  function sqPct(sq){
+    var fiscais=Object.keys(squadData[sq].fiscais);
+    var total=fiscais.length*totalDays;
+    if(!total)return 0;
+    var pres=fiscais.reduce(function(s,f){return s+Object.keys(squadData[sq].days[f]||{}).length;},0);
+    return Math.round(pres/total*100);
+  }
+  function sqColor(p){if(p>=80)return'rgba(22,163,74,.85)';if(p>=60)return'rgba(37,99,235,.85)';if(p>=40)return'rgba(194,65,12,.85)';return'rgba(220,38,38,.85)';}
+  function sqTextColor(p){if(p>=80)return'#15803d';if(p>=60)return'#1d4ed8';if(p>=40)return'#c2410c';return'#dc2626';}
+  var sorted=Object.keys(squadData).map(function(sq){return{sq:sq,pct:sqPct(sq),n:Object.keys(squadData[sq].fiscais).length};}).sort(function(a,b){return b.pct-a.pct;});
+  var sub=document.getElementById('evo-sq-subtitle');
+  if(sub&&IMP_DT_MIN&&IMP_DT_MAX){
+    function fmtD(s){var p=s.split('-');return p[2]+'/'+p[1]+'/'+p[0].slice(2);}
+    sub.textContent='Aderência média · '+fmtD(IMP_DT_MIN)+' – '+fmtD(IMP_DT_MAX);
+  }
+  if(_impAderSqChart){_impAderSqChart.destroy();_impAderSqChart=null;}
+  _impAderSqChart=new Chart(chartEl.getContext('2d'),{
+    type:'bar',
+    plugins:[_impDlPlugin(function(v){return v+'%';},'x')],
+    data:{labels:sorted.map(function(s){return s.sq;}),datasets:[{label:'Aderência (%)',data:sorted.map(function(s){return s.pct;}),backgroundColor:sorted.map(function(s){return sqColor(s.pct);}),borderRadius:6,barThickness:40}]},
+    options:Object.assign({},_impCT,{scales:{
+      y:Object.assign({},_impAXY,{min:0,max:105,ticks:Object.assign({},_impAXY.ticks,{callback:function(v){return v<=100?v+'%':''}})}),
+      x:Object.assign({},_impAXX)
+    }})
+  });
+  var medals=['🥇','🥈','🥉'];
+  rankEl.innerHTML='<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Ranking</div>'
+    +sorted.map(function(s,i){var c=sqTextColor(s.pct);return'<div style="padding:8px 10px;border-radius:6px;background:var(--bg);border:1px solid var(--bord);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
+      +'<div style="display:flex;align-items:center;gap:6px">'
+      +(i<3?'<span style="font-size:15px">'+medals[i]+'</span>':'<span style="font-size:11px;font-weight:700;color:var(--muted);min-width:20px;text-align:center">'+(i+1)+'</span>')
+      +'<div><div style="font-size:11px;font-weight:700;color:var(--text)">'+impEsc(s.sq)+'</div>'
+      +'<div style="font-size:10px;color:var(--muted)">'+s.n+' fiscal'+(s.n>1?'is':'')+'</div></div></div>'
+      +'<span style="font-size:15px;font-weight:800;color:'+c+'">'+s.pct+'%</span>'
+      +'</div>';}).join('');
 }
 
 function _impWeekKey(dateStr){
@@ -10189,6 +10255,16 @@ async function renderViewImprodutividade(){
   +'</div></div>'
   +'<div id="evo-ader-table" style="overflow-x:auto;margin-bottom:14px"></div>'
   +'<div style="position:relative;height:280px"><canvas id="evo-ader-chart"></canvas></div>'
+  +'</div>'
+
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px">'
+  +'<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">Comparativo entre Squads</div>'
+  +'<div id="evo-sq-subtitle" style="font-size:10px;color:var(--muted);margin-bottom:14px;font-style:italic">Aderência média por squad</div>'
+  +'<div style="display:flex;gap:20px;align-items:flex-start">'
+  +'<div style="flex:1;min-width:0;position:relative;height:240px"><canvas id="evo-ader-sq-chart"></canvas></div>'
+  +'<div id="evo-ader-sq-ranking" style="width:200px;flex-shrink:0"></div>'
+  +'</div>'
+  +'<div style="margin-top:10px;font-size:9px;color:var(--muted)">Legenda: <span style="color:#15803d;font-weight:700">≥80% ótimo</span> · <span style="color:#1d4ed8;font-weight:700">60–79% bom</span> · <span style="color:#c2410c;font-weight:700">40–59% atenção</span> · <span style="color:#dc2626;font-weight:700">&lt;40% crítico</span></div>'
   +'</div>'
   +'</div>'
 
