@@ -7914,13 +7914,18 @@ function impBuildProjSquad(){
     }
   });
 }
+function _impNormSquad(sq){
+  if(!sq)return sq;
+  if(sq.toUpperCase().indexOf('TELAMENTO')>=0)return'MINA';
+  return sq;
+}
 function impGetSquad(sap){
   if(!sap) return{squad:'',lider:'',planejador:''};
-  var r=REF_SQUADS[sap]; if(r) return r;
+  var r=REF_SQUADS[sap]; if(r) return{squad:_impNormSquad(r.squad),lider:r.lider,planejador:r.planejador};
   var pep=sap.split('.')[0];
-  var r2=REF_SQUADS[pep]; if(r2) return r2;
+  var r2=REF_SQUADS[pep]; if(r2) return{squad:_impNormSquad(r2.squad),lider:r2.lider,planejador:r2.planejador};
   var proj=_IMP_PROJ_SQUAD[sap]||_IMP_PROJ_SQUAD[pep]||'';
-  return{squad:proj,lider:'',planejador:''};
+  return{squad:_impNormSquad(proj),lider:'',planejador:''};
 }
 
 // ── Destroy / Safe chart ─────────────────────────────────────────
