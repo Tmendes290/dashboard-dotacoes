@@ -350,10 +350,10 @@ body.embed .main{width:100%!important}
     <div class="sec">Ranking e Evolução Mensal</div>
     <div class="g-60-40">
       <div class="cc">
-        <div class="cc-hdr"><div class="cc-title">Top 10 — maior número de desvios</div><div class="cc-badge" id="top10-badge">período selecionado</div></div>
+        <div class="cc-hdr"><div class="cc-title">Top 10 — maior número de desvios</div><div class="cc-badge" id="top10-badge">período selecionado</div><div style="font-size:10px;color:var(--muted)">clique em uma linha para ver os dias detalhados</div></div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>#</th><th>Motorista</th><th>Eventos</th><th>Proporção</th><th>Tempo</th><th>Vel. Máx.</th></tr></thead>
+            <thead><tr><th>#</th><th>Motorista</th><th>Eventos</th><th>Proporção</th><th>Tempo</th><th>Vel. Máx.</th><th></th></tr></thead>
             <tbody id="top10-tbody"></tbody>
           </table>
         </div>
@@ -683,6 +683,78 @@ function toggleExpand(idx) {
   renderComiteTable(_lastComiteDrivers);
 }
 var _lastComiteDrivers = [];
+var _top10Drivers=[];var _top10Rows=[];var _top10Expanded=new Set();
+
+function toggleTop10(idx){
+  if(_top10Expanded.has(idx))_top10Expanded.delete(idx);else _top10Expanded.add(idx);
+  renderTop10Inner();
+}
+function renderTop10Inner(){
+  var tbody=document.getElementById('top10-tbody');
+  if(!tbody)return;
+  var maxEv=_top10Drivers[0]?_top10Drivers[0].ev:1;
+  tbody.innerHTML=_top10Drivers.map(function(d,i){
+    var pct=Math.round(d.ev/maxEv*100);
+    var pillC=i<3?'pill-red':i<6?'pill-orange':'pill-yellow';
+    var isOpen=_top10Expanded.has(i);
+    var mainRow='<tr style="cursor:pointer" onclick="toggleTop10('+i+')">'
+      +'<td style="font-weight:800;color:var(--muted)">'+(i+1)+'</td>'
+      +'<td style="font-weight:600;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+d.drv+'">'+d.drv.split(' ').slice(0,2).join(' ')+'…</td>'
+      +'<td><span class="pill '+pillC+'">'+d.ev.toLocaleString('pt-BR')+'</span></td>'
+      +'<td><div class="fb"><div class="fb-fill" style="width:'+pct+'%"></div></div></td>'
+      +'<td style="color:var(--muted)">'+(d.dur<60?d.dur+'s':d.dur<3600?Math.round(d.dur/60)+'min':Math.round(d.dur/3600)+'h')+'</td>'
+      +'<td style="font-weight:700;color:'+(d.maxV>=100?'var(--danger)':d.maxV>=90?'#ea580c':'var(--warn)')+'">'+d.maxV+' km/h</td>'
+      +'<td style="color:var(--muted);font-size:10px">'+(isOpen?'▲ fechar':'▼ detalhes')+'</td>'
+      +'</tr>';
+    var detailRow='';
+    if(isOpen){
+      var dRows=_top10Rows.filter(function(r){return r[1]===d.drv;}).sort(function(a,b){return (b[2]+b[3]+b[4]+b[5])-(a[2]+a[3]+a[4]+a[5]);});
+      var tblRows=dRows.map(function(r){
+        var dt=r[0].slice(8,10)+'/'+r[0].slice(5,7)+'/'+r[0].slice(0,4);
+        var ev=r[2]+r[3]+r[4]+r[5];
+        var lim=r[8]||0;
+        var pc=lim>0?Math.round((r[7]/lim-1)*100):0;
+        var sv=pc>30?'Gravíssima':pc>20?'Grave':pc>10?'Média':'Baixa';
+        var sc=pc>30?'#b91c1c':pc>20?'#c2410c':pc>10?'#a16207':'#15803d';
+        var sb=pc>30?'#fee2e2':pc>20?'#ffedd5':pc>10?'#fef9c3':'#dcfce7';
+        var dur=r[6]<60?r[6]+'s':Math.round(r[6]/60)+'min';
+        return '<tr style="border-bottom:1px solid #e0e7ef">'
+          +'<td style="padding:4px 10px;font-weight:600">'+dt+'</td>'
+          +'<td style="padding:4px 10px;text-align:center;font-weight:700;color:var(--danger)">'+ev+'</td>'
+          +'<td style="padding:4px 10px;text-align:center;color:#15803d">'+r[2]+'</td>'
+          +'<td style="padding:4px 10px;text-align:center;color:#a16207">'+r[3]+'</td>'
+          +'<td style="padding:4px 10px;text-align:center;color:#c2410c">'+r[4]+'</td>'
+          +'<td style="padding:4px 10px;text-align:center;color:#b91c1c;font-weight:'+(r[5]>0?'700':'400')+'">'+r[5]+'</td>'
+          +'<td style="padding:4px 10px;font-weight:700;color:'+(r[7]>=100?'#b91c1c':r[7]>=70?'#c2410c':'var(--text)')+'">'+r[7]+' km/h</td>'
+          +'<td style="padding:4px 10px;color:var(--muted)">'+(lim>0?lim+' km/h':'—')+'</td>'
+          +'<td style="padding:4px 10px;font-weight:700;color:'+sc+'">+'+(lim>0?pc+'%':'—')+'</td>'
+          +'<td style="padding:4px 10px"><span style="background:'+sb+';color:'+sc+';padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">'+sv+'</span></td>'
+          +'<td style="padding:4px 10px;color:var(--muted)">'+dur+'</td>'
+          +'</tr>';
+      }).join('');
+      detailRow='<tr style="background:#f0f6ff"><td colspan="7" style="padding:10px 14px">'
+        +'<div style="font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Histórico completo — '+d.drv+'</div>'
+        +'<div style="overflow-x:auto;max-height:280px;overflow-y:auto">'
+        +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
+        +'<thead><tr style="background:#eff6ff">'
+        +'<th style="padding:5px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#1d4ed8;white-space:nowrap;border-bottom:2px solid #bfdbfe">Data</th>'
+        +'<th style="padding:5px 10px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#1d4ed8;white-space:nowrap;border-bottom:2px solid #bfdbfe">Eventos</th>'
+        +'<th style="padding:5px 10px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#15803d;white-space:nowrap;border-bottom:2px solid #bfdbfe">Baixa</th>'
+        +'<th style="padding:5px 10px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#a16207;white-space:nowrap;border-bottom:2px solid #bfdbfe">Média</th>'
+        +'<th style="padding:5px 10px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#c2410c;white-space:nowrap;border-bottom:2px solid #bfdbfe">Grave</th>'
+        +'<th style="padding:5px 10px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#b91c1c;white-space:nowrap;border-bottom:2px solid #bfdbfe">Gravíssima</th>'
+        +'<th style="padding:5px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#b91c1c;white-space:nowrap;border-bottom:2px solid #bfdbfe">Vel. Máx.</th>'
+        +'<th style="padding:5px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);white-space:nowrap;border-bottom:2px solid #bfdbfe">Limite</th>'
+        +'<th style="padding:5px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#b91c1c;white-space:nowrap;border-bottom:2px solid #bfdbfe">Excesso</th>'
+        +'<th style="padding:5px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);white-space:nowrap;border-bottom:2px solid #bfdbfe">Severidade</th>'
+        +'<th style="padding:5px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);white-space:nowrap;border-bottom:2px solid #bfdbfe">Tempo</th>'
+        +'</tr></thead>'
+        +'<tbody>'+tblRows+'</tbody>'
+        +'</table></div></td></tr>';
+    }
+    return mainRow+detailRow;
+  }).join('');
+}
 
 function renderComiteTable(comiteDrvs) {
   _lastComiteDrivers = comiteDrvs;
@@ -798,6 +870,8 @@ function renderAll(){
     drvData=drvData.filter(function(d){return d.lastDt>=_cutStr;});
     if(MODO_12S)kpiDrvData=kpiDrvData.filter(function(d){return d.lastDt>=_cutStr;});
   }
+  // Em modo 12s a matriz exibe apenas motoristas com eventos >12s (mesmos do kpiDrvData)
+  if(MODO_12S)drvData=kpiDrvData;
   var moData=byMonth(kpiRows);
   var totalEv=kpiDrvData.reduce(function(s,d){return s+d.ev;},0);
   var totalDur=(MODO_12S?FILTERED_12S:FILTERED).reduce(function(s,r){return s+r[6];},0);
@@ -885,18 +959,11 @@ function renderAll(){
   }).join('');
 
   // TOP 10
-  var maxEv=kpiDrvData[0]?kpiDrvData[0].ev:1;
+  _top10Drivers=kpiDrvData.slice(0,10);
+  _top10Rows=kpiRows;
+  _top10Expanded.clear();
   document.getElementById('top10-badge').textContent='Top '+Math.min(10,kpiDrvData.length)+' — '+periodLbl;
-  document.getElementById('top10-tbody').innerHTML=kpiDrvData.slice(0,10).map(function(d,i){
-    var pct=Math.round(d.ev/maxEv*100);
-    var pillC=i<3?'pill-red':i<6?'pill-orange':'pill-yellow';
-    return '<tr><td style="font-weight:800;color:var(--muted)">'+(i+1)+'</td>'
-      +'<td style="font-weight:600;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+d.drv+'">'+d.drv.split(' ').slice(0,2).join(' ')+'…</td>'
-      +'<td><span class="pill '+pillC+'">'+d.ev.toLocaleString('pt-BR')+'</span></td>'
-      +'<td><div class="fb"><div class="fb-fill" style="width:'+pct+'%"></div></div></td>'
-      +'<td style="color:var(--muted)">'+(d.dur<60?d.dur+'s':d.dur<3600?Math.round(d.dur/60)+'min':Math.round(d.dur/3600)+'h')+'</td>'
-      +'<td style="font-weight:700;color:'+(d.maxV>=100?'var(--danger)':d.maxV>=90?'#ea580c':'var(--warn)')+'">'+d.maxV+' km/h</td></tr>';
-  }).join('');
+  renderTop10Inner();
 
   // EVOLUÇÃO TOP5 (clickable legend)
   var top5=kpiDrvData.slice(0,5).map(function(d){return d.drv;});
