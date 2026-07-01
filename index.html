@@ -8854,6 +8854,9 @@ function impRenderAderSquads(){
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
     var sq=impGetSquad(d.sap).squad;
     if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
+    if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
+    if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
+    if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
     return true;
   });
   if(!allRecs.length){gridEl.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--muted);font-size:12px">Preencha a coluna "Fiscal" na planilha para ver este painel.</div>';return;}
@@ -8953,6 +8956,9 @@ function impRenderEvolucao(){
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
+    if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
+    if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
+    if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
     return true;
   }).map(function(d){return _impDeriveRow(d,refMin,fimMin);}).filter(function(d){return!impIsExcluido(d);});
 
@@ -9243,6 +9249,9 @@ function _impBuildChegadaChart(){
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
+    if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
+    if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
+    if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
     return true;
   }).filter(function(d){return d.chegadaMin!==null&&d.dataSortKey;});
 
