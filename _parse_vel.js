@@ -35,8 +35,8 @@ function getSev(pct) {
   return 'B';
 }
 
-// Aggregate
-const map = {};
+// Aggregate — dois modos: % puro (todos os eventos ≥1%) e regra 12s (só dur > 12s)
+const map = {}, map12s = {};
 const driverSet = new Set();
 
 for (let i = 1; i < raw.length; i++) {
@@ -51,11 +51,10 @@ for (let i = 1; i < raw.length; i++) {
   const pct = Math.round((maxV / lim - 1) * 100);
   if (pct < 1) continue; // não é violação
   const sev = getSev(pct);
-
   const key = dt + '|' + drv;
-  if (!map[key]) {
-    map[key] = { dt, drv, b: 0, m: 0, g: 0, gv: 0, dur: 0, maxV: 0, limAtMax: 0 };
-  }
+
+  // % puro — todos os eventos
+  if (!map[key]) map[key] = { dt, drv, b: 0, m: 0, g: 0, gv: 0, dur: 0, maxV: 0, limAtMax: 0 };
   const e = map[key];
   if (sev === 'B') e.b++;
   else if (sev === 'M') e.m++;
@@ -63,12 +62,27 @@ for (let i = 1; i < raw.length; i++) {
   else e.gv++;
   e.dur += dur;
   if (maxV > e.maxV) { e.maxV = maxV; e.limAtMax = lim; }
-
   driverSet.add(drv);
+
+  // regra 12s — só eventos com duração > 12 segundos contam como infração formal
+  if (dur > 12) {
+    if (!map12s[key]) map12s[key] = { dt, drv, b: 0, m: 0, g: 0, gv: 0, dur: 0, maxV: 0, limAtMax: 0 };
+    const e2 = map12s[key];
+    if (sev === 'B') e2.b++;
+    else if (sev === 'M') e2.m++;
+    else if (sev === 'G') e2.g++;
+    else e2.gv++;
+    e2.dur += dur;
+    if (maxV > e2.maxV) { e2.maxV = maxV; e2.limAtMax = lim; }
+  }
 }
 
 // Sort rows by date
 const rows = Object.values(map).sort((a, b) => a.dt < b.dt ? -1 : 1).map(e => [
+  e.dt, e.drv, e.b, e.m, e.g, e.gv, e.dur, e.maxV, e.limAtMax
+]);
+
+const rows12s = Object.values(map12s).sort((a, b) => a.dt < b.dt ? -1 : 1).map(e => [
   e.dt, e.drv, e.b, e.m, e.g, e.gv, e.dur, e.maxV, e.limAtMax
 ]);
 
@@ -95,6 +109,6 @@ if (ranulfoName) {
   }));
 }
 
-const out = { rows, drivers, ranulfo };
+const out = { rows, rows12s, drivers, ranulfo };
 fs.writeFileSync('vel_data.json', JSON.stringify(out));
-console.log('OK:', rows.length, 'rows,', drivers.length, 'drivers, ranulfo:', ranulfo.length);
+console.log('OK:', rows.length, 'rows (% puro),', rows12s.length, 'rows (12s),', drivers.length, 'drivers, ranulfo:', ranulfo.length);

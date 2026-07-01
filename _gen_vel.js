@@ -162,22 +162,32 @@ body.embed .main{width:100%!important}
 
 const js = `
 var _RAW = ${DATA_JSON};
+var ALL_ROWS_PURO = _RAW.rows;
+var ALL_ROWS_12S_DATA = _RAW.rows12s || [];
 var ALL_ROWS = _RAW.rows;
 var ALL_DRIVERS = _RAW.drivers;
 var FILTERED = ALL_ROWS.slice();
+var MODO_12S = false;
 
 // active severity filter: null = all, else Set of 'B','M','G','GV'
 var SEV_FILTER = null;
 
-var MATRIX = {
+var MATRIX_PURO = {
   B:{1:'Conversa formal — Líder',2:'Conversa formal + Advert. Verbal',3:'Restrição 03 dias (condução) + Advert. formal + Reciclagem',x:'Comitê pela Vida'},
   M:{1:'Advertência Verbal',2:'Reciclagem + Advert. formal',3:'Restrição 05 dias (condução) + Advert. formal + Reciclagem',x:'Comitê pela Vida'},
   G:{1:'Reciclagem + Advert. formal',2:'Restrição 03 dias (condução) + Advert. formal + Reciclagem',3:'Comitê pela Vida',x:'Comitê pela Vida'},
   GV:{1:'Restrição 03 dias (condução) + Advert. formal + Reciclagem',2:'Restrição 05 dias (condução) + Advert. formal + Reciclagem',3:'Comitê pela Vida',x:'Comitê pela Vida'}
 };
+var MATRIX_12S_OBJ = {
+  B:{1:'Conversa formal — Líder',2:'Conversa formal + Advert. Verbal',3:'Suspensão 30 dias (condução) + Advert. formal + Reciclagem',x:'Comitê pela Vida'},
+  M:{1:'Advertência Verbal',2:'Reciclagem + Advert. formal',3:'Suspensão 60 dias (condução) + Advert. formal',x:'Comitê pela Vida'},
+  G:{1:'Reciclagem + Advert. formal',2:'Reciclagem + Suspensão 30 dias (condução) + Advert. formal',3:'Afastar + Comitê pela Vida',x:'Afastar + Comitê pela Vida'},
+  GV:{1:'Suspensão 30 dias (condução) + Advert. formal + Reciclagem',2:'Suspensão 60 dias + Advert. formal + 5 dias suspensão trabalho',3:'Afastar + Comitê pela Vida',x:'Afastar + Comitê pela Vida'}
+};
+var MATRIX = MATRIX_PURO;
 
 function getConsequencia(sev,count){var m=MATRIX[sev];var k=count>=4?'x':count<=0?1:count;return m[k]||m[3];}
-function getConsClass(c){if(c.indexOf('Comitê')>=0)return 'pill cons-comite';if(c.indexOf('05 dias')>=0)return 'pill cons-rest5';if(c.indexOf('03 dias')>=0)return 'pill cons-rest3';if(c.indexOf('Reciclagem')>=0)return 'pill cons-recicla';if(c.indexOf('Verbal')>=0)return 'pill cons-advert';return 'pill cons-conversa';}
+function getConsClass(c){if(c.indexOf('Afastar')>=0||c.indexOf('Comitê')>=0)return 'pill cons-comite';if(c.indexOf('Suspensão 60')>=0||c.indexOf('05 dias')>=0)return 'pill cons-rest5';if(c.indexOf('Suspensão 30')>=0||c.indexOf('03 dias')>=0)return 'pill cons-rest3';if(c.indexOf('Reciclagem')>=0)return 'pill cons-recicla';if(c.indexOf('Verbal')>=0)return 'pill cons-advert';return 'pill cons-conversa';}
 function getSevLabel(s){if(s==='GV')return '<span class="pill pill-red">Gravíssima</span>';if(s==='G')return '<span class="pill pill-orange">Grave</span>';if(s==='M')return '<span class="pill pill-yellow">Média</span>';if(s==='C')return '<span class="pill pill-blue">Conversa</span>';return '<span class="pill pill-green">Baixa</span>';}
 
 // ── MULTI-SELECT ──────────────────────────────────────────────────
@@ -223,6 +233,24 @@ function setInactive(d){
     el.className='ia-btn'+(active?' ia-active':'');
   });
   renderAll();
+}
+
+function setModo(is12s){
+  MODO_12S=is12s;
+  ALL_ROWS=is12s?ALL_ROWS_12S_DATA:ALL_ROWS_PURO;
+  MATRIX=is12s?MATRIX_12S_OBJ:MATRIX_PURO;
+  ['modo-puro','modo-12s'].forEach(function(id){
+    var el=document.getElementById(id);if(!el)return;
+    el.className='ia-btn'+((is12s?id==='modo-12s':id==='modo-puro')?' ia-active':'');
+  });
+  var leg=document.getElementById('mat-legend');
+  if(leg)leg.innerHTML=is12s
+    ?'<span class="pill cons-conversa" style="font-size:9px">Conversa</span><span class="pill cons-advert" style="font-size:9px">Advertência</span><span class="pill cons-recicla" style="font-size:9px">Reciclagem</span><span class="pill cons-rest3" style="font-size:9px">Susp. 30d</span><span class="pill cons-rest5" style="font-size:9px">Susp. 60d</span><span class="pill cons-comite" style="font-size:9px">Comitê/Afastar</span><span class="cc-badge" id="mat-count">—</span>'
+    :'<span class="pill cons-conversa" style="font-size:9px">Conversa</span><span class="pill cons-advert" style="font-size:9px">Advertência</span><span class="pill cons-recicla" style="font-size:9px">Reciclagem</span><span class="pill cons-rest3" style="font-size:9px">Rest. 3d</span><span class="pill cons-rest5" style="font-size:9px">Rest. 5d</span><span class="pill cons-comite" style="font-size:9px">Comitê</span><span class="cc-badge" id="mat-count">—</span>';
+  var lbl=document.getElementById('mat-sec-lbl');
+  if(lbl)lbl.textContent=is12s?'Matriz de Consequências — PRO-025917 Rev.12 (Regra 12s)':'Matriz de Consequências — Plano de Trânsito BMSA Rev.11';
+  FILTERED=ALL_ROWS.slice();SEV_FILTER=null;
+  applyFilters();
 }
 
 buildMs('ms-mes',MESES_ALL,'Todos os meses',applyFilters);
@@ -374,7 +402,10 @@ function byMonth(rows){
 }
 
 function getWorstSev(d){if(d.gv>0)return 'GV';if(d.g>0)return 'G';if(d.mb>0)return 'M';return 'B';}
-function getDriverCons(d){var s=getWorstSev(d);var cnt=d.b+d.mb+d.g+d.gv;return getConsequencia(s,cnt);}
+function getDriverCons(d){
+  if(MODO_12S){var cats=(d.b>0?1:0)+(d.mb>0?1:0)+(d.g>0?1:0)+(d.gv>0?1:0);if(cats>=3)return 'Afastar + Comitê pela Vida';}
+  var s=getWorstSev(d);var cnt=d.b+d.mb+d.g+d.gv;return getConsequencia(s,cnt);
+}
 
 // ── CHARTS ────────────────────────────────────────────────────────
 var chartSev=null, chartEv=null;
@@ -723,7 +754,8 @@ fetch('/api/velocidade')
   .then(function(d){
     if(!d||!d.payload||!d.payload.rows||d.payload.rows.length===0)return;
     var p=d.payload;
-    _RAW=p;ALL_ROWS=p.rows;ALL_DRIVERS=p.drivers;
+    _RAW=p;ALL_ROWS_PURO=p.rows;ALL_ROWS_12S_DATA=p.rows12s||[];
+    ALL_ROWS=MODO_12S?ALL_ROWS_12S_DATA:ALL_ROWS_PURO;ALL_DRIVERS=p.drivers;
     FILTERED=ALL_ROWS.slice();SEV_FILTER=null;expandedRows.clear();
     buildMs('ms-motorista',ALL_DRIVERS,'Todos os motoristas',applyFilters);
     applyFilters();
@@ -760,7 +792,8 @@ function handleImport(file){
               .then(function(d2){
                 if(d2&&d2.payload&&d2.payload.rows&&d2.payload.rows.length>0){
                   var p=d2.payload;
-                  _RAW=p;ALL_ROWS=p.rows;ALL_DRIVERS=p.drivers;
+                  _RAW=p;ALL_ROWS_PURO=p.rows;ALL_ROWS_12S_DATA=p.rows12s||[];
+                  ALL_ROWS=MODO_12S?ALL_ROWS_12S_DATA:ALL_ROWS_PURO;ALL_DRIVERS=p.drivers;
                   FILTERED=ALL_ROWS.slice();SEV_FILTER=null;expandedRows.clear();
                   buildMs('ms-motorista',ALL_DRIVERS,'Todos os motoristas',applyFilters);
                   applyFilters();
@@ -923,14 +956,14 @@ const html = `<!DOCTYPE html>
     </div>
 
     <!-- MATRIZ -->
-    <div class="sec">Matriz de Consequências — Plano de Trânsito BMSA Rev.11</div>
+    <div class="sec" id="mat-sec-lbl">Matriz de Consequências — Plano de Trânsito BMSA Rev.11</div>
     <div class="cc">
       <div class="cc-hdr">
         <div>
           <div class="cc-title">Ação recomendada por motorista</div>
           <div style="font-size:10px;color:var(--muted);margin-top:2px">Período: <span id="mat-period" style="font-weight:600;color:var(--text)">—</span></div>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <div id="mat-legend" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           <span class="pill cons-conversa" style="font-size:9px">Conversa</span>
           <span class="pill cons-advert" style="font-size:9px">Advertência</span>
           <span class="pill cons-recicla" style="font-size:9px">Reciclagem</span>
@@ -939,7 +972,11 @@ const html = `<!DOCTYPE html>
           <span class="pill cons-comite" style="font-size:9px">Comitê</span>
           <span class="cc-badge" id="mat-count">—</span>
         </div>
-        <div style="display:flex;gap:4px;align-items:center">
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:10px;color:var(--muted);font-weight:600;margin-right:2px">Parâmetro:</span>
+          <button id="modo-puro" class="ia-btn ia-active" onclick="setModo(false)">% Puro</button>
+          <button id="modo-12s" class="ia-btn" onclick="setModo(true)">Regra 12s</button>
+          <div style="width:1px;height:16px;background:var(--bord);margin:0 4px"></div>
           <span style="font-size:10px;color:var(--muted);font-weight:600;margin-right:2px">Mostrar:</span>
           <button id="ia-all" class="ia-btn ia-active" onclick="setInactive(0)">Todos</button>
           <button id="ia-30" class="ia-btn" onclick="setInactive(30)">Ativos 30d</button>

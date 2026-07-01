@@ -184,7 +184,7 @@ app.post('/api/import-velocidade', async (req, res) => {
     }
     function getSev(pct) { return pct > 30 ? 'GV' : pct > 20 ? 'G' : pct > 10 ? 'M' : 'B'; }
 
-    const map = {}, driverSet = new Set();
+    const map = {}, map12s = {}, driverSet = new Set();
     for (let i = 1; i < rawRows.length; i++) {
       const r = rawRows[i];
       const dt = parseDate(r[iData]);
@@ -198,15 +198,26 @@ app.post('/api/import-velocidade', async (req, res) => {
       if (pct < 1) continue;
       const sev = getSev(pct);
       const key = dt + '|' + drv;
+      // % puro — todos os eventos
       if (!map[key]) map[key] = { dt, drv, b: 0, m: 0, g: 0, gv: 0, dur: 0, maxV: 0, limAtMax: 0 };
       const e = map[key];
       if (sev === 'B') e.b++; else if (sev === 'M') e.m++; else if (sev === 'G') e.g++; else e.gv++;
       e.dur += dur;
       if (maxV > e.maxV) { e.maxV = maxV; e.limAtMax = lim; }
       driverSet.add(drv);
+      // regra 12s — só eventos com dur > 12s
+      if (dur > 12) {
+        if (!map12s[key]) map12s[key] = { dt, drv, b: 0, m: 0, g: 0, gv: 0, dur: 0, maxV: 0, limAtMax: 0 };
+        const e2 = map12s[key];
+        if (sev === 'B') e2.b++; else if (sev === 'M') e2.m++; else if (sev === 'G') e2.g++; else e2.gv++;
+        e2.dur += dur;
+        if (maxV > e2.maxV) { e2.maxV = maxV; e2.limAtMax = lim; }
+      }
     }
 
     const rows = Object.values(map).sort((a, b) => a.dt < b.dt ? -1 : 1)
+      .map(e => [e.dt, e.drv, e.b, e.m, e.g, e.gv, e.dur, e.maxV, e.limAtMax]);
+    const rows12s = Object.values(map12s).sort((a, b) => a.dt < b.dt ? -1 : 1)
       .map(e => [e.dt, e.drv, e.b, e.m, e.g, e.gv, e.dur, e.maxV, e.limAtMax]);
     const drivers = [...driverSet].sort();
     let ranulfoName = null;
@@ -219,7 +230,7 @@ app.post('/api/import-velocidade', async (req, res) => {
       : [];
 
     // Salva no Supabase
-    const payload = { rows, drivers, ranulfo };
+    const payload = { rows, rows12s, drivers, ranulfo };
     const supa = await fetch(`${SUPA_URL}/rest/v1/vel_dados`, {
       method: 'POST',
       headers: {
