@@ -422,6 +422,8 @@ var ALL_ROWS_12S_DATA = _RAW.rows12s || [];
 var ALL_ROWS = _RAW.rows;
 var ALL_DRIVERS = _RAW.drivers;
 var FILTERED = ALL_ROWS.slice();
+var FILTERED_12S = ALL_ROWS_12S_DATA.slice();
+var _byDrv12s = {};
 var MODO_12S = false;
 
 // active severity filter: null = all, else Set of 'B','M','G','GV'
@@ -442,7 +444,7 @@ var MATRIX_12S_OBJ = {
 var MATRIX = MATRIX_PURO;
 
 function getConsequencia(sev,count){var m=MATRIX[sev];var k=count>=4?'x':count<=0?1:count;return m[k]||m[3];}
-function getConsClass(c){if(c.indexOf('Afastar')>=0||c.indexOf('Comitê')>=0)return 'pill cons-comite';if(c.indexOf('Suspensão 60')>=0||c.indexOf('05 dias')>=0)return 'pill cons-rest5';if(c.indexOf('Suspensão 30')>=0||c.indexOf('03 dias')>=0)return 'pill cons-rest3';if(c.indexOf('Reciclagem')>=0)return 'pill cons-recicla';if(c.indexOf('Verbal')>=0)return 'pill cons-advert';return 'pill cons-conversa';}
+function getConsClass(c){if(c.indexOf('Sem infração')>=0)return 'pill pill-blue';if(c.indexOf('Afastar')>=0||c.indexOf('Comitê')>=0)return 'pill cons-comite';if(c.indexOf('Suspensão 60')>=0||c.indexOf('05 dias')>=0)return 'pill cons-rest5';if(c.indexOf('Suspensão 30')>=0||c.indexOf('03 dias')>=0)return 'pill cons-rest3';if(c.indexOf('Reciclagem')>=0)return 'pill cons-recicla';if(c.indexOf('Verbal')>=0)return 'pill cons-advert';return 'pill cons-conversa';}
 function getSevLabel(s){if(s==='GV')return '<span class="pill pill-red">Gravíssima</span>';if(s==='G')return '<span class="pill pill-orange">Grave</span>';if(s==='M')return '<span class="pill pill-yellow">Média</span>';if(s==='C')return '<span class="pill pill-blue">Conversa</span>';return '<span class="pill pill-green">Baixa</span>';}
 
 // ── MULTI-SELECT ──────────────────────────────────────────────────
@@ -492,7 +494,6 @@ function setInactive(d){
 
 function setModo(is12s){
   MODO_12S=is12s;
-  ALL_ROWS=is12s?ALL_ROWS_12S_DATA:ALL_ROWS_PURO;
   MATRIX=is12s?MATRIX_12S_OBJ:MATRIX_PURO;
   ['modo-puro','modo-12s'].forEach(function(id){
     var el=document.getElementById(id);if(!el)return;
@@ -500,11 +501,11 @@ function setModo(is12s){
   });
   var leg=document.getElementById('mat-legend');
   if(leg)leg.innerHTML=is12s
-    ?'<span class="pill cons-conversa" style="font-size:9px">Conversa</span><span class="pill cons-advert" style="font-size:9px">Advertência</span><span class="pill cons-recicla" style="font-size:9px">Reciclagem</span><span class="pill cons-rest3" style="font-size:9px">Susp. 30d</span><span class="pill cons-rest5" style="font-size:9px">Susp. 60d</span><span class="pill cons-comite" style="font-size:9px">Comitê/Afastar</span><span class="cc-badge" id="mat-count">—</span>'
+    ?'<span class="pill pill-blue" style="font-size:9px">Sem infração</span><span class="pill cons-conversa" style="font-size:9px">Conversa</span><span class="pill cons-advert" style="font-size:9px">Advertência</span><span class="pill cons-recicla" style="font-size:9px">Reciclagem</span><span class="pill cons-rest3" style="font-size:9px">Susp. 30d</span><span class="pill cons-rest5" style="font-size:9px">Susp. 60d</span><span class="pill cons-comite" style="font-size:9px">Comitê/Afastar</span><span class="cc-badge" id="mat-count">—</span>'
     :'<span class="pill cons-conversa" style="font-size:9px">Conversa</span><span class="pill cons-advert" style="font-size:9px">Advertência</span><span class="pill cons-recicla" style="font-size:9px">Reciclagem</span><span class="pill cons-rest3" style="font-size:9px">Rest. 3d</span><span class="pill cons-rest5" style="font-size:9px">Rest. 5d</span><span class="pill cons-comite" style="font-size:9px">Comitê</span><span class="cc-badge" id="mat-count">—</span>';
   var lbl=document.getElementById('mat-sec-lbl');
   if(lbl)lbl.textContent=is12s?'Matriz de Consequências — PRO-025917 Rev.12 (Regra 12s)':'Matriz de Consequências — Plano de Trânsito BMSA Rev.11';
-  FILTERED=ALL_ROWS.slice();SEV_FILTER=null;
+  FILTERED=ALL_ROWS_PURO.slice();FILTERED_12S=ALL_ROWS_12S_DATA.slice();SEV_FILTER=null;
   applyFilters();
 }
 
@@ -540,15 +541,17 @@ function applyFilters(){
   var selMes=_msStore['ms-mes'].sel;
   var selDia=_msStore['ms-dia'].sel;
   var selDrv=_msStore['ms-motorista'].sel;
-  FILTERED=ALL_ROWS.filter(function(r){
+  var fn=function(r){
     var dt=r[0],yr=dt.slice(0,4),mo=dt.slice(5,7),dy=dt.slice(8,10);
     if(ano&&yr!==ano)return false;
     if(selMes.size>0){var moL=Object.keys(MESES_IDX).find(function(k){return MESES_IDX[k]===mo;});if(!moL||!selMes.has(moL))return false;}
     if(selDia.size>0&&!selDia.has(dy))return false;
     if(selDrv.size>0&&!selDrv.has(r[1]))return false;
     return true;
-  });
-  SEV_FILTER=null; // reset severity filter on main filter change
+  };
+  FILTERED=ALL_ROWS_PURO.filter(fn);
+  FILTERED_12S=ALL_ROWS_12S_DATA.filter(fn);
+  SEV_FILTER=null;
   updateFilterChips();
   renderAll();
 }
@@ -556,7 +559,7 @@ function applyFilters(){
 function resetFilters(){
   document.getElementById('f-ano').value='2026';
   Object.keys(_msStore).forEach(function(k){_msStore[k].sel.clear();_msStore[k].open=false;renderMs(k);});
-  FILTERED=ALL_ROWS.slice();SEV_FILTER=null;updateFilterChips();renderAll();
+  FILTERED=ALL_ROWS_PURO.slice();FILTERED_12S=ALL_ROWS_12S_DATA.slice();SEV_FILTER=null;updateFilterChips();renderAll();
 }
 
 // ── SEVERITY FILTER (from donut click) ───────────────────────────
@@ -658,7 +661,14 @@ function byMonth(rows){
 
 function getWorstSev(d){if(d.gv>0)return 'GV';if(d.g>0)return 'G';if(d.mb>0)return 'M';return 'B';}
 function getDriverCons(d){
-  if(MODO_12S){var cats=(d.b>0?1:0)+(d.mb>0?1:0)+(d.g>0?1:0)+(d.gv>0?1:0);if(cats>=3)return 'Afastar + Comitê pela Vida';}
+  if(MODO_12S){
+    var c=_byDrv12s[d.drv]||{b:0,mb:0,g:0,gv:0};
+    if(!c.b&&!c.mb&&!c.g&&!c.gv)return 'Sem infração formal';
+    var cats=(c.b>0?1:0)+(c.mb>0?1:0)+(c.g>0?1:0)+(c.gv>0?1:0);
+    if(cats>=3)return 'Afastar + Comitê pela Vida';
+    var s=c.gv>0?'GV':c.g>0?'G':c.mb>0?'M':'B';
+    return getConsequencia(s,c.b+c.mb+c.g+c.gv);
+  }
   var s=getWorstSev(d);var cnt=d.b+d.mb+d.g+d.gv;return getConsequencia(s,cnt);
 }
 
@@ -771,6 +781,13 @@ function renderComiteTable(comiteDrvs) {
 
 // ── RENDER ALL ────────────────────────────────────────────────────
 function renderAll(){
+  // Monta lookup de contagens 12s por motorista (para cálculo de consequência)
+  _byDrv12s={};
+  if(MODO_12S){
+    var r12=FILTERED_12S;
+    if(SEV_FILTER){r12=r12.filter(function(r){var ev=0;if(SEV_FILTER.has('B'))ev+=r[2];if(SEV_FILTER.has('M'))ev+=r[3];if(SEV_FILTER.has('G'))ev+=r[4];if(SEV_FILTER.has('GV'))ev+=r[5];return ev>0;});}
+    byDriver(r12).forEach(function(d){_byDrv12s[d.drv]={b:d.b,mb:d.mb,g:d.g,gv:d.gv};});
+  }
   var rows = getRows();
   var drvData=byDriver(rows).sort(function(a,b){return b.ev-a.ev;});
   if(INACTIVE_DAYS>0){var _cut=new Date();_cut.setDate(_cut.getDate()-INACTIVE_DAYS);var _cutStr=_cut.toISOString().slice(0,10);drvData=drvData.filter(function(d){return d.lastDt>=_cutStr;});}
@@ -1009,10 +1026,10 @@ fetch('/api/velocidade')
   .then(function(d){
     if(!d||!d.payload||!d.payload.rows||d.payload.rows.length===0)return;
     var p=d.payload;
-    _RAW=p;ALL_ROWS_PURO=p.rows;
+    _RAW=p;ALL_ROWS_PURO=p.rows;ALL_ROWS=p.rows;
     if(p.rows12s&&p.rows12s.length>0)ALL_ROWS_12S_DATA=p.rows12s;
-    ALL_ROWS=MODO_12S?ALL_ROWS_12S_DATA:ALL_ROWS_PURO;ALL_DRIVERS=p.drivers;
-    FILTERED=ALL_ROWS.slice();SEV_FILTER=null;expandedRows.clear();
+    ALL_DRIVERS=p.drivers;
+    FILTERED=ALL_ROWS_PURO.slice();FILTERED_12S=ALL_ROWS_12S_DATA.slice();SEV_FILTER=null;expandedRows.clear();
     buildMs('ms-motorista',ALL_DRIVERS,'Todos os motoristas',applyFilters);
     applyFilters();
     var upd=d.atualizado_em?new Date(d.atualizado_em).toLocaleDateString('pt-BR'):'';
@@ -1048,9 +1065,10 @@ function handleImport(file){
               .then(function(d2){
                 if(d2&&d2.payload&&d2.payload.rows&&d2.payload.rows.length>0){
                   var p=d2.payload;
-                  _RAW=p;ALL_ROWS_PURO=p.rows;ALL_ROWS_12S_DATA=p.rows12s||[];
-                  ALL_ROWS=MODO_12S?ALL_ROWS_12S_DATA:ALL_ROWS_PURO;ALL_DRIVERS=p.drivers;
-                  FILTERED=ALL_ROWS.slice();SEV_FILTER=null;expandedRows.clear();
+                  _RAW=p;ALL_ROWS_PURO=p.rows;ALL_ROWS=p.rows;
+                  if(p.rows12s&&p.rows12s.length>0)ALL_ROWS_12S_DATA=p.rows12s;
+                  ALL_DRIVERS=p.drivers;
+                  FILTERED=ALL_ROWS_PURO.slice();FILTERED_12S=ALL_ROWS_12S_DATA.slice();SEV_FILTER=null;expandedRows.clear();
                   buildMs('ms-motorista',ALL_DRIVERS,'Todos os motoristas',applyFilters);
                   applyFilters();
                 }
