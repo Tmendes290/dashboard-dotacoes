@@ -1009,7 +1009,8 @@ fetch('/api/velocidade')
   .then(function(d){
     if(!d||!d.payload||!d.payload.rows||d.payload.rows.length===0)return;
     var p=d.payload;
-    _RAW=p;ALL_ROWS_PURO=p.rows;ALL_ROWS_12S_DATA=p.rows12s||[];
+    _RAW=p;ALL_ROWS_PURO=p.rows;
+    if(p.rows12s&&p.rows12s.length>0)ALL_ROWS_12S_DATA=p.rows12s;
     ALL_ROWS=MODO_12S?ALL_ROWS_12S_DATA:ALL_ROWS_PURO;ALL_DRIVERS=p.drivers;
     FILTERED=ALL_ROWS.slice();SEV_FILTER=null;expandedRows.clear();
     buildMs('ms-motorista',ALL_DRIVERS,'Todos os motoristas',applyFilters);
