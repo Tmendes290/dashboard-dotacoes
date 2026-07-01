@@ -179,8 +179,8 @@ var MATRIX_PURO = {
   GV:{1:'Restrição 03 dias (condução) + Advert. formal + Reciclagem',2:'Restrição 05 dias (condução) + Advert. formal + Reciclagem',3:'Comitê pela Vida',x:'Comitê pela Vida'}
 };
 var MATRIX_12S_OBJ = {
-  B:{1:'Conversa formal — Líder',2:'Conversa formal + Advert. Verbal',3:'Suspensão 30 dias (condução) + Advert. formal + Reciclagem',x:'Comitê pela Vida'},
-  M:{1:'Advertência Verbal',2:'Reciclagem + Advert. formal',3:'Suspensão 60 dias (condução) + Advert. formal',x:'Comitê pela Vida'},
+  B:{1:'Conversa formal — Líder',2:'Conversa formal + Advert. Verbal',3:'Suspensão 30 dias (condução) + Advert. formal + Reciclagem',x:'Suspensão 30 dias (condução) + Advert. formal + Reciclagem'},
+  M:{1:'Advertência Verbal',2:'Reciclagem + Advert. formal',3:'Suspensão 60 dias (condução) + Advert. formal',x:'Suspensão 60 dias (condução) + Advert. formal'},
   G:{1:'Reciclagem + Advert. formal',2:'Reciclagem + Suspensão 30 dias (condução) + Advert. formal',3:'Afastar + Comitê pela Vida',x:'Afastar + Comitê pela Vida'},
   GV:{1:'Suspensão 30 dias (condução) + Advert. formal + Reciclagem',2:'Suspensão 60 dias + Advert. formal + 5 dias suspensão trabalho',3:'Afastar + Comitê pela Vida',x:'Afastar + Comitê pela Vida'}
 };
