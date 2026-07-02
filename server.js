@@ -300,6 +300,107 @@ app.post('/api/velocidade', async (req, res) => {
   }
 });
 
+// ── CJI3: IMPORTAR EXCEL (Export rev01) ──────────────────────────
+app.post('/api/import-cji3', async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  const { fileBase64 } = req.body;
+  if (!fileBase64) return res.status(400).json({ error: 'no file' });
+
+  try {
+    const XLSX = require('xlsx');
+    const buffer = Buffer.from(fileBase64, 'base64');
+    const wb = XLSX.read(buffer, { type: 'buffer' });
+    const ws = wb.Sheets['Export rev01'];
+    if (!ws) return res.status(400).json({ error: 'Aba "Export rev01" não encontrada no arquivo.' });
+
+    const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    // Header at index 1 (Excel row 2); data starts at index 2
+    const HDR = rawRows[1] || [];
+    const fi = (name) => HDR.indexOf(name);
+    const iSite  = fi('Site');
+    const iYear  = fi('Fiscal Year');
+    const iMonth = fi('Month');
+    const iProj  = fi('Project');
+    const iPName = fi('Project Name');
+    const iWbs   = fi('WBS Element');
+    const iVal   = fi('Value In Object Currency');
+    const iForn  = fi('FORNECEDOR');
+    const iWName = fi('WBS NAME');
+    const iGer   = fi('GERÊNCIA');
+
+    if (iYear < 0 || iMonth < 0 || iProj < 0 || iVal < 0) {
+      return res.status(400).json({ error: 'Colunas obrigatórias não encontradas. Verifique a aba "Export rev01".' });
+    }
+
+    const MONTH_ORDER = {JAN:1,FEV:2,MAR:3,ABR:4,MAI:5,JUN:6,JUL:7,AGO:8,SET:9,OUT:10,NOV:11,DEZ:12};
+    const monthSet = new Set();
+    const map = {};
+
+    for (let i = 2; i < rawRows.length; i++) {
+      const r = rawRows[i];
+      const proj = String(r[iProj] || '').trim();
+      const wbs  = String(r[iWbs]  || '').trim();
+      if (!proj || !wbs) continue;
+      const val = parseFloat(r[iVal]) || 0;
+      if (val === 0) continue;
+      const year  = String(r[iYear]  || '').trim();
+      const month = String(r[iMonth] || '').trim();
+      if (!year || !month) continue;
+      const mk = year + '-' + month;
+      monthSet.add(mk);
+      const forn  = String(r[iForn]  || '').trim() || '—';
+      const pname = String(r[iPName] || '').trim();
+      const ger   = String(r[iGer]   || '').trim();
+      const site  = String(r[iSite]  || '').trim();
+      const wname = String(r[iWName] || '').trim();
+      const key = proj + '|' + wbs + '|' + forn;
+      if (!map[key]) map[key] = { proj, pname, wbs, forn, ger, site, wname, v: {} };
+      map[key].v[mk] = (map[key].v[mk] || 0) + val;
+    }
+
+    const months = [...monthSet].sort((a, b) => {
+      const [ya, ma] = a.split('-'); const [yb, mb] = b.split('-');
+      return ya !== yb ? parseInt(ya) - parseInt(yb) : (MONTH_ORDER[ma]||0) - (MONTH_ORDER[mb]||0);
+    });
+    const rows = Object.values(map);
+
+    const payload = { months, rows, atualizado_em: new Date().toISOString() };
+    const supa = await fetch(`${SUPA_URL}/rest/v1/cji3_dados`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
+        'apikey': SUPA_SERVICE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify([{ chave: 'main', payload, atualizado_em: new Date().toISOString() }])
+    });
+    if (!supa.ok) {
+      const err = await supa.text();
+      return res.status(500).json({ error: 'Supabase: ' + err });
+    }
+    console.log(`[import-cji3] ${rows.length} combinações, ${months.length} meses`);
+    res.json({ ok: true, rows: rows.length, months: months.length });
+  } catch (e) {
+    console.error('[import-cji3]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/cji3', async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/cji3_dados?chave=eq.main&select=payload,atualizado_em`, {
+      headers: { 'Authorization': `Bearer ${SUPA_SERVICE_KEY}`, 'apikey': SUPA_SERVICE_KEY }
+    });
+    const data = await r.json();
+    if (!data[0]) return res.status(404).json({ error: 'no data' });
+    res.json(data[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── COPPER PRICE PROXY ─────────────────────────────────────────
 // Busca cotação do cobre (HG=F) server-side para evitar CORS do browser
 app.get('/api/copper', async (req, res) => {

@@ -971,6 +971,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div class="sb-item" data-view="resumo" data-label="Resumo Sub PEP"><span class="ico">📋</span><span class="sb-label">Resumo Sub PEP<span class="sb-badge blue" id="nb-res">39</span></span></div>
     <div class="sb-item" data-view="dotacoes" data-label="Dotações"><span class="ico">📄</span><span class="sb-label">Dotações<span class="sb-badge orange" id="nb-det">56</span></span></div>
     <div class="sb-item" data-view="alertas" data-label="Capex Projetos"><span class="ico">📊</span><span class="sb-label">Capex Projetos<span class="sb-badge red" id="nb-alerta">8</span></span></div>
+    <div class="sb-item" data-view="cji3" data-label="CJI3 Tabela"><span class="ico">📋</span><span class="sb-label">CJI3 TABELA</span></div>
     <div class="sb-item" data-view="nova" data-label="Nova Dotação"><span class="ico">➕</span><span class="sb-label">Nova Dotação</span></div>
     <div class="sb-item" data-view="regularizar" data-label="Regularizar Saldo"><span class="ico">⚖️</span><span class="sb-label">Regularizar Saldo<span class="sb-badge red" id="nb-reg" style="display:none">!</span></span></div>
     <!-- SAÚDE CAPEX -->
@@ -1280,6 +1281,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="v-resumo" class="hidden"></div>
     <div id="v-dotacoes" class="hidden"></div>
     <div id="v-alertas" class="hidden"></div>
+    <div id="v-cji3" class="hidden"></div>
     <div id="v-regularizar" class="hidden"></div>
     <div id="v-nova" class="hidden"></div>
     <div id="v-saude-pep" class="hidden"></div>
@@ -1438,6 +1440,9 @@ function loadState(){
 
 // ─── MATERIAIS STATE ─────────────────────────────────────────────
 var STATE_MATERIAIS = JSON.parse(localStorage.getItem('mat_data') || '[]');
+var STATE_CJI3 = { months: [], rows: [] };
+var _cji3F = { year: 'Todos', ger: 'Todos', site: 'Todos', proj: 'Todos' };
+var _cji3Open = {}; // proj|wbs -> expanded bool
 var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
@@ -1530,6 +1535,16 @@ async function loadFromSupabase(){
         const {data:rsq,error:e6}=await supa.from('ref_squads').select('*');
         if(!e6&&rsq&&rsq.length>0){REF_SQUADS={};rsq.forEach(function(r){REF_SQUADS[r.pep]={squad:r.squad||'',lider:r.lider||'',planejador:r.planejador||''};});}
       } catch(e6){console.warn('[Sync] ref_squads:',e6);}
+    })(),
+
+    // CJI3
+    (async function(){
+      try {
+        const {data:cji3d,error:eCji3}=await supa.from('cji3_dados').select('payload').eq('chave','main').maybeSingle();
+        if(!eCji3&&cji3d&&cji3d.payload&&cji3d.payload.rows&&cji3d.payload.rows.length){
+          STATE_CJI3=cji3d.payload;
+        }
+      } catch(eCji3){console.warn('[Sync] cji3:',eCji3);}
     })(),
 
     // Materiais
@@ -1646,6 +1661,16 @@ function startRealtime(){
       })();
       var quemR=(payload.payload&&payload.payload.uploadedBy)||'admin';
       toast('👥 Referências atualizadas por '+quemR+' — dados recarregados','blue');
+    })
+    .on('broadcast', {event: 'cji3-updated'}, function(payload){
+      (async function(){
+        try{
+          var {data:cji3d}=await supa.from('cji3_dados').select('payload').eq('chave','main').maybeSingle();
+          if(cji3d&&cji3d.payload&&cji3d.payload.rows){STATE_CJI3=cji3d.payload;if(currentView==='cji3')renderCji3();}
+        }catch(e){console.warn('[Realtime] cji3-updated:',e);}
+      })();
+      var quemJ=(payload.payload&&payload.payload.uploadedBy)||'admin';
+      toast('📋 CJI3 atualizado por '+quemJ+' — dados recarregados','blue');
     })
     .on('broadcast', {event: 'mat-updated'}, function(payload){
       (async function(){
@@ -2125,6 +2150,7 @@ const VIEW_META={
   resumo:{title:'Resumo por Sub PEP',sub:'Controle acumulado por empresa e sub PEP'},
   dotacoes:{title:'Dotações — Detalhado',sub:'Registro completo de todas as dotações'},
   alertas:{title:'Capex Projetos',sub:'CAPEX · Contratado · Pago · Desvios'},
+  cji3:{title:'CJI3 Tabela',sub:'Execuções mensais por Projeto / WBS / Fornecedor'},
   regularizar:{title:'Regularizar Saldo',sub:'Divergências entre CAPEX medido e dotações abertas'},
   nova:{title:'Nova Dotação',sub:'Cadastrar nova dotação no sistema'},
   upload:{title:'Atualizar Bases',sub:'Importe as planilhas de Medido, CAPEX e PEP/Sub-PEP/Planejadores'},
@@ -2159,14 +2185,14 @@ function _syncBnav(id){
 function setView(id){
   currentView=id;
   _syncBnav(id);
-  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-velocidade','v-histograma'].forEach(v=>document.getElementById(v).classList.add('hidden'));
+  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-velocidade','v-histograma'].forEach(v=>document.getElementById(v).classList.add('hidden'));
   document.getElementById('v-'+id).classList.remove('hidden');
   // Lazy-load histograma iframe on first visit
   if(id==='histograma'){
     const fr=document.getElementById('histograma-frame');
     if(!fr.src||fr.src==='about:blank')fr.src='/histograma-eletro.html?embed=1';
   }
-  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','velocidade','histograma'].includes(id));
+  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','velocidade','histograma','cji3'].includes(id));
   if(id==='improdutividade'){
     var _mImp=VIEW_META['improdutividade'];
     var _ptImp=document.getElementById('page-title');if(_ptImp)_ptImp.textContent=_mImp.title;
@@ -2218,6 +2244,7 @@ function _renderNow(){
   if(currentView==='nova') renderFormNova();
   if(currentView==='upload') renderUpload();
   if(currentView==='materiais') renderMateriais();
+  if(currentView==='cji3') renderCji3();
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -7289,6 +7316,227 @@ function _matRowPasses(r, skip){
 function applyMatFilters(){ return STATE_MATERIAIS.filter(function(r){ return _matRowPasses(r, null); }); }
 function matSubset(skip)  { return STATE_MATERIAIS.filter(function(r){ return _matRowPasses(r, skip); }); }
 
+
+// ── CJI3 TABELA ─────────────────────────────────────────────────
+function renderCji3(){
+  var el=document.getElementById('v-cji3');
+  if(!el) return;
+  var data=STATE_CJI3;
+  var isAdmin=CURRENT_PERFIL&&CURRENT_PERFIL.role==='admin';
+
+  if(!data||!data.rows||!data.rows.length){
+    el.innerHTML='<div style="padding:32px;max-width:520px;margin:60px auto;text-align:center">'
+      +'<div style="font-size:48px;margin-bottom:16px">📋</div>'
+      +'<div style="font-size:18px;font-weight:700;color:#1e293b;margin-bottom:8px">Nenhum dado CJI3 importado</div>'
+      +(isAdmin
+        ?'<div style="font-size:13px;color:#64748b;margin-bottom:24px">Importe o arquivo <strong>BASE DE DADO MENSAL1.xlsx</strong> (aba "Export rev01").</div>'
+         +'<label style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:#1e3a5f;color:#fff;border-radius:8px;font-size:13px;font-weight:700">'
+         +'<input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleCji3Upload(this.files[0])">📂 Importar BASE DE DADO MENSAL1.xlsx</label>'
+        :'<div style="font-size:13px;color:#64748b">Aguarde o administrador importar os dados.</div>')
+      +'</div>';
+    return;
+  }
+
+  // Unique filter values
+  var years=[], gers=[], sites=[], projs=[];
+  data.months.forEach(function(m){ var y=m.split('-')[0]; if(!years.includes(y)) years.push(y); });
+  years.sort();
+  data.rows.forEach(function(r){
+    if(r.ger&&!gers.includes(r.ger)) gers.push(r.ger);
+    if(r.site&&!sites.includes(r.site)) sites.push(r.site);
+    if(r.proj&&!projs.includes(r.proj)) projs.push(r.proj);
+  });
+  gers.sort(); sites.sort(); projs.sort();
+
+  // Active filters
+  var fYear=_cji3F.year, fGer=_cji3F.ger, fSite=_cji3F.site, fProj=_cji3F.proj;
+
+  // Filtered months
+  var selMonths=fYear==='Todos'?data.months:data.months.filter(function(m){return m.startsWith(fYear+'-');});
+
+  // Group months by year for colspan header
+  var yearGroups={};
+  selMonths.forEach(function(m){ var y=m.split('-')[0]; yearGroups[y]=(yearGroups[y]||0)+1; });
+
+  // Filtered rows
+  var rows=data.rows.filter(function(r){
+    if(fGer!=='Todos'&&r.ger!==fGer) return false;
+    if(fSite!=='Todos'&&r.site!==fSite) return false;
+    if(fProj!=='Todos'&&r.proj!==fProj) return false;
+    return selMonths.some(function(m){return (r.v[m]||0)!==0;});
+  });
+
+  // Build proj→wbs→fornecedores hierarchy
+  var pmap={};
+  rows.forEach(function(r){
+    if(!pmap[r.proj]) pmap[r.proj]={pname:r.pname,wmap:{}};
+    if(!pmap[r.proj].wmap[r.wbs]) pmap[r.proj].wmap[r.wbs]={wname:r.wname,forns:[]};
+    pmap[r.proj].wmap[r.wbs].forns.push(r);
+  });
+  var projKeys=Object.keys(pmap).sort();
+
+  function fmtV(v){
+    if(!v||v===0) return '<span style="color:#cbd5e1">—</span>';
+    var neg=v<0; var abs=Math.abs(v);
+    var s='R$ '+abs.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    return neg?'<span style="color:#dc2626">-'+s+'</span>':s;
+  }
+  function sumRow(r){ return selMonths.reduce(function(a,m){return a+(r.v[m]||0);},0); }
+  function sumWbs(forns){ return forns.reduce(function(a,r){return a+sumRow(r);},0); }
+  function sumProj(wmap){ return Object.values(wmap).reduce(function(a,w){return a+sumWbs(w.forns);},0); }
+  function sumMonth(rlist,m){ return rlist.reduce(function(a,r){return a+(r.v[m]||0);},0); }
+  function grandTotal(m){ return rows.reduce(function(a,r){return a+(r.v[m]||0);},0); }
+
+  // Filter selects HTML
+  function sel(id,cur,opts,fn){
+    return '<select id="cji3-'+id+'" onchange="'+fn+'" style="border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;color:#1e3a5f;background:#fff;cursor:pointer">'
+      +'<option value="Todos"'+(cur==='Todos'?' selected':'')+'>'+(id==='year'?'Todos os anos':'Todos')+'</option>'
+      +opts.map(function(o){return '<option value="'+o+'"'+(cur===o?' selected':'')+'>'+(o||'—')+'</option>';}).join('')
+      +'</select>';
+  }
+
+  // Table rows
+  var trows='';
+  var grandTotCols=selMonths.map(function(){return 0;});
+  var grandTotRow=0;
+
+  projKeys.forEach(function(proj){
+    var pd=pmap[proj];
+    var pOpen=_cji3Open['p:'+proj]!==false;
+    var allProjRows=Object.values(pd.wmap).reduce(function(a,w){return a.concat(w.forns);},[]);
+    var pColTots=selMonths.map(function(m){return sumMonth(allProjRows,m);});
+    var pTot=pColTots.reduce(function(a,v){return a+v;},0);
+    pColTots.forEach(function(v,i){grandTotCols[i]+=v;});
+    grandTotRow+=pTot;
+
+    trows+='<tr style="background:#dbeafe;cursor:pointer" onclick="_cji3Toggle(\'p:'+proj+'\')">'
+      +'<td style="padding:7px 10px;font-weight:800;color:#1e3a5f;font-size:12px;white-space:nowrap">'
+      +'<span style="font-size:9px;margin-right:6px;color:#64748b">'+(pOpen?'▼':'▶')+'</span>'
+      +'<span style="background:#dbeafe;color:#1d4ed8;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;margin-right:6px">'+proj+'</span>'
+      +pd.pname+'</td>'
+      +pColTots.map(function(v){return '<td style="padding:7px 10px;text-align:right;font-size:11.5px;font-weight:700">'+fmtV(v)+'</td>';}).join('')
+      +'<td style="padding:7px 10px;text-align:right;font-size:11.5px;font-weight:800;background:#bfdbfe">'+fmtV(pTot)+'</td>'
+      +'</tr>';
+
+    if(!pOpen) return;
+
+    Object.keys(pd.wmap).sort().forEach(function(wbs){
+      var wd=pd.wmap[wbs];
+      var wOpen=_cji3Open['w:'+proj+'|'+wbs]!==false;
+      var wColTots=selMonths.map(function(m){return sumMonth(wd.forns,m);});
+      var wTot=wColTots.reduce(function(a,v){return a+v;},0);
+
+      trows+='<tr style="background:#eff6ff;cursor:pointer" onclick="_cji3Toggle(\'w:'+proj+'|'+wbs+'\')">'
+        +'<td style="padding:6px 10px 6px 28px;font-weight:700;color:#1e40af;font-size:11px;white-space:nowrap">'
+        +'<span style="font-size:8px;margin-right:6px;color:#94a3b8">'+(wOpen?'▼':'▶')+'</span>'
+        +'<span style="font-family:monospace">'+wbs+'</span>'
+        +(wd.wname?'<span style="color:#64748b;font-weight:400;margin-left:8px;font-size:10px">'+wd.wname+'</span>':'')
+        +'</td>'
+        +wColTots.map(function(v){return '<td style="padding:6px 10px;text-align:right;font-size:11px;font-weight:600">'+fmtV(v)+'</td>';}).join('')
+        +'<td style="padding:6px 10px;text-align:right;font-size:11px;font-weight:700;background:#dbeafe">'+fmtV(wTot)+'</td>'
+        +'</tr>';
+
+      if(!wOpen) return;
+
+      wd.forns.forEach(function(r,fi){
+        var fTot=sumRow(r);
+        trows+='<tr style="background:'+(fi%2===0?'#fff':'#f8fafc')+'">'
+          +'<td style="padding:5px 10px 5px 52px;color:#475569;font-size:11px;white-space:nowrap;max-width:320px;overflow:hidden;text-overflow:ellipsis" title="'+r.forn+'">'+r.forn+'</td>'
+          +selMonths.map(function(m){return '<td style="padding:5px 10px;text-align:right;font-size:11px">'+fmtV(r.v[m]||0)+'</td>';}).join('')
+          +'<td style="padding:5px 10px;text-align:right;font-size:11px;font-weight:600">'+fmtV(fTot)+'</td>'
+          +'</tr>';
+      });
+    });
+  });
+
+  // Grand total row
+  trows+='<tr style="background:#1e3a5f;color:#fff">'
+    +'<td style="padding:8px 10px;font-weight:800;font-size:12px">TOTAL GERAL</td>'
+    +grandTotCols.map(function(v){return '<td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:800">'+fmtV(v)+'</td>';}).join('')
+    +'<td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:800">'+fmtV(grandTotRow)+'</td>'
+    +'</tr>';
+
+  // Month colspan headers grouped by year
+  var yrHdr=Object.keys(yearGroups).sort().map(function(y){
+    return '<th colspan="'+yearGroups[y]+'" style="text-align:center;background:#16305a;font-size:10px;color:#93c5fd;letter-spacing:.5px;padding:6px">ANO FISCAL '+y+'</th>';
+  }).join('');
+
+  var updInfo=data.atualizado_em?('<span style="font-size:10px;color:#64748b">Atualizado: '+new Date(data.atualizado_em).toLocaleString('pt-BR')+'</span>'):'';
+
+  el.innerHTML='<div style="padding:16px;background:#eef2f7;min-height:100%">'
+    +'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden">'
+
+    // Header
+    +'<div style="padding:14px 18px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    +'<div><div style="font-size:13px;font-weight:800;color:#1e3a5f">📋 CJI3 — Execuções Mensais por Projeto / WBS / Fornecedor</div>'
+    +'<div style="font-size:11px;color:#64748b;margin-top:2px">Clique no ▶ para expandir • Valores em R$</div></div>'
+    +(isAdmin?'<label style="margin-left:auto;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#1e3a5f;color:#fff;border-radius:7px;font-size:11px;font-weight:700">'
+      +'<input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleCji3Upload(this.files[0])">⬆ Atualizar arquivo</label>'
+      :('<div style="margin-left:auto">'+updInfo+'</div>'))
+    +'</div>'
+
+    // Filters
+    +'<div style="padding:10px 18px;border-bottom:1px solid #e2e8f0;background:#f8fafc;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'
+    +'<span style="font-size:11px;color:#64748b;font-weight:600">FILTROS:</span>'
+    +'<label style="font-size:11px;color:#64748b">Ano Fiscal '+sel('year',fYear,years,'_cji3SetF("year",this.value)')+'</label>'
+    +'<label style="font-size:11px;color:#64748b">Gerência '+sel('ger',fGer,gers,'_cji3SetF("ger",this.value)')+'</label>'
+    +'<label style="font-size:11px;color:#64748b">Site '+sel('site',fSite,sites,'_cji3SetF("site",this.value)')+'</label>'
+    +'<label style="font-size:11px;color:#64748b">Projeto '+sel('proj',fProj,projs,'_cji3SetF("proj",this.value)')+'</label>'
+    +(isAdmin?'<span style="margin-left:auto">'+updInfo+'</span>':'')
+    +'</div>'
+
+    // Table
+    +'<div style="overflow-x:auto">'
+    +'<table style="width:100%;border-collapse:collapse;min-width:700px">'
+    +'<thead>'
+    +'<tr><th style="background:#1e3a5f;color:#fff;padding:8px 10px;text-align:left;font-size:11px;min-width:260px">PROJETO / WBS / FORNECEDOR</th>'
+    +yrHdr
+    +'<th style="background:#0f2040;color:#fff;padding:8px 10px;text-align:right;font-size:11px;white-space:nowrap;min-width:90px" rowspan="2">TOTAL GERAL</th></tr>'
+    +'<tr>'
+    +'<th style="background:#1e3a5f"></th>'
+    +selMonths.map(function(m){var mo=m.split('-')[1];return '<th style="background:#1e3a5f;color:#cbd5e1;padding:6px 10px;text-align:right;font-size:10px;font-weight:700;min-width:80px;white-space:nowrap">'+mo+'</th>';}).join('')
+    +'</tr>'
+    +'</thead>'
+    +'<tbody>'+trows+'</tbody>'
+    +'</table>'
+    +'</div>'
+    +'</div></div>';
+}
+
+function _cji3Toggle(key){
+  _cji3Open[key]=(_cji3Open[key]===false)?true:false;
+  renderCji3();
+}
+function _cji3SetF(k,v){ _cji3F[k]=v; renderCji3(); }
+
+function handleCji3Upload(file){
+  if(!file) return;
+  if(!file.name.match(/\.xlsx?$/i)){toast('Use arquivo .xlsx','red');return;}
+  if(!CURRENT_USER){toast('Você precisa estar logado','red');return;}
+  var reader=new FileReader();
+  reader.onload=async function(e){
+    var b64=btoa(String.fromCharCode.apply(null,new Uint8Array(e.target.result)));
+    toast('Processando CJI3... aguarde','blue');
+    try{
+      var resp=await fetch('/api/import-cji3',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+(CURRENT_USER.access_token||'')},
+        body:JSON.stringify({fileBase64:b64})
+      });
+      var result=await resp.json();
+      if(!resp.ok||result.error){toast('Erro: '+(result.error||'falha no servidor'),'red');return;}
+      // Recarrega do Supabase
+      var {data:cji3d}=await supa.from('cji3_dados').select('payload').eq('chave','main').maybeSingle();
+      if(cji3d&&cji3d.payload){STATE_CJI3=cji3d.payload;}
+      toast('CJI3 importado! '+result.rows+' combinações / '+result.months+' meses','green');
+      renderCji3();
+      if(_medidoSyncChannel&&CURRENT_USER){
+        _medidoSyncChannel.send({type:'broadcast',event:'cji3-updated',payload:{uploadedBy:CURRENT_USER.email}}).catch(function(e){console.warn('[Broadcast] cji3:',e);});
+      }
+    }catch(err){toast('Erro: '+err.message,'red');}
+  };
+  reader.readAsArrayBuffer(file);
+}
 
 function handleMateriaisUpload(file){
   if(!file) return;
