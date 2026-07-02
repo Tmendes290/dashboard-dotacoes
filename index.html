@@ -7513,27 +7513,69 @@ function handleCji3Upload(file){
   if(!file) return;
   if(!file.name.match(/\.xlsx?$/i)){toast('Use arquivo .xlsx','red');return;}
   if(!CURRENT_USER){toast('Você precisa estar logado','red');return;}
+  // Garante XLSX carregado
+  if(typeof XLSX==='undefined'){
+    toast('Carregando biblioteca...','blue');
+    var s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload=function(){handleCji3Upload(file);};
+    document.head.appendChild(s);
+    return;
+  }
   var reader=new FileReader();
   reader.onload=async function(e){
-    var b64=btoa(String.fromCharCode.apply(null,new Uint8Array(e.target.result)));
-    toast('Processando CJI3... aguarde','blue');
+    toast('Lendo arquivo grande — aguarde (pode levar até 1 minuto)...','blue');
     try{
-      var resp=await fetch('/api/import-cji3',{
+      // Parse client-side — arquivo 110MB, não pode ser enviado como base64
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var ws=wb.Sheets['Export rev01'];
+      if(!ws){toast('Aba "Export rev01" não encontrada.','red');return;}
+      var rawRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      var HDR=rawRows[1]||[];
+      var fi=function(n){return HDR.indexOf(n);};
+      var iSite=fi('Site'),iYear=fi('Fiscal Year'),iMonth=fi('Month');
+      var iProj=fi('Project'),iPName=fi('Project Name'),iWbs=fi('WBS Element');
+      var iVal=fi('Value In Object Currency'),iForn=fi('FORNECEDOR');
+      var iWName=fi('WBS NAME'),iGer=fi('GERÊNCIA');
+      if(iYear<0||iMonth<0||iProj<0||iVal<0){
+        toast('Colunas obrigatórias não encontradas na aba "Export rev01".','red');return;
+      }
+      var MO={JAN:1,FEV:2,MAR:3,ABR:4,MAI:5,JUN:6,JUL:7,AGO:8,SET:9,OUT:10,NOV:11,DEZ:12};
+      var monthSet=new Set(),map={};
+      for(var i=2;i<rawRows.length;i++){
+        var r=rawRows[i];
+        var proj=String(r[iProj]||'').trim(), wbs=String(r[iWbs]||'').trim();
+        if(!proj||!wbs) continue;
+        var val=parseFloat(r[iVal])||0; if(val===0) continue;
+        var year=String(r[iYear]||'').trim(), month=String(r[iMonth]||'').trim();
+        if(!year||!month) continue;
+        var mk=year+'-'+month; monthSet.add(mk);
+        var forn=String(r[iForn]||'').trim()||'—';
+        var key=proj+'|'+wbs+'|'+forn;
+        if(!map[key]) map[key]={proj,pname:String(r[iPName]||'').trim(),wbs,forn,ger:String(r[iGer]||'').trim(),site:String(r[iSite]||'').trim(),wname:String(r[iWName]||'').trim(),v:{}};
+        map[key].v[mk]=(map[key].v[mk]||0)+val;
+      }
+      var months=[...monthSet].sort(function(a,b){
+        var ya=a.split('-')[0],ma=a.split('-')[1],yb=b.split('-')[0],mb=b.split('-')[1];
+        return ya!==yb?parseInt(ya)-parseInt(yb):(MO[ma]||0)-(MO[mb]||0);
+      });
+      var rows=Object.values(map);
+      var payload={months,rows,atualizado_em:new Date().toISOString()};
+      toast('Salvando '+rows.length+' combinações no servidor...','blue');
+      var resp=await fetch('/api/save-cji3',{
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+(CURRENT_USER.access_token||'')},
-        body:JSON.stringify({fileBase64:b64})
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({payload})
       });
       var result=await resp.json();
-      if(!resp.ok||result.error){toast('Erro: '+(result.error||'falha no servidor'),'red');return;}
-      // Recarrega do Supabase
-      var {data:cji3d}=await supa.from('cji3_dados').select('payload').eq('chave','main').maybeSingle();
-      if(cji3d&&cji3d.payload){STATE_CJI3=cji3d.payload;}
-      toast('CJI3 importado! '+result.rows+' combinações / '+result.months+' meses','green');
+      if(!resp.ok||result.error){toast('Erro ao salvar: '+(result.error||'falha'),'red');return;}
+      STATE_CJI3=payload;
+      toast('CJI3 importado! '+rows.length+' combinações / '+months.length+' meses','green');
       renderCji3();
       if(_medidoSyncChannel&&CURRENT_USER){
         _medidoSyncChannel.send({type:'broadcast',event:'cji3-updated',payload:{uploadedBy:CURRENT_USER.email}}).catch(function(e){console.warn('[Broadcast] cji3:',e);});
       }
-    }catch(err){toast('Erro: '+err.message,'red');}
+    }catch(err){console.error('[CJI3]',err);toast('Erro: '+err.message,'red');}
   };
   reader.readAsArrayBuffer(file);
 }
