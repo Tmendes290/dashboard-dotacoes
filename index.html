@@ -1621,6 +1621,49 @@ function startRealtime(){
       var quem=(payload.payload&&payload.payload.uploadedBy)||'admin';
       toast('📊 Medido atualizado por '+quem+' — dados recarregados','blue');
     })
+    .on('broadcast', {event: 'capex-updated'}, function(payload){
+      (async function(){
+        try{
+          var {data:cpx}=await supa.from('capex').select('*');
+          if(cpx&&cpx.length>0){STATE.capex=cpx.map(function(c){return{pep:c.pep,empresa:c.empresa,grupo:c.grupo||'',capex:parseFloat(c.capex)||0,contratado:parseFloat(c.contratado)||0,pago:parseFloat(c.pago)||0,a_contratar:parseFloat(c.a_contratar)||0,a_pagar:parseFloat(c.a_pagar)||0};});try{localStorage.setItem('dot_capex',JSON.stringify(STATE.capex));}catch(e){}}
+          var {data:cpp}=await supa.from('capex_por_pep').select('*');
+          if(cpp&&cpp.length>0){STATE.capexPorPep={};cpp.forEach(function(c){STATE.capexPorPep[c.pep]=parseFloat(c.valor)||0;});try{localStorage.setItem('dot_capex_pep',JSON.stringify(STATE.capexPorPep));}catch(e){}}
+          render();
+        }catch(e){console.warn('[Realtime] capex-updated:',e);}
+      })();
+      var quemC=(payload.payload&&payload.payload.uploadedBy)||'admin';
+      toast('📊 CAPEX atualizado por '+quemC+' — dados recarregados','blue');
+    })
+    .on('broadcast', {event: 'refs-updated'}, function(payload){
+      (async function(){
+        try{
+          var {data:rwbs}=await supa.from('ref_wbs').select('*');
+          if(rwbs&&rwbs.length>0) REF_PEPS=rwbs.map(function(r){return[r.wbs,r.descricao||'',r.projeto||''];});
+          var {data:rsq}=await supa.from('ref_squads').select('*');
+          if(rsq&&rsq.length>0){REF_SQUADS={};rsq.forEach(function(r){REF_SQUADS[r.pep]={squad:r.squad||'',lider:r.lider||'',planejador:r.planejador||''};});}
+          populateFilters(); render();
+        }catch(e){console.warn('[Realtime] refs-updated:',e);}
+      })();
+      var quemR=(payload.payload&&payload.payload.uploadedBy)||'admin';
+      toast('👥 Referências atualizadas por '+quemR+' — dados recarregados','blue');
+    })
+    .on('broadcast', {event: 'mat-updated'}, function(payload){
+      (async function(){
+        try{
+          var {data:matCfg}=await supa.from('mat_config').select('*').eq('id',1).maybeSingle();
+          if(matCfg&&matCfg.data){
+            STATE_MATERIAIS=matCfg.data;
+            try{localStorage.setItem('mat_data',JSON.stringify(matCfg.data));}catch(e){}
+            var nbMat=document.getElementById('nb-mat');
+            if(nbMat&&STATE_MATERIAIS.length){nbMat.textContent=STATE_MATERIAIS.length;nbMat.style.display='inline-flex';}
+            var vMat=document.getElementById('v-materiais');
+            if(vMat&&!vMat.classList.contains('hidden')) renderMateriais();
+          }
+        }catch(e){console.warn('[Realtime] mat-updated:',e);}
+      })();
+      var quemM=(payload.payload&&payload.payload.uploadedBy)||'admin';
+      toast('📦 Materiais atualizados por '+quemM+' — dados recarregados','blue');
+    })
     .subscribe(function(s){ console.log('[Realtime] medido-sync:', s); });
 
   // Recarrega medido ao voltar para a aba após 5+ minutos ausente
@@ -5327,6 +5370,9 @@ function handleCapexUpload(file){
         toast('⚠ CAPEX importado mas NÃO sincronizado com o servidor ('+_cpxSyncErr+'). Vai reverter ao recarregar a página!','red');
       } else {
         toast('CAPEX importado e sincronizado! '+capexData.length+' contratos. '+divs.length+' divergência(s).', divs.length>0?'red':'green');
+        if(_medidoSyncChannel&&CURRENT_USER){
+          _medidoSyncChannel.send({type:'broadcast',event:'capex-updated',payload:{uploadedBy:CURRENT_USER.email}}).catch(function(e){console.warn('[Broadcast] capex:',e);});
+        }
       }
       setView('regularizar');
     }catch(err){
@@ -5412,6 +5458,9 @@ async function handlePepSquadUpload(file){
       }
       populateFilters(); render();
       toast('✔ '+novoPeps+' PEPs e '+novoSquads+' vínculos salvos no Supabase!','green');
+      if(_medidoSyncChannel&&CURRENT_USER){
+        _medidoSyncChannel.send({type:'broadcast',event:'refs-updated',payload:{uploadedBy:CURRENT_USER.email}}).catch(function(e){console.warn('[Broadcast] refs:',e);});
+      }
       renderUpload();
     }catch(err){
       console.error(err);
@@ -5514,6 +5563,9 @@ async function handleWbsSquadUpload(file){
 
       populateFilters(); render();
       toast('✔ '+wbsCount+' WBS e '+sqCount+' vínculos salvos!','green');
+      if(_medidoSyncChannel&&CURRENT_USER){
+        _medidoSyncChannel.send({type:'broadcast',event:'refs-updated',payload:{uploadedBy:CURRENT_USER.email}}).catch(function(e){console.warn('[Broadcast] refs:',e);});
+      }
       renderUpload();
     }catch(err){
       console.error(err);
@@ -7379,6 +7431,9 @@ function handleMateriaisUpload(file){
       var nb = document.getElementById('nb-mat');
       if(nb){ nb.textContent = merged.length; nb.style.display = 'inline-flex'; }
       toast('✔ ' + merged.length + ' itens importados!', 'green');
+      if(_medidoSyncChannel&&CURRENT_USER){
+        _medidoSyncChannel.send({type:'broadcast',event:'mat-updated',payload:{uploadedBy:CURRENT_USER.email}}).catch(function(e){console.warn('[Broadcast] mat:',e);});
+      }
       renderMateriais();
     } catch(err){
       console.error('Erro ao processar MATERIAIS.xlsx:', err);
