@@ -7350,20 +7350,13 @@ function renderCji3(){
     return;
   }
 
-  // Unique filter options
-  var allYears=[], allGers=[], allSites=[], allProjs=[], allForns=[];
-  data.months.forEach(function(m){ var y=m.split('-')[0]; if(!allYears.includes(y)) allYears.push(y); });
-  allYears.sort();
-  data.rows.forEach(function(r){
-    if(r.ger&&!allGers.includes(r.ger)) allGers.push(r.ger);
-    if(r.site&&!allSites.includes(r.site)) allSites.push(r.site);
-    if(r.proj&&!allProjs.includes(r.proj)) allProjs.push(r.proj);
-    if(r.forn&&!allForns.includes(r.forn)) allForns.push(r.forn);
-  });
-  allGers.sort(); allSites.sort(); allProjs.sort(); allForns.sort();
-
   // Active filters (empty array = todos)
   var fYears=_cji3F.years, fGers=_cji3F.gers, fSites=_cji3F.sites, fProjs=_cji3F.projs, fForns=_cji3F.forns;
+
+  // Anos disponíveis (sempre de tudo)
+  var allYears=[];
+  data.months.forEach(function(m){ var y=m.split('-')[0]; if(!allYears.includes(y)) allYears.push(y); });
+  allYears.sort();
 
   // Filtered months
   var selMonths=fYears.length
@@ -7374,12 +7367,30 @@ function renderCji3(){
   var yearGroups={};
   selMonths.forEach(function(m){ var y=m.split('-')[0]; yearGroups[y]=(yearGroups[y]||0)+1; });
 
-  // Filtered rows
+  // Helper: filtra rows excluindo um campo específico (para cascata)
+  function rowsExcept(skip){
+    return data.rows.filter(function(r){
+      if(skip!=='gers'  && fGers.length  && !fGers.includes(r.ger))   return false;
+      if(skip!=='sites' && fSites.length && !fSites.includes(r.site))  return false;
+      if(skip!=='projs' && fProjs.length && !fProjs.includes(r.proj))  return false;
+      if(skip!=='forns' && fForns.length && !fForns.includes(r.forn))  return false;
+      return selMonths.some(function(m){return (r.v[m]||0)!==0;});
+    });
+  }
+  function uniq(arr,fn){ var s=[]; arr.forEach(function(r){var v=fn(r);if(v&&!s.includes(v))s.push(v);}); return s.sort(); }
+
+  // Opções cascateadas: cada dropdown mostra só o que existe dado os outros filtros ativos
+  var allGers  = uniq(rowsExcept('gers'),  function(r){return r.ger;});
+  var allSites = uniq(rowsExcept('sites'), function(r){return r.site;});
+  var allProjs = uniq(rowsExcept('projs'), function(r){return r.proj;});
+  var allForns = uniq(rowsExcept('forns'), function(r){return r.forn;});
+
+  // Filtered rows (todos os filtros ativos)
   var rows=data.rows.filter(function(r){
-    if(fGers.length&&!fGers.includes(r.ger)) return false;
-    if(fSites.length&&!fSites.includes(r.site)) return false;
-    if(fProjs.length&&!fProjs.includes(r.proj)) return false;
-    if(fForns.length&&!fForns.includes(r.forn)) return false;
+    if(fGers.length  && !fGers.includes(r.ger))   return false;
+    if(fSites.length && !fSites.includes(r.site))  return false;
+    if(fProjs.length && !fProjs.includes(r.proj))  return false;
+    if(fForns.length && !fForns.includes(r.forn))  return false;
     return selMonths.some(function(m){return (r.v[m]||0)!==0;});
   });
 
@@ -7497,8 +7508,8 @@ function renderCji3(){
     +'<div style="padding:10px 18px;border-bottom:1px solid #e2e8f0;background:#f8fafc;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
     +'<span style="font-size:11px;color:#64748b;font-weight:600;margin-right:4px">FILTROS:</span>'
     +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Ano '+msWrap('ms-cji3-years','Todos os anos')+'</label>'
-    +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Gerência '+msWrap('ms-cji3-gers','Todos')+'</label>'
-    +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Site '+msWrap('ms-cji3-sites','Todos')+'</label>'
+    +(allGers.length?'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Gerência '+msWrap('ms-cji3-gers','Todos')+'</label>':'')
+    +(allSites.length?'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Site '+msWrap('ms-cji3-sites','Todos')+'</label>':'')
     +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Projeto '+msWrap('ms-cji3-projs','Todos')+'</label>'
     +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Empresa '+msWrap('ms-cji3-forns','Todos')+'</label>'
     +(hasFilter?'<button onclick="_cji3ClearFilters()" style="font-size:11px;padding:5px 12px;border:1px solid #ef4444;background:#fff;color:#ef4444;border-radius:6px;cursor:pointer;font-weight:700;white-space:nowrap">✕ Limpar filtros</button>':'')
@@ -7523,8 +7534,8 @@ function renderCji3(){
 
   // Inicializa ms-drops após o innerHTML ser setado
   buildMsDrop('ms-cji3-years', allYears, fYears, null);
-  buildMsDrop('ms-cji3-gers',  allGers,  fGers,  null);
-  buildMsDrop('ms-cji3-sites', allSites, fSites, null);
+  if(allGers.length)  buildMsDrop('ms-cji3-gers',  allGers,  fGers,  null);
+  if(allSites.length) buildMsDrop('ms-cji3-sites', allSites, fSites, null);
   buildMsDrop('ms-cji3-projs', allProjs, fProjs, null);
   buildMsDrop('ms-cji3-forns', allForns, fForns, null);
 }
