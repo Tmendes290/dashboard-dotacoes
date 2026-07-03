@@ -4539,7 +4539,8 @@ function onMsChange(id){
   if(id.startsWith('ms-cji3-')){
     var cji3Key=id.replace('ms-cji3-','');
     _cji3F[cji3Key]=selected;
-    renderCji3();
+    clearTimeout(_cji3RenderT);
+    _cji3RenderT=setTimeout(renderCji3, 200);
     return;
   }
   if(id.startsWith('ms-mat-')){
@@ -7401,7 +7402,7 @@ function renderCji3(){
 
   projKeys.forEach(function(proj){
     var pd=pmap[proj];
-    var pOpen=_cji3Open['p:'+proj]!==false;
+    var pOpen=_cji3Open['p:'+proj]===true;
     var allPR=Object.values(pd.wmap).reduce(function(a,w){return a.concat(w.forns);},[]);
     var pCols=selMonths.map(function(m){return sumMonth(allPR,m);});
     var pTot=pCols.reduce(function(a,v){return a+v;},0);
@@ -7419,7 +7420,7 @@ function renderCji3(){
 
     Object.keys(pd.wmap).sort().forEach(function(wbs){
       var wd=pd.wmap[wbs];
-      var wOpen=_cji3Open['w:'+proj+'|'+wbs]!==false;
+      var wOpen=_cji3Open['w:'+proj+'|'+wbs]===true;
       var wCols=selMonths.map(function(m){return sumMonth(wd.forns,m);});
       var wTot=wCols.reduce(function(a,v){return a+v;},0);
 
@@ -7469,7 +7470,11 @@ function renderCji3(){
     // Cabeçalho
     +'<div style="padding:14px 18px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
     +'<div><div style="font-size:13px;font-weight:800;color:#1e3a5f">📋 CJI3 — Execuções Mensais por Projeto / WBS / Fornecedor</div>'
-    +'<div style="font-size:11px;color:#64748b;margin-top:2px">Clique no ▶ para expandir • Valores em R$</div></div>'
+    +'<div style="font-size:11px;color:#64748b;margin-top:2px">Clique no ▶ para expandir • Valores em R$ • '+projKeys.length+' projetos'+(rows.length!==data.rows.length?' (filtrado)':'')+'</div></div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<button onclick="_cji3ExpandAll(true)" style="font-size:10px;padding:4px 10px;border:1px solid #1e3a5f;background:#fff;color:#1e3a5f;border-radius:5px;cursor:pointer;font-weight:600">▼ Expandir tudo</button>'
+    +'<button onclick="_cji3ExpandAll(false)" style="font-size:10px;padding:4px 10px;border:1px solid #e2e8f0;background:#fff;color:#64748b;border-radius:5px;cursor:pointer;font-weight:600">▲ Recolher tudo</button>'
+    +'</div>'
     +(isAdmin?'<label style="margin-left:auto;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#1e3a5f;color:#fff;border-radius:7px;font-size:11px;font-weight:700">'
       +'<input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleCji3Upload(this.files[0])">⬆ Atualizar arquivo</label>'
       :'<span style="margin-left:auto;font-size:10px;color:#64748b">'+updInfo+'</span>')
@@ -7507,8 +7512,18 @@ function renderCji3(){
   buildMsDrop('ms-cji3-projs', allProjs, fProjs, null);
 }
 
+var _cji3RenderT=null;
 function _cji3Toggle(key){
-  _cji3Open[key]=(_cji3Open[key]===false)?true:false;
+  _cji3Open[key]=(_cji3Open[key]===true)?false:true;
+  renderCji3();
+}
+function _cji3ExpandAll(open){
+  _cji3Open={};
+  if(!STATE_CJI3||!STATE_CJI3.rows) return;
+  STATE_CJI3.rows.forEach(function(r){
+    _cji3Open['p:'+r.proj]=open;
+    _cji3Open['w:'+r.proj+'|'+r.wbs]=open;
+  });
   renderCji3();
 }
 
