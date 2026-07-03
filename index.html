@@ -1441,7 +1441,7 @@ function loadState(){
 // ─── MATERIAIS STATE ─────────────────────────────────────────────
 var STATE_MATERIAIS = JSON.parse(localStorage.getItem('mat_data') || '[]');
 var STATE_CJI3 = { months: [], rows: [] };
-var _cji3F = { years: [], gers: [], sites: [], projs: [] }; // empty array = todos
+var _cji3F = { years: [], gers: [], sites: [], projs: [], forns: [] }; // empty array = todos
 var _cji3Open = {}; // proj|wbs -> expanded bool
 var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
 var MAT_TAB = 'dashboard';
@@ -4602,7 +4602,8 @@ function updateMsLabel(id, selected){
     'ms-cji3-years': 'Todos os anos',
     'ms-cji3-gers': 'Todos',
     'ms-cji3-sites': 'Todos',
-    'ms-cji3-projs': 'Todos'
+    'ms-cji3-projs': 'Todos',
+    'ms-cji3-forns': 'Todos'
   };
   if(selected.length === 0){
     label.textContent = defaults[id] || 'Todos';
@@ -7349,18 +7350,19 @@ function renderCji3(){
   }
 
   // Unique filter options
-  var allYears=[], allGers=[], allSites=[], allProjs=[];
+  var allYears=[], allGers=[], allSites=[], allProjs=[], allForns=[];
   data.months.forEach(function(m){ var y=m.split('-')[0]; if(!allYears.includes(y)) allYears.push(y); });
   allYears.sort();
   data.rows.forEach(function(r){
     if(r.ger&&!allGers.includes(r.ger)) allGers.push(r.ger);
     if(r.site&&!allSites.includes(r.site)) allSites.push(r.site);
     if(r.proj&&!allProjs.includes(r.proj)) allProjs.push(r.proj);
+    if(r.forn&&!allForns.includes(r.forn)) allForns.push(r.forn);
   });
-  allGers.sort(); allSites.sort(); allProjs.sort();
+  allGers.sort(); allSites.sort(); allProjs.sort(); allForns.sort();
 
   // Active filters (empty array = todos)
-  var fYears=_cji3F.years, fGers=_cji3F.gers, fSites=_cji3F.sites, fProjs=_cji3F.projs;
+  var fYears=_cji3F.years, fGers=_cji3F.gers, fSites=_cji3F.sites, fProjs=_cji3F.projs, fForns=_cji3F.forns;
 
   // Filtered months
   var selMonths=fYears.length
@@ -7376,8 +7378,12 @@ function renderCji3(){
     if(fGers.length&&!fGers.includes(r.ger)) return false;
     if(fSites.length&&!fSites.includes(r.site)) return false;
     if(fProjs.length&&!fProjs.includes(r.proj)) return false;
+    if(fForns.length&&!fForns.includes(r.forn)) return false;
     return selMonths.some(function(m){return (r.v[m]||0)!==0;});
   });
+
+  // Indicador de filtros ativos
+  var hasFilter=fYears.length||fGers.length||fSites.length||fProjs.length||fForns.length;
 
   // Build proj→wbs→forns hierarchy
   var pmap={};
@@ -7493,6 +7499,8 @@ function renderCji3(){
     +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Gerência '+msWrap('ms-cji3-gers','Todos')+'</label>'
     +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Site '+msWrap('ms-cji3-sites','Todos')+'</label>'
     +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Projeto '+msWrap('ms-cji3-projs','Todos')+'</label>'
+    +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Empresa '+msWrap('ms-cji3-forns','Todos')+'</label>'
+    +(hasFilter?'<button onclick="_cji3ClearFilters()" style="font-size:11px;padding:5px 12px;border:1px solid #ef4444;background:#fff;color:#ef4444;border-radius:6px;cursor:pointer;font-weight:700;white-space:nowrap">✕ Limpar filtros</button>':'')
     +(isAdmin?'<span style="margin-left:auto;font-size:10px;color:#64748b">'+updInfo+'</span>':'')
     +'</div>'
     // Tabela com scroll horizontal+vertical; thead sticky por posição
@@ -7517,6 +7525,7 @@ function renderCji3(){
   buildMsDrop('ms-cji3-gers',  allGers,  fGers,  null);
   buildMsDrop('ms-cji3-sites', allSites, fSites, null);
   buildMsDrop('ms-cji3-projs', allProjs, fProjs, null);
+  buildMsDrop('ms-cji3-forns', allForns, fForns, null);
 }
 
 var _cji3RenderT=null;
@@ -7531,6 +7540,10 @@ function _cji3ExpandAll(open){
     _cji3Open['p:'+r.proj]=open;
     _cji3Open['w:'+r.proj+'|'+r.wbs]=open;
   });
+  renderCji3();
+}
+function _cji3ClearFilters(){
+  _cji3F={years:[],gers:[],sites:[],projs:[],forns:[]};
   renderCji3();
 }
 
