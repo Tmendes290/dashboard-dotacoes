@@ -4227,7 +4227,7 @@ function updateUserBadge(){
   var _perms = (CURRENT_PERFIL.permissoes && CURRENT_PERFIL.permissoes.length) ? CURRENT_PERFIL.permissoes : ['overview'];
   document.body.classList.toggle("is-imp", isAdmin || _perms.indexOf('improdutividade') >= 0);
   if(!isAdmin){
-    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','velocidade'];
+    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','velocidade','cji3'];
     document.querySelectorAll('.sb-nav .sb-item').forEach(function(item){
       if(item.classList.contains('admin-only')||item.classList.contains('imp-only')) return;
       var v=item.dataset.view; if(!v||_permViews.indexOf(v)<0) return;
@@ -6162,7 +6162,8 @@ function renderUsuariosHTML(el, usuarios, bloqueados){
         {v:'overview',l:'Visão Geral'},{v:'resumo',l:'Resumo Sub PEP'},{v:'dotacoes',l:'Dotações'},
         {v:'alertas',l:'Capex Projetos'},{v:'nova',l:'Nova Dotação'},{v:'regularizar',l:'Regularizar Saldo'},
         {v:'analytics',l:'Dashboard'},{v:'saude-pep',l:'Saúde do PEP'},{v:'materiais',l:'Materiais'},
-        {v:'improdutividade',l:'Produtividade'},{v:'velocidade',l:'Telemetria'}
+        {v:'improdutividade',l:'Produtividade'},{v:'velocidade',l:'Telemetria'},
+        {v:'cji3',l:'CJI3 Tabela'}
       ];
       var _uPerms = u.permissoes || ['overview'];
       html += '<div style="margin-top:10px;border-top:1px solid #f1f5f9;padding-top:10px">';
