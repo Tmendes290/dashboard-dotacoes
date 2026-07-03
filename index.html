@@ -4598,7 +4598,11 @@ function updateMsLabel(id, selected){
     'ms-imp-squad': 'Todos',
     'ms-imp-mes': 'Todos',
     'ms-imp-semana': 'Todas',
-    'ms-imp-dias': 'Todos'
+    'ms-imp-dias': 'Todos',
+    'ms-cji3-years': 'Todos os anos',
+    'ms-cji3-gers': 'Todos',
+    'ms-cji3-sites': 'Todos',
+    'ms-cji3-projs': 'Todos'
   };
   if(selected.length === 0){
     label.textContent = defaults[id] || 'Todos';
@@ -7457,11 +7461,14 @@ function renderCji3(){
 
   var updInfo=data.atualizado_em?'Atualizado: '+new Date(data.atualizado_em).toLocaleString('pt-BR'):'';
 
-  // ms-drop HTML para cada filtro
-  function msWrap(id,label){
-    return '<div class="ms-wrap" id="'+id+'-wrap" style="position:relative">'
-      +'<div class="ms-input" id="'+id+'-label" onclick="toggleMs(\''+id+'\')" style="font-size:11px;padding:4px 24px 4px 8px;min-width:100px">'+label+'</div>'
-      +'<div class="ms-drop hidden" id="'+id+'-drop" style="min-width:200px"></div>'
+  // ms-drop HTML para cada filtro (padrão idêntico ao restante do app)
+  function msWrap(id,defaultLabel){
+    return '<div class="ms-wrap" id="'+id+'">'
+      +'<div class="ms-input" onclick="toggleMs(\''+id+'\')" style="font-size:11px;min-width:110px;padding:5px 8px">'
+      +'<span class="ms-label" id="'+id+'-label">'+defaultLabel+'</span>'
+      +'<span style="color:var(--muted);font-size:10px">▾</span>'
+      +'</div>'
+      +'<div class="ms-drop" id="'+id+'-drop" style="display:none"></div>'
       +'</div>';
   }
 
@@ -7482,10 +7489,10 @@ function renderCji3(){
     // Filtros ms-drop
     +'<div style="padding:10px 18px;border-bottom:1px solid #e2e8f0;background:#f8fafc;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
     +'<span style="font-size:11px;color:#64748b;font-weight:600;margin-right:4px">FILTROS:</span>'
-    +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Ano '+msWrap('ms-cji3-years',fYears.length?fYears.join(', '):'Todos os anos')+'</label>'
-    +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Gerência '+msWrap('ms-cji3-gers',fGers.length?fGers.length+' selecionados':'Todos')+'</label>'
-    +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Site '+msWrap('ms-cji3-sites',fSites.length?fSites.join(', '):'Todos')+'</label>'
-    +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Projeto '+msWrap('ms-cji3-projs',fProjs.length?fProjs.length+' projetos':'Todos')+'</label>'
+    +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Ano '+msWrap('ms-cji3-years','Todos os anos')+'</label>'
+    +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Gerência '+msWrap('ms-cji3-gers','Todos')+'</label>'
+    +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Site '+msWrap('ms-cji3-sites','Todos')+'</label>'
+    +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Projeto '+msWrap('ms-cji3-projs','Todos')+'</label>'
     +(isAdmin?'<span style="margin-left:auto;font-size:10px;color:#64748b">'+updInfo+'</span>':'')
     +'</div>'
     // Tabela com overflow-x e a primeira coluna sticky
