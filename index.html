@@ -7495,17 +7495,17 @@ function renderCji3(){
     +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Projeto '+msWrap('ms-cji3-projs','Todos')+'</label>'
     +(isAdmin?'<span style="margin-left:auto;font-size:10px;color:#64748b">'+updInfo+'</span>':'')
     +'</div>'
-    // Tabela com overflow-x e a primeira coluna sticky
-    +'<div style="overflow-x:auto;overflow-y:visible">'
+    // Tabela com scroll horizontal+vertical; thead sticky por posição
+    +'<div style="overflow:auto;max-height:calc(100vh - 250px)">'
     +'<table style="width:100%;border-collapse:collapse;min-width:800px">'
     +'<thead>'
     +'<tr>'
-    +'<th rowspan="2" style="'+STK+'background:#1e3a5f;color:#fff;padding:8px 10px;text-align:left;font-size:11px;font-weight:700;min-width:280px;z-index:3">PROJETO / WBS / FORNECEDOR</th>'
-    +yrHdr
-    +'<th rowspan="2" style="background:#0f2040;color:#fff;padding:8px 10px;text-align:right;font-size:11px;font-weight:700;white-space:nowrap;min-width:100px">TOTAL GERAL</th>'
+    +'<th rowspan="2" style="'+STK+'top:0;background:#1e3a5f;color:#fff;padding:8px 10px;text-align:left;font-size:11px;font-weight:700;min-width:280px;z-index:5">PROJETO / WBS / FORNECEDOR</th>'
+    +yrHdr.replace(/style="/g,'style="position:sticky;top:0;z-index:3;')
+    +'<th rowspan="2" style="position:sticky;top:0;z-index:3;background:#0f2040;color:#fff;padding:8px 10px;text-align:right;font-size:11px;font-weight:700;white-space:nowrap;min-width:100px">TOTAL GERAL</th>'
     +'</tr>'
     +'<tr>'
-    +selMonths.map(function(m){var mo=m.split('-')[1];return '<th style="background:#1e3a5f;color:#cbd5e1;padding:6px 10px;text-align:right;font-size:10px;font-weight:700;min-width:85px;white-space:nowrap">'+mo+'</th>';}).join('')
+    +selMonths.map(function(m){var mo=m.split('-')[1];return '<th style="position:sticky;top:33px;z-index:3;background:#1e3a5f;color:#cbd5e1;padding:6px 10px;text-align:right;font-size:10px;font-weight:700;min-width:85px;white-space:nowrap">'+mo+'</th>';}).join('')
     +'</tr>'
     +'</thead>'
     +'<tbody>'+trows+'</tbody>'
