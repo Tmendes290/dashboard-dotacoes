@@ -9890,7 +9890,7 @@ function _impHorasDrillOpen(key,baseData){
     var alm=(d.almIniMin!==null&&d.almFimMin!==null)?Math.max(0,d.almFimMin-d.almIniMin):0;
     var hTrab=Math.max(0,d.terminoMin-d.inicioMin-alm);
     return Object.assign({},d,{_hTrab:hTrab,_alm:alm});
-  }).sort(function(a,b){return b._hTrab-a._hTrab;});
+  }).sort(function(a,b){return a._hTrab-b._hTrab;});
   if(!recs.length)return;
   var title=key;
   if(key.indexOf('-W')>=0){var wp=key.split('-W');title='Semana '+parseInt(wp[1])+' / '+wp[0];}
