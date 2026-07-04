@@ -9185,6 +9185,20 @@ function impChegadaSetPeriod(p,btn){
   btn.style.background='var(--sb)';btn.style.color='#fff';
   _impBuildChegadaChart();
 }
+function impCloseAderPanel(){
+  var panel=document.getElementById('evo-ader-panel');
+  if(panel)panel.style.display='none';
+  _IMP_ADER_SQUADS=[];
+}
+function impOpenAderPanel(squad){
+  _IMP_ADER_SQUADS=squad?[squad]:[];
+  var panel=document.getElementById('evo-ader-panel');
+  if(panel){panel.style.display='block';}
+  var sqLbl=document.getElementById('evo-ader-squad-lbl');
+  if(sqLbl){sqLbl.textContent=squad||'';sqLbl.style.display=squad?'inline-block':'none';}
+  impRenderAderenciaFiscais();
+  if(panel)panel.scrollIntoView({behavior:'smooth',block:'start'});
+}
 function impAderSetPeriod(p,btn){
   _IMP_ADER_PERIOD=p;
   document.querySelectorAll('.evo-ader-btn').forEach(function(b){b.style.background='var(--card)';b.style.color='var(--muted)';});
@@ -9348,7 +9362,7 @@ function impRenderAderSquads(){
   gridEl.innerHTML=sorted.map(function(s,i){
     var tc=sqTextColor(s.pct);var bg=sqBgColor(s.pct);var bd=sqBdColor(s.pct);var sc=sqSolidColor(s.pct);var lbl=sqLabel(s.pct);
     var rankHtml=i<3?'<span style="font-size:18px;line-height:1">'+medals[i]+'</span>':'<span style="font-size:13px;font-weight:800;color:#cbd5e1">'+(i+1)+'.</span>';
-    return'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px 14px;position:relative;overflow:hidden" onmouseover="this.style.boxShadow=\'0 6px 20px rgba(0,0,0,.1)\';this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.boxShadow=\'none\';this.style.transform=\'none\'">'
+    return'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px 14px;position:relative;overflow:hidden;cursor:pointer;transition:transform .15s,box-shadow .15s" onclick="impOpenAderPanel(\''+s.sq.replace(/'/g,"\\'")+'\')" onmouseover="this.style.boxShadow=\'0 6px 20px rgba(0,0,0,.1)\';this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.boxShadow=\'none\';this.style.transform=\'none\'">'
       +'<div style="position:absolute;top:0;left:0;right:0;height:5px;border-radius:12px 12px 0 0;background:'+sc+'"></div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;margin-top:2px">'+rankHtml+'<span style="font-size:30px;font-weight:900;line-height:1;color:'+tc+'">'+s.pct+'%</span></div>'
       +'<div style="font-size:11px;font-weight:700;color:#334155;line-height:1.35;margin-bottom:11px;min-height:30px">'+impEsc(s.sq)+'</div>'
@@ -9363,6 +9377,7 @@ function impRenderAderSquads(){
       +'<span style="font-size:10px;color:#94a3b8;font-weight:600">'+s.n+' fiscal'+(s.n>1?'is':'')+'</span>'
       +'<span style="font-size:9px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.3px;background:'+bg+';color:'+tc+'">'+lbl+'</span>'
       +'</div>'
+      +'<div style="text-align:center;margin-top:10px;font-size:9px;color:#94a3b8;font-weight:600;letter-spacing:.3px">Clique para ver fiscais</div>'
       +'</div>';
   }).join('');
   // Legenda
@@ -9624,7 +9639,10 @@ function impRenderEvolucao(){
     }).join('')+(atPend.length>8?'<div style="text-align:center;font-size:10px;color:var(--muted);padding-top:6px">+ '+(atPend.length-8)+' outros pendentes</div>':'');
     if(!visible.length) pendEl.innerHTML='<div style="font-size:11px;color:#16a34a;font-weight:600;text-align:center;padding:12px">✓ Todos os atrasos graves estão justificados!</div>';
   }
-  impRenderAderenciaFiscais();
+  // Só atualiza a tabela de aderência se o painel já estiver aberto
+  var _ap=document.getElementById('evo-ader-panel');
+  if(_ap&&_ap.style.display!=='none')impRenderAderenciaFiscais();
+  impRenderAderSquads();
 }
 
 function _impChegadaDrillOpen(key,baseData,refMin){
@@ -10793,15 +10811,17 @@ async function renderViewImprodutividade(){
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Média de horas trabalhadas por período</span><div style="font-size:11px;color:var(--muted);margin-top:2px">Término − Início − Almoço &nbsp;·&nbsp; Verde = atingiu 8h, vermelho = abaixo de 8h</div></div><div style="display:flex;gap:5px" id="horas-period-btns"><button onclick="impHorasSetPeriod(\'semana\',this)" class="horas-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impHorasSetPeriod(\'dia\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impHorasSetPeriod(\'mes\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div style="position:relative;height:220px"><canvas id="evo-chart-horas"></canvas></div>'
   +'</div>'
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px">'
+  +'<div id="evo-ader-panel" style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px;display:none">'
   +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">'
-  +'<div><span style="font-size:12px;font-weight:700;color:var(--text)">Aderência dos Fiscais</span>'
-  +'<span id="evo-ader-badge" style="margin-left:8px;font-size:10px;background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px;color:var(--muted)"></span></div>'
+  +'<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:700;color:var(--text)">Aderência dos Fiscais</span>'
+  +'<span id="evo-ader-badge" style="font-size:10px;background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px;color:var(--muted)"></span>'
+  +'<span id="evo-ader-squad-lbl" style="font-size:10px;font-weight:700;color:var(--sb);background:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;padding:2px 10px;display:none"></span></div>'
   +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
   +'<div class="ms-wrap" id="ms-ader-squad" style="min-width:160px"><div class="ms-input" onclick="toggleMs(\'ms-ader-squad\')"><span class="ms-label" id="ms-ader-squad-label">Todos</span><span>▾</span></div><div class="ms-drop" id="ms-ader-squad-drop" style="display:none"></div></div>'
   +'<div style="width:1px;height:20px;background:var(--bord)"></div>'
   +'<button onclick="impAderSetPeriod(\'semana\',this)" class="evo-ader-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button>'
   +'<button onclick="impAderSetPeriod(\'mes\',this)" class="evo-ader-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button>'
+  +'<button onclick="impCloseAderPanel()" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:#fef2f2;color:#dc2626;font-family:inherit">✕ Fechar</button>'
   +'</div></div>'
   +'<div id="evo-ader-table" style="overflow-x:auto"></div>'
   +'</div>'
