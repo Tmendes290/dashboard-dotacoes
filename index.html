@@ -9814,10 +9814,15 @@ function _impBuildHorasChart(){
     if(k.length===10){var p=k.split('-');var ds=_diasSem[new Date(k+'T12:00:00').getDay()];return ds+'\n'+p[2]+'/'+p[1];}
     var p=k.split('-');return['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][parseInt(p[1])-1]+'/'+p[0].slice(2);
   }
-  var meta=480;
+  var meta=420; // 07:00h em minutos
   var labels=grupos.map(function(g){return fmtK(g.key);});
   var vals=grupos.map(function(g){return Math.round(g.t/g.n);});
-  var bgs=vals.map(function(v){return v>=meta?'rgba(22,163,74,.75)':'rgba(239,68,68,.75)';});
+  function horasBg(v){
+    if(v>=420)return'rgba(22,163,74,.75)';   // >= 7h → verde
+    if(v>=360)return'rgba(234,179,8,.80)';   // >= 6h → amarelo
+    return'rgba(239,68,68,.75)';              // < 6h → vermelho
+  }
+  var bgs=vals.map(horasBg);
 
   if(_impEvoCharts.horas)_impEvoCharts.horas.destroy();
   var cv=document.getElementById('evo-chart-horas');
@@ -9827,13 +9832,14 @@ function _impBuildHorasChart(){
   _impEvoCharts.horas=new Chart(cv.getContext('2d'),{type:'bar',
     data:{labels:labels,datasets:[
       {label:'Méd. horas trab.',data:vals,backgroundColor:bgs,borderRadius:5,borderSkipped:false,order:2},
-      {type:'line',label:'Meta (8h)',data:labels.map(function(){return meta;}),borderColor:'#002F6C',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false,order:1}
+      {type:'line',label:'Meta (7h)',data:labels.map(function(){return meta;}),borderColor:'#002F6C',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false,order:1}
     ]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
-        if(ctx.datasetIndex===1)return' Meta: 08:00';
+        if(ctx.datasetIndex===1)return' Meta: 07:00';
         var v=ctx.raw,h=Math.floor(v/60),m=v%60;
-        return[' Média: '+String(h).padStart(2,'0')+'h'+String(m).padStart(2,'0'),' n='+grupos[ctx.dataIndex].n+' registros'];
+        var status=v>=420?'Ótimo':v>=360?'Atenção':'Crítico';
+        return[' Média: '+String(h).padStart(2,'0')+'h'+String(m).padStart(2,'0')+' ('+status+')',' n='+grupos[ctx.dataIndex].n+' registros'];
       }}}},
       scales:{
         y:{min:yMin,max:yMax,ticks:{callback:function(v){var h=Math.floor(v/60),m=v%60;return String(h).padStart(2,'0')+'h'+String(m).padStart(2,'0');},font:{size:10}},grid:{color:'#f1f5f9'}},
@@ -10808,7 +10814,7 @@ async function renderViewImprodutividade(){
   +'<div style="position:relative;height:220px"><canvas id="evo-chart-chegada"></canvas></div>'
   +'</div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px">'
-  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Média de horas trabalhadas por período</span><div style="font-size:11px;color:var(--muted);margin-top:2px">Término − Início − Almoço &nbsp;·&nbsp; Verde = atingiu 8h, vermelho = abaixo de 8h</div></div><div style="display:flex;gap:5px" id="horas-period-btns"><button onclick="impHorasSetPeriod(\'semana\',this)" class="horas-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impHorasSetPeriod(\'dia\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impHorasSetPeriod(\'mes\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Média de horas trabalhadas por período</span><div style="font-size:11px;color:var(--muted);margin-top:2px">Término − Início − Almoço &nbsp;·&nbsp; <span style="color:#16a34a;font-weight:700">Verde ≥ 7h</span> &nbsp;·&nbsp; <span style="color:#b45309;font-weight:700">Amarelo 6–7h</span> &nbsp;·&nbsp; <span style="color:#dc2626;font-weight:700">Vermelho &lt; 6h</span></div></div><div style="display:flex;gap:5px" id="horas-period-btns"><button onclick="impHorasSetPeriod(\'semana\',this)" class="horas-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impHorasSetPeriod(\'dia\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impHorasSetPeriod(\'mes\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div style="position:relative;height:220px"><canvas id="evo-chart-horas"></canvas></div>'
   +'</div>'
   +'<div id="evo-ader-panel" style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px;display:none">'
