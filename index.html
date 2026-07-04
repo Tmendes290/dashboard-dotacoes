@@ -8362,11 +8362,12 @@ function impBuildProjSquad(){
 function _impNormSquad(sq){
   if(!sq)return sq;
   if(sq.toUpperCase().indexOf('TELAMENTO')>=0)return'MINA';
-  return sq;
+  return sq.toUpperCase();
 }
 function impGetSquadByFiscal(nome){
   if(!nome) return '';
-  return REF_FISCAIS[nome.trim()] || '';
+  var sq=REF_FISCAIS[nome.trim()]||'';
+  return sq?_impNormSquad(sq):'';
 }
 function impGetSquad(sap){
   if(!sap) return{squad:'',lider:'',planejador:''};
