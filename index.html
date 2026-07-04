@@ -1441,7 +1441,7 @@ function loadState(){
 // ─── MATERIAIS STATE ─────────────────────────────────────────────
 var STATE_MATERIAIS = JSON.parse(localStorage.getItem('mat_data') || '[]');
 var STATE_CJI3 = { months: [], rows: [] };
-var _cji3F = { years: [], gers: [], sites: [], projs: [], forns: [] }; // empty array = todos
+var _cji3F = { years: [], months: [], gers: [], sites: [], projs: [], forns: [] }; // empty array = todos
 var _cji3Open = {}; // proj|wbs -> expanded bool
 var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
 var MAT_TAB = 'dashboard';
@@ -7351,17 +7351,24 @@ function renderCji3(){
   }
 
   // Active filters (empty array = todos)
-  var fYears=_cji3F.years, fGers=_cji3F.gers, fSites=_cji3F.sites, fProjs=_cji3F.projs, fForns=_cji3F.forns;
+  var fYears=_cji3F.years, fMonths=_cji3F.months, fGers=_cji3F.gers, fSites=_cji3F.sites, fProjs=_cji3F.projs, fForns=_cji3F.forns;
 
   // Anos disponíveis (sempre de tudo)
   var allYears=[];
   data.months.forEach(function(m){ var y=m.split('-')[0]; if(!allYears.includes(y)) allYears.push(y); });
   allYears.sort();
 
-  // Filtered months
+  // Meses disponíveis em ordem calendário (sempre de tudo, independente do ano)
+  var _mOrder=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+  var allMonths=[];
+  data.months.forEach(function(m){ var mo=m.split('-')[1]; if(!allMonths.includes(mo)) allMonths.push(mo); });
+  allMonths.sort(function(a,b){ return _mOrder.indexOf(a)-_mOrder.indexOf(b); });
+
+  // Filtered months (primeiro por ano, depois por mês)
   var selMonths=fYears.length
     ? data.months.filter(function(m){return fYears.includes(m.split('-')[0]);})
     : data.months;
+  if(fMonths.length) selMonths=selMonths.filter(function(m){return fMonths.includes(m.split('-')[1]);});
 
   // Group months by year for colspan header
   var yearGroups={};
@@ -7395,7 +7402,7 @@ function renderCji3(){
   });
 
   // Indicador de filtros ativos
-  var hasFilter=fYears.length||fGers.length||fSites.length||fProjs.length||fForns.length;
+  var hasFilter=fYears.length||fMonths.length||fGers.length||fSites.length||fProjs.length||fForns.length;
 
   // Build proj→wbs→forns hierarchy
   var pmap={};
@@ -7508,6 +7515,7 @@ function renderCji3(){
     +'<div style="padding:10px 18px;border-bottom:1px solid #e2e8f0;background:#f8fafc;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
     +'<span style="font-size:11px;color:#64748b;font-weight:600;margin-right:4px">FILTROS:</span>'
     +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Ano '+msWrap('ms-cji3-years','Todos os anos')+'</label>'
+    +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Mês '+msWrap('ms-cji3-months','Todos os meses')+'</label>'
     +(allGers.length?'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Gerência '+msWrap('ms-cji3-gers','Todos')+'</label>':'')
     +(allSites.length?'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Site '+msWrap('ms-cji3-sites','Todos')+'</label>':'')
     +'<label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px">Projeto '+msWrap('ms-cji3-projs','Todos')+'</label>'
@@ -7533,7 +7541,8 @@ function renderCji3(){
     +'</div></div>';
 
   // Inicializa ms-drops após o innerHTML ser setado
-  buildMsDrop('ms-cji3-years', allYears, fYears, null);
+  buildMsDrop('ms-cji3-years',  allYears,  fYears,  null);
+  buildMsDrop('ms-cji3-months', allMonths, fMonths, null);
   if(allGers.length)  buildMsDrop('ms-cji3-gers',  allGers,  fGers,  null);
   if(allSites.length) buildMsDrop('ms-cji3-sites', allSites, fSites, null);
   buildMsDrop('ms-cji3-projs', allProjs, fProjs, null);
@@ -7555,7 +7564,7 @@ function _cji3ExpandAll(open){
   renderCji3();
 }
 function _cji3ClearFilters(){
-  _cji3F={years:[],gers:[],sites:[],projs:[],forns:[]};
+  _cji3F={years:[],months:[],gers:[],sites:[],projs:[],forns:[]};
   renderCji3();
 }
 
