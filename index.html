@@ -9179,11 +9179,17 @@ function impEvoSetPeriod(p,btn){
   btn.style.background='var(--sb)';btn.style.color='#fff';
   impRenderEvolucao();
 }
+function impSetEvoPeriod(p){
+  _IMP_CHEGADA_PERIOD=p;_IMP_HORAS_PERIOD=p;
+  document.querySelectorAll('.chegada-period-btn,.horas-period-btn').forEach(function(b){
+    var match=(p==='semana'&&b.textContent.indexOf('semana')>=0)||(p==='dia'&&b.textContent.indexOf('dia')>=0)||(p==='mes'&&b.textContent.indexOf('mês')>=0);
+    b.style.background=match?'var(--sb)':'var(--card)';b.style.color=match?'#fff':'var(--muted)';
+  });
+  _impBuildChegadaChart();_impBuildHorasChart();
+}
 function impChegadaSetPeriod(p,btn){
-  _IMP_CHEGADA_PERIOD=p;
-  document.querySelectorAll('.chegada-period-btn').forEach(function(b){b.style.background='var(--card)';b.style.color='var(--muted)';});
-  btn.style.background='var(--sb)';btn.style.color='#fff';
-  _impBuildChegadaChart();
+  impSetEvoPeriod(p);
+  void btn;
 }
 function impCloseAderPanel(){
   var panel=document.getElementById('evo-ader-panel');
@@ -9750,12 +9756,22 @@ function _impBuildChegadaChart(){
   if(_impEvoCharts.chegada)_impEvoCharts.chegada.destroy();
   var cv=document.getElementById('evo-chart-chegada');
   if(!cv)return;
+  var _chegadaLabelPlugin={id:'chegadaLabels',afterDatasetsDraw:function(chart){
+    var ctx=chart.ctx;var ds=chart.getDatasetMeta(0);
+    ds.data.forEach(function(bar,i){
+      var v=vals[i];if(v===undefined)return;
+      var h=Math.floor(v/60),m=v%60;
+      var lbl=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+      ctx.save();ctx.font='bold 10px sans-serif';ctx.fillStyle='#1e3a5f';ctx.textAlign='center';ctx.textBaseline='bottom';
+      ctx.fillText(lbl,bar.x,bar.y-3);ctx.restore();
+    });
+  }};
   _impEvoCharts.chegada=new Chart(cv.getContext('2d'),{type:'bar',
     data:{labels:labels,datasets:[
       {label:'Méd. chegada',data:vals,backgroundColor:bgs,borderRadius:5,borderSkipped:false,order:2},
       {type:'line',label:'Meta (08:00)',data:labels.map(function(){return meta;}),borderColor:'#002F6C',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false,order:1}
     ]},
-    options:{responsive:true,maintainAspectRatio:false,
+    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},
       onClick:function(event,elements){
         if(!elements.length||elements[0].datasetIndex!==0)return;
         _impChegadaDrillOpen(grupos[elements[0].index].key,baseData,refMin);
@@ -9774,15 +9790,14 @@ function _impBuildChegadaChart(){
         y:{min:420,max:600,ticks:{callback:function(v){var h=Math.floor(v/60),m=v%60;return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');},font:{size:10}},grid:{color:'#f1f5f9'}},
         x:{grid:{display:false},ticks:{font:{size:10}}}
       }
-    }
+    },
+    plugins:[_chegadaLabelPlugin]
   });
 }
 
 function impHorasSetPeriod(p,btn){
-  _IMP_HORAS_PERIOD=p;
-  document.querySelectorAll('.horas-period-btn').forEach(function(b){b.style.background='var(--card)';b.style.color='var(--muted)';});
-  btn.style.background='var(--sb)';btn.style.color='#fff';
-  _impBuildHorasChart();
+  impSetEvoPeriod(p);
+  void btn;
 }
 function _impBuildHorasChart(){
   var fimMin=impGetFimMin();
@@ -9829,12 +9844,22 @@ function _impBuildHorasChart(){
   if(!cv)return;
   var yMin=Math.max(0,Math.min.apply(null,vals)-30);
   var yMax=Math.max.apply(null,vals)+30;
+  var _horasLabelPlugin={id:'horasLabels',afterDatasetsDraw:function(chart){
+    var ctx=chart.ctx;var ds=chart.getDatasetMeta(0);
+    ds.data.forEach(function(bar,i){
+      var v=vals[i];if(v===undefined)return;
+      var h=Math.floor(v/60),m=v%60;
+      var lbl=String(h).padStart(2,'0')+'h'+String(m).padStart(2,'0');
+      ctx.save();ctx.font='bold 10px sans-serif';ctx.fillStyle='#1e3a5f';ctx.textAlign='center';ctx.textBaseline='bottom';
+      ctx.fillText(lbl,bar.x,bar.y-3);ctx.restore();
+    });
+  }};
   _impEvoCharts.horas=new Chart(cv.getContext('2d'),{type:'bar',
     data:{labels:labels,datasets:[
       {label:'Méd. horas trab.',data:vals,backgroundColor:bgs,borderRadius:5,borderSkipped:false,order:2},
       {type:'line',label:'Meta (7h)',data:labels.map(function(){return meta;}),borderColor:'#002F6C',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false,order:1}
     ]},
-    options:{responsive:true,maintainAspectRatio:false,
+    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},
       plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
         if(ctx.datasetIndex===1)return' Meta: 07:00';
         var v=ctx.raw,h=Math.floor(v/60),m=v%60;
@@ -9845,7 +9870,8 @@ function _impBuildHorasChart(){
         y:{min:yMin,max:yMax,ticks:{callback:function(v){var h=Math.floor(v/60),m=v%60;return String(h).padStart(2,'0')+'h'+String(m).padStart(2,'0');},font:{size:10}},grid:{color:'#f1f5f9'}},
         x:{grid:{display:false},ticks:{font:{size:10}}}
       }
-    }
+    },
+    plugins:[_horasLabelPlugin]
   });
 }
 function impChartTimeline(){
@@ -10817,21 +10843,6 @@ async function renderViewImprodutividade(){
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Média de horas trabalhadas por período</span><div style="font-size:11px;color:var(--muted);margin-top:2px">Término − Início − Almoço &nbsp;·&nbsp; <span style="color:#16a34a;font-weight:700">Verde ≥ 7h</span> &nbsp;·&nbsp; <span style="color:#b45309;font-weight:700">Amarelo 6–7h</span> &nbsp;·&nbsp; <span style="color:#dc2626;font-weight:700">Vermelho &lt; 6h</span></div></div><div style="display:flex;gap:5px" id="horas-period-btns"><button onclick="impHorasSetPeriod(\'semana\',this)" class="horas-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impHorasSetPeriod(\'dia\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impHorasSetPeriod(\'mes\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div style="position:relative;height:220px"><canvas id="evo-chart-horas"></canvas></div>'
   +'</div>'
-  +'<div id="evo-ader-panel" style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px;display:none">'
-  +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">'
-  +'<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:700;color:var(--text)">Aderência dos Fiscais</span>'
-  +'<span id="evo-ader-badge" style="font-size:10px;background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px;color:var(--muted)"></span>'
-  +'<span id="evo-ader-squad-lbl" style="font-size:10px;font-weight:700;color:var(--sb);background:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;padding:2px 10px;display:none"></span></div>'
-  +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
-  +'<div class="ms-wrap" id="ms-ader-squad" style="min-width:160px"><div class="ms-input" onclick="toggleMs(\'ms-ader-squad\')"><span class="ms-label" id="ms-ader-squad-label">Todos</span><span>▾</span></div><div class="ms-drop" id="ms-ader-squad-drop" style="display:none"></div></div>'
-  +'<div style="width:1px;height:20px;background:var(--bord)"></div>'
-  +'<button onclick="impAderSetPeriod(\'semana\',this)" class="evo-ader-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button>'
-  +'<button onclick="impAderSetPeriod(\'mes\',this)" class="evo-ader-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button>'
-  +'<button onclick="impCloseAderPanel()" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:#fef2f2;color:#dc2626;font-family:inherit">✕ Fechar</button>'
-  +'</div></div>'
-  +'<div id="evo-ader-table" style="overflow-x:auto"></div>'
-  +'</div>'
-
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:12px;padding:20px 22px;margin-top:14px">'
   +'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #f1f5f9">'
   +'<div><div style="font-size:16px;font-weight:800;color:var(--sb);letter-spacing:-.3px">Comparativo entre Squads</div>'
@@ -10841,6 +10852,23 @@ async function renderViewImprodutividade(){
   +'<div id="evo-ader-sq-kpis" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px"></div>'
   +'<div id="evo-ader-sq-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px"></div>'
   +'<div id="evo-sq-legend" style="margin-top:16px;font-size:9.5px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;align-items:center"></div>'
+  +'</div>'
+
+  +'<div id="evo-ader-panel" style="background:var(--card);border:2px solid var(--sb);border-radius:12px;padding:16px 18px;margin-top:14px;display:none">'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f1f5f9">'
+  +'<div style="display:flex;align-items:center;gap:8px">'
+  +'<span style="font-size:13px;font-weight:800;color:var(--sb)">Aderência dos Fiscais</span>'
+  +'<span id="evo-ader-badge" style="font-size:10px;background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px;color:var(--muted)"></span>'
+  +'<span id="evo-ader-squad-lbl" style="font-size:10px;font-weight:700;color:var(--sb);background:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;padding:2px 10px;display:none"></span>'
+  +'</div>'
+  +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+  +'<div class="ms-wrap" id="ms-ader-squad" style="min-width:160px"><div class="ms-input" onclick="toggleMs(\'ms-ader-squad\')"><span class="ms-label" id="ms-ader-squad-label">Todos</span><span>▾</span></div><div class="ms-drop" id="ms-ader-squad-drop" style="display:none"></div></div>'
+  +'<div style="width:1px;height:20px;background:var(--bord)"></div>'
+  +'<button onclick="impAderSetPeriod(\'semana\',this)" class="evo-ader-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button>'
+  +'<button onclick="impAderSetPeriod(\'mes\',this)" class="evo-ader-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button>'
+  +'<button onclick="impCloseAderPanel()" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:#fef2f2;color:#dc2626;font-family:inherit">✕ Fechar</button>'
+  +'</div></div>'
+  +'<div id="evo-ader-table" style="overflow-x:auto"></div>'
   +'</div>'
   +'</div>'
 
