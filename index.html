@@ -9343,96 +9343,30 @@ function impRenderAderSquads(){
   var cCrit=sorted.filter(function(x){return x.pct<40;}).length;
   function chip(val,lbl,tc,bg,bd){return'<div style="flex:1;min-width:80px;padding:12px 14px;border-radius:10px;background:'+bg+';border:1px solid '+bd+';display:flex;flex-direction:column;align-items:center;gap:4px"><span style="font-size:24px;font-weight:900;line-height:1;color:'+tc+'">'+val+'</span><span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;text-align:center;line-height:1.35;color:'+tc+';opacity:.85">'+lbl+'</span></div>';}
   if(kpiEl)kpiEl.innerHTML=chip(avgPct+'%','Média<br>Geral',sqTextColor(avgPct),sqBgColor(avgPct),sqBdColor(avgPct))+chip(cOtimo,'Ótimos<br>≥ 80%','#15803d','#f0fdf4','#bbf7d0')+chip(cBom,'Bons<br>60–79%','#1d4ed8','#eff6ff','#bfdbfe')+chip(cAtenc,'Atenção<br>40–59%','#c2410c','#fff7ed','#fed7aa')+chip(cCrit,'Críticos<br>&lt; 40%','#dc2626','#fef2f2','#fecaca')+chip(nFiscais,'Total<br>Fiscais','#475569','#f8fafc','#e2e8f0');
-  // ── Gráfico de barras horizontal ──────────────────────────────
-  var chartH=Math.max(220,sorted.length*42+40);
-  if(gridEl)gridEl.style.height=chartH+'px';
-
-  var linDiv=document.getElementById('evo-sq-linked');
-  var _selSqName=null;
-
-  // Pre-compute per-fiscal per-week presence from squadData
-  var allDaySet={};allRecs.forEach(function(d){allDaySet[d.dataSortKey]=1;});
-  var wkDays={};
-  Object.keys(allDaySet).forEach(function(dt){var wk=_impWeekKey(dt);if(!wkDays[wk])wkDays[wk]={};wkDays[wk][dt]=1;});
-  var allWeeks=Object.keys(wkDays).sort();
-  var last4Weeks=allWeeks.slice(-4);
-
-  function renderLinkedAder(squadName){
-    if(!linDiv)return;
-    if(!squadData[squadName]){linDiv.style.display='none';return;}
-    var sqFs=Object.keys(squadData[squadName].fiscais);
-    if(!sqFs.length){linDiv.style.display='none';return;}
-    // per fiscal per week
-    var fiscWk={};
-    sqFs.forEach(function(f){
-      fiscWk[f]={};
-      last4Weeks.forEach(function(wk){fiscWk[f][wk]=0;});
-      Object.keys(squadData[squadName].days[f]||{}).forEach(function(dt){
-        var wk=_impWeekKey(dt);if(fiscWk[f][wk]!==undefined)fiscWk[f][wk]++;
-      });
-    });
-    function totPct(f){var tot=Object.values(wkDays).reduce(function(s,d){return s+Object.keys(d).length;},0);var pres=Object.values(fiscWk[f]).reduce(function(s,v){return s+v;},0);return tot?Math.round(pres/tot*100):0;}
-    sqFs.sort(function(a,b){return totPct(b)-totPct(a);});
-    function pctBg(p){if(p>=80)return'#f0fdf4';if(p>=60)return'#eff6ff';if(p>=40)return'#fff7ed';return'#fef2f2';}
-    function pctClr(p){if(p>=80)return'#15803d';if(p>=60)return'#1d4ed8';if(p>=40)return'#c2410c';return'#dc2626';}
-    function wkLbl(wk){var p=wk.split('-W');return'Sem.'+parseInt(p[1]);}
-    var thS='background:#1e3a5f;color:#fff;padding:8px 10px;font-size:10px;font-weight:700;text-align:center;white-space:nowrap';
-    var html='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
-      +'<span style="font-size:11px;font-weight:700;color:var(--sb)">📋 '+impEsc(squadName)+'</span>'
-      +'<button onclick="document.getElementById(\'evo-sq-linked\').style.display=\'none\'" style="font-size:10px;border:none;background:none;color:var(--muted);cursor:pointer">✕ Fechar</button>'
+  // Cards de squad
+  var medals=['🥇','🥈','🥉'];
+  gridEl.innerHTML=sorted.map(function(s,i){
+    var tc=sqTextColor(s.pct);var bg=sqBgColor(s.pct);var bd=sqBdColor(s.pct);var sc=sqSolidColor(s.pct);var lbl=sqLabel(s.pct);
+    var rankHtml=i<3?'<span style="font-size:18px;line-height:1">'+medals[i]+'</span>':'<span style="font-size:13px;font-weight:800;color:#cbd5e1">'+(i+1)+'.</span>';
+    return'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px 14px;position:relative;overflow:hidden" onmouseover="this.style.boxShadow=\'0 6px 20px rgba(0,0,0,.1)\';this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.boxShadow=\'none\';this.style.transform=\'none\'">'
+      +'<div style="position:absolute;top:0;left:0;right:0;height:5px;border-radius:12px 12px 0 0;background:'+sc+'"></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;margin-top:2px">'+rankHtml+'<span style="font-size:30px;font-weight:900;line-height:1;color:'+tc+'">'+s.pct+'%</span></div>'
+      +'<div style="font-size:11px;font-weight:700;color:#334155;line-height:1.35;margin-bottom:11px;min-height:30px">'+impEsc(s.sq)+'</div>'
+      +'<div style="position:relative;margin-bottom:16px">'
+      +'<div style="height:7px;background:#e2e8f0;border-radius:4px;overflow:visible;position:relative">'
+      +'<div style="height:100%;border-radius:4px;background:'+sc+';width:'+s.pct+'%"></div>'
+      +'<div style="position:absolute;top:-4px;left:80%;width:2px;height:15px;background:#002F6C;border-radius:1px;z-index:2"></div>'
+      +'</div>'
+      +'<div style="position:absolute;top:14px;left:80%;transform:translateX(-50%);font-size:8px;color:#002F6C;font-weight:700;white-space:nowrap">meta 80%</div>'
+      +'</div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center">'
+      +'<span style="font-size:10px;color:#94a3b8;font-weight:600">'+s.n+' fiscal'+(s.n>1?'is':'')+'</span>'
+      +'<span style="font-size:9px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.3px;background:'+bg+';color:'+tc+'">'+lbl+'</span>'
+      +'</div>'
       +'</div>';
-    html+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">';
-    html+='<thead><tr><th style="'+thS+';text-align:left;background:#16305a">Fiscal</th>';
-    last4Weeks.forEach(function(wk){html+='<th style="'+thS+'">'+wkLbl(wk)+'</th>';});
-    html+='<th style="background:#0f2040;color:#fff;padding:8px 10px;font-size:10px;font-weight:700;text-align:center">Total</th></tr></thead><tbody>';
-    sqFs.forEach(function(f,fi){
-      var rowBg=fi%2===0?'#fff':'#f8fafc';var tot=totPct(f);
-      html+='<tr style="background:'+rowBg+'">';
-      html+='<td style="padding:7px 10px;font-weight:600;color:var(--text)">'+impEsc(f)+'</td>';
-      last4Weeks.forEach(function(wk){
-        var pres=fiscWk[f][wk];var totInWk=Object.keys(wkDays[wk]||{}).length;
-        var pct=totInWk?Math.round(pres/totInWk*100):null;
-        html+='<td style="padding:6px 8px;text-align:center">';
-        if(pct===null)html+='<span style="color:var(--muted)">—</span>';
-        else html+='<div style="background:'+pctBg(pct)+';color:'+pctClr(pct)+';border-radius:4px;padding:2px 8px;font-weight:700;display:inline-block">'+pct+'%</div>';
-        html+='</td>';
-      });
-      html+='<td style="padding:6px 8px;text-align:center"><div style="background:'+pctBg(tot)+';color:'+pctClr(tot)+';border-radius:4px;padding:2px 10px;font-weight:800;display:inline-block">'+tot+'%</div></td>';
-      html+='</tr>';
-    });
-    html+='</tbody></table></div>';
-    linDiv.innerHTML=html;linDiv.style.display='block';
-  }
-
-  if(_impAderSqChart){_impAderSqChart.destroy();_impAderSqChart=null;}
-  var cv=document.getElementById('evo-chart-sq-ader');if(!cv)return;
-  var barColors=sorted.map(function(s){return sqSolidColor(s.pct);});
-  _impAderSqChart=new Chart(cv.getContext('2d'),{type:'bar',
-    data:{labels:sorted.map(function(s){return s.sq+' ('+s.n+')';}),
-      datasets:[
-        {label:'Aderência %',data:sorted.map(function(s){return s.pct;}),backgroundColor:barColors.map(function(c){return c+'cc';}),borderColor:barColors,borderWidth:1,borderRadius:4,borderSkipped:false,order:2},
-        {type:'line',label:'Meta 80%',data:sorted.map(function(){return 80;}),borderColor:'#002F6C',borderWidth:2,borderDash:[5,5],pointRadius:0,fill:false,order:1}
-      ]},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
-      onClick:function(event,elements){
-        if(!elements.length||elements[0].datasetIndex!==0)return;
-        var sq=sorted[elements[0].index].sq;
-        if(_selSqName===sq){_selSqName=null;if(linDiv)linDiv.style.display='none';}
-        else{_selSqName=sq;renderLinkedAder(sq);}
-      },
-      onHover:function(event,elements){var el=event.native&&event.native.target;if(el)el.style.cursor=(elements.length&&elements[0].datasetIndex===0)?'pointer':'default';},
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
-        if(ctx.datasetIndex===1)return' Meta: 80%';
-        var s=sorted[ctx.dataIndex];
-        return[' Aderência: '+s.pct+'%  ('+sqLabel(s.pct)+')',' '+s.n+' fiscal'+(s.n>1?'is':''),' 🔍 Clique para ver os fiscais'];
-      }}}},
-      scales:{
-        x:{min:0,max:100,ticks:{callback:function(v){return v+'%';},font:{size:10}},grid:{color:'#f1f5f9'}},
-        y:{ticks:{font:{size:10},maxRotation:0},grid:{display:false}}
-      }
-    }
-  });
-  if(legEl)legEl.innerHTML='<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;display:inline-block"></span><strong style="color:#15803d">≥80% Ótimo</strong></span>'+'<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#2563eb;display:inline-block"></span><strong style="color:#1d4ed8">60–79% Bom</strong></span>'+'<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#c2410c;display:inline-block"></span><strong style="color:#c2410c">40–59% Atenção</strong></span>'+'<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#dc2626;display:inline-block"></span><strong style="color:#dc2626">&lt;40% Crítico</strong></span>'+'<span style="margin-left:auto;font-size:9px;color:#94a3b8">🔍 Clique em uma barra para ver os fiscais do squad</span>';
+  }).join('');
+  // Legenda
+  if(legEl)legEl.innerHTML='<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;display:inline-block"></span><strong style="color:#15803d">≥80% Ótimo</strong></span>'+'<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#2563eb;display:inline-block"></span><strong style="color:#1d4ed8">60–79% Bom</strong></span>'+'<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#c2410c;display:inline-block"></span><strong style="color:#c2410c">40–59% Atenção</strong></span>'+'<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#dc2626;display:inline-block"></span><strong style="color:#dc2626">&lt;40% Crítico</strong></span>'+'<span style="margin-left:auto;color:#94a3b8">A linha ▌em cada barra indica a meta de 80%</span>';
 }
 
 function _impWeekKey(dateStr){
@@ -10879,9 +10813,8 @@ async function renderViewImprodutividade(){
   +'<div id="evo-sq-period" style="font-size:11px;font-weight:700;color:var(--sb);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:4px 12px;white-space:nowrap"></div>'
   +'</div>'
   +'<div id="evo-ader-sq-kpis" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px"></div>'
-  +'<div id="evo-ader-sq-grid" style="position:relative"><canvas id="evo-chart-sq-ader" style="cursor:pointer"></canvas></div>'
-  +'<div id="evo-sq-legend" style="margin-top:12px;font-size:9.5px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;align-items:center"></div>'
-  +'<div id="evo-sq-linked" style="display:none;margin-top:16px;border-top:1px solid #f1f5f9;padding-top:14px"></div>'
+  +'<div id="evo-ader-sq-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px"></div>'
+  +'<div id="evo-sq-legend" style="margin-top:16px;font-size:9.5px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;align-items:center"></div>'
   +'</div>'
   +'</div>'
 
