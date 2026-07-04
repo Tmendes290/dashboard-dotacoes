@@ -8821,11 +8821,11 @@ function impApplyFilters(){
   }
 
   try{impRenderCards(refMin);}catch(e){console.error('[imp] cards',e);}
-  try{impRenderDashboard();}catch(e){console.error('[imp] dashboard',e);}
-  try{impRenderRegistros();}catch(e){console.error('[imp] registros',e);}
-  try{impRenderEmpresas();}catch(e){console.error('[imp] empresas',e);}
-  try{impRenderObras();}catch(e){console.error('[imp] obras',e);}
-  try{impRenderSquads();}catch(e){console.error('[imp] squads',e);}
+  try{if(IMP_TAB==='dashboard') impRenderDashboard();}catch(e){console.error('[imp] dashboard',e);}
+  try{if(IMP_TAB==='registros') impRenderRegistros();}catch(e){console.error('[imp] registros',e);}
+  try{if(IMP_TAB==='empresas') impRenderEmpresas();}catch(e){console.error('[imp] empresas',e);}
+  try{if(IMP_TAB==='obras') impRenderObras();}catch(e){console.error('[imp] obras',e);}
+  try{if(IMP_TAB==='squads') impRenderSquads();}catch(e){console.error('[imp] squads',e);}
   try{if(IMP_TAB==='rdo') rdoImpRender();}catch(e){console.error('[imp] rdo',e);}
   try{if(IMP_TAB==='evolucao') impRenderEvolucao();}catch(e){console.error('[imp] evolucao',e);}
 }
@@ -10689,7 +10689,15 @@ function impShowTab(tab,el){
   el.style.color='var(--acc)';
   el.style.borderBottomColor='var(--acc)';
   ['dashboard','registros','empresas','obras','squads','rdo','evolucao'].forEach(function(t){var d=document.getElementById('imp-tab-'+t);if(d)d.style.display=t===tab?'':'none';});
-  if(tab==='dashboard') impRenderDashboard();
+  try{
+    if(tab==='dashboard') impRenderDashboard();
+    else if(tab==='registros') impRenderRegistros();
+    else if(tab==='empresas') impRenderEmpresas();
+    else if(tab==='obras') impRenderObras();
+    else if(tab==='squads') impRenderSquads();
+    else if(tab==='evolucao') impRenderEvolucao();
+    else if(tab==='rdo') rdoImpRender();
+  }catch(e){console.error('[imp] showTab',tab,e);}
 }
 
 // ── Render view principal ─────────────────────────────────────────
