@@ -9656,7 +9656,7 @@ function _impChegadaDrillOpen(key,baseData,refMin){
   var recs=baseData.filter(function(d){
     var k=_IMP_CHEGADA_PERIOD==='dia'?d.dataSortKey:_IMP_CHEGADA_PERIOD==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
     return k===key;
-  }).sort(function(a,b){return(a.chegadaMin||0)-(b.chegadaMin||0);});
+  }).sort(function(a,b){return(b.chegadaMin||0)-(a.chegadaMin||0);});
   if(!recs.length)return;
   var title=key;
   if(key.indexOf('-W')>=0){var wp=key.split('-W');title='Semana '+parseInt(wp[1])+' / '+wp[0];}
