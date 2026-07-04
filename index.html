@@ -9860,11 +9860,19 @@ function _impBuildHorasChart(){
       {type:'line',label:'Meta (7h)',data:labels.map(function(){return meta;}),borderColor:'#002F6C',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false,order:1}
     ]},
     options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},
+      onClick:function(event,elements){
+        if(!elements.length||elements[0].datasetIndex!==0)return;
+        _impHorasDrillOpen(grupos[elements[0].index].key,baseData);
+      },
+      onHover:function(event,elements){
+        var el=event.native&&event.native.target;
+        if(el)el.style.cursor=(elements.length&&elements[0].datasetIndex===0)?'pointer':'default';
+      },
       plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
         if(ctx.datasetIndex===1)return' Meta: 07:00';
         var v=ctx.raw,h=Math.floor(v/60),m=v%60;
         var status=v>=420?'Ótimo':v>=360?'Atenção':'Crítico';
-        return[' Média: '+String(h).padStart(2,'0')+'h'+String(m).padStart(2,'0')+' ('+status+')',' n='+grupos[ctx.dataIndex].n+' registros'];
+        return[' Média: '+String(h).padStart(2,'0')+'h'+String(m).padStart(2,'0')+' ('+status+')',' n='+grupos[ctx.dataIndex].n+' registros',' 🔍 Clique para ver os registros'];
       }}}},
       scales:{
         y:{min:yMin,max:yMax,ticks:{callback:function(v){var h=Math.floor(v/60),m=v%60;return String(h).padStart(2,'0')+'h'+String(m).padStart(2,'0');},font:{size:10}},grid:{color:'#f1f5f9'}},
@@ -9873,6 +9881,69 @@ function _impBuildHorasChart(){
     },
     plugins:[_horasLabelPlugin]
   });
+}
+function _impHorasDrillOpen(key,baseData){
+  var recs=baseData.filter(function(d){
+    var k=_IMP_HORAS_PERIOD==='dia'?d.dataSortKey:_IMP_HORAS_PERIOD==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
+    return k===key;
+  }).map(function(d){
+    var alm=(d.almIniMin!==null&&d.almFimMin!==null)?Math.max(0,d.almFimMin-d.almIniMin):0;
+    var hTrab=Math.max(0,d.terminoMin-d.inicioMin-alm);
+    return Object.assign({},d,{_hTrab:hTrab,_alm:alm});
+  }).sort(function(a,b){return b._hTrab-a._hTrab;});
+  if(!recs.length)return;
+  var title=key;
+  if(key.indexOf('-W')>=0){var wp=key.split('-W');title='Semana '+parseInt(wp[1])+' / '+wp[0];}
+  else if(key.length===10){var pk=key.split('-');title=pk[2]+'/'+pk[1]+'/'+pk[0];}
+  else{var pk=key.split('-');title=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][parseInt(pk[1])-1]+'/'+pk[0].slice(2);}
+  function m2hm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
+  function m2hhm(m){if(m===null||m===undefined||m<0)return'—';return String(Math.floor(m/60)).padStart(2,'0')+'h'+String(m%60).padStart(2,'0');}
+  function horasColor(v){if(v>=420)return'#16a34a';if(v>=360)return'#b45309';return'#dc2626';}
+  function horasStatus(v){if(v>=420)return'Ótimo';if(v>=360)return'Atenção';return'Crítico';}
+  var avg=Math.round(recs.reduce(function(s,d){return s+d._hTrab;},0)/recs.length);
+  var otimos=recs.filter(function(d){return d._hTrab>=420;}).length;
+  var hasFiscal=recs.some(function(d){return d.fiscal;});
+  var thS='background:#f5f9ff;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);position:sticky;top:0;white-space:nowrap';
+  var rows=recs.map(function(d,i){
+    var sq=impGetSquad(d.sap).squad||'—';
+    var bg=i%2===0?'#fff':'#f8fafc';
+    var clr=horasColor(d._hTrab);
+    return'<tr style="background:'+bg+'">'
+      +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.dataStr||d.dataSortKey||'—')+'</td>'
+      +'<td style="padding:7px 10px;font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+impEsc(d.empresa)+'</td>'
+      +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.sap)+'</td>'
+      +'<td style="padding:7px 10px;white-space:nowrap">'+impEsc(sq)+'</td>'
+      +(hasFiscal?'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.fiscal||'—')+'</td>':'')
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+m2hm(d.inicioMin)+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap;color:var(--muted)">'+(d._alm>0?m2hm(d.almIniMin)+'–'+m2hm(d.almFimMin)+' <span style="font-size:9px">('+d._alm+'min)</span>':'—')+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+m2hm(d.terminoMin)+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap"><span style="font-weight:800;color:'+clr+'">'+m2hhm(d._hTrab)+'</span></td>'
+      +'<td style="padding:7px 10px;text-align:center"><span style="font-size:9px;font-weight:700;color:'+clr+'">'+horasStatus(d._hTrab)+'</span></td>'
+      +'</tr>';
+  }).join('');
+  var mo=document.getElementById('imp-horas-drill-modal');
+  if(!mo){mo=document.createElement('div');mo.id='imp-horas-drill-modal';mo.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';mo.onclick=function(e){if(e.target===mo)mo.style.display='none';};document.body.appendChild(mo);}
+  mo.innerHTML='<div style="background:#fff;border-radius:12px;width:1060px;max-width:97vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)">'
+    +'<div style="padding:16px 20px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'
+    +'<div><div style="font-size:14px;font-weight:800;color:var(--sb)">Horas trabalhadas — '+title+'</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+recs.length+' registros · Média: <strong style="color:'+horasColor(avg)+'">'+m2hhm(avg)+'</strong> · <span style="color:#16a34a;font-weight:700">'+otimos+' atingiram ≥ 7h</span></div></div>'
+    +'<button onclick="document.getElementById(\'imp-horas-drill-modal\').style.display=\'none\'" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:4px 8px;line-height:1">×</button>'
+    +'</div>'
+    +'<div style="overflow:auto;flex:1">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'
+    +'<th style="'+thS+';text-align:left">Data</th>'
+    +'<th style="'+thS+';text-align:left">Empresa</th>'
+    +'<th style="'+thS+';text-align:left">Obra (SAP)</th>'
+    +'<th style="'+thS+';text-align:left">Squad</th>'
+    +(hasFiscal?'<th style="'+thS+';text-align:left">Fiscal</th>':'')
+    +'<th style="'+thS+';text-align:center">Início</th>'
+    +'<th style="'+thS+';text-align:center">Almoço</th>'
+    +'<th style="'+thS+';text-align:center">Término</th>'
+    +'<th style="'+thS+';text-align:center">Horas trab.</th>'
+    +'<th style="'+thS+';text-align:center">Status</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table>'
+    +'</div></div>';
+  mo.style.display='flex';
 }
 function impChartTimeline(){
   var byDay={};
