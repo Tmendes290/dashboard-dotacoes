@@ -1441,6 +1441,7 @@ function loadState(){
 // ─── MATERIAIS STATE ─────────────────────────────────────────────
 var STATE_MATERIAIS = JSON.parse(localStorage.getItem('mat_data') || '[]');
 var STATE_CJI3 = { months: [], rows: [] };
+var REF_FISCAIS = {}; // fiscal nome -> squad (carregado do Supabase)
 var _cji3F = { years: [], months: [], gers: [], sites: [], projs: [], forns: [] }; // empty array = todos
 var _cji3Open = {}; // proj|wbs -> expanded bool
 var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
@@ -1535,6 +1536,10 @@ async function loadFromSupabase(){
         const {data:rsq,error:e6}=await supa.from('ref_squads').select('*');
         if(!e6&&rsq&&rsq.length>0){REF_SQUADS={};rsq.forEach(function(r){REF_SQUADS[r.pep]={squad:r.squad||'',lider:r.lider||'',planejador:r.planejador||''};});}
       } catch(e6){console.warn('[Sync] ref_squads:',e6);}
+      try {
+        const {data:rfc}=await supa.from('ref_fiscais').select('nome,squad');
+        if(rfc&&rfc.length>0){REF_FISCAIS={};rfc.forEach(function(r){if(r.nome)REF_FISCAIS[r.nome.trim()]=r.squad||'';});}
+      } catch(e7){console.warn('[Sync] ref_fiscais:',e7);}
     })(),
 
     // CJI3
@@ -8359,6 +8364,10 @@ function _impNormSquad(sq){
   if(sq.toUpperCase().indexOf('TELAMENTO')>=0)return'MINA';
   return sq;
 }
+function impGetSquadByFiscal(nome){
+  if(!nome) return '';
+  return REF_FISCAIS[nome.trim()] || '';
+}
 function impGetSquad(sap){
   if(!sap) return{squad:'',lider:'',planejador:''};
   var r=REF_SQUADS[sap]; if(r) return{squad:_impNormSquad(r.squad),lider:r.lider,planejador:r.planejador};
@@ -9197,13 +9206,13 @@ function impRenderAderenciaFiscais(){
     if(dow===0||dow===6)return false;
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
-    var sq=impGetSquad(d.sap).squad;
+    var sq=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad;
     if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
     if(_IMP_ADER_SQUADS.length&&_IMP_ADER_SQUADS.indexOf(sq)<0)return false;
     return true;
   });
-  // Popula ms-drop de squad
-  var _sqOpts={}; IMP_DATA.filter(function(d){return d.fiscal&&d.fiscal.trim()&&d.dataSortKey;}).forEach(function(d){var sq=impGetSquad(d.sap).squad;if(sq)_sqOpts[sq]=1;});
+  // Popula ms-drop de squad — usa squad do fiscal (ref_fiscais), fallback SAP
+  var _sqOpts={}; IMP_DATA.filter(function(d){return d.fiscal&&d.fiscal.trim()&&d.dataSortKey;}).forEach(function(d){var sq=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad;if(sq)_sqOpts[sq]=1;});
   var _allSquads=Object.keys(_sqOpts).sort();
   buildMsDrop('ms-ader-squad',_allSquads,_IMP_ADER_SQUADS,'impAderSquadMs');
   var _lbl=document.getElementById('ms-ader-squad-label');
@@ -9292,7 +9301,7 @@ function impRenderAderSquads(){
     if(dow===0||dow===6)return false;
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
-    var sq=impGetSquad(d.sap).squad;
+    var sq=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad;
     if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
@@ -9305,7 +9314,7 @@ function impRenderAderSquads(){
   if(!totalDays)return;
   var squadData={};
   allRecs.forEach(function(d){
-    var sq=impGetSquad(d.sap).squad||'Sem squad';
+    var sq=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad||'Sem squad';
     if(!squadData[sq])squadData[sq]={fiscais:{},days:{}};
     squadData[sq].fiscais[d.fiscal.trim()]=1;
     if(!squadData[sq].days[d.fiscal.trim()])squadData[sq].days[d.fiscal.trim()]={};
