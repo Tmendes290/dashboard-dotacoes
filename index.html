@@ -9166,6 +9166,7 @@ function impChartProblemas(){
 // ── Evolução Tab ──────────────────────────────────────────────────
 var _IMP_EVO_PERIOD='semana';
 var _IMP_CHEGADA_PERIOD='semana';
+var _IMP_HORAS_PERIOD='semana';
 var _IMP_ADER_PERIOD='semana';
 var _IMP_ADER_SQUADS=[];
 var _impAderSqChart=null;
@@ -9583,6 +9584,9 @@ function impRenderEvolucao(){
   // Gráfico de chegada
   _impBuildChegadaChart();
 
+  // Gráfico de horas trabalhadas
+  _impBuildHorasChart();
+
   // ── Desvios por Problema Identificado ──────────────────────────
   var byPid={};var totalComPid=0;
   IMP_FILTERED.forEach(function(d){
@@ -9756,6 +9760,70 @@ function _impBuildChegadaChart(){
   });
 }
 
+function impHorasSetPeriod(p,btn){
+  _IMP_HORAS_PERIOD=p;
+  document.querySelectorAll('.horas-period-btn').forEach(function(b){b.style.background='var(--card)';b.style.color='var(--muted)';});
+  btn.style.background='var(--sb)';btn.style.color='#fff';
+  _impBuildHorasChart();
+}
+function _impBuildHorasChart(){
+  var fimMin=impGetFimMin();
+  var baseData=IMP_DATA.filter(function(d){
+    if(d.terminoMin!==null&&d.terminoMin>fimMin)return false;
+    if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
+    if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
+    var sq=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
+    if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
+    if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
+    if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
+    return d.inicioMin!==null&&d.terminoMin!==null&&d.dataSortKey;
+  });
+
+  var byP={};
+  baseData.forEach(function(d){
+    var key=_IMP_HORAS_PERIOD==='dia'?d.dataSortKey:_IMP_HORAS_PERIOD==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
+    if(!byP[key])byP[key]={t:0,n:0,key:key};
+    var alm=(d.almIniMin!==null&&d.almFimMin!==null)?Math.max(0,d.almFimMin-d.almIniMin):0;
+    byP[key].t+=Math.max(0,d.terminoMin-d.inicioMin-alm);
+    byP[key].n++;
+  });
+  var grupos=Object.values(byP).sort(function(a,b){return a.key<b.key?-1:1;}).slice(-12);
+  if(!grupos.length){impDestroyChart('evo-chart-horas');return;}
+
+  var _diasSem=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  function fmtK(k){
+    if(k.includes('-W')){var p=k.split('-W');return'Sem.'+parseInt(p[1])+'\n'+p[0];}
+    if(k.length===10){var p=k.split('-');var ds=_diasSem[new Date(k+'T12:00:00').getDay()];return ds+'\n'+p[2]+'/'+p[1];}
+    var p=k.split('-');return['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][parseInt(p[1])-1]+'/'+p[0].slice(2);
+  }
+  var meta=480;
+  var labels=grupos.map(function(g){return fmtK(g.key);});
+  var vals=grupos.map(function(g){return Math.round(g.t/g.n);});
+  var bgs=vals.map(function(v){return v>=meta?'rgba(22,163,74,.75)':'rgba(239,68,68,.75)';});
+
+  if(_impEvoCharts.horas)_impEvoCharts.horas.destroy();
+  var cv=document.getElementById('evo-chart-horas');
+  if(!cv)return;
+  var yMin=Math.max(0,Math.min.apply(null,vals)-30);
+  var yMax=Math.max.apply(null,vals)+30;
+  _impEvoCharts.horas=new Chart(cv.getContext('2d'),{type:'bar',
+    data:{labels:labels,datasets:[
+      {label:'Méd. horas trab.',data:vals,backgroundColor:bgs,borderRadius:5,borderSkipped:false,order:2},
+      {type:'line',label:'Meta (8h)',data:labels.map(function(){return meta;}),borderColor:'#002F6C',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false,order:1}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
+        if(ctx.datasetIndex===1)return' Meta: 08:00';
+        var v=ctx.raw,h=Math.floor(v/60),m=v%60;
+        return[' Média: '+String(h).padStart(2,'0')+'h'+String(m).padStart(2,'0'),' n='+grupos[ctx.dataIndex].n+' registros'];
+      }}}},
+      scales:{
+        y:{min:yMin,max:yMax,ticks:{callback:function(v){var h=Math.floor(v/60),m=v%60;return String(h).padStart(2,'0')+'h'+String(m).padStart(2,'0');},font:{size:10}},grid:{color:'#f1f5f9'}},
+        x:{grid:{display:false},ticks:{font:{size:10}}}
+      }
+    }
+  });
+}
 function impChartTimeline(){
   var byDay={};
   IMP_FILTERED.forEach(function(d){ if(!d.dataSortKey) return; if(!byDay[d.dataSortKey]) byDay[d.dataSortKey]={at:0,min:0}; if(d.delayMin>0){byDay[d.dataSortKey].at++;byDay[d.dataSortKey].min+=d.delayMin;} });
@@ -10720,6 +10788,10 @@ async function renderViewImprodutividade(){
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-bottom:14px">'
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Evolução da média de chegada <span style="display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;vertical-align:middle">NOVO</span></span><div style="font-size:11px;color:var(--muted);margin-top:2px">Quanto mais cedo, melhor — verde = antes da meta, vermelho = depois da meta (08:00)</div></div><div style="display:flex;gap:5px" id="chegada-period-btns"><button onclick="impChegadaSetPeriod(\'semana\',this)" class="chegada-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impChegadaSetPeriod(\'dia\',this)" class="chegada-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impChegadaSetPeriod(\'mes\',this)" class="chegada-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div style="position:relative;height:220px"><canvas id="evo-chart-chegada"></canvas></div>'
+  +'</div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px">'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Média de horas trabalhadas por período</span><div style="font-size:11px;color:var(--muted);margin-top:2px">Término − Início − Almoço &nbsp;·&nbsp; Verde = atingiu 8h, vermelho = abaixo de 8h</div></div><div style="display:flex;gap:5px" id="horas-period-btns"><button onclick="impHorasSetPeriod(\'semana\',this)" class="horas-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impHorasSetPeriod(\'dia\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impHorasSetPeriod(\'mes\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
+  +'<div style="position:relative;height:220px"><canvas id="evo-chart-horas"></canvas></div>'
   +'</div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px">'
   +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">'
