@@ -1567,6 +1567,7 @@ async function loadFromSupabase(){
     })()
   ]);
 
+  _buildMedidoNormIdx(); // garante que "medido" reflita a CJI3 já carregada, independente da ordem das promises acima
   try { populateFilters(); render(); } catch(eRender){ console.warn('[Sync] render:',eRender); }
   if(CURRENT_PERFIL) updateUserBadge();
   _syncInProgress = false;
@@ -1671,7 +1672,7 @@ function startRealtime(){
       (async function(){
         try{
           var {data:cji3d}=await supa.from('cji3_dados').select('payload').eq('chave','main').maybeSingle();
-          if(cji3d&&cji3d.payload&&cji3d.payload.rows){STATE_CJI3=cji3d.payload;if(currentView==='cji3')renderCji3();}
+          if(cji3d&&cji3d.payload&&cji3d.payload.rows){STATE_CJI3=cji3d.payload;_buildMedidoNormIdx();if(currentView==='cji3')renderCji3();else render();}
         }catch(e){console.warn('[Realtime] cji3-updated:',e);}
       })();
       var quemJ=(payload.payload&&payload.payload.uploadedBy)||'admin';
@@ -1785,7 +1786,35 @@ function getMedidoKey(subpep,empresa,ano){return `${subpep}|${empresa}|${ano}`;}
 var _medidoNormIdx = {};
 var _medidoKeys = [];      // cache de Object.keys(STATE.medido) — evita recriar array a cada chamada
 var _medidoPepIdx = {};    // { pepRaiz: [chaves...] } — busca rápida filtrando só pelo PEP correto
+var _MESES_CJI3 = {JAN:1,FEV:2,MAR:3,ABR:4,MAI:5,JUN:6,JUL:7,AGO:8,SET:9,OUT:10,NOV:11,DEZ:12};
+// Fonte única de verdade: "medido" é sempre derivado da CJI3 Tabela (STATE_CJI3),
+// nunca do upload separado "Atualizar Medido" — evita os dois dados divergirem.
+function _computeMedidoFromCji3(){
+  var map = {};
+  var rows = (STATE_CJI3 && STATE_CJI3.rows) || [];
+  rows.forEach(function(r){
+    var root = String(r.proj || r.wbs || '').split('.')[0];
+    if(!root) return;
+    var forn = r.forn || '_';
+    var vals = r.v || {};
+    Object.keys(vals).forEach(function(mk){
+      var val = vals[mk] || 0;
+      if(!val) return;
+      var parts = mk.split('-'); // ex: "2026-MAI"
+      var yr = parts[0];
+      var moNum = _MESES_CJI3[parts[1]];
+      var kYear = root+'|'+forn+'|'+yr;
+      map[kYear] = (map[kYear]||0) + val;
+      if(moNum){
+        var kMon = root+'|'+forn+'|'+yr+'|'+String(moNum).padStart(2,'0');
+        map[kMon] = (map[kMon]||0) + val;
+      }
+    });
+  });
+  return map;
+}
 function _buildMedidoNormIdx(){
+  STATE.medido = _computeMedidoFromCji3();
   _medidoNormIdx = {};
   _medidoKeys = Object.keys(STATE.medido||{});
   _medidoPepIdx = {};
@@ -3808,7 +3837,10 @@ function handleFile(file){
         processed++;
       }
       setProgress(90,'Atualizando painel…');
-      // Substituição completa: descarta dados antigos
+      // NOTA: STATE.medido agora é sempre recalculado a partir da CJI3 Tabela dentro de
+      // _buildMedidoNormIdx() (fonte única de verdade). Este medMap é salvo no Supabase
+      // por compatibilidade, mas não é o que aparece nos dashboards — quem quiser atualizar
+      // os valores de "Medido/CJI3" deve usar "Atualizar arquivo" dentro da aba CJI3 Tabela.
       STATE.medido = medMap;
       _buildMedidoNormIdx();
       saveState(); // medido não incluso no saveState (usa Supabase)
@@ -3828,11 +3860,12 @@ function handleFile(file){
                 ? '<br><span style="color:#e74c3c;font-size:12px">⚠ '+errCount+' erros ao salvar no Supabase — reimporte o arquivo</span>'
                 : '<br><span style="color:#27ae60;font-size:12px">✔ '+savedCount+' registros confirmados no Supabase</span>')
             : '';
-          si.innerHTML='<h4>✅ Medido atualizado com sucesso!</h4>'
+          si.innerHTML='<h4>✅ Arquivo processado!</h4>'
             +'<p><strong>Arquivo:</strong> '+_uploadFile+'<br>'
             +'<strong>Linhas processadas:</strong> '+_uploadProcessed.toLocaleString()+'<br>'
-            +'<strong>Combinações atualizadas:</strong> '+keys.toLocaleString()+' (Sub PEP / Empresa / Ano)'
-            +supaStatus+'</p>'
+            +'<strong>Combinações lidas:</strong> '+keys.toLocaleString()+' (Sub PEP / Empresa / Ano)'
+            +supaStatus
+            +'<br><span style="color:#b45309;font-size:12px">⚠ Os valores de "Medido/CJI3" exibidos no dashboard vêm da aba <strong>CJI3 Tabela</strong>. Para atualizá-los, use "Atualizar arquivo" lá.</span></p>'
             +'<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'
             +'<button class="btn btn-green" onclick="refreshDashboard()" style="font-size:13px;padding:9px 20px">🔄 Atualizar Dashboard</button>'
             +'<button class="btn btn-outline" onclick="handleFile(window._lastUploadedFile)" style="font-size:12px;padding:9px 16px">↺ Reprocessar arquivo</button>'
@@ -7669,6 +7702,7 @@ function handleCji3Upload(file){
         var result=await resp.json();
         if(!resp.ok||result.error){toast('Erro ao salvar: '+(result.error||'falha'),'red');renderCji3();return;}
         STATE_CJI3=payload;
+        _buildMedidoNormIdx();
         toast('CJI3 importado! '+rows.length+' combinações / '+months.length+' meses','green');
         renderCji3();
         if(_medidoSyncChannel&&CURRENT_USER){
