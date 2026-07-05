@@ -9201,6 +9201,7 @@ function impChartProblemas(){
 var _IMP_EVO_PERIOD='semana';
 var _IMP_CHEGADA_PERIOD='semana';
 var _IMP_HORAS_PERIOD='semana';
+var _IMP_PRODIMP_PERIOD='semana';
 var _IMP_ADER_PERIOD='semana';
 var _IMP_ADER_SQUADS=[];
 var _impAderSqChart=null;
@@ -9642,6 +9643,9 @@ function impRenderEvolucao(){
   // Gráfico de horas trabalhadas
   _impBuildHorasChart();
 
+  // Gráfico de produtivo x improdutivo (base fixa 7h30)
+  _impBuildProdImpChart();
+
   // ── Desvios por Problema Identificado ──────────────────────────
   var byPid={};var totalComPid=0;
   IMP_FILTERED.forEach(function(d){
@@ -9828,6 +9832,12 @@ function impHorasSetPeriod(p,btn){
   impSetEvoPeriod(p);
   void btn;
 }
+function impProdImpSetPeriod(p,btn){
+  _IMP_PRODIMP_PERIOD=p;
+  document.querySelectorAll('.prodimp-period-btn').forEach(function(b){b.style.background='var(--card)';b.style.color='var(--muted)';});
+  if(btn){btn.style.background='var(--sb)';btn.style.color='#fff';}
+  _impBuildProdImpChart();
+}
 function _impBuildHorasChart(){
   var baseData=IMP_FILTERED.filter(function(d){
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
@@ -9969,6 +9979,213 @@ function _impHorasDrillOpen(key,baseData){
     +'</div></div>';
   mo.style.display='flex';
 }
+
+// ── Evolução: Produtivo x Improdutivo (base fixa 08:00→16:30 −1h almoço = 7h30) ──
+var PRODIMP_FIXED_INI=480, PRODIMP_FIXED_FIM=990, PRODIMP_FIXED_BASE=450;
+function _impProdImpFmt(v){var h=Math.floor(v/60),m=v%60;return h+'h'+String(m).padStart(2,'0');}
+function _impProdImpEntrada(d){return d.inicioMin!==null?d.inicioMin:(d.chegadaMin!==null?d.chegadaMin:d.ptsMin);}
+function _impBuildProdImpChart(){
+  var baseData=IMP_FILTERED.filter(function(d){
+    if(impIsExcluido(d))return false;
+    if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
+    if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
+    var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
+    var entrada=_impProdImpEntrada(d);
+    return entrada!==null&&entrada!==undefined&&!!d.dataSortKey;
+  });
+
+  var byP={};
+  baseData.forEach(function(d){
+    var key=_IMP_PRODIMP_PERIOD==='dia'?d.dataSortKey:_IMP_PRODIMP_PERIOD==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
+    if(!byP[key])byP[key]={atraso:0,saida:0,almoco:0,n:0,nComp:0,nParc:0,key:key};
+    var entrada=_impProdImpEntrada(d);
+    var atraso=Math.max(0,entrada-PRODIMP_FIXED_INI);
+    var completo=d.terminoMin!==null;
+    var saida=completo?Math.max(0,PRODIMP_FIXED_FIM-d.terminoMin):0;
+    var almoco=d.almExcesso||0;
+    byP[key].atraso+=atraso;byP[key].saida+=saida;byP[key].almoco+=almoco;byP[key].n++;
+    if(completo)byP[key].nComp++;else byP[key].nParc++;
+  });
+  var grupos=Object.values(byP).sort(function(a,b){return a.key<b.key?-1:1;}).slice(-12);
+  var cv=document.getElementById('evo-chart-prodimp');
+  var insEl=document.getElementById('evo-prodimp-insight');
+  var qb=document.getElementById('evo-prodimp-quality');
+  var cb=document.getElementById('evo-prodimp-causes');
+  var kpiEl=document.getElementById('evo-prodimp-kpis');
+  if(!grupos.length){
+    impDestroyChart('evo-chart-prodimp');
+    if(insEl)insEl.style.display='none';
+    if(qb)qb.innerHTML='';
+    if(cb)cb.innerHTML='';
+    if(kpiEl)kpiEl.innerHTML='';
+    return;
+  }
+
+  var _diasSem=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  function fmtK(k){
+    if(k.indexOf('-W')>=0){var p=k.split('-W');return'Sem.'+parseInt(p[1])+'\n'+p[0];}
+    if(k.length===10){var p=k.split('-');var ds=_diasSem[new Date(k+'T12:00:00').getDay()];return ds+'\n'+p[2]+'/'+p[1];}
+    var p=k.split('-');return['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][parseInt(p[1])-1]+'/'+p[0].slice(2);
+  }
+  var labels=grupos.map(function(g){return fmtK(g.key);});
+  var avgAtraso=grupos.map(function(g){return Math.round(g.atraso/g.n);});
+  var avgSaida=grupos.map(function(g){return Math.round(g.saida/g.n);});
+  var avgAlmoco=grupos.map(function(g){return Math.round(g.almoco/g.n);});
+  var imp=grupos.map(function(g,i){return avgAtraso[i]+avgSaida[i]+avgAlmoco[i];});
+  var prod=imp.map(function(v){return Math.max(0,PRODIMP_FIXED_BASE-v);});
+  var pct=prod.map(function(p,i){return Math.round(p/(p+imp[i])*100);});
+
+  if(insEl){
+    insEl.style.display='block';
+    var sp=pct[0],ep=pct[pct.length-1];
+    if(ep>=sp){insEl.style.background='#f0fdf4';insEl.style.color='#15803d';insEl.style.border='1px solid #bbf7d0';insEl.textContent='📈 Produtividade melhorou no período — % produtivo subiu de '+sp+'% para '+ep+'%';}
+    else{insEl.style.background='#fef2f2';insEl.style.color='#dc2626';insEl.style.border='1px solid #fecaca';insEl.textContent='📉 Produtividade piorou no período — % produtivo caiu de '+sp+'% para '+ep+'%';}
+  }
+
+  if(_impEvoCharts.prodimp){_impEvoCharts.prodimp.destroy();_impEvoCharts.prodimp=null;}
+  if(!cv)return;
+
+  var barLabelsPlugin={id:'prodimpBarLabels',afterDatasetsDraw:function(c){
+    var ctx=c.ctx;var metaProd=c.getDatasetMeta(0),metaImp=c.getDatasetMeta(1);
+    ctx.save();ctx.font='700 9px Arial,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff';
+    metaProd.data.forEach(function(bar,i){var h=bar.base-bar.y;if(h<14)return;ctx.fillText(_impProdImpFmt(prod[i]),bar.x,bar.y+h/2);});
+    metaImp.data.forEach(function(bar,i){var h=bar.base-bar.y;if(h<14)return;ctx.fillText(_impProdImpFmt(imp[i]),bar.x,bar.y+h/2);});
+    ctx.restore();
+  }};
+  var lineLabelsPlugin={id:'prodimpLineLabels',afterDatasetsDraw:function(c){
+    var ctx=c.ctx;var meta=c.getDatasetMeta(2);
+    ctx.save();ctx.font='800 10px Arial,sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillStyle='#1e3a5f';
+    meta.data.forEach(function(pt,i){ctx.fillText(pct[i]+'%',pt.x,pt.y-7);});
+    ctx.restore();
+  }};
+
+  _impEvoCharts.prodimp=new Chart(cv.getContext('2d'),{
+    data:{labels:labels,datasets:[
+      {type:'bar',label:'Produtivo',data:prod,backgroundColor:'rgba(22,163,74,.8)',borderRadius:4,borderSkipped:false,stack:'s',order:2,yAxisID:'y'},
+      {type:'bar',label:'Improdutivo',data:imp,backgroundColor:'rgba(220,38,38,.75)',borderRadius:4,borderSkipped:false,stack:'s',order:2,yAxisID:'y'},
+      {type:'line',label:'% produtivo',data:pct,borderColor:'#1e3a5f',backgroundColor:'#1e3a5f',borderWidth:2,pointRadius:3,pointBackgroundColor:'#1e3a5f',tension:.3,yAxisID:'y1',order:1}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:20}},interaction:{mode:'index',intersect:false},
+      onClick:function(ev,els){if(!els.length||els[0].datasetIndex===2)return;_impProdImpDrillOpen(grupos[els[0].index].key,baseData);},
+      onHover:function(ev,els){var el=ev.native&&ev.native.target;if(el)el.style.cursor=(els.length&&els[0].datasetIndex!==2)?'pointer':'default';},
+      plugins:{legend:{display:false},tooltip:{callbacks:{
+        label:function(c){if(c.dataset.label==='% produtivo')return' % produtivo: '+c.raw+'%';return' '+c.dataset.label+': '+_impProdImpFmt(c.raw);},
+        afterBody:function(items){var i=items[0].dataIndex;var g=grupos[i];return['','Composição do improdutivo:','  atraso na entrada: '+_impProdImpFmt(avgAtraso[i]),'  saída antecipada: '+_impProdImpFmt(avgSaida[i]),'  excesso de almoço: '+_impProdImpFmt(avgAlmoco[i]),'',g.nComp+' completos · '+g.nParc+' parciais (só chegada)','🔍 Clique para ver os registros'];}
+      }}},
+      scales:{
+        y:{stacked:true,min:0,max:PRODIMP_FIXED_BASE+60,ticks:{callback:function(v){return _impProdImpFmt(v);},font:{size:10}},grid:{color:'#f1f5f9'}},
+        y1:{position:'right',min:0,max:100,ticks:{callback:function(v){return v+'%';},font:{size:10}},grid:{display:false}},
+        x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}}
+      }
+    },
+    plugins:[barLabelsPlugin,lineLabelsPlugin]
+  });
+
+  // Selo de qualidade do dado
+  var totComp=grupos.reduce(function(s,g){return s+g.nComp;},0);
+  var totParc=grupos.reduce(function(s,g){return s+g.nParc;},0);
+  var totAll=totComp+totParc;
+  var pComp=totAll?Math.round(totComp/totAll*100):0,pParc=100-pComp;
+  if(qb)qb.innerHTML=
+    '<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0">'+pComp+'% completos ('+totComp+' reg.) — conta atraso + saída + almoço</span>'
+    +'<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca">'+pParc+'% parciais ('+totParc+' reg.) — sem Término, só conta atraso na entrada</span>';
+
+  // Composição do improdutivo (médias do período exibido)
+  var mA=Math.round(avgAtraso.reduce(function(s,v){return s+v;},0)/avgAtraso.length);
+  var mS=Math.round(avgSaida.reduce(function(s,v){return s+v;},0)/avgSaida.length);
+  var mAl=Math.round(avgAlmoco.reduce(function(s,v){return s+v;},0)/avgAlmoco.length);
+  var mTot=(mA+mS+mAl)||1;
+  var causes=[{lbl:'Atraso na entrada',val:mA,color:'#dc2626'},{lbl:'Saída antecipada',val:mS,color:'#f97316'},{lbl:'Excesso de almoço',val:mAl,color:'#a855f7'}];
+  if(cb)cb.innerHTML=causes.map(function(c){
+    var pc=Math.round(c.val/mTot*100);
+    return'<div style="display:grid;grid-template-columns:150px 1fr 60px;align-items:center;gap:10px;margin-bottom:8px;font-size:11px">'
+      +'<span style="color:var(--text);font-weight:600">'+c.lbl+'</span>'
+      +'<div style="height:8px;border-radius:4px;background:#e2e8f0;overflow:hidden"><div style="height:100%;border-radius:4px;width:'+pc+'%;background:'+c.color+'"></div></div>'
+      +'<span style="text-align:right;font-weight:800;color:var(--text)">'+_impProdImpFmt(c.val)+' · '+pc+'%</span>'
+      +'</div>';
+  }).join('');
+
+  // KPI mini cards (último período vs anterior)
+  if(kpiEl&&prod.length){
+    var lastI=prod.length-1, prevI=Math.max(0,prod.length-2);
+    var dProd=prod[lastI]-prod[prevI], dImp=imp[lastI]-imp[prevI], dPct=pct[lastI]-pct[prevI];
+    function _deltaRow(d,goodWhenPositive,suf){
+      var good=goodWhenPositive?d>=0:d<=0;
+      return'<div style="font-size:11px;font-weight:700;margin-top:6px;color:'+(good?'#16a34a':'#dc2626')+'">'+(d>=0?'▲ +':'▼ ')+Math.abs(d)+suf+' vs período anterior</div>';
+    }
+    kpiEl.innerHTML=
+      '<div style="background:var(--card);border:1px solid var(--bord);border-top:3px solid #16a34a;border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Produtivo / equipe</div><div style="font-size:22px;font-weight:900;margin-top:4px;color:#16a34a">'+_impProdImpFmt(prod[lastI])+'</div>'+_deltaRow(dProd,true,' min')+'</div>'
+      +'<div style="background:var(--card);border:1px solid var(--bord);border-top:3px solid #dc2626;border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Improdutivo / equipe</div><div style="font-size:22px;font-weight:900;margin-top:4px;color:#dc2626">'+_impProdImpFmt(imp[lastI])+'</div>'+_deltaRow(dImp,false,' min')+'</div>'
+      +'<div style="background:var(--card);border:1px solid var(--bord);border-top:3px solid #1e3a5f;border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Aderência produtiva (%)</div><div style="font-size:22px;font-weight:900;margin-top:4px;color:#1e3a5f">'+pct[lastI]+'%</div>'+_deltaRow(dPct,true,' p.p.')+'</div>';
+  }
+}
+function _impProdImpDrillOpen(key,baseData){
+  var recs=baseData.filter(function(d){
+    var k=_IMP_PRODIMP_PERIOD==='dia'?d.dataSortKey:_IMP_PRODIMP_PERIOD==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
+    return k===key;
+  }).map(function(d){
+    var entrada=_impProdImpEntrada(d);
+    var atraso=Math.max(0,entrada-PRODIMP_FIXED_INI);
+    var completo=d.terminoMin!==null;
+    var saida=completo?Math.max(0,PRODIMP_FIXED_FIM-d.terminoMin):0;
+    var almoco=d.almExcesso||0;
+    var impTot=atraso+saida+almoco;
+    var prodTot=Math.max(0,PRODIMP_FIXED_BASE-impTot);
+    return Object.assign({},d,{_entrada:entrada,_atraso:atraso,_saida:saida,_almoco:almoco,_imp:impTot,_prod:prodTot,_completo:completo});
+  }).sort(function(a,b){return b._imp-a._imp;});
+  if(!recs.length)return;
+  var title=key;
+  if(key.indexOf('-W')>=0){var wp=key.split('-W');title='Semana '+parseInt(wp[1])+' / '+wp[0];}
+  else if(key.length===10){var pk=key.split('-');title=pk[2]+'/'+pk[1]+'/'+pk[0];}
+  else{var pk=key.split('-');title=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][parseInt(pk[1])-1]+'/'+pk[0].slice(2);}
+  function m2hm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
+  function m2hhm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60))+'h'+String(m%60).padStart(2,'0');}
+  var avgImp=Math.round(recs.reduce(function(s,d){return s+d._imp;},0)/recs.length);
+  var nComp=recs.filter(function(d){return d._completo;}).length;
+  var thS='background:#f5f9ff;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);position:sticky;top:0;white-space:nowrap';
+  var rows=recs.map(function(d,i){
+    var sq=impGetSquad(d.sap).squad||'—';
+    var bg=i%2===0?'#fff':'#f8fafc';
+    return'<tr style="background:'+bg+'">'
+      +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.dataStr||d.dataSortKey||'—')+'</td>'
+      +'<td style="padding:7px 10px;font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+impEsc(d.empresa)+'</td>'
+      +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.sap)+'</td>'
+      +'<td style="padding:7px 10px;white-space:nowrap">'+impEsc(sq)+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+m2hm(d._entrada)+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap;color:'+(d._atraso>0?'#dc2626':'#16a34a')+'">'+(d._atraso>0?m2hhm(d._atraso):'—')+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+(d._completo?m2hm(d.terminoMin):'<span style="color:#94a3b8">sem dado</span>')+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap;color:'+(d._saida>0?'#f97316':'#16a34a')+'">'+(d._completo?(d._saida>0?m2hhm(d._saida):'—'):'—')+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap;color:'+(d._almoco>0?'#a855f7':'#16a34a')+'">'+(d._almoco>0?m2hhm(d._almoco):'—')+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap"><span style="font-weight:800;color:#dc2626">'+m2hhm(d._imp)+'</span></td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap"><span style="font-weight:800;color:#16a34a">'+m2hhm(d._prod)+'</span></td>'
+      +'</tr>';
+  }).join('');
+  var mo=document.getElementById('imp-prodimp-drill-modal');
+  if(!mo){mo=document.createElement('div');mo.id='imp-prodimp-drill-modal';mo.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';mo.onclick=function(e){if(e.target===mo)mo.style.display='none';};document.body.appendChild(mo);}
+  mo.innerHTML='<div style="background:#fff;border-radius:12px;width:1180px;max-width:97vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)">'
+    +'<div style="padding:16px 20px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'
+    +'<div><div style="font-size:14px;font-weight:800;color:var(--sb)">Produtivo x Improdutivo (base 7h30) — '+title+'</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+recs.length+' registros · Média improdutivo: <strong style="color:#dc2626">'+m2hhm(avgImp)+'</strong> · <span style="color:#16a34a;font-weight:700">'+nComp+' completos</span> · <span style="color:#dc2626;font-weight:700">'+(recs.length-nComp)+' parciais</span></div></div>'
+    +'<button onclick="document.getElementById(\'imp-prodimp-drill-modal\').style.display=\'none\'" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:4px 8px;line-height:1">×</button>'
+    +'</div>'
+    +'<div style="overflow:auto;flex:1">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'
+    +'<th style="'+thS+';text-align:left">Data</th>'
+    +'<th style="'+thS+';text-align:left">Empresa</th>'
+    +'<th style="'+thS+';text-align:left">Obra (SAP)</th>'
+    +'<th style="'+thS+';text-align:left">Squad</th>'
+    +'<th style="'+thS+';text-align:center">Entrada</th>'
+    +'<th style="'+thS+';text-align:center">Atraso</th>'
+    +'<th style="'+thS+';text-align:center">Término</th>'
+    +'<th style="'+thS+';text-align:center">Saída antec.</th>'
+    +'<th style="'+thS+';text-align:center">Almoço exc.</th>'
+    +'<th style="'+thS+';text-align:center">Improdutivo</th>'
+    +'<th style="'+thS+';text-align:center">Produtivo</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table>'
+    +'</div></div>';
+  mo.style.display='flex';
+}
+
 function impChartTimeline(){
   var byDay={};
   IMP_FILTERED.forEach(function(d){ if(!d.dataSortKey) return; if(!byDay[d.dataSortKey]) byDay[d.dataSortKey]={at:0,min:0}; if(d.delayMin>0){byDay[d.dataSortKey].at++;byDay[d.dataSortKey].min+=d.delayMin;} });
@@ -10945,6 +11162,16 @@ async function renderViewImprodutividade(){
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px">'
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Média de horas trabalhadas por período</span><div style="font-size:11px;color:var(--muted);margin-top:2px">Término − Início − Almoço &nbsp;·&nbsp; <span style="color:#16a34a;font-weight:700">Verde ≥ 7h</span> &nbsp;·&nbsp; <span style="color:#b45309;font-weight:700">Amarelo 6–7h</span> &nbsp;·&nbsp; <span style="color:#dc2626;font-weight:700">Vermelho &lt; 6h</span></div></div><div style="display:flex;gap:5px" id="horas-period-btns"><button onclick="impHorasSetPeriod(\'semana\',this)" class="horas-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impHorasSetPeriod(\'dia\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impHorasSetPeriod(\'mes\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div style="position:relative;height:220px"><canvas id="evo-chart-horas"></canvas></div>'
+  +'</div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px">'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:8px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Evolução de Horas Produtivas x Improdutivas <span style="display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;vertical-align:middle">NOVO</span></span><div style="font-size:11px;color:var(--muted);margin-top:2px">Base fixa: <strong>08:00 → 16:30</strong> − 1h almoço = <strong>7h30/equipe (450 min)</strong> — não muda com os filtros do topo</div></div><div style="display:flex;gap:5px" id="prodimp-period-btns"><button onclick="impProdImpSetPeriod(\'semana\',this)" class="prodimp-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impProdImpSetPeriod(\'dia\',this)" class="prodimp-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impProdImpSetPeriod(\'mes\',this)" class="prodimp-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
+  +'<div id="evo-prodimp-insight" style="display:none;border-radius:8px;padding:10px 12px;font-size:12px;font-weight:700;margin:8px 0"></div>'
+  +'<div style="display:flex;gap:14px;margin:8px 0 10px;flex-wrap:wrap"><span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#16a34a;display:inline-block"></span>Produtivo</span><span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#dc2626;display:inline-block"></span>Improdutivo</span><span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#1e3a5f;display:inline-block"></span>% produtivo</span></div>'
+  +'<div style="position:relative;height:260px"><canvas id="evo-chart-prodimp"></canvas></div>'
+  +'<div id="evo-prodimp-quality" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;font-size:10px"></div>'
+  +'<div style="font-size:10px;color:#94a3b8;margin-top:6px;font-style:italic">Passe o mouse na barra vermelha para ver o motivo (atraso/saída/almoço) · Clique para ver os registros do período</div>'
+  +'<div id="evo-prodimp-kpis" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px"></div>'
+  +'<div style="background:var(--bg);border:1px solid var(--bord);border-radius:8px;padding:12px 14px;margin-top:12px"><div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:2px">Composição do improdutivo</div><div style="font-size:10px;color:var(--muted);margin-bottom:8px">Média do período exibido acima — o que está "roubando" os 7h30</div><div id="evo-prodimp-causes"></div></div>'
   +'</div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:12px;padding:20px 22px;margin-top:14px">'
   +'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #f1f5f9">'
