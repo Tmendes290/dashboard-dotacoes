@@ -9233,11 +9233,16 @@ function impCloseAderPanel(){
   _IMP_ADER_SQUADS=[];
 }
 function impOpenAderPanel(squad){
-  _IMP_ADER_SQUADS=squad?[squad]:[];
+  if(squad){
+    var idx=_IMP_ADER_SQUADS.indexOf(squad);
+    if(idx>=0) _IMP_ADER_SQUADS.splice(idx,1); else _IMP_ADER_SQUADS.push(squad);
+  } else {
+    _IMP_ADER_SQUADS=[];
+  }
   var panel=document.getElementById('evo-ader-panel');
   if(panel){panel.style.display='block';}
   var sqLbl=document.getElementById('evo-ader-squad-lbl');
-  if(sqLbl){sqLbl.textContent=squad||'';sqLbl.style.display=squad?'inline-block':'none';}
+  if(sqLbl){sqLbl.textContent=_IMP_ADER_SQUADS.join(' · ');sqLbl.style.display=_IMP_ADER_SQUADS.length?'inline-block':'none';}
   impRenderAderenciaFiscais();
   if(panel)panel.scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -9404,7 +9409,10 @@ function impRenderAderSquads(){
   gridEl.innerHTML=sorted.map(function(s,i){
     var tc=sqTextColor(s.pct);var bg=sqBgColor(s.pct);var bd=sqBdColor(s.pct);var sc=sqSolidColor(s.pct);var lbl=sqLabel(s.pct);
     var rankHtml=i<3?'<span style="font-size:18px;line-height:1">'+medals[i]+'</span>':'<span style="font-size:13px;font-weight:800;color:#cbd5e1">'+(i+1)+'.</span>';
-    return'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px 14px;position:relative;overflow:hidden;cursor:pointer;transition:transform .15s,box-shadow .15s" onclick="impOpenAderPanel(\''+s.sq.replace(/'/g,"\\'")+'\')" onmouseover="this.style.boxShadow=\'0 6px 20px rgba(0,0,0,.1)\';this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.boxShadow=\'none\';this.style.transform=\'none\'">'
+    var isSel=_IMP_ADER_SQUADS.indexOf(s.sq)>=0;
+    var selBorder=isSel?'border:2px solid #002F6C;box-shadow:0 0 0 3px rgba(0,47,108,.12)':'border:1px solid #e2e8f0';
+    return'<div style="background:#f8fafc;'+selBorder+';border-radius:12px;padding:16px 18px 14px;position:relative;overflow:hidden;cursor:pointer;transition:transform .15s,box-shadow .15s" onclick="impOpenAderPanel(\''+s.sq.replace(/'/g,"\\'")+'\')" onmouseover="this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.transform=\'none\'">'
+      +(isSel?'<div style="position:absolute;top:8px;right:10px;background:#002F6C;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;z-index:2">✓ selecionado</div>':'')
       +'<div style="position:absolute;top:0;left:0;right:0;height:5px;border-radius:12px 12px 0 0;background:'+sc+'"></div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;margin-top:2px">'+rankHtml+'<span style="font-size:30px;font-weight:900;line-height:1;color:'+tc+'">'+s.pct+'%</span></div>'
       +'<div style="font-size:11px;font-weight:700;color:#334155;line-height:1.35;margin-bottom:11px;min-height:30px">'+impEsc(s.sq)+'</div>'
@@ -9419,7 +9427,7 @@ function impRenderAderSquads(){
       +'<span style="font-size:10px;color:#94a3b8;font-weight:600">'+s.n+' fiscal'+(s.n>1?'is':'')+'</span>'
       +'<span style="font-size:9px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.3px;background:'+bg+';color:'+tc+'">'+lbl+'</span>'
       +'</div>'
-      +'<div style="text-align:center;margin-top:10px;font-size:9px;color:#94a3b8;font-weight:600;letter-spacing:.3px">Clique para ver fiscais</div>'
+      +'<div style="text-align:center;margin-top:10px;font-size:9px;color:#94a3b8;font-weight:600;letter-spacing:.3px">'+(isSel?'Clique para remover da comparação':'Clique para comparar (pode selecionar vários)')+'</div>'
       +'</div>';
   }).join('');
   // Legenda
