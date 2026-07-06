@@ -9381,12 +9381,14 @@ function impRenderAderSquads(){
   allRecs.forEach(function(d){
     var sq=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad;
     if(!sq)return; // sem squad identificado — não vira card na comparação
-    if(!squadData[sq])squadData[sq]={fiscais:{},days:{}};
+    if(!squadData[sq])squadData[sq]={fiscais:{},days:{},squadDays:{}};
     squadData[sq].fiscais[d.fiscal.trim()]=1;
     if(!squadData[sq].days[d.fiscal.trim()])squadData[sq].days[d.fiscal.trim()]={};
     squadData[sq].days[d.fiscal.trim()][d.dataSortKey]=1;
+    squadData[sq].squadDays[d.dataSortKey]=1;
   });
-  function sqPct(sq){var fs=Object.keys(squadData[sq].fiscais);var tot=fs.length*totalDays;if(!tot)return 0;var pres=fs.reduce(function(s,f){return s+Object.keys(squadData[sq].days[f]||{}).length;},0);return Math.round(pres/tot*100);}
+  // % de presença calculado sobre os dias em que o PRÓPRIO squad teve atividade — não sobre o total global de dias de todos os squads
+  function sqPct(sq){var fs=Object.keys(squadData[sq].fiscais);var squadTotalDays=Object.keys(squadData[sq].squadDays).length;var tot=fs.length*squadTotalDays;if(!tot)return 0;var pres=fs.reduce(function(s,f){return s+Object.keys(squadData[sq].days[f]||{}).length;},0);return Math.round(pres/tot*100);}
   function sqSolidColor(p){if(p>=80)return'#16a34a';if(p>=60)return'#2563eb';if(p>=40)return'#c2410c';return'#dc2626';}
   function sqTextColor(p){if(p>=80)return'#15803d';if(p>=60)return'#1d4ed8';if(p>=40)return'#c2410c';return'#dc2626';}
   function sqBgColor(p){if(p>=80)return'#f0fdf4';if(p>=60)return'#eff6ff';if(p>=40)return'#fff7ed';return'#fef2f2';}
