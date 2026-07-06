@@ -8604,6 +8604,7 @@ function impSaveJust(supaId,filtIdx,el){
 
 function impDesconsiderar(filtIdx,supaId){
   var _d=IMP_FILTERED[filtIdx];if(!_d)return;
+  if(!(_d.justificativa||'').trim()){toast('Preencha a justificativa antes de desconsiderar.','#dc2626');return;}
   _d.acao='Desconsiderar';
   var orig=IMP_DATA.find(function(d){return d.supaId===supaId;});
   if(orig)orig.acao='Desconsiderar';
@@ -10702,14 +10703,15 @@ function impRenderRegistros(){
       justCell='<td style="vertical-align:middle;padding:4px 10px"><div class="just-done">'
         +'<div class="just-done-pill">✓ Justificado</div>'
         +'<div class="just-done-txt" title="'+impEsc(_justTxt)+'">'+impEsc(_preview)+'</div>'
-        +'<div style="display:flex;gap:4px;margin-top:3px">'
+        +'<div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap">'
         +'<button class="just-btn" style="font-size:9px;padding:2px 7px" onclick="impOpenJust('+i+','+(jid?jid:'null')+')">✎ Editar</button>'
         +'<button class="just-btn" style="font-size:9px;padding:2px 7px;border-color:#ef4444;color:#ef4444" onclick="impRemoverJust('+i+','+(jid?jid:'null')+')">✕ Remover</button>'
+        +'<button class="just-btn" style="font-size:9px;padding:2px 7px;border-color:#94a3b8;color:#64748b" onclick="impDesconsiderar('+i+','+(jid?jid:'null')+')">⊘ Desconsiderar</button>'
         +'</div></div></td>';
     }else{
       justCell='<td style="vertical-align:middle;padding:4px 10px"><div style="display:flex;flex-direction:column;gap:4px">'
         +'<button class="just-btn" onclick="impOpenJust('+i+','+(jid?jid:'null')+')">+ Justificar</button>'
-        +'<button class="just-btn" style="border-color:#94a3b8;color:#64748b" onclick="impDesconsiderar('+i+','+(jid?jid:'null')+')">⊘ Desconsiderar</button>'
+        +'<button class="just-btn" disabled title="Preencha a justificativa antes de desconsiderar" style="border-color:#e2e8f0;color:#cbd5e1;cursor:not-allowed">⊘ Desconsiderar</button>'
         +'</div></td>';
     }
     var _pid=(d.problemaId||'').trim();
