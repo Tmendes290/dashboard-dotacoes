@@ -8641,7 +8641,7 @@ var _IMP_ACAO_STYLES={
 };
 function impGetFimMin(){
   var el=document.getElementById('imp-fim-time');
-  if(!el||!el.value) return 1020;
+  if(!el||!el.value) return 1005;
   var p=el.value.split(':');
   return parseInt(p[0])*60+parseInt(p[1]||0);
 }
@@ -8850,7 +8850,7 @@ function impApplyFilters(){
     function _toBR(s){if(!s)return'—';var p=s.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
     var _periodoStr=dtIni&&dtFim&&dtIni!==dtFim?_toBR(dtIni)+' a '+_toBR(dtFim):_toBR(dtIni||dtFim);
     var _refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
-    var _fimStr=(document.getElementById('imp-fim-time')||{}).value||'17:00';
+    var _fimStr=(document.getElementById('imp-fim-time')||{}).value||'16:45';
     _pi.textContent='Período: '+_periodoStr+'  ·  Referência de entrada: '+_refStr+'  |  Término até: '+_fimStr;
   }
 
@@ -8887,7 +8887,7 @@ function impLimpar(){
   var fim=document.getElementById('imp-dt-fim'); if(fim) fim.value='';
   if(impFP)impFP.clear();
   var ref=document.getElementById('imp-ref-time'); if(ref) ref.value='08:00';
-  var fim2=document.getElementById('imp-fim-time'); if(fim2) fim2.value='17:00';
+  var fim2=document.getElementById('imp-fim-time'); if(fim2) fim2.value='16:45';
   impRebuildMs();
   updateMsLabel('ms-imp-emp',[]);
   updateMsLabel('ms-imp-sap',[]);
@@ -8926,7 +8926,7 @@ function impRenderCards(refMin){
   var prevPctProd=prev&&prev.totalEsp>0?(100-prev.pctImp):null;
   var prevAvgH=prev?prev.avgH:null;
   var refStr2=(document.getElementById('imp-ref-time')||{}).value||'08:00';
-  var fimStr2=(document.getElementById('imp-fim-time')||{}).value||'17:00';
+  var fimStr2=(document.getElementById('imp-fim-time')||{}).value||'16:45';
   var liquidoMinC=Math.max(0,periodoBase-60);
   var avgImpMinC=validos.length?Math.round(totalMin/validos.length):0;
   var avgProdMinC=Math.max(0,liquidoMinC-avgImpMinC);
@@ -9055,7 +9055,7 @@ function impRenderKPIs(){
   var bdEl=document.getElementById('imp-kpi-breakdown');
   if(!bdEl||!validos.length) return;
   var refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
-  var fimStr=(document.getElementById('imp-fim-time')||{}).value||'17:00';
+  var fimStr=(document.getElementById('imp-fim-time')||{}).value||'16:45';
   var rp=refStr.split(':');var fp=fimStr.split(':');
   var refMin=parseInt(rp[0])*60+parseInt(rp[1]||0);
   var fimMin=parseInt(fp[0])*60+parseInt(fp[1]||0);
@@ -9993,7 +9993,7 @@ function _impProdImpFmt(v){var h=Math.floor(v/60),m=v%60;return h+'h'+String(m).
 function _impProdImpEntrada(d){return d.inicioMin!==null?d.inicioMin:(d.chegadaMin!==null?d.chegadaMin:d.ptsMin);}
 function _impProdImpWindow(){
   var refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
-  var fimStr=(document.getElementById('imp-fim-time')||{}).value||'17:00';
+  var fimStr=(document.getElementById('imp-fim-time')||{}).value||'16:45';
   var rp=refStr.split(':'),fp=fimStr.split(':');
   var ini=parseInt(rp[0])*60+parseInt(rp[1]||0);
   var fim=parseInt(fp[0])*60+parseInt(fp[1]||0);
@@ -11051,7 +11051,7 @@ async function renderViewImprodutividade(){
   +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Squad</label><div class="ms-wrap" id="ms-imp-squad"><div class="ms-input" onclick="toggleMs(\'ms-imp-squad\')"><span class="ms-label" id="ms-imp-squad-label">Todos</span><span>▾</span></div><div class="ms-drop" id="ms-imp-squad-drop" style="display:none"></div></div></div>'
   +'<div style="width:1px;height:32px;background:var(--bord);align-self:center;flex-shrink:0"></div>'
   +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Horário ref.</label><input type="time" id="imp-ref-time" value="08:00" onchange="impApplyFilters()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;width:90px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"></div>'
-  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Término até</label><input type="time" id="imp-fim-time" value="17:00" onchange="impApplyFilters()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;width:90px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"></div>'
+  +'<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;color:var(--muted)">Término até</label><input type="time" id="imp-fim-time" value="16:45" onchange="impApplyFilters()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 8px;font-size:12px;width:90px;color:var(--text);background:#fff;font-family:Inter,sans-serif;outline:none"></div>'
   +'<button onclick="impLimpar()" style="padding:7px 14px;border:1px solid #fca5a5;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;background:#fff;color:#dc2626;align-self:flex-end;font-family:inherit">✕ Limpar filtros</button>'
   +'<span id="imp-filter-hint" style="font-size:10px;color:var(--acc);font-weight:600;align-self:center;display:none"></span>'
   +'</div>'
