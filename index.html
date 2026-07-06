@@ -9309,6 +9309,14 @@ function impRenderAderenciaFiscais(){
   function getTotalPct(f){var allD=0,fiscD=0;periods.forEach(function(p){allD+=Object.keys(periodDays[p]).length;fiscD+=Object.keys(fiscalData[f][p]).length;});return allD?Math.round(fiscD/allD*100):0;}
   fiscais.sort(function(a,b){return getTotalPct(b)-getTotalPct(a);});
   if(badge)badge.textContent=fiscais.length+' fiscais · '+periods.length+' períodos';
+  // Squad de cada fiscal (pra agrupar a tabela quando mais de um squad estiver visível)
+  var fiscalSquad={};
+  allRecs.forEach(function(d){
+    var f=d.fiscal.trim();
+    if(!fiscalSquad[f]) fiscalSquad[f]=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad||'(sem squad)';
+  });
+  var squadsPresentes=Object.keys(fiscais.reduce(function(m,f){m[fiscalSquad[f]]=1;return m;},{}));
+  var agruparPorSquad=squadsPresentes.length>1;
   function pctColor(pct){
     if(pct===null)return{bg:'var(--bg)',text:'var(--muted)',brd:'var(--bord)'};
     if(pct===0)return{bg:'#fef2f2',text:'#dc2626',brd:'#fecaca'};
@@ -9328,22 +9336,38 @@ function impRenderAderenciaFiscais(){
     return'<div style="font-weight:800">S'+w+'</div><div>'+pad(mon.getDate())+'/'+pad(mon.getMonth()+1)+'–'+pad(fri.getDate())+'/'+pad(fri.getMonth()+1)+'</div>';
   }
   var thS='background:#1e3a5f;color:#fff;font-size:10px;font-weight:700;padding:7px 8px;text-align:center;white-space:nowrap;min-width:64px';
+  var nCols=periods.length+2;
   var html='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'
     +'<th style="'+thS+';text-align:left;min-width:130px;position:sticky;left:0;z-index:2">Fiscal</th>';
   periods.forEach(function(p){html+='<th style="'+thS+'">'+periodLabel(p)+'</th>';});
   html+='<th style="'+thS+';background:#0f2744">Total</th></tr></thead><tbody>';
-  fiscais.forEach(function(f,fi){
+  function fiscalRow(f,fi){
     var rowBg=fi%2===0?'#fff':'#f8fafc';
-    html+='<tr>';
-    html+='<td style="padding:6px 10px;font-weight:600;color:var(--text);border-right:1px solid var(--bord);position:sticky;left:0;z-index:1;background:'+rowBg+';white-space:nowrap">'+impEsc(f)+'</td>';
+    var row='<tr>';
+    row+='<td style="padding:6px 10px 6px 22px;font-weight:600;color:var(--text);border-right:1px solid var(--bord);position:sticky;left:0;z-index:1;background:'+rowBg+';white-space:nowrap">'+impEsc(f)+'</td>';
     periods.forEach(function(p){
       var pct=getPct(f,p);var c=pctColor(pct);
-      html+='<td style="padding:5px;text-align:center;background:'+rowBg+'"><div style="background:'+c.bg+';color:'+c.text+';border:1px solid '+c.brd+';border-radius:5px;padding:3px 5px;font-weight:700">'+(pct!==null?pct+'%':'—')+'</div></td>';
+      row+='<td style="padding:5px;text-align:center;background:'+rowBg+'"><div style="background:'+c.bg+';color:'+c.text+';border:1px solid '+c.brd+';border-radius:5px;padding:3px 5px;font-weight:700">'+(pct!==null?pct+'%':'—')+'</div></td>';
     });
     var tot=getTotalPct(f);var ct=pctColor(tot);
-    html+='<td style="padding:5px;text-align:center;background:'+rowBg+'"><div style="background:'+ct.bg+';color:'+ct.text+';border:2px solid '+ct.brd+';border-radius:6px;padding:4px 7px;font-weight:800;font-size:12px">'+tot+'%</div></td>';
-    html+='</tr>';
-  });
+    row+='<td style="padding:5px;text-align:center;background:'+rowBg+'"><div style="background:'+ct.bg+';color:'+ct.text+';border:2px solid '+ct.brd+';border-radius:6px;padding:4px 7px;font-weight:800;font-size:12px">'+tot+'%</div></td>';
+    row+='</tr>';
+    return row;
+  }
+  if(agruparPorSquad){
+    var bySquadFiscais={};
+    fiscais.forEach(function(f){var sq=fiscalSquad[f];if(!bySquadFiscais[sq])bySquadFiscais[sq]=[];bySquadFiscais[sq].push(f);});
+    var squadOrder=Object.keys(bySquadFiscais).map(function(sq){
+      var fs=bySquadFiscais[sq];var avg=Math.round(fs.reduce(function(s,f){return s+getTotalPct(f);},0)/fs.length);
+      return{sq:sq,avg:avg};
+    }).sort(function(a,b){return b.avg-a.avg;});
+    squadOrder.forEach(function(g){
+      html+='<tr><td colspan="'+nCols+'" style="padding:6px 10px;background:#eef2f7;color:#1e3a5f;font-weight:800;font-size:10px;text-transform:uppercase;letter-spacing:.4px;border-top:1px solid var(--bord);border-bottom:1px solid var(--bord);position:sticky;left:0">'+impEsc(g.sq)+' <span style="font-weight:600;color:var(--muted);text-transform:none">— '+bySquadFiscais[g.sq].length+' fiscal'+(bySquadFiscais[g.sq].length>1?'is':'')+' · média '+g.avg+'%</span></td></tr>';
+      bySquadFiscais[g.sq].forEach(function(f,fi){html+=fiscalRow(f,fi);});
+    });
+  } else {
+    fiscais.forEach(function(f,fi){html+=fiscalRow(f,fi);});
+  }
   html+='</tbody></table>';
   if(tableEl)tableEl.innerHTML=html;
   if(_impAderChart){_impAderChart.destroy();_impAderChart=null;}
