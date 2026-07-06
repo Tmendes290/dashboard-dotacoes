@@ -10054,10 +10054,24 @@ function _impBuildProdImpChart(){
   }};
   var lineLabelsPlugin={id:'prodimpLineLabels',afterDatasetsDraw:function(c){
     var ctx=c.ctx;var meta=c.getDatasetMeta(2);
-    ctx.save();ctx.font='800 10px Arial,sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillStyle='#1e3a5f';
-    meta.data.forEach(function(pt,i){ctx.fillText(pct[i]+'%',pt.x,pt.y-7);});
+    ctx.save();ctx.font='800 10px Arial,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    meta.data.forEach(function(pt,i){
+      var txt=pct[i]+'%';
+      var w=ctx.measureText(txt).width;
+      var cy=pt.y-15; // acima do ponto da linha, com folga extra pra não colar no rótulo da barra
+      ctx.fillStyle='#1e3a5f';
+      ctx.beginPath();
+      if(ctx.roundRect) ctx.roundRect(pt.x-w/2-5,cy-8,w+10,16,8); else ctx.rect(pt.x-w/2-5,cy-8,w+10,16);
+      ctx.fill();
+      ctx.fillStyle='#fff';
+      ctx.fillText(txt,pt.x,cy+1);
+    });
     ctx.restore();
   }};
+  function _prodImpBarElement(els){
+    for(var i=0;i<els.length;i++) if(els[i].datasetIndex!==2) return els[i];
+    return null;
+  }
 
   _impEvoCharts.prodimp=new Chart(cv.getContext('2d'),{
     data:{labels:labels,datasets:[
@@ -10065,9 +10079,9 @@ function _impBuildProdImpChart(){
       {type:'bar',label:'Improdutivo',data:imp,backgroundColor:'rgba(220,38,38,.75)',borderRadius:4,borderSkipped:false,stack:'s',order:2,yAxisID:'y'},
       {type:'line',label:'% produtivo',data:pct,borderColor:'#1e3a5f',backgroundColor:'#1e3a5f',borderWidth:2,pointRadius:3,pointBackgroundColor:'#1e3a5f',tension:.3,yAxisID:'y1',order:1}
     ]},
-    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:20}},interaction:{mode:'index',intersect:false},
-      onClick:function(ev,els){if(!els.length||els[0].datasetIndex===2)return;_impProdImpDrillOpen(grupos[els[0].index].key,baseData);},
-      onHover:function(ev,els){var el=ev.native&&ev.native.target;if(el)el.style.cursor=(els.length&&els[0].datasetIndex!==2)?'pointer':'default';},
+    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:28}},interaction:{mode:'index',intersect:false},
+      onClick:function(ev,els){var barEl=_prodImpBarElement(els);if(!barEl)return;_impProdImpDrillOpen(grupos[barEl.index].key,baseData);},
+      onHover:function(ev,els){var el=ev.native&&ev.native.target;if(el)el.style.cursor=_prodImpBarElement(els)?'pointer':'default';},
       plugins:{legend:{display:false},tooltip:{callbacks:{
         label:function(c){if(c.dataset.label==='% produtivo')return' % produtivo: '+c.raw+'%';return' '+c.dataset.label+': '+_impProdImpFmt(c.raw);},
         afterBody:function(items){var i=items[0].dataIndex;var g=grupos[i];return['','Composição do improdutivo:','  atraso na entrada: '+_impProdImpFmt(avgAtraso[i]),'  saída antecipada: '+_impProdImpFmt(avgSaida[i]),'  excesso de almoço: '+_impProdImpFmt(avgAlmoco[i]),'',g.nComp+' completos · '+g.nParc+' parciais (só chegada)','🔍 Clique para ver os registros'];}
