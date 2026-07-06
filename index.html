@@ -9215,12 +9215,12 @@ function impEvoSetPeriod(p,btn){
   impRenderEvolucao();
 }
 function impSetEvoPeriod(p){
-  _IMP_CHEGADA_PERIOD=p;_IMP_HORAS_PERIOD=p;
-  document.querySelectorAll('.chegada-period-btn,.horas-period-btn').forEach(function(b){
+  _IMP_CHEGADA_PERIOD=p;_IMP_HORAS_PERIOD=p;_IMP_PRODIMP_PERIOD=p;
+  document.querySelectorAll('.chegada-period-btn,.horas-period-btn,.prodimp-period-btn').forEach(function(b){
     var match=(p==='semana'&&b.textContent.indexOf('semana')>=0)||(p==='dia'&&b.textContent.indexOf('dia')>=0)||(p==='mes'&&b.textContent.indexOf('mês')>=0);
     b.style.background=match?'var(--sb)':'var(--card)';b.style.color=match?'#fff':'var(--muted)';
   });
-  _impBuildChegadaChart();_impBuildHorasChart();
+  _impBuildChegadaChart();_impBuildHorasChart();_impBuildProdImpChart();
 }
 function impChegadaSetPeriod(p,btn){
   impSetEvoPeriod(p);
@@ -9833,10 +9833,8 @@ function impHorasSetPeriod(p,btn){
   void btn;
 }
 function impProdImpSetPeriod(p,btn){
-  _IMP_PRODIMP_PERIOD=p;
-  document.querySelectorAll('.prodimp-period-btn').forEach(function(b){b.style.background='var(--card)';b.style.color='var(--muted)';});
-  if(btn){btn.style.background='var(--sb)';btn.style.color='#fff';}
-  _impBuildProdImpChart();
+  impSetEvoPeriod(p);
+  void btn;
 }
 function _impBuildHorasChart(){
   var baseData=IMP_FILTERED.filter(function(d){
