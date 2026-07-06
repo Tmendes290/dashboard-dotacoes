@@ -9983,7 +9983,7 @@ var PRODIMP_FIXED_INI=480, PRODIMP_FIXED_FIM=990, PRODIMP_FIXED_BASE=450;
 function _impProdImpFmt(v){var h=Math.floor(v/60),m=v%60;return h+'h'+String(m).padStart(2,'0');}
 function _impProdImpEntrada(d){return d.inicioMin!==null?d.inicioMin:(d.chegadaMin!==null?d.chegadaMin:d.ptsMin);}
 function _impBuildProdImpChart(){
-  var baseData=IMP_FILTERED.filter(function(d){
+  var candidatos=IMP_FILTERED.filter(function(d){
     if(impIsExcluido(d))return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
@@ -9991,6 +9991,9 @@ function _impBuildProdImpChart(){
     var entrada=_impProdImpEntrada(d);
     return entrada!==null&&entrada!==undefined&&!!d.dataSortKey;
   });
+  // Entradas depois das 16:30 são turno (não horário administrativo) — não entram nesta base fixa de 7h30
+  var nTurno=candidatos.filter(function(d){return _impProdImpEntrada(d)>PRODIMP_FIXED_FIM;}).length;
+  var baseData=candidatos.filter(function(d){return _impProdImpEntrada(d)<=PRODIMP_FIXED_FIM;});
 
   var byP={};
   baseData.forEach(function(d){
@@ -10100,7 +10103,8 @@ function _impBuildProdImpChart(){
   var pComp=totAll?Math.round(totComp/totAll*100):0,pParc=100-pComp;
   if(qb)qb.innerHTML=
     '<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0">'+pComp+'% completos ('+totComp+' reg.) — conta atraso + saída + almoço</span>'
-    +'<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca">'+pParc+'% parciais ('+totParc+' reg.) — sem Término, só conta atraso na entrada</span>';
+    +'<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca">'+pParc+'% parciais ('+totParc+' reg.) — sem Término, só conta atraso na entrada</span>'
+    +(nTurno?'<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1">'+nTurno+' de turno (excluídos) — entrada após 16:30, fora do horário adm.</span>':'');
 
   // Composição do improdutivo (médias do período exibido)
   var mA=Math.round(avgAtraso.reduce(function(s,v){return s+v;},0)/avgAtraso.length);
