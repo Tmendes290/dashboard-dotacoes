@@ -8359,6 +8359,13 @@ function _matTh(txt){
 var IMP_DATA=[], IMP_FILTERED=[];
 var IMP_F_EMPS=[], IMP_F_SAPS=[], IMP_F_SQUADS=[];
 var IMP_DT_MIN='', IMP_DT_MAX='';
+// Ano usado para montar o dropdown de Semana — vem dos próprios dados (IMP_DT_MAX),
+// nunca do relógio do computador do usuário (que pode estar com data/fuso errado).
+function _impDataYear(){
+  if(IMP_DT_MAX&&IMP_DT_MAX.length>=4) return parseInt(IMP_DT_MAX.slice(0,4));
+  if(IMP_DT_MIN&&IMP_DT_MIN.length>=4) return parseInt(IMP_DT_MIN.slice(0,4));
+  return new Date().getFullYear();
+}
 var IMP_TAB='dashboard';
 var _impCharts={};
 var IMP_CHART_F={empresa:null,sap:null,squad:null};
@@ -8433,7 +8440,7 @@ function impOnMs(id){
   if(id==='ms-imp-mes'){
     IMP_F_MES=sel; updateMsLabel(id,sel);
     // Ao mudar mês, reconstruir semanas filtrando pelo(s) mês(es) selecionado(s)
-    var ySem=new Date().getFullYear();
+    var ySem=_impDataYear();
     var mesIdxSel=IMP_F_MES.map(function(n){return _IMP_MES_NAMES.indexOf(n);});
     var weeksToShow=[];
     for(var wi=1;wi<=52;wi++){
@@ -8488,8 +8495,8 @@ function impRebuildMs(){setTimeout(impInitFP,0);
   buildMsDrop('ms-imp-squad',squads,IMP_F_SQUADS,'impOnMs');
   // MÊS — sempre todos os 12 meses
   buildMsDropKV('ms-imp-mes',[0,1,2,3,4,5,6,7,8,9,10,11].map(function(m){return{value:_IMP_MES_NAMES[m],label:_IMP_MES_NAMES[m]};}),IMP_F_MES,'impOnMs');
-  // SEMANA — sempre todas as semanas do ano (1-52)
-  var y=new Date().getFullYear();
+  // SEMANA — sempre todas as semanas do ano dos dados (1-52)
+  var y=_impDataYear();
   var allWeeks=[];for(var w=1;w<=52;w++)allWeeks.push(w);
   buildMsDropKV('ms-imp-semana',allWeeks.map(function(w){var mon=_impISOMonday(w,y);var fri=new Date(mon);fri.setDate(mon.getDate()+4);return{value:'Sem.'+w,label:'Sem.'+w+' — '+_impFmt2(mon)+' a '+_impFmt2(fri)};}),IMP_F_SEMANA_MS,'impOnMs');
   // DIAS da semana — estático
@@ -11444,6 +11451,11 @@ async function renderViewImprodutividade(){
   if(_bgRefresh){
     setTimeout(async function(){
       await impLoadFromSupabase();
+      if(_IMP_LOAD_ERR){
+        console.warn('[imp] background refresh falhou, mantendo dados em cache local:',_IMP_LOAD_ERR);
+        toast('Não foi possível atualizar os dados do servidor — mostrando última versão salva neste navegador.','#dc2626');
+        return;
+      }
       var _still=document.getElementById('imp-cards');
       if(_still){try{
         impRebuildMs();impApplyFilters();
