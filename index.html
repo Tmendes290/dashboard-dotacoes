@@ -9207,6 +9207,8 @@ var _IMP_ADER_SQUADS=[];
 var _impAderSqChart=null;
 var _impEvoCharts={};
 var _EVO_SQHRS_RECORDS={};
+var _EVO_PRODIMP_BASEDATA=[];
+var _EVO_PRODIMP_W=null;
 var _impAderChart=null;
 
 function impEvoSetPeriod(p,btn){
@@ -10145,10 +10147,11 @@ function _impBuildProdImpChart(){
   var mS=Math.round(avgSaida.reduce(function(s,v){return s+v;},0)/avgSaida.length);
   var mAl=Math.round(avgAlmoco.reduce(function(s,v){return s+v;},0)/avgAlmoco.length);
   var mTot=(mA+mS+mAl)||1;
-  var causes=[{lbl:'Atraso na entrada',val:mA,color:'#dc2626'},{lbl:'Saída antecipada',val:mS,color:'#f97316'},{lbl:'Excesso de almoço',val:mAl,color:'#a855f7'}];
+  _EVO_PRODIMP_BASEDATA=baseData;_EVO_PRODIMP_W=W;
+  var causes=[{lbl:'Atraso na entrada',val:mA,color:'#dc2626',key:'atraso'},{lbl:'Saída antecipada',val:mS,color:'#f97316',key:'saida'},{lbl:'Excesso de almoço',val:mAl,color:'#a855f7',key:'almoco'}];
   if(cb)cb.innerHTML=causes.map(function(c){
     var pc=Math.round(c.val/mTot*100);
-    return'<div style="display:grid;grid-template-columns:150px 1fr 60px;align-items:center;gap:10px;margin-bottom:8px;font-size:11px">'
+    return'<div onclick="_impProdImpCauseDrillOpen(\''+c.key+'\')" style="cursor:pointer;display:grid;grid-template-columns:150px 1fr 60px;align-items:center;gap:10px;margin-bottom:8px;font-size:11px" title="Clique para ver os registros">'
       +'<span style="color:var(--text);font-weight:600">'+c.lbl+'</span>'
       +'<div style="height:8px;border-radius:4px;background:#e2e8f0;overflow:hidden"><div style="height:100%;border-radius:4px;width:'+pc+'%;background:'+c.color+'"></div></div>'
       +'<span style="text-align:right;font-weight:800;color:var(--text)">'+_impProdImpFmt(c.val)+' · '+pc+'%</span>'
@@ -10316,6 +10319,65 @@ function _impSquadHorasDrillOpen(sq){
     +'<th style="'+thS+';text-align:center">Almoço</th>'
     +'<th style="'+thS+';text-align:center">Término</th>'
     +'<th style="'+thS+';text-align:center">Horas trab.</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table>'
+    +'</div></div>';
+  mo.style.display='flex';
+}
+
+function _impProdImpCauseDrillOpen(cause){
+  var W=_EVO_PRODIMP_W||_impProdImpWindow();
+  var baseData=_EVO_PRODIMP_BASEDATA||[];
+  var labelsCause={atraso:'Atraso na entrada',saida:'Saída antecipada',almoco:'Excesso de almoço'};
+  var colorsCause={atraso:'#dc2626',saida:'#f97316',almoco:'#a855f7'};
+  function m2hm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
+  function m2hhm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60))+'h'+String(m%60).padStart(2,'0');}
+  var recs=baseData.map(function(d){
+    var entrada=_impProdImpEntrada(d);
+    var atraso=Math.max(0,entrada-W.ini);
+    var completo=d.terminoMin!==null;
+    var saida=completo?Math.max(0,W.fim-d.terminoMin):0;
+    var almoco=d.almExcesso||0;
+    var v=cause==='atraso'?atraso:cause==='saida'?saida:almoco;
+    return Object.assign({},d,{_entrada:entrada,_completo:completo,_terminoOk:completo,_v:v});
+  }).filter(function(d){return d._v>0;}).sort(function(a,b){return b._v-a._v;});
+  if(!recs.length)return;
+  var avgV=Math.round(recs.reduce(function(s,d){return s+d._v;},0)/recs.length);
+  var causeColor=colorsCause[cause];
+  var extraColLabel=cause==='atraso'?'Entrada':cause==='saida'?'Término':'Almoço';
+  function extraColVal(d){
+    if(cause==='atraso')return m2hm(d._entrada);
+    if(cause==='saida')return d._completo?m2hm(d.terminoMin):'<span style="color:#94a3b8">sem dado</span>';
+    return(d.almIniMin!==null&&d.almFimMin!==null)?m2hm(d.almIniMin)+'–'+m2hm(d.almFimMin):'—';
+  }
+  var thS='background:#f5f9ff;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);position:sticky;top:0;white-space:nowrap';
+  var rows=recs.map(function(d,i){
+    var sq=impGetSquad(d.sap).squad||'—';
+    var bg=i%2===0?'#fff':'#f8fafc';
+    return'<tr style="background:'+bg+'">'
+      +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.dataStr||d.dataSortKey||'—')+'</td>'
+      +'<td style="padding:7px 10px;font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+impEsc(d.empresa)+'</td>'
+      +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.sap)+'</td>'
+      +'<td style="padding:7px 10px;white-space:nowrap">'+impEsc(sq)+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+extraColVal(d)+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap"><span style="font-weight:800;color:'+causeColor+'">'+m2hhm(d._v)+'</span></td>'
+      +'</tr>';
+  }).join('');
+  var mo=document.getElementById('imp-prodimpcause-drill-modal');
+  if(!mo){mo=document.createElement('div');mo.id='imp-prodimpcause-drill-modal';mo.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';mo.onclick=function(e){if(e.target===mo)mo.style.display='none';};document.body.appendChild(mo);}
+  mo.innerHTML='<div style="background:#fff;border-radius:12px;width:820px;max-width:97vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)">'
+    +'<div style="padding:16px 20px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'
+    +'<div><div style="font-size:14px;font-weight:800;color:var(--sb)">'+labelsCause[cause]+' — registros do período exibido</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+recs.length+' registros · Média: <strong style="color:'+causeColor+'">'+m2hhm(avgV)+'</strong></div></div>'
+    +'<button onclick="document.getElementById(\'imp-prodimpcause-drill-modal\').style.display=\'none\'" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:4px 8px;line-height:1">×</button>'
+    +'</div>'
+    +'<div style="overflow:auto;flex:1">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'
+    +'<th style="'+thS+';text-align:left">Data</th>'
+    +'<th style="'+thS+';text-align:left">Empresa</th>'
+    +'<th style="'+thS+';text-align:left">Obra (SAP)</th>'
+    +'<th style="'+thS+';text-align:left">Squad</th>'
+    +'<th style="'+thS+';text-align:center">'+extraColLabel+'</th>'
+    +'<th style="'+thS+';text-align:center">'+labelsCause[cause]+'</th>'
     +'</tr></thead><tbody>'+rows+'</tbody></table>'
     +'</div></div>';
   mo.style.display='flex';
