@@ -9206,6 +9206,7 @@ var _IMP_ADER_PERIOD='semana';
 var _IMP_ADER_SQUADS=[];
 var _impAderSqChart=null;
 var _impEvoCharts={};
+var _EVO_SQHRS_RECORDS={};
 var _impAderChart=null;
 
 function impEvoSetPeriod(p,btn){
@@ -9622,18 +9623,20 @@ function impRenderEvolucao(){
 
   // Média horas produtivas por squad
   var bySq={};
+  var sqRecs={};
   var _sqFilter=curr._isoIni
     ? function(d){return d.horasTrab!==null&&d.dataSortKey>=curr._isoIni&&d.dataSortKey<=curr._isoFim;}
     : function(d){return d.horasTrab!==null&&(_IMP_EVO_PERIOD==='mes'?_impMonthKey(d.dataSortKey)===curr.key:_impWeekKey(d.dataSortKey)===curr.key);};
   baseData.filter(_sqFilter)
-    .forEach(function(d){var sq=(d.squadInfo&&d.squadInfo.squad)||'(sem squad)';if(!bySq[sq])bySq[sq]={t:0,n:0};bySq[sq].t+=d.horasTrab;bySq[sq].n++;});
+    .forEach(function(d){var sq=(d.squadInfo&&d.squadInfo.squad)||'(sem squad)';if(!bySq[sq])bySq[sq]={t:0,n:0};bySq[sq].t+=d.horasTrab;bySq[sq].n++;if(!sqRecs[sq])sqRecs[sq]=[];sqRecs[sq].push(d);});
+  _EVO_SQHRS_RECORDS=sqRecs;
   var sqList=Object.entries(bySq).map(function(e){return{sq:e[0],avg:Math.round(e[1].t/e[1].n)};}).sort(function(a,b){return b.avg-a.avg;});
   var sqEl=document.getElementById('evo-squad-hrs');
   if(sqEl){
     var avgGeral=curr.countH?Math.round(curr.totalH/curr.countH):480;
     sqEl.innerHTML=sqList.slice(0,8).map(function(s){
       var col2=s.avg>=avgGeral?'background:#f0fdf4':'';if(s.avg<avgGeral-60)col2='background:#fef2f2';
-      return'<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;border-radius:6px;font-size:11px;'+col2+'"><span>'+s.sq+'</span><strong style="color:var(--sb)">'+impFmtDelay(s.avg)+'</strong></div>';
+      return'<div onclick="_impSquadHorasDrillOpen(\''+s.sq.replace(/'/g,"\\'")+'\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:4px 8px;border-radius:6px;font-size:11px;'+col2+'" title="Clique para ver os registros"><span>'+impEsc(s.sq)+'</span><strong style="color:var(--sb)">'+impFmtDelay(s.avg)+'</strong></div>';
     }).join('');
   }
 
@@ -9664,7 +9667,7 @@ function impRenderEvolucao(){
       var col2=pidColors[e[0]]||'#009CDE';
       var bw2=Math.round(e[1]/maxPid*100);
       var pct2=totalComPid?Math.round(e[1]/totalComPid*100):0;
-      return'<div style="display:flex;flex-direction:column;gap:3px">'
+      return'<div onclick="_impProbDrillOpen(\''+e[0].replace(/'/g,"\\'")+'\')" style="cursor:pointer;display:flex;flex-direction:column;gap:3px" title="Clique para ver os registros afetados">'
         +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;font-weight:700;color:var(--text)">'+impEsc(e[0])+'</span><span style="font-size:11px;color:var(--muted)">'+e[1]+' ('+pct2+'%)</span></div>'
         +'<div style="background:#f1f5f9;border-radius:4px;height:6px"><div style="background:'+col2+';height:6px;border-radius:4px;width:'+bw2+'%"></div></div>'
         +'</div>';
@@ -10075,12 +10078,13 @@ function _impBuildProdImpChart(){
     ctx.restore();
   }};
   var lineLabelsPlugin={id:'prodimpLineLabels',afterDatasetsDraw:function(c){
-    var ctx=c.ctx;var meta=c.getDatasetMeta(2);
+    var ctx=c.ctx;var meta=c.getDatasetMeta(2);var metaImpTop=c.getDatasetMeta(1);
     ctx.save();ctx.font='800 10px Arial,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     meta.data.forEach(function(pt,i){
       var txt=pct[i]+'%';
       var w=ctx.measureText(txt).width;
-      var cy=pt.y-15; // acima do ponto da linha, com folga extra pra não colar no rótulo da barra
+      var barTopY=metaImpTop.data[i]?metaImpTop.data[i].y:pt.y;
+      var cy=Math.min(pt.y,barTopY)-18; // sempre acima do topo da barra e do ponto da linha, com folga fixa
       ctx.fillStyle='#1e3a5f';
       ctx.beginPath();
       if(ctx.roundRect) ctx.roundRect(pt.x-w/2-5,cy-8,w+10,16,8); else ctx.rect(pt.x-w/2-5,cy-8,w+10,16);
@@ -10101,7 +10105,7 @@ function _impBuildProdImpChart(){
       {type:'bar',label:'Improdutivo',data:imp,backgroundColor:'rgba(220,38,38,.75)',borderRadius:4,borderSkipped:false,stack:'s',order:2,yAxisID:'y'},
       {type:'line',label:'% produtivo',data:pct,borderColor:'#1e3a5f',backgroundColor:'#1e3a5f',borderWidth:2,pointRadius:3,pointBackgroundColor:'#1e3a5f',tension:.3,yAxisID:'y1',order:1}
     ]},
-    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:28}},interaction:{mode:'index',intersect:false},
+    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:36}},interaction:{mode:'index',intersect:false},
       onClick:function(ev,els){var barEl=_prodImpBarElement(els);if(!barEl)return;_impProdImpDrillOpen(grupos[barEl.index].key,baseData,W);},
       onHover:function(ev,els){var el=ev.native&&ev.native.target;if(el)el.style.cursor=_prodImpBarElement(els)?'pointer':'default';},
       plugins:{legend:{display:false},tooltip:{callbacks:{
@@ -10219,6 +10223,90 @@ function _impProdImpDrillOpen(key,baseData,W){
     +'<th style="'+thS+';text-align:center">Almoço exc.</th>'
     +'<th style="'+thS+';text-align:center">Improdutivo</th>'
     +'<th style="'+thS+';text-align:center">Produtivo</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table>'
+    +'</div></div>';
+  mo.style.display='flex';
+}
+
+function _impProbDrillOpen(pid){
+  var recs=IMP_FILTERED.filter(function(d){return !impIsExcluido(d)&&d.delayMin>0&&(d.problemaId||'').trim()===pid;})
+    .slice().sort(function(a,b){return (b.dataSortKey||'').localeCompare(a.dataSortKey||'');});
+  if(!recs.length)return;
+  var diasSet={};recs.forEach(function(d){if(d.dataSortKey)diasSet[d.dataSortKey]=1;});
+  var nDias=Object.keys(diasSet).length;
+  var thS='background:#f5f9ff;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);position:sticky;top:0;white-space:nowrap';
+  var rows=recs.map(function(d,i){
+    var sq=impGetSquad(d.sap).squad||'—';
+    var bg=i%2===0?'#fff':'#f8fafc';
+    return'<tr style="background:'+bg+'">'
+      +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.dataStr||d.dataSortKey||'—')+'</td>'
+      +'<td style="padding:7px 10px;font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+impEsc(d.empresa)+'</td>'
+      +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.sap)+'</td>'
+      +'<td style="padding:7px 10px;white-space:nowrap">'+impEsc(sq)+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap"><span style="font-weight:800;color:#dc2626">'+(impFmtDelay(d.delayMin)||d.delayMin+' min')+'</span></td>'
+      +'<td style="padding:7px 10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+impEsc(d.justificativa||'')+'">'+impEsc(d.justificativa||'—')+'</td>'
+      +'<td style="padding:7px 10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+impEsc(d.acao||'')+'">'+impEsc(d.acao||'—')+'</td>'
+      +'</tr>';
+  }).join('');
+  var mo=document.getElementById('imp-prob-drill-modal');
+  if(!mo){mo=document.createElement('div');mo.id='imp-prob-drill-modal';mo.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';mo.onclick=function(e){if(e.target===mo)mo.style.display='none';};document.body.appendChild(mo);}
+  mo.innerHTML='<div style="background:#fff;border-radius:12px;width:1080px;max-width:97vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)">'
+    +'<div style="padding:16px 20px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'
+    +'<div><div style="font-size:14px;font-weight:800;color:var(--sb)">Desvios — '+impEsc(pid)+'</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+recs.length+' registros · '+nDias+' dia(s) afetado(s)</div></div>'
+    +'<button onclick="document.getElementById(\'imp-prob-drill-modal\').style.display=\'none\'" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:4px 8px;line-height:1">×</button>'
+    +'</div>'
+    +'<div style="overflow:auto;flex:1">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'
+    +'<th style="'+thS+';text-align:left">Data</th>'
+    +'<th style="'+thS+';text-align:left">Empresa</th>'
+    +'<th style="'+thS+';text-align:left">Obra (SAP)</th>'
+    +'<th style="'+thS+';text-align:left">Squad</th>'
+    +'<th style="'+thS+';text-align:center">Atraso</th>'
+    +'<th style="'+thS+';text-align:left">Justificativa</th>'
+    +'<th style="'+thS+';text-align:left">Ação</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table>'
+    +'</div></div>';
+  mo.style.display='flex';
+}
+
+function _impSquadHorasDrillOpen(sq){
+  var recs=(_EVO_SQHRS_RECORDS[sq]||[]).slice().sort(function(a,b){return (b.dataSortKey||'').localeCompare(a.dataSortKey||'');});
+  if(!recs.length)return;
+  var avg=Math.round(recs.reduce(function(s,d){return s+d.horasTrab;},0)/recs.length);
+  var thS='background:#f5f9ff;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);position:sticky;top:0;white-space:nowrap';
+  function m2hm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
+  function m2hhm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60))+'h'+String(m%60).padStart(2,'0');}
+  var rows=recs.map(function(d,i){
+    var bg=i%2===0?'#fff':'#f8fafc';
+    var alm=(d.almIniMin!==null&&d.almFimMin!==null)?Math.max(0,d.almFimMin-d.almIniMin):0;
+    return'<tr style="background:'+bg+'">'
+      +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.dataStr||d.dataSortKey||'—')+'</td>'
+      +'<td style="padding:7px 10px;font-weight:600;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+impEsc(d.empresa)+'</td>'
+      +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.sap)+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+m2hm(d.inicioMin)+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap;color:var(--muted)">'+(alm>0?m2hm(d.almIniMin)+'–'+m2hm(d.almFimMin):'—')+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+m2hm(d.terminoMin)+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap"><span style="font-weight:800;color:var(--sb)">'+m2hhm(d.horasTrab)+'</span></td>'
+      +'</tr>';
+  }).join('');
+  var mo=document.getElementById('imp-sqhrs-drill-modal');
+  if(!mo){mo=document.createElement('div');mo.id='imp-sqhrs-drill-modal';mo.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';mo.onclick=function(e){if(e.target===mo)mo.style.display='none';};document.body.appendChild(mo);}
+  mo.innerHTML='<div style="background:#fff;border-radius:12px;width:900px;max-width:97vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)">'
+    +'<div style="padding:16px 20px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'
+    +'<div><div style="font-size:14px;font-weight:800;color:var(--sb)">Horas produtivas — '+impEsc(sq)+'</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+recs.length+' registros · Média: <strong style="color:var(--sb)">'+m2hhm(avg)+'</strong></div></div>'
+    +'<button onclick="document.getElementById(\'imp-sqhrs-drill-modal\').style.display=\'none\'" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:4px 8px;line-height:1">×</button>'
+    +'</div>'
+    +'<div style="overflow:auto;flex:1">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'
+    +'<th style="'+thS+';text-align:left">Data</th>'
+    +'<th style="'+thS+';text-align:left">Empresa</th>'
+    +'<th style="'+thS+';text-align:left">Obra (SAP)</th>'
+    +'<th style="'+thS+';text-align:center">Início</th>'
+    +'<th style="'+thS+';text-align:center">Almoço</th>'
+    +'<th style="'+thS+';text-align:center">Término</th>'
+    +'<th style="'+thS+';text-align:center">Horas trab.</th>'
     +'</tr></thead><tbody>'+rows+'</tbody></table>'
     +'</div></div>';
   mo.style.display='flex';
