@@ -9837,6 +9837,11 @@ function impProdImpSetPeriod(p,btn){
   void btn;
 }
 function _impBuildHorasChart(){
+  var W=_impProdImpWindow();
+  var meta=W.base, metaYellow=Math.max(0,meta-60);
+  var legEl=document.getElementById('evo-horas-legend-lbl');
+  if(legEl)legEl.innerHTML='Término − Início − Almoço &nbsp;·&nbsp; <span style="color:#16a34a;font-weight:700">Verde ≥ '+_impProdImpFmt(meta)+'</span> &nbsp;·&nbsp; <span style="color:#b45309;font-weight:700">Amarelo '+_impProdImpFmt(metaYellow)+'–'+_impProdImpFmt(meta)+'</span> &nbsp;·&nbsp; <span style="color:#dc2626;font-weight:700">Vermelho &lt; '+_impProdImpFmt(metaYellow)+'</span> &nbsp;·&nbsp; <span style="color:var(--muted)">(meta segue o filtro Horário Ref./Término Até)</span>';
+
   var baseData=IMP_FILTERED.filter(function(d){
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
@@ -9861,13 +9866,12 @@ function _impBuildHorasChart(){
     if(k.length===10){var p=k.split('-');var ds=_diasSem[new Date(k+'T12:00:00').getDay()];return ds+'\n'+p[2]+'/'+p[1];}
     var p=k.split('-');return['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][parseInt(p[1])-1]+'/'+p[0].slice(2);
   }
-  var meta=420; // 07:00h em minutos
   var labels=grupos.map(function(g){return fmtK(g.key);});
   var vals=grupos.map(function(g){return Math.round(g.t/g.n);});
   function horasBg(v){
-    if(v>=420)return'rgba(22,163,74,.75)';   // >= 7h → verde
-    if(v>=360)return'rgba(234,179,8,.80)';   // >= 6h → amarelo
-    return'rgba(239,68,68,.75)';              // < 6h → vermelho
+    if(v>=meta)return'rgba(22,163,74,.75)';
+    if(v>=metaYellow)return'rgba(234,179,8,.80)';
+    return'rgba(239,68,68,.75)';
   }
   var bgs=vals.map(horasBg);
 
@@ -9886,24 +9890,29 @@ function _impBuildHorasChart(){
       ctx.fillText(lbl,bar.x,bar.y-3);ctx.restore();
     });
   }};
+  function _horasBarElement(els){
+    for(var i=0;i<els.length;i++) if(els[i].datasetIndex!==1) return els[i];
+    return null;
+  }
   _impEvoCharts.horas=new Chart(cv.getContext('2d'),{type:'bar',
     data:{labels:labels,datasets:[
       {label:'Méd. horas trab.',data:vals,backgroundColor:bgs,borderRadius:5,borderSkipped:false,order:2},
-      {type:'line',label:'Meta (7h)',data:labels.map(function(){return meta;}),borderColor:'#002F6C',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false,order:1}
+      {type:'line',label:'Meta ('+_impProdImpFmt(meta)+')',data:labels.map(function(){return meta;}),borderColor:'#002F6C',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false,order:1}
     ]},
     options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},
       onClick:function(event,elements){
-        if(!elements.length||elements[0].datasetIndex!==0)return;
-        _impHorasDrillOpen(grupos[elements[0].index].key,baseData);
+        var barEl=_horasBarElement(elements);
+        if(!barEl)return;
+        _impHorasDrillOpen(grupos[barEl.index].key,baseData,meta,metaYellow);
       },
       onHover:function(event,elements){
         var el=event.native&&event.native.target;
-        if(el)el.style.cursor=(elements.length&&elements[0].datasetIndex===0)?'pointer':'default';
+        if(el)el.style.cursor=_horasBarElement(elements)?'pointer':'default';
       },
       plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
-        if(ctx.datasetIndex===1)return' Meta: 07:00';
+        if(ctx.datasetIndex===1)return' Meta: '+impToHHMM(meta);
         var v=ctx.raw,h=Math.floor(v/60),m=v%60;
-        var status=v>=420?'Ótimo':v>=360?'Atenção':'Crítico';
+        var status=v>=meta?'Ótimo':v>=metaYellow?'Atenção':'Crítico';
         return[' Média: '+String(h).padStart(2,'0')+'h'+String(m).padStart(2,'0')+' ('+status+')',' n='+grupos[ctx.dataIndex].n+' registros',' 🔍 Clique para ver os registros'];
       }}}},
       scales:{
@@ -9914,7 +9923,8 @@ function _impBuildHorasChart(){
     plugins:[_horasLabelPlugin]
   });
 }
-function _impHorasDrillOpen(key,baseData){
+function _impHorasDrillOpen(key,baseData,meta,metaYellow){
+  if(meta===undefined){var _W=_impProdImpWindow();meta=_W.base;metaYellow=Math.max(0,meta-60);}
   var recs=baseData.filter(function(d){
     var k=_IMP_HORAS_PERIOD==='dia'?d.dataSortKey:_IMP_HORAS_PERIOD==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
     return k===key;
@@ -9930,10 +9940,10 @@ function _impHorasDrillOpen(key,baseData){
   else{var pk=key.split('-');title=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][parseInt(pk[1])-1]+'/'+pk[0].slice(2);}
   function m2hm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
   function m2hhm(m){if(m===null||m===undefined||m<0)return'—';return String(Math.floor(m/60)).padStart(2,'0')+'h'+String(m%60).padStart(2,'0');}
-  function horasColor(v){if(v>=420)return'#16a34a';if(v>=360)return'#b45309';return'#dc2626';}
-  function horasStatus(v){if(v>=420)return'Ótimo';if(v>=360)return'Atenção';return'Crítico';}
+  function horasColor(v){if(v>=meta)return'#16a34a';if(v>=metaYellow)return'#b45309';return'#dc2626';}
+  function horasStatus(v){if(v>=meta)return'Ótimo';if(v>=metaYellow)return'Atenção';return'Crítico';}
   var avg=Math.round(recs.reduce(function(s,d){return s+d._hTrab;},0)/recs.length);
-  var otimos=recs.filter(function(d){return d._hTrab>=420;}).length;
+  var otimos=recs.filter(function(d){return d._hTrab>=meta;}).length;
   var hasFiscal=recs.some(function(d){return d.fiscal;});
   var thS='background:#f5f9ff;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);position:sticky;top:0;white-space:nowrap';
   var rows=recs.map(function(d,i){
@@ -9958,7 +9968,7 @@ function _impHorasDrillOpen(key,baseData){
   mo.innerHTML='<div style="background:#fff;border-radius:12px;width:1060px;max-width:97vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)">'
     +'<div style="padding:16px 20px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'
     +'<div><div style="font-size:14px;font-weight:800;color:var(--sb)">Horas trabalhadas — '+title+'</div>'
-    +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+recs.length+' registros · Média: <strong style="color:'+horasColor(avg)+'">'+m2hhm(avg)+'</strong> · <span style="color:#16a34a;font-weight:700">'+otimos+' atingiram ≥ 7h</span></div></div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+recs.length+' registros · Média: <strong style="color:'+horasColor(avg)+'">'+m2hhm(avg)+'</strong> · <span style="color:#16a34a;font-weight:700">'+otimos+' atingiram ≥ '+_impProdImpFmt(meta)+'</span></div></div>'
     +'<button onclick="document.getElementById(\'imp-horas-drill-modal\').style.display=\'none\'" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:4px 8px;line-height:1">×</button>'
     +'</div>'
     +'<div style="overflow:auto;flex:1">'
@@ -11188,7 +11198,7 @@ async function renderViewImprodutividade(){
   +'<div style="position:relative;height:220px"><canvas id="evo-chart-chegada"></canvas></div>'
   +'</div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px">'
-  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Média de horas trabalhadas por período</span><div style="font-size:11px;color:var(--muted);margin-top:2px">Término − Início − Almoço &nbsp;·&nbsp; <span style="color:#16a34a;font-weight:700">Verde ≥ 7h</span> &nbsp;·&nbsp; <span style="color:#b45309;font-weight:700">Amarelo 6–7h</span> &nbsp;·&nbsp; <span style="color:#dc2626;font-weight:700">Vermelho &lt; 6h</span></div></div><div style="display:flex;gap:5px" id="horas-period-btns"><button onclick="impHorasSetPeriod(\'semana\',this)" class="horas-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impHorasSetPeriod(\'dia\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impHorasSetPeriod(\'mes\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Média de horas trabalhadas por período</span><div id="evo-horas-legend-lbl" style="font-size:11px;color:var(--muted);margin-top:2px">Término − Início − Almoço</div></div><div style="display:flex;gap:5px" id="horas-period-btns"><button onclick="impHorasSetPeriod(\'semana\',this)" class="horas-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impHorasSetPeriod(\'dia\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impHorasSetPeriod(\'mes\',this)" class="horas-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div style="position:relative;height:220px"><canvas id="evo-chart-horas"></canvas></div>'
   +'</div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px">'
