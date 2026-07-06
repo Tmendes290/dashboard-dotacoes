@@ -9377,7 +9377,8 @@ function impRenderAderSquads(){
   if(!totalDays)return;
   var squadData={};
   allRecs.forEach(function(d){
-    var sq=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad||'Sem squad';
+    var sq=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad;
+    if(!sq)return; // sem squad identificado — não vira card na comparação
     if(!squadData[sq])squadData[sq]={fiscais:{},days:{}};
     squadData[sq].fiscais[d.fiscal.trim()]=1;
     if(!squadData[sq].days[d.fiscal.trim()])squadData[sq].days[d.fiscal.trim()]={};
