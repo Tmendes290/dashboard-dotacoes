@@ -8869,7 +8869,7 @@ function impApplyFilters(){
   try{if(IMP_TAB==='obras') impRenderObras();}catch(e){console.error('[imp] obras',e);}
   try{if(IMP_TAB==='squads') impRenderSquads();}catch(e){console.error('[imp] squads',e);}
   try{if(IMP_TAB==='rdo') rdoImpRender();}catch(e){console.error('[imp] rdo',e);}
-  try{if(IMP_TAB==='evolucao') impRenderEvolucao();}catch(e){console.error('[imp] evolucao',e);}
+  try{if(IMP_TAB==='evolucao'||IMP_TAB==='comparativo') impRenderEvolucao();}catch(e){console.error('[imp] evolucao',e);}
 }
 
 function impSetChartFilter(type,val){
@@ -9504,7 +9504,7 @@ function _impGroupByPeriod(data,tipo,refMin){
 }
 
 function impRenderEvolucao(){
-  if(IMP_TAB!=='evolucao')return;
+  if(IMP_TAB!=='evolucao'&&IMP_TAB!=='comparativo')return;
   var refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
   var rp=refStr.split(':');var refMin=parseInt(rp[0])*60+parseInt(rp[1]||0);
   var fimMin=impGetFimMin();
@@ -11179,7 +11179,7 @@ function impShowTab(tab,el){
   el.classList.add('active');
   el.style.color='var(--acc)';
   el.style.borderBottomColor='var(--acc)';
-  ['dashboard','registros','empresas','obras','squads','rdo','evolucao'].forEach(function(t){var d=document.getElementById('imp-tab-'+t);if(d)d.style.display=t===tab?'':'none';});
+  ['dashboard','registros','empresas','obras','squads','rdo','evolucao','comparativo'].forEach(function(t){var d=document.getElementById('imp-tab-'+t);if(d)d.style.display=t===tab?'':'none';});
   try{
     if(tab==='dashboard') impRenderDashboard();
     else if(tab==='registros') impRenderRegistros();
@@ -11187,6 +11187,7 @@ function impShowTab(tab,el){
     else if(tab==='obras') impRenderObras();
     else if(tab==='squads') impRenderSquads();
     else if(tab==='evolucao') impRenderEvolucao();
+    else if(tab==='comparativo') impRenderEvolucao();
     else if(tab==='rdo') rdoImpRender();
   }catch(e){console.error('[imp] showTab',tab,e);}
 }
@@ -11276,6 +11277,7 @@ async function renderViewImprodutividade(){
   +'<div class="imp-tab" onclick="impShowTab(\'squads\',this)" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">Por Squad</div>'
   +'<div class="imp-tab" onclick="impShowTab(\'evolucao\',this);impRenderEvolucao();" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">📈 Evolução <span style="display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;vertical-align:middle">NOVO</span></div>'
   +'<div class="imp-tab" onclick="impShowTab(\'rdo\',this);rdoImpRender();" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">📅 RDO Diário</div>'
+  +'<div class="imp-tab" onclick="impShowTab(\'comparativo\',this);impRenderEvolucao();" style="padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">📊 Comparativo</div>'
   +'</div>'
 
   // Tab Dashboard
@@ -11385,16 +11387,20 @@ async function renderViewImprodutividade(){
   +'<div id="imp-print-footer" style="display:none;text-align:right;font-size:10px;color:#94a3b8;padding-top:12px;border-top:1px solid #e2e8f0;margin-top:16px">Desenvolvido por: Thiago Mendes Lima</div>'
   +'</div>'
 
+  // Tab Comparativo
+  +'<div id="imp-tab-comparativo" style="display:none">'
+  +'<div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px">'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Desvios por Problema Identificado</span><span style="margin-left:auto;font-size:10px;background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px;color:var(--muted)" id="evo-prob-badge"></span></div><div id="evo-prob-list" style="display:flex;flex-direction:column;gap:8px"></div></div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">Méd. horas produtivas por squad</div><div id="evo-squad-hrs" style="display:flex;flex-direction:column;gap:5px"></div></div>'
+  +'</div>'
+  +'</div>'
+
   // Tab Evolução
   +'<div id="imp-tab-evolucao" style="display:none">'
   +''
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div><div style="font-size:13px;font-weight:700;color:var(--sb)">Comparativo de período</div><div style="font-size:11px;color:var(--muted)">Período atual vs período anterior — gerado automaticamente pelos filtros acima</div></div><div style="display:flex;gap:6px" id="evo-period-btns"><button onclick="impEvoSetPeriod(\'dia\',this)" class="evo-period-btn" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impEvoSetPeriod(\'semana\',this)" class="evo-period-btn active" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impEvoSetPeriod(\'mes\',this)" class="evo-period-btn" style="padding:4px 12px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div id="evo-trend-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px"></div>'
   +'<div id="evo-destaques" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px"></div>'
-  +'<div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px">'
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Desvios por Problema Identificado</span><span style="margin-left:auto;font-size:10px;background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px;color:var(--muted)" id="evo-prob-badge"></span></div><div id="evo-prob-list" style="display:flex;flex-direction:column;gap:8px"></div></div>'
-  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">Méd. horas produtivas por squad</div><div id="evo-squad-hrs" style="display:flex;flex-direction:column;gap:5px"></div></div>'
-  +'</div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-bottom:14px">'
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Evolução da média de chegada <span style="display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;vertical-align:middle">NOVO</span></span><div style="font-size:11px;color:var(--muted);margin-top:2px">Quanto mais cedo, melhor — verde = antes da meta, vermelho = depois da meta (08:00)</div></div><div style="display:flex;gap:5px" id="chegada-period-btns"><button onclick="impChegadaSetPeriod(\'semana\',this)" class="chegada-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impChegadaSetPeriod(\'dia\',this)" class="chegada-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impChegadaSetPeriod(\'mes\',this)" class="chegada-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div style="position:relative;height:220px"><canvas id="evo-chart-chegada"></canvas></div>'
