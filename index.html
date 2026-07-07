@@ -8936,15 +8936,23 @@ function impRenderCards(refMin){
   var refStr2=(document.getElementById('imp-ref-time')||{}).value||'08:00';
   var fimStr2=(document.getElementById('imp-fim-time')||{}).value||'16:45';
   var liquidoMinC=Math.max(0,periodoBase-60);
-  var avgImpMinC=validos.length?Math.round(totalMin/validos.length):0;
+  var totalImpMinC=validos.reduce(function(s,d){
+    var atraso=d.delayMin||0;
+    var saida=d.terminoMin!==null?Math.max(0,fimMin-d.terminoMin):0;
+    var almoco=d.almExcesso||0;
+    return s+atraso+saida+almoco;
+  },0);
+  var avgImpMinC=validos.length?Math.round(totalImpMinC/validos.length):0;
   var avgProdMinC=Math.max(0,liquidoMinC-avgImpMinC);
+  var pctProdC=liquidoMinC>0?Math.round(avgProdMinC/liquidoMinC*100):0;
+  var pctImpC=100-pctProdC;
   var _subJornada=refStr2+' → '+fimStr2+' − 1h almoço'
     +'<div style="margin:5px 0;height:8px;border-radius:4px;overflow:hidden;background:#f1f5f9;display:flex">'
-    +'<div style="width:'+pctProd+'%;background:#10b981"></div>'
+    +'<div style="width:'+pctProdC+'%;background:#10b981"></div>'
     +'<div style="flex:1;background:#ef4444;opacity:.7"></div></div>'
     +'<div style="display:flex;justify-content:space-between;font-size:9px;font-weight:700;margin-bottom:5px">'
-    +'<span style="color:#10b981">'+pctProd+'% prod.</span>'
-    +'<span style="color:#ef4444">'+pctImp+'% imp.</span></div>'
+    +'<span style="color:#10b981">'+pctProdC+'% prod.</span>'
+    +'<span style="color:#ef4444">'+pctImpC+'% imp.</span></div>'
     +'<div style="display:flex;flex-direction:column;gap:3px">'
     +'<div style="display:flex;justify-content:space-between;font-size:10px;padding:3px 7px;border-radius:4px;background:#f0fdf4"><span style="color:#15803d">Produtivo/p.</span><strong style="color:#15803d">'+impFmtDelay(avgProdMinC)+'</strong></div>'
     +'<div style="display:flex;justify-content:space-between;font-size:10px;padding:3px 7px;border-radius:4px;background:#fef2f2"><span style="color:#dc2626">Improdutivo/p.</span><strong style="color:#dc2626">'+impFmtDelay(avgImpMinC)+'</strong></div>'
@@ -8968,7 +8976,7 @@ function impRenderCards(refMin){
       'Média de horas trabalhadas por pessoa (registros com início e término preenchidos). Quanto mais próximo de 9h, melhor.',
       prev&&prevAvgH!==null&&avgHMin!==null?'<div>'+_impDeltaHtml(avgHMin,prevAvgH,false,function(v){return Math.round(v)+' min';})+'</div><div style="font-size:9px;color:var(--muted);margin-top:2px">'+pvs+'</div>':null)+
     impCard('#64748b',Math.floor(liquidoMinC/60)+'h','Jornada líquida/pessoa',_subJornada,
-      'Base da jornada: Horário Ref. ('+refStr2+') → Término Até ('+fimStr2+') − 1h almoço = '+Math.floor(liquidoMinC/60)+'h líquido/pessoa. Produtivo/p. = líquida − improdutivo médio por registro. Improdutivo/p. = média de minutos de atraso por registro.',
+      'Base da jornada: Horário Ref. ('+refStr2+') → Término Até ('+fimStr2+') − 1h almoço = '+Math.floor(liquidoMinC/60)+'h líquido/pessoa. Improdutivo/p. = média de (atraso na entrada + saída antecipada + excesso de almoço) por registro. Produtivo/p. = líquida − improdutivo médio.',
       null);
 }
 function impCard(cor,val,lbl,sub,info,delta){
