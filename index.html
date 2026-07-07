@@ -9486,23 +9486,6 @@ function _impWeekKey(dateStr){
   return d.getFullYear()+'-W'+String(w).padStart(2,'0');
 }
 function _impMonthKey(dateStr){ return dateStr.slice(0,7); }
-function _impGroupByPeriod(data,tipo,refMin){
-  var fimMin=impGetFimMin();var periodoBase=Math.max(0,fimMin-refMin);
-  var byP={};
-  data.forEach(function(d){
-    if(!d.dataSortKey)return;
-    var key=tipo==='mes'?_impMonthKey(d.dataSortKey):tipo==='dia'?d.dataSortKey:_impWeekKey(d.dataSortKey);
-    if(!byP[key])byP[key]={key:key,label:'',totalMin:0,atCount:0,totalH:0,countH:0,totalCheg:0,countCheg:0,totalEsp:0,n:0};
-    var g=byP[key];g.n++;
-    if(d.delayMin>0){g.atCount++;g.totalMin+=d.delayMin;}
-    if(d.horasTrab!==null){g.totalH+=d.horasTrab;g.countH++;}
-    if(d.chegadaMin!==null){g.totalCheg+=d.chegadaMin;g.countCheg++;}
-    var dow=new Date(d.dataSortKey+'T00:00:00').getDay();
-    g.totalEsp+=(dow===5?Math.max(0,periodoBase-60):periodoBase);
-  });
-  return Object.values(byP).sort(function(a,b){return a.key<b.key?-1:1;});
-}
-
 function impRenderEvolucao(){
   if(IMP_TAB!=='evolucao'&&IMP_TAB!=='comparativo')return;
   var refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
@@ -9536,41 +9519,39 @@ function impRenderEvolucao(){
 
   var curr,prev2;
 
-  if(dtIni&&dtFim){
-    // ── Modo com filtro de data ──────────────────────────────────
-    // "Atual" = dados filtrados; "Anterior" = mesmo intervalo deslocado para trás
-    function _calcStats(data){
-      var s={atCount:0,totalMin:0,countH:0,totalH:0};
-      data.forEach(function(d){
-        if((d.delayMin||0)>0){s.atCount++;s.totalMin+=d.delayMin;}
-        if(d.horasTrab!==null){s.totalH+=d.horasTrab;s.countH++;}
-      });
-      return s;
-    }
-    var currData=IMP_FILTERED.filter(function(d){return !impIsExcluido(d);});
-    var dIniMs=new Date(dtIni+'T00:00:00').getTime();
-    var dFimMs=new Date(dtFim+'T00:00:00').getTime();
-    var lenMs=dFimMs-dIniMs+86400000;
-    var pFimMs=dIniMs-86400000;
-    var pIniMs=pFimMs-lenMs+86400000;
-    var pIniStr=_impFmt(new Date(pIniMs)),pFimStr=_impFmt(new Date(pFimMs));
-    var prevData=baseData.filter(function(d){return d.dataSortKey>=pIniStr&&d.dataSortKey<=pFimStr;});
-    curr=_calcStats(currData);
-    curr.key=(dtIni===dtFim?_isoToBR(dtIni):_isoToBR(dtIni)+' a '+_isoToBR(dtFim));
-    curr._isoIni=dtIni;curr._isoFim=dtFim;
-    prev2=_calcStats(prevData);
-    prev2.key=(pIniStr===pFimStr?_isoToBR(pIniStr):_isoToBR(pIniStr)+' a '+_isoToBR(pFimStr));
-    prev2._isoIni=pIniStr;prev2._isoFim=pFimStr;
-  } else {
-    // ── Modo sem filtro de data: últimos 2 grupos históricos ─────
-    var grupos=_impGroupByPeriod(baseData,_IMP_EVO_PERIOD,refMin).slice(-8);
-    if(grupos.length<2){
-      var _el=document.getElementById('evo-trend-cards');
-      if(_el) _el.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted);font-size:13px">Dados insuficientes para comparativo. Carregue mais registros.</div>';
-      return;
-    }
-    curr=grupos[grupos.length-1];prev2=grupos[grupos.length-2];
+  // "Atual" = todo o período filtrado (mesma base do Dashboard) — "Anterior" = mesmo
+  // intervalo, deslocado para trás. Usa De/Até quando preenchido; senão usa o intervalo
+  // real dos dados filtrados, garantindo que estes cards batam com os do Dashboard.
+  function _calcStats(data){
+    var s={atCount:0,totalMin:0,countH:0,totalH:0};
+    data.forEach(function(d){
+      if((d.delayMin||0)>0){s.atCount++;s.totalMin+=d.delayMin;}
+      if(d.horasTrab!==null){s.totalH+=d.horasTrab;s.countH++;}
+    });
+    return s;
   }
+  var currData=IMP_FILTERED.filter(function(d){return !impIsExcluido(d);});
+  var _datesArr=currData.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
+  if(!dtIni&&!dtFim&&!_datesArr.length){
+    var _el=document.getElementById('evo-trend-cards');
+    if(_el) _el.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted);font-size:13px">Dados insuficientes para comparativo. Carregue mais registros.</div>';
+    return;
+  }
+  var effIni=dtIni||_datesArr[0];
+  var effFim=dtFim||_datesArr[_datesArr.length-1];
+  var dIniMs=new Date(effIni+'T00:00:00').getTime();
+  var dFimMs=new Date(effFim+'T00:00:00').getTime();
+  var lenMs=dFimMs-dIniMs+86400000;
+  var pFimMs=dIniMs-86400000;
+  var pIniMs=pFimMs-lenMs+86400000;
+  var pIniStr=_impFmt(new Date(pIniMs)),pFimStr=_impFmt(new Date(pFimMs));
+  var prevData=baseData.filter(function(d){return d.dataSortKey>=pIniStr&&d.dataSortKey<=pFimStr;});
+  curr=_calcStats(currData);
+  curr.key=(effIni===effFim?_isoToBR(effIni):_isoToBR(effIni)+' a '+_isoToBR(effFim));
+  curr._isoIni=effIni;curr._isoFim=effFim;
+  prev2=_calcStats(prevData);
+  prev2.key=(pIniStr===pFimStr?_isoToBR(pIniStr):_isoToBR(pIniStr)+' a '+_isoToBR(pFimStr));
+  prev2._isoIni=pIniStr;prev2._isoFim=pFimStr;
 
   // Trend cards com bolinhas coloridas
   function tCard(lbl,currV,prevV,higherIsBad,fmt){
