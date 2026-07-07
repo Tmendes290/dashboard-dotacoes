@@ -9291,14 +9291,28 @@ function impAderSquadMs(id){
 }
 function impRenderAderenciaFiscais(){
   if(IMP_TAB!=='evolucao')return;
-  var allRecs=IMP_DATA.filter(function(d){
+  var preRecs=IMP_DATA.filter(function(d){
     if(!d.fiscal||!d.fiscal.trim())return false;
     if(!d.dataSortKey)return false;
     var dow=new Date(d.dataSortKey+'T00:00:00').getDay();
     if(dow===0||dow===6)return false;
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
-    var sq=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad;
+    return true;
+  });
+  // Squad canônico por FISCAL (não por registro): o nome (ref_fiscais) sempre vence
+  // sobre a obra/SAP. Sem isso, um único registro com o nome grafado diferente cai no
+  // fallback por SAP e "vaza" esse fiscal pro squad da obra quando filtrando 1 squad
+  // isolado (ele não some na visão "Todos" porque lá é agrupado uma única vez).
+  var fiscalSquadCanon={};
+  preRecs.forEach(function(d){
+    var f=d.fiscal.trim();
+    var byName=impGetSquadByFiscal(d.fiscal);
+    if(byName) fiscalSquadCanon[f]=byName;
+    else if(!fiscalSquadCanon[f]) fiscalSquadCanon[f]=impGetSquad(d.sap).squad;
+  });
+  var allRecs=preRecs.filter(function(d){
+    var sq=fiscalSquadCanon[d.fiscal.trim()];
     if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
     if(_IMP_ADER_SQUADS.length&&_IMP_ADER_SQUADS.indexOf(sq)<0)return false;
     return true;
@@ -9338,10 +9352,7 @@ function impRenderAderenciaFiscais(){
   if(badge)badge.textContent=fiscais.length+' fiscais · '+periods.length+' períodos';
   // Squad de cada fiscal (pra agrupar a tabela quando mais de um squad estiver visível)
   var fiscalSquad={};
-  allRecs.forEach(function(d){
-    var f=d.fiscal.trim();
-    if(!fiscalSquad[f]) fiscalSquad[f]=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad||'(sem squad)';
-  });
+  fiscais.forEach(function(f){fiscalSquad[f]=fiscalSquadCanon[f]||'(sem squad)';});
   var squadsPresentes=Object.keys(fiscais.reduce(function(m,f){m[fiscalSquad[f]]=1;return m;},{}));
   var agruparPorSquad=squadsPresentes.length>1;
   function pctColor(pct){
@@ -9410,14 +9421,27 @@ function impRenderAderSquads(){
   var legEl=document.getElementById('evo-sq-legend');
   if(!gridEl)return;
   if(_impAderSqChart){_impAderSqChart.destroy();_impAderSqChart=null;}
-  var allRecs=IMP_DATA.filter(function(d){
+  var preRecs=IMP_DATA.filter(function(d){
     if(!d.fiscal||!d.fiscal.trim())return false;
     if(!d.dataSortKey)return false;
     var dow=new Date(d.dataSortKey+'T00:00:00').getDay();
     if(dow===0||dow===6)return false;
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
-    var sq=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad;
+    return true;
+  });
+  // Squad canônico por FISCAL (nome vence sobre a obra/SAP) — mesma regra da tabela de
+  // Aderência, evita que um registro isolado com nome grafado diferente vaze o fiscal
+  // pro squad da obra e distorça a % de presença do squad certo.
+  var fiscalSquadCanon={};
+  preRecs.forEach(function(d){
+    var f=d.fiscal.trim();
+    var byName=impGetSquadByFiscal(d.fiscal);
+    if(byName) fiscalSquadCanon[f]=byName;
+    else if(!fiscalSquadCanon[f]) fiscalSquadCanon[f]=impGetSquad(d.sap).squad;
+  });
+  var allRecs=preRecs.filter(function(d){
+    var sq=fiscalSquadCanon[d.fiscal.trim()];
     if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
@@ -9430,7 +9454,7 @@ function impRenderAderSquads(){
   if(!totalDays)return;
   var squadData={};
   allRecs.forEach(function(d){
-    var sq=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad;
+    var sq=fiscalSquadCanon[d.fiscal.trim()];
     if(!sq)return; // sem squad identificado — não vira card na comparação
     if(!squadData[sq])squadData[sq]={fiscais:{},days:{},squadDays:{}};
     squadData[sq].fiscais[d.fiscal.trim()]=1;
