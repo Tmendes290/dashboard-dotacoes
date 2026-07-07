@@ -8838,7 +8838,7 @@ function impApplyFilters(){
     else if(d.ptsMin!==null){base=d.ptsMin;bu='PTS';}
     d.baseUsada=bu; d.delayMin=base!==null?Math.max(0,base-refMin):null;
     d.squadInfo=impGetSquad(d.sap);
-    var almPausa=(d.almIniMin!==null&&d.almFimMin!==null)?(d.almFimMin-d.almIniMin):0;
+    var almPausa=(d.almIniMin!==null&&d.almFimMin!==null)?Math.max(0,d.almFimMin-d.almIniMin):0;
     d.horasTrab=(d.inicioMin!==null&&d.terminoMin!==null)?d.terminoMin-d.inicioMin-almPausa:null;
     d.almExcesso=(d.almIniMin!==null&&d.almFimMin!==null)?Math.max(0,(d.almFimMin-d.almIniMin)-60):null;
   });
@@ -8999,7 +8999,7 @@ function _impDeriveRow(d,refMin,fimMin){
   else if(d2.chegadaMin!==null)base=d2.chegadaMin;
   else if(d2.ptsMin!==null)base=d2.ptsMin;
   d2.delayMin=base!==null?Math.max(0,base-refMin):null;
-  var almP=(d2.almIniMin!==null&&d2.almFimMin!==null)?(d2.almFimMin-d2.almIniMin):0;
+  var almP=(d2.almIniMin!==null&&d2.almFimMin!==null)?Math.max(0,d2.almFimMin-d2.almIniMin):0;
   d2.horasTrab=(d2.inicioMin!==null&&d2.terminoMin!==null)?d2.terminoMin-d2.inicioMin-almP:null;
   return d2;
 }
