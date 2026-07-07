@@ -10117,8 +10117,21 @@ function _impBuildProdImpChart(){
     var ctx=c.ctx;var metaProd=c.getDatasetMeta(0),metaPts=c.getDatasetMeta(1),metaImp=c.getDatasetMeta(2);
     ctx.save();ctx.font='700 9px Arial,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff';
     metaProd.data.forEach(function(bar,i){var h=bar.base-bar.y;if(h<14)return;ctx.fillText(_impProdImpFmt(prod[i]),bar.x,bar.y+h/2);});
-    metaPts.data.forEach(function(bar,i){var h=bar.base-bar.y;if(h<14||!pts[i])return;ctx.fillText(_impProdImpFmt(pts[i]),bar.x,bar.y+h/2);});
     metaImp.data.forEach(function(bar,i){var h=bar.base-bar.y;if(h<14)return;ctx.fillText(_impProdImpFmt(imp[i]),bar.x,bar.y+h/2);});
+    // PTS: segmento costuma ser fino demais para o texto caber dentro — desenha um "selinho"
+    // com fundo próprio (sempre legível) em vez de escrever direto na barra.
+    metaPts.data.forEach(function(bar,i){
+      if(!pts[i])return;
+      var cy=bar.y+(bar.base-bar.y)/2;
+      var txt=_impProdImpFmt(pts[i]);
+      var w=ctx.measureText(txt).width;
+      ctx.fillStyle='#0369a1';
+      ctx.beginPath();
+      if(ctx.roundRect) ctx.roundRect(bar.x-w/2-4,cy-7,w+8,14,7); else ctx.rect(bar.x-w/2-4,cy-7,w+8,14);
+      ctx.fill();
+      ctx.fillStyle='#fff';
+      ctx.fillText(txt,bar.x,cy+1);
+    });
     ctx.restore();
   }};
   var lineLabelsPlugin={id:'prodimpLineLabels',afterDatasetsDraw:function(c){
