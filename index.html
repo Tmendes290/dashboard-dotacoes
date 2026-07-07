@@ -9880,6 +9880,7 @@ function _impBuildHorasChart(){
   if(legEl)legEl.innerHTML='Término − Início − Almoço &nbsp;·&nbsp; <span style="color:#16a34a;font-weight:700">Verde ≥ '+_impProdImpFmt(meta)+'</span> &nbsp;·&nbsp; <span style="color:#b45309;font-weight:700">Amarelo '+_impProdImpFmt(metaYellow)+'–'+_impProdImpFmt(meta)+'</span> &nbsp;·&nbsp; <span style="color:#dc2626;font-weight:700">Vermelho &lt; '+_impProdImpFmt(metaYellow)+'</span> &nbsp;·&nbsp; <span style="color:var(--muted)">(meta segue o filtro Horário Ref./Término Até)</span>';
 
   var baseData=IMP_FILTERED.filter(function(d){
+    if(impIsExcluido(d))return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
@@ -10040,30 +10041,32 @@ function _impBuildProdImpChart(){
   var W=_impProdImpWindow();
   var lblEl=document.getElementById('evo-prodimp-base-lbl');
   if(lblEl)lblEl.innerHTML='Base: <strong>'+W.refStr+'</strong> → <strong>'+W.fimStr+'</strong> − 1h almoço = <strong>'+_impProdImpFmt(W.base)+'/equipe</strong> (segue o filtro "Horário Ref." / "Término Até" acima)';
-  var candidatos=IMP_FILTERED.filter(function(d){
+  // Só entram registros com Início E Término — igual à base do gráfico "Horas trabalhadas",
+  // para que "Produtivo" seja exatamente a média real de horasTrab (bate com aquele gráfico).
+  var validForChart=IMP_FILTERED.filter(function(d){
     if(impIsExcluido(d))return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
-    var entrada=_impProdImpEntrada(d);
-    return entrada!==null&&entrada!==undefined&&!!d.dataSortKey;
+    return !!d.dataSortKey;
   });
+  var candidatos=validForChart.filter(function(d){return d.inicioMin!==null&&d.terminoMin!==null;});
+  var nSemDados=validForChart.length-candidatos.length;
   // Entradas fora da janela administrativa (Horário Ref. −4h até Término Até) são turno — não entram nesta base
-  function _impIsAdmEntrada(d){var e=_impProdImpEntrada(d);return e>=W.admMin&&e<=W.fim;}
+  function _impIsAdmEntrada(d){return d.inicioMin>=W.admMin&&d.inicioMin<=W.fim;}
   var nTurno=candidatos.filter(function(d){return!_impIsAdmEntrada(d);}).length;
   var baseData=candidatos.filter(_impIsAdmEntrada);
 
   var byP={};
   baseData.forEach(function(d){
     var key=_IMP_PRODIMP_PERIOD==='dia'?d.dataSortKey:_IMP_PRODIMP_PERIOD==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
-    if(!byP[key])byP[key]={atraso:0,saida:0,almoco:0,n:0,nComp:0,nParc:0,key:key};
-    var entrada=_impProdImpEntrada(d);
-    var atraso=Math.max(0,entrada-W.ini);
-    var completo=d.terminoMin!==null;
-    var saida=completo?Math.max(0,W.fim-d.terminoMin):0;
-    var almoco=d.almExcesso||0;
-    byP[key].atraso+=atraso;byP[key].saida+=saida;byP[key].almoco+=almoco;byP[key].n++;
-    if(completo)byP[key].nComp++;else byP[key].nParc++;
+    if(!byP[key])byP[key]={atraso:0,saida:0,almoco:0,prod:0,n:0,key:key};
+    var atraso=Math.max(0,d.inicioMin-W.ini);
+    var saida=Math.max(0,W.fim-d.terminoMin);
+    var almPausa=(d.almIniMin!==null&&d.almFimMin!==null)?(d.almFimMin-d.almIniMin):0;
+    var almocoExcesso=Math.max(0,almPausa-60);
+    var prodReal=Math.max(0,d.horasTrab);
+    byP[key].atraso+=atraso;byP[key].saida+=saida;byP[key].almoco+=almocoExcesso;byP[key].prod+=prodReal;byP[key].n++;
   });
   var grupos=Object.values(byP).sort(function(a,b){return a.key<b.key?-1:1;}).slice(-12);
   var cv=document.getElementById('evo-chart-prodimp');
@@ -10090,9 +10093,11 @@ function _impBuildProdImpChart(){
   var avgAtraso=grupos.map(function(g){return Math.round(g.atraso/g.n);});
   var avgSaida=grupos.map(function(g){return Math.round(g.saida/g.n);});
   var avgAlmoco=grupos.map(function(g){return Math.round(g.almoco/g.n);});
-  var imp=grupos.map(function(g,i){return avgAtraso[i]+avgSaida[i]+avgAlmoco[i];});
-  var prod=imp.map(function(v){return Math.max(0,W.base-v);});
-  var pct=prod.map(function(p,i){return Math.round(p/(p+imp[i])*100);});
+  // Produtivo = média real de horasTrab (Término−Início−Almoço real) — mesma fórmula e mesma
+  // base de registros do gráfico "Horas trabalhadas", então os dois batem exatamente.
+  var prod=grupos.map(function(g){return Math.round(g.prod/g.n);});
+  var imp=prod.map(function(p){return Math.max(0,W.base-p);});
+  var pct=prod.map(function(p,i){return(p+imp[i])>0?Math.round(p/(p+imp[i])*100):0;});
 
   if(insEl){
     insEl.style.display='block';
@@ -10144,7 +10149,7 @@ function _impBuildProdImpChart(){
       onHover:function(ev,els){var el=ev.native&&ev.native.target;if(el)el.style.cursor=_prodImpBarElement(els)?'pointer':'default';},
       plugins:{legend:{display:false},tooltip:{callbacks:{
         label:function(c){if(c.dataset.label==='% produtivo')return' % produtivo: '+c.raw+'%';return' '+c.dataset.label+': '+_impProdImpFmt(c.raw);},
-        afterBody:function(items){var i=items[0].dataIndex;var g=grupos[i];return['','Composição do improdutivo:','  atraso na entrada: '+_impProdImpFmt(avgAtraso[i]),'  saída antecipada: '+_impProdImpFmt(avgSaida[i]),'  excesso de almoço: '+_impProdImpFmt(avgAlmoco[i]),'',g.nComp+' completos · '+g.nParc+' parciais (só chegada)','🔍 Clique para ver os registros'];}
+        afterBody:function(items){var i=items[0].dataIndex;var g=grupos[i];return['','Diagnóstico (causas prováveis do déficit):','  atraso na entrada: '+_impProdImpFmt(avgAtraso[i]),'  saída antecipada: '+_impProdImpFmt(avgSaida[i]),'  excesso de almoço: '+_impProdImpFmt(avgAlmoco[i]),'',g.n+' registros completos','🔍 Clique para ver os registros'];}
       }}},
       scales:{
         y:{stacked:true,min:0,max:W.base+60,ticks:{callback:function(v){return _impProdImpFmt(v);},font:{size:10}},grid:{color:'#f1f5f9'}},
@@ -10156,13 +10161,10 @@ function _impBuildProdImpChart(){
   });
 
   // Selo de qualidade do dado
-  var totComp=grupos.reduce(function(s,g){return s+g.nComp;},0);
-  var totParc=grupos.reduce(function(s,g){return s+g.nParc;},0);
-  var totAll=totComp+totParc;
-  var pComp=totAll?Math.round(totComp/totAll*100):0,pParc=100-pComp;
+  var totConsiderados=grupos.reduce(function(s,g){return s+g.n;},0);
   if(qb)qb.innerHTML=
-    '<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0">'+pComp+'% completos ('+totComp+' reg.) — conta atraso + saída + almoço</span>'
-    +'<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca">'+pParc+'% parciais ('+totParc+' reg.) — sem Término, só conta atraso na entrada</span>'
+    '<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0">'+totConsiderados+' registros considerados — com Início e Término, bate com "Horas trabalhadas"</span>'
+    +(nSemDados?'<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca">'+nSemDados+' sem Início/Término (fora deste cálculo)</span>':'')
     +(nTurno?'<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1">'+nTurno+' de turno (excluídos) — entrada fora de '+impToHHMM(W.admMin)+'–'+W.fimStr+', fora do horário adm.</span>':'');
 
   // Composição do improdutivo (médias do período exibido)
@@ -10201,14 +10203,13 @@ function _impProdImpDrillOpen(key,baseData,W){
     var k=_IMP_PRODIMP_PERIOD==='dia'?d.dataSortKey:_IMP_PRODIMP_PERIOD==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
     return k===key;
   }).map(function(d){
-    var entrada=_impProdImpEntrada(d);
-    var atraso=Math.max(0,entrada-W.ini);
-    var completo=d.terminoMin!==null;
-    var saida=completo?Math.max(0,W.fim-d.terminoMin):0;
-    var almoco=d.almExcesso||0;
-    var impTot=atraso+saida+almoco;
-    var prodTot=Math.max(0,W.base-impTot);
-    return Object.assign({},d,{_entrada:entrada,_atraso:atraso,_saida:saida,_almoco:almoco,_imp:impTot,_prod:prodTot,_completo:completo});
+    var atraso=Math.max(0,d.inicioMin-W.ini);
+    var saida=Math.max(0,W.fim-d.terminoMin);
+    var almPausa=(d.almIniMin!==null&&d.almFimMin!==null)?(d.almFimMin-d.almIniMin):0;
+    var almoco=Math.max(0,almPausa-60);
+    var prodTot=Math.max(0,d.horasTrab);
+    var impTot=Math.max(0,W.base-prodTot);
+    return Object.assign({},d,{_entrada:d.inicioMin,_atraso:atraso,_saida:saida,_almoco:almoco,_imp:impTot,_prod:prodTot,_completo:true});
   }).sort(function(a,b){return b._imp-a._imp;});
   if(!recs.length)return;
   var title=key;
@@ -10218,7 +10219,6 @@ function _impProdImpDrillOpen(key,baseData,W){
   function m2hm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
   function m2hhm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60))+'h'+String(m%60).padStart(2,'0');}
   var avgImp=Math.round(recs.reduce(function(s,d){return s+d._imp;},0)/recs.length);
-  var nComp=recs.filter(function(d){return d._completo;}).length;
   var thS='background:#f5f9ff;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);position:sticky;top:0;white-space:nowrap';
   var rows=recs.map(function(d,i){
     var sq=impGetSquad(d.sap).squad||'—';
@@ -10242,7 +10242,7 @@ function _impProdImpDrillOpen(key,baseData,W){
   mo.innerHTML='<div style="background:#fff;border-radius:12px;width:1180px;max-width:97vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)">'
     +'<div style="padding:16px 20px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'
     +'<div><div style="font-size:14px;font-weight:800;color:var(--sb)">Produtivo x Improdutivo (base '+_impProdImpFmt(W.base)+', '+W.refStr+'–'+W.fimStr+') — '+title+'</div>'
-    +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+recs.length+' registros · Média improdutivo: <strong style="color:#dc2626">'+m2hhm(avgImp)+'</strong> · <span style="color:#16a34a;font-weight:700">'+nComp+' completos</span> · <span style="color:#dc2626;font-weight:700">'+(recs.length-nComp)+' parciais</span></div></div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+recs.length+' registros completos · Média improdutivo: <strong style="color:#dc2626">'+m2hhm(avgImp)+'</strong></div></div>'
     +'<button onclick="document.getElementById(\'imp-prodimp-drill-modal\').style.display=\'none\'" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:4px 8px;line-height:1">×</button>'
     +'</div>'
     +'<div style="overflow:auto;flex:1">'
