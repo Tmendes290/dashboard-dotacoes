@@ -10052,10 +10052,9 @@ function _impBuildProdImpChart(){
   });
   var candidatos=validForChart.filter(function(d){return d.inicioMin!==null&&d.terminoMin!==null;});
   var nSemDados=validForChart.length-candidatos.length;
-  // Entradas fora da janela administrativa (Horário Ref. −4h até Término Até) são turno — não entram nesta base
-  function _impIsAdmEntrada(d){return d.inicioMin>=W.admMin&&d.inicioMin<=W.fim;}
-  var nTurno=candidatos.filter(function(d){return!_impIsAdmEntrada(d);}).length;
-  var baseData=candidatos.filter(_impIsAdmEntrada);
+  // Sem exclusão de "turno" aqui — a mesma população exata do gráfico "Horas trabalhadas",
+  // para que as médias diárias batam em todos os dias, não só na maioria.
+  var baseData=candidatos;
 
   var byP={};
   baseData.forEach(function(d){
@@ -10164,8 +10163,7 @@ function _impBuildProdImpChart(){
   var totConsiderados=grupos.reduce(function(s,g){return s+g.n;},0);
   if(qb)qb.innerHTML=
     '<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0">'+totConsiderados+' registros considerados — com Início e Término, bate com "Horas trabalhadas"</span>'
-    +(nSemDados?'<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca">'+nSemDados+' sem Início/Término (fora deste cálculo)</span>':'')
-    +(nTurno?'<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1">'+nTurno+' de turno (excluídos) — entrada fora de '+impToHHMM(W.admMin)+'–'+W.fimStr+', fora do horário adm.</span>':'');
+    +(nSemDados?'<span style="padding:4px 10px;border-radius:20px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca">'+nSemDados+' sem Início/Término (fora deste cálculo)</span>':'');
 
   // Composição do improdutivo (médias do período exibido)
   var mA=Math.round(avgAtraso.reduce(function(s,v){return s+v;},0)/avgAtraso.length);
