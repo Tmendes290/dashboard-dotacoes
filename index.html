@@ -10059,13 +10059,14 @@ function _impBuildProdImpChart(){
   var byP={};
   baseData.forEach(function(d){
     var key=_IMP_PRODIMP_PERIOD==='dia'?d.dataSortKey:_IMP_PRODIMP_PERIOD==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
-    if(!byP[key])byP[key]={atraso:0,saida:0,almoco:0,prod:0,n:0,key:key};
+    if(!byP[key])byP[key]={atraso:0,saida:0,almoco:0,pts:0,prod:0,n:0,key:key};
     var atraso=Math.max(0,d.inicioMin-W.ini);
     var saida=Math.max(0,W.fim-d.terminoMin);
     var almPausa=(d.almIniMin!==null&&d.almFimMin!==null)?(d.almFimMin-d.almIniMin):0;
     var almocoExcesso=Math.max(0,almPausa-60);
+    var ptsEspera=(d.chegadaMin!==null&&d.ptsMin!==null)?Math.max(0,d.ptsMin-d.chegadaMin):0;
     var prodReal=Math.max(0,d.horasTrab);
-    byP[key].atraso+=atraso;byP[key].saida+=saida;byP[key].almoco+=almocoExcesso;byP[key].prod+=prodReal;byP[key].n++;
+    byP[key].atraso+=atraso;byP[key].saida+=saida;byP[key].almoco+=almocoExcesso;byP[key].pts+=ptsEspera;byP[key].prod+=prodReal;byP[key].n++;
   });
   var grupos=Object.values(byP).sort(function(a,b){return a.key<b.key?-1:1;}).slice(-12);
   var cv=document.getElementById('evo-chart-prodimp');
@@ -10092,11 +10093,15 @@ function _impBuildProdImpChart(){
   var avgAtraso=grupos.map(function(g){return Math.round(g.atraso/g.n);});
   var avgSaida=grupos.map(function(g){return Math.round(g.saida/g.n);});
   var avgAlmoco=grupos.map(function(g){return Math.round(g.almoco/g.n);});
+  var avgPts=grupos.map(function(g){return Math.round(g.pts/g.n);});
   // Produtivo = média real de horasTrab (Término−Início−Almoço real) — mesma fórmula e mesma
   // base de registros do gráfico "Horas trabalhadas", então os dois batem exatamente.
   var prod=grupos.map(function(g){return Math.round(g.prod/g.n);});
-  var imp=prod.map(function(p){return Math.max(0,W.base-p);});
-  var pct=prod.map(function(p,i){return(p+imp[i])>0?Math.round(p/(p+imp[i])*100):0;});
+  // PTS (espera Chegada→abertura do PTS) sai de dentro do improdutivo — nunca aumenta o total da barra.
+  var impTotal=prod.map(function(p){return Math.max(0,W.base-p);});
+  var pts=impTotal.map(function(t,i){return Math.min(avgPts[i],t);});
+  var imp=impTotal.map(function(t,i){return t-pts[i];});
+  var pct=prod.map(function(p,i){var tot=p+pts[i]+imp[i];return tot>0?Math.round(p/tot*100):0;});
 
   if(insEl){
     insEl.style.display='block';
@@ -10109,14 +10114,15 @@ function _impBuildProdImpChart(){
   if(!cv)return;
 
   var barLabelsPlugin={id:'prodimpBarLabels',afterDatasetsDraw:function(c){
-    var ctx=c.ctx;var metaProd=c.getDatasetMeta(0),metaImp=c.getDatasetMeta(1);
+    var ctx=c.ctx;var metaProd=c.getDatasetMeta(0),metaPts=c.getDatasetMeta(1),metaImp=c.getDatasetMeta(2);
     ctx.save();ctx.font='700 9px Arial,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff';
     metaProd.data.forEach(function(bar,i){var h=bar.base-bar.y;if(h<14)return;ctx.fillText(_impProdImpFmt(prod[i]),bar.x,bar.y+h/2);});
+    metaPts.data.forEach(function(bar,i){var h=bar.base-bar.y;if(h<14||!pts[i])return;ctx.fillText(_impProdImpFmt(pts[i]),bar.x,bar.y+h/2);});
     metaImp.data.forEach(function(bar,i){var h=bar.base-bar.y;if(h<14)return;ctx.fillText(_impProdImpFmt(imp[i]),bar.x,bar.y+h/2);});
     ctx.restore();
   }};
   var lineLabelsPlugin={id:'prodimpLineLabels',afterDatasetsDraw:function(c){
-    var ctx=c.ctx;var meta=c.getDatasetMeta(2);var metaImpTop=c.getDatasetMeta(1);
+    var ctx=c.ctx;var meta=c.getDatasetMeta(3);var metaImpTop=c.getDatasetMeta(2);
     ctx.save();ctx.font='800 10px Arial,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     meta.data.forEach(function(pt,i){
       var txt=pct[i]+'%';
@@ -10133,13 +10139,14 @@ function _impBuildProdImpChart(){
     ctx.restore();
   }};
   function _prodImpBarElement(els){
-    for(var i=0;i<els.length;i++) if(els[i].datasetIndex!==2) return els[i];
+    for(var i=0;i<els.length;i++) if(els[i].datasetIndex!==3) return els[i];
     return null;
   }
 
   _impEvoCharts.prodimp=new Chart(cv.getContext('2d'),{
     data:{labels:labels,datasets:[
       {type:'bar',label:'Produtivo',data:prod,backgroundColor:'rgba(22,163,74,.8)',borderRadius:4,borderSkipped:false,stack:'s',order:2,yAxisID:'y'},
+      {type:'bar',label:'PTS (espera Chegada→abertura)',data:pts,backgroundColor:'rgba(14,165,233,.8)',borderRadius:4,borderSkipped:false,stack:'s',order:2,yAxisID:'y'},
       {type:'bar',label:'Improdutivo',data:imp,backgroundColor:'rgba(220,38,38,.75)',borderRadius:4,borderSkipped:false,stack:'s',order:2,yAxisID:'y'},
       {type:'line',label:'% produtivo',data:pct,borderColor:'#1e3a5f',backgroundColor:'#1e3a5f',borderWidth:2,pointRadius:3,pointBackgroundColor:'#1e3a5f',tension:.3,yAxisID:'y1',order:1}
     ]},
@@ -10148,7 +10155,7 @@ function _impBuildProdImpChart(){
       onHover:function(ev,els){var el=ev.native&&ev.native.target;if(el)el.style.cursor=_prodImpBarElement(els)?'pointer':'default';},
       plugins:{legend:{display:false},tooltip:{callbacks:{
         label:function(c){if(c.dataset.label==='% produtivo')return' % produtivo: '+c.raw+'%';return' '+c.dataset.label+': '+_impProdImpFmt(c.raw);},
-        afterBody:function(items){var i=items[0].dataIndex;var g=grupos[i];return['','Diagnóstico (causas prováveis do déficit):','  atraso na entrada: '+_impProdImpFmt(avgAtraso[i]),'  saída antecipada: '+_impProdImpFmt(avgSaida[i]),'  excesso de almoço: '+_impProdImpFmt(avgAlmoco[i]),'',g.n+' registros completos','🔍 Clique para ver os registros'];}
+        afterBody:function(items){var i=items[0].dataIndex;var g=grupos[i];return['','Diagnóstico (causas prováveis do déficit):','  espera pelo PTS (Chegada→abertura): '+_impProdImpFmt(avgPts[i]),'  atraso na entrada: '+_impProdImpFmt(avgAtraso[i]),'  saída antecipada: '+_impProdImpFmt(avgSaida[i]),'  excesso de almoço: '+_impProdImpFmt(avgAlmoco[i]),'',g.n+' registros completos','🔍 Clique para ver os registros'];}
       }}},
       scales:{
         y:{stacked:true,min:0,max:W.base+60,ticks:{callback:function(v){return _impProdImpFmt(v);},font:{size:10}},grid:{color:'#f1f5f9'}},
@@ -10169,9 +10176,10 @@ function _impBuildProdImpChart(){
   var mA=Math.round(avgAtraso.reduce(function(s,v){return s+v;},0)/avgAtraso.length);
   var mS=Math.round(avgSaida.reduce(function(s,v){return s+v;},0)/avgSaida.length);
   var mAl=Math.round(avgAlmoco.reduce(function(s,v){return s+v;},0)/avgAlmoco.length);
-  var mTot=(mA+mS+mAl)||1;
+  var mPts=Math.round(pts.reduce(function(s,v){return s+v;},0)/pts.length);
+  var mTot=(mA+mS+mAl+mPts)||1;
   _EVO_PRODIMP_BASEDATA=baseData;_EVO_PRODIMP_W=W;
-  var causes=[{lbl:'Atraso na entrada',val:mA,color:'#dc2626',key:'atraso'},{lbl:'Saída antecipada',val:mS,color:'#f97316',key:'saida'},{lbl:'Excesso de almoço',val:mAl,color:'#a855f7',key:'almoco'}];
+  var causes=[{lbl:'Espera pelo PTS',val:mPts,color:'#0ea5e9',key:'pts'},{lbl:'Atraso na entrada',val:mA,color:'#dc2626',key:'atraso'},{lbl:'Saída antecipada',val:mS,color:'#f97316',key:'saida'},{lbl:'Excesso de almoço',val:mAl,color:'#a855f7',key:'almoco'}];
   if(cb)cb.innerHTML=causes.map(function(c){
     var pc=Math.round(c.val/mTot*100);
     return'<div onclick="_impProdImpCauseDrillOpen(\''+c.key+'\')" style="cursor:pointer;display:grid;grid-template-columns:150px 1fr 60px;align-items:center;gap:10px;margin-bottom:8px;font-size:11px" title="Clique para ver os registros">'
@@ -10184,13 +10192,14 @@ function _impBuildProdImpChart(){
   // KPI mini cards (último período vs anterior)
   if(kpiEl&&prod.length){
     var lastI=prod.length-1, prevI=Math.max(0,prod.length-2);
-    var dProd=prod[lastI]-prod[prevI], dImp=imp[lastI]-imp[prevI], dPct=pct[lastI]-pct[prevI];
+    var dProd=prod[lastI]-prod[prevI], dImp=imp[lastI]-imp[prevI], dPts=pts[lastI]-pts[prevI], dPct=pct[lastI]-pct[prevI];
     function _deltaRow(d,goodWhenPositive,suf){
       var good=goodWhenPositive?d>=0:d<=0;
       return'<div style="font-size:11px;font-weight:700;margin-top:6px;color:'+(good?'#16a34a':'#dc2626')+'">'+(d>=0?'▲ +':'▼ ')+Math.abs(d)+suf+' vs período anterior</div>';
     }
     kpiEl.innerHTML=
       '<div style="background:var(--card);border:1px solid var(--bord);border-top:3px solid #16a34a;border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Produtivo / equipe</div><div style="font-size:22px;font-weight:900;margin-top:4px;color:#16a34a">'+_impProdImpFmt(prod[lastI])+'</div>'+_deltaRow(dProd,true,' min')+'</div>'
+      +'<div style="background:var(--card);border:1px solid var(--bord);border-top:3px solid #0ea5e9;border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">PTS / equipe</div><div style="font-size:22px;font-weight:900;margin-top:4px;color:#0ea5e9">'+_impProdImpFmt(pts[lastI])+'</div>'+_deltaRow(dPts,false,' min')+'</div>'
       +'<div style="background:var(--card);border:1px solid var(--bord);border-top:3px solid #dc2626;border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Improdutivo / equipe</div><div style="font-size:22px;font-weight:900;margin-top:4px;color:#dc2626">'+_impProdImpFmt(imp[lastI])+'</div>'+_deltaRow(dImp,false,' min')+'</div>'
       +'<div style="background:var(--card);border:1px solid var(--bord);border-top:3px solid #1e3a5f;border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Aderência produtiva (%)</div><div style="font-size:22px;font-weight:900;margin-top:4px;color:#1e3a5f">'+pct[lastI]+'%</div>'+_deltaRow(dPct,true,' p.p.')+'</div>';
   }
@@ -10205,9 +10214,10 @@ function _impProdImpDrillOpen(key,baseData,W){
     var saida=Math.max(0,W.fim-d.terminoMin);
     var almPausa=(d.almIniMin!==null&&d.almFimMin!==null)?(d.almFimMin-d.almIniMin):0;
     var almoco=Math.max(0,almPausa-60);
+    var pts=(d.chegadaMin!==null&&d.ptsMin!==null)?Math.max(0,d.ptsMin-d.chegadaMin):0;
     var prodTot=Math.max(0,d.horasTrab);
     var impTot=Math.max(0,W.base-prodTot);
-    return Object.assign({},d,{_entrada:d.inicioMin,_atraso:atraso,_saida:saida,_almoco:almoco,_imp:impTot,_prod:prodTot,_completo:true});
+    return Object.assign({},d,{_entrada:d.inicioMin,_atraso:atraso,_saida:saida,_almoco:almoco,_pts:pts,_imp:impTot,_prod:prodTot,_completo:true});
   }).sort(function(a,b){return b._imp-a._imp;});
   if(!recs.length)return;
   var title=key;
@@ -10227,6 +10237,7 @@ function _impProdImpDrillOpen(key,baseData,W){
       +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.sap)+'</td>'
       +'<td style="padding:7px 10px;white-space:nowrap">'+impEsc(sq)+'</td>'
       +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+m2hm(d._entrada)+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap;color:'+(d._pts>0?'#0ea5e9':'#16a34a')+'">'+(d._pts>0?m2hhm(d._pts):'—')+'</td>'
       +'<td style="padding:7px 10px;text-align:center;white-space:nowrap;color:'+(d._atraso>0?'#dc2626':'#16a34a')+'">'+(d._atraso>0?m2hhm(d._atraso):'—')+'</td>'
       +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+(d._completo?m2hm(d.terminoMin):'<span style="color:#94a3b8">sem dado</span>')+'</td>'
       +'<td style="padding:7px 10px;text-align:center;white-space:nowrap;color:'+(d._saida>0?'#f97316':'#16a34a')+'">'+(d._completo?(d._saida>0?m2hhm(d._saida):'—'):'—')+'</td>'
@@ -10250,6 +10261,7 @@ function _impProdImpDrillOpen(key,baseData,W){
     +'<th style="'+thS+';text-align:left">Obra (SAP)</th>'
     +'<th style="'+thS+';text-align:left">Squad</th>'
     +'<th style="'+thS+';text-align:center">Entrada</th>'
+    +'<th style="'+thS+';text-align:center">Espera PTS</th>'
     +'<th style="'+thS+';text-align:center">Atraso</th>'
     +'<th style="'+thS+';text-align:center">Término</th>'
     +'<th style="'+thS+';text-align:center">Saída antec.</th>'
@@ -10348,8 +10360,8 @@ function _impSquadHorasDrillOpen(sq){
 function _impProdImpCauseDrillOpen(cause){
   var W=_EVO_PRODIMP_W||_impProdImpWindow();
   var baseData=_EVO_PRODIMP_BASEDATA||[];
-  var labelsCause={atraso:'Atraso na entrada',saida:'Saída antecipada',almoco:'Excesso de almoço'};
-  var colorsCause={atraso:'#dc2626',saida:'#f97316',almoco:'#a855f7'};
+  var labelsCause={pts:'Espera pelo PTS',atraso:'Atraso na entrada',saida:'Saída antecipada',almoco:'Excesso de almoço'};
+  var colorsCause={pts:'#0ea5e9',atraso:'#dc2626',saida:'#f97316',almoco:'#a855f7'};
   function m2hm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
   function m2hhm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60))+'h'+String(m%60).padStart(2,'0');}
   var recs=baseData.map(function(d){
@@ -10358,16 +10370,18 @@ function _impProdImpCauseDrillOpen(cause){
     var completo=d.terminoMin!==null;
     var saida=completo?Math.max(0,W.fim-d.terminoMin):0;
     var almoco=d.almExcesso||0;
-    var v=cause==='atraso'?atraso:cause==='saida'?saida:almoco;
+    var pts=(d.chegadaMin!==null&&d.ptsMin!==null)?Math.max(0,d.ptsMin-d.chegadaMin):0;
+    var v=cause==='atraso'?atraso:cause==='saida'?saida:cause==='pts'?pts:almoco;
     return Object.assign({},d,{_entrada:entrada,_completo:completo,_terminoOk:completo,_v:v});
   }).filter(function(d){return d._v>0;}).sort(function(a,b){return b._v-a._v;});
   if(!recs.length)return;
   var avgV=Math.round(recs.reduce(function(s,d){return s+d._v;},0)/recs.length);
   var causeColor=colorsCause[cause];
-  var extraColLabel=cause==='atraso'?'Entrada':cause==='saida'?'Término':'Almoço';
+  var extraColLabel=cause==='atraso'?'Entrada':cause==='saida'?'Término':cause==='pts'?'Chegada→PTS':'Almoço';
   function extraColVal(d){
     if(cause==='atraso')return m2hm(d._entrada);
     if(cause==='saida')return d._completo?m2hm(d.terminoMin):'<span style="color:#94a3b8">sem dado</span>';
+    if(cause==='pts')return m2hm(d.chegadaMin)+'–'+m2hm(d.ptsMin);
     return(d.almIniMin!==null&&d.almFimMin!==null)?m2hm(d.almIniMin)+'–'+m2hm(d.almFimMin):'—';
   }
   var thS='background:#f5f9ff;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);position:sticky;top:0;white-space:nowrap';
@@ -11391,11 +11405,11 @@ async function renderViewImprodutividade(){
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:14px 16px;margin-top:14px">'
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:8px"><div><span style="font-size:12px;font-weight:700;color:var(--text)">Evolução de Horas Produtivas x Improdutivas <span style="display:inline-flex;align-items:center;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;vertical-align:middle">NOVO</span></span><div id="evo-prodimp-base-lbl" style="font-size:11px;color:var(--muted);margin-top:2px">Base: <strong>Horário Ref.</strong> → <strong>Término Até</strong> (filtro acima) − 1h almoço</div></div><div style="display:flex;gap:5px" id="prodimp-period-btns"><button onclick="impProdImpSetPeriod(\'semana\',this)" class="prodimp-period-btn active" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--sb);color:#fff;font-family:inherit">Por semana</button><button onclick="impProdImpSetPeriod(\'dia\',this)" class="prodimp-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por dia</button><button onclick="impProdImpSetPeriod(\'mes\',this)" class="prodimp-period-btn" style="padding:3px 10px;border-radius:20px;border:1px solid var(--bord);font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--muted);font-family:inherit">Por mês</button></div></div>'
   +'<div id="evo-prodimp-insight" style="display:none;border-radius:8px;padding:10px 12px;font-size:12px;font-weight:700;margin:8px 0"></div>'
-  +'<div style="display:flex;gap:14px;margin:8px 0 10px;flex-wrap:wrap"><span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#16a34a;display:inline-block"></span>Produtivo</span><span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#dc2626;display:inline-block"></span>Improdutivo</span><span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#1e3a5f;display:inline-block"></span>% produtivo</span></div>'
+  +'<div style="display:flex;gap:14px;margin:8px 0 10px;flex-wrap:wrap"><span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#16a34a;display:inline-block"></span>Produtivo</span><span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#0ea5e9;display:inline-block"></span>PTS (espera Chegada→abertura)</span><span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#dc2626;display:inline-block"></span>Improdutivo</span><span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#1e3a5f;display:inline-block"></span>% produtivo</span></div>'
   +'<div style="position:relative;height:260px"><canvas id="evo-chart-prodimp"></canvas></div>'
   +'<div id="evo-prodimp-quality" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;font-size:10px"></div>'
-  +'<div style="font-size:10px;color:#94a3b8;margin-top:6px;font-style:italic">Passe o mouse na barra vermelha para ver o motivo (atraso/saída/almoço) · Clique para ver os registros do período</div>'
-  +'<div id="evo-prodimp-kpis" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px"></div>'
+  +'<div style="font-size:10px;color:#94a3b8;margin-top:6px;font-style:italic">Passe o mouse na barra vermelha para ver o motivo (PTS/atraso/saída/almoço) · Clique para ver os registros do período</div>'
+  +'<div id="evo-prodimp-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px"></div>'
   +'<div style="background:var(--bg);border:1px solid var(--bord);border-radius:8px;padding:12px 14px;margin-top:12px"><div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:2px">Composição do improdutivo</div><div style="font-size:10px;color:var(--muted);margin-bottom:8px">Média do período exibido acima — o que está "roubando" a base</div><div id="evo-prodimp-causes"></div><div style="font-size:9px;color:#94a3b8;margin-top:8px;font-style:italic">Nota: o almoço sempre desconta 1h fixo da base, mesmo se o almoço real for mais curto — só o excesso sobre 1h entra como improdutivo. Por isso "Produtivo" pode ser um pouco menor que "Horas trabalhadas reais" quando o almoço foi mais curto que 1h.</div></div>'
   +'</div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:12px;padding:20px 22px;margin-top:14px">'
