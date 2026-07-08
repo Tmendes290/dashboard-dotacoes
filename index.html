@@ -7801,7 +7801,11 @@ function handleMateriaisUpload(file){
   var reader = new FileReader();
   reader.onload = function(e){
     try{
-      var wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+      // Sem cellDates: a coluna VALOR TOTAL desta planilha vem com formatação de data
+      // aplicada por engano (célula numérica exibida como data), e cellDates:true
+      // converteria esse número em Date, zerando o valor. fmtMatDate já sabe
+      // converter serial numérico do Excel em data quando necessário.
+      var wb = XLSX.read(e.target.result, {type:'array'});
       var wsMatriz = wb.Sheets['BD_MATRIZ'];
       if(!wsMatriz){ alert('Aba BD_MATRIZ não encontrada no arquivo.'); return; }
       var matrizRows = XLSX.utils.sheet_to_json(wsMatriz, {defval:''});
