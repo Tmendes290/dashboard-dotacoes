@@ -4003,7 +4003,9 @@ function exportCSV(){
 // ─────────────────────────────────────────────────────────────────
 // INIT — wait for Chart.js to be ready
 // ─────────────────────────────────────────────────────────────────
-var _sc=document.getElementById('s-clock');if(_sc)_sc.textContent=new Date().toLocaleTimeString('pt-BR');
+function _tickClock(){ var _sc=document.getElementById('s-clock'); if(_sc) _sc.textContent=new Date().toLocaleTimeString('pt-BR'); }
+_tickClock();
+setInterval(_tickClock, 1000);
 // Fallback se bootApp não rodou ainda
 setTimeout(function(){
   if(!window._booted){ window._booted=true; bootApp(); }
