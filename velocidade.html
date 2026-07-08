@@ -731,18 +731,52 @@ function _fetchEventosDia(drv, r, onDone){
     .catch(function(){ _top10EventosCache[cacheKey]='error'; onDone(); });
 }
 
+// Filtro por faixa de duração dentro da lista de eventos individuais
+var _eventosDurFiltro='';
+function setEventosDurFiltro(f){
+  _eventosDurFiltro=(_eventosDurFiltro===f)?'':f; // clicar de novo no mesmo limpa o filtro
+  renderTop10Inner();
+  renderComiteTable(_lastComiteDrivers);
+}
+
 // HTML da tabela de eventos individuais (compartilhado entre Top10 e Comitê)
 function _eventosCellHtml(cached){
   if(cached==='error') return '<div style="padding:8px;color:var(--danger);font-size:11px">Erro ao carregar eventos.</div>';
   if(!cached) return '<div style="padding:8px;color:var(--muted);font-size:11px">Carregando eventos...</div>';
   if(!cached.length) return '<div style="padding:8px;color:var(--muted);font-size:11px">Nenhum evento encontrado.</div>';
-  return '<table style="width:100%;border-collapse:collapse;font-size:10px"><thead><tr style="background:#f8fafc">'
+
+  var b05=cached.filter(function(ev){return ev.duracao<=5;});
+  var b68=cached.filter(function(ev){return ev.duracao>=6&&ev.duracao<=8;});
+  var b9=cached.filter(function(ev){return ev.duracao>=9;});
+  var faixas=[
+    {key:'',label:'Todos',list:cached},
+    {key:'0-5',label:'0–5s',list:b05},
+    {key:'6-8',label:'6–8s',list:b68},
+    {key:'9+',label:'9s+',list:b9}
+  ];
+  var shown=faixas.filter(function(f){return f.key===_eventosDurFiltro;})[0]||faixas[0];
+
+  var filterBar='<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap">'
+    +faixas.map(function(f){
+      var active=f.key===_eventosDurFiltro;
+      return '<button onclick="event.stopPropagation();setEventosDurFiltro(\''+f.key+'\')" '
+        +'style="padding:4px 10px;border-radius:6px;border:1px solid '+(active?'#2563eb':'#e2e8f0')+';'
+        +'background:'+(active?'#2563eb':'#fff')+';color:'+(active?'#fff':'#475569')+';'
+        +'font-size:10px;font-weight:700;cursor:pointer">'+f.label+' ('+f.list.length+')</button>';
+    }).join('')
+    +'</div>';
+
+  if(!shown.list.length){
+    return filterBar+'<div style="padding:8px;color:var(--muted);font-size:11px">Nenhum evento nessa faixa.</div>';
+  }
+
+  return filterBar+'<table style="width:100%;border-collapse:collapse;font-size:10px"><thead><tr style="background:#f8fafc">'
     +'<th style="padding:3px 8px;text-align:left;color:var(--muted);text-transform:uppercase;font-size:9px">Duração</th>'
     +'<th style="padding:3px 8px;text-align:left;color:var(--muted);text-transform:uppercase;font-size:9px">Velocidade</th>'
     +'<th style="padding:3px 8px;text-align:left;color:var(--muted);text-transform:uppercase;font-size:9px">Limite</th>'
     +'<th style="padding:3px 8px;text-align:left;color:var(--muted);text-transform:uppercase;font-size:9px">Excesso</th>'
     +'</tr></thead><tbody>'
-    +cached.map(function(ev){
+    +shown.list.map(function(ev){
       var evPc=ev.limite>0?Math.round((ev.velocidade/ev.limite-1)*100):0;
       var puniu=ev.duracao>12;
       return '<tr style="border-bottom:1px solid #f1f5f9'+(puniu?';background:#fff7ed':'')+'">'
