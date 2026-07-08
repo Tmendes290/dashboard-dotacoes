@@ -1451,6 +1451,8 @@ var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], p
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
 var MAT_PAGE = 1;
+var USR_FILTERS = {nome:[], squad:[]};
+var _usrCache = {usuarios:[], bloqueados:[]};
 var SP_FAROL = '';
 var RES_TAB = 'dashboard';
 var CAPEX_TAB = 'graficos';
@@ -2230,7 +2232,7 @@ function setView(id){
     const fr=document.getElementById('histograma-frame');
     if(!fr.src||fr.src==='about:blank')fr.src='/histograma-eletro.html?embed=1';
   }
-  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','produtividade-rev2','velocidade','histograma','cji3'].includes(id));
+  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','produtividade-rev2','velocidade','histograma','cji3','usuarios'].includes(id));
   if(id==='produtividade-rev2'){
     var _mRev2=VIEW_META['produtividade-rev2'];
     var _ptRev2=document.getElementById('page-title');if(_ptRev2)_ptRev2.textContent=_mRev2.title;
@@ -4601,6 +4603,12 @@ function onMsChange(id){
     if(currentView === 'materiais') renderMateriais();
     return;
   }
+  if(id.startsWith('ms-usr-')){
+    var usrKey = id.replace('ms-usr-','');
+    USR_FILTERS[usrKey] = selected;
+    if(currentView === 'usuarios') renderUsuariosHTML(document.getElementById('v-usuarios'), _usrCache.usuarios, _usrCache.bloqueados);
+    return;
+  }
   var isReg = id.startsWith('ms-reg-');
   var effectiveId = id.replace('ms-reg-','ms-').replace('ms-sp-','ms-');
   if(isReg){
@@ -4654,7 +4662,9 @@ function updateMsLabel(id, selected){
     'ms-cji3-gers': 'Todos',
     'ms-cji3-sites': 'Todos',
     'ms-cji3-projs': 'Todos',
-    'ms-cji3-forns': 'Todos'
+    'ms-cji3-forns': 'Todos',
+    'ms-usr-nome': 'Todos os usuários...',
+    'ms-usr-squad': 'Todos os squads'
   };
   if(selected.length === 0){
     label.textContent = defaults[id] || 'Todos';
@@ -6147,6 +6157,8 @@ async function renderUsuarios(){
     var usuarios = result.data || [];
     var bloqResult = await supa.from('emails_excluidos').select('email, excluido_em').order('excluido_em', {ascending: false});
     var bloqueados = (bloqResult.data || []);
+    _usrCache.usuarios = usuarios;
+    _usrCache.bloqueados = bloqueados;
     renderUsuariosHTML(el, usuarios, bloqueados);
   } catch(e) {
     el.innerHTML = '<div style="padding:24px;color:red">Erro ao carregar usuários: ' + e.message + '</div>';
@@ -6159,17 +6171,51 @@ function renderUsuariosHTML(el, usuarios, bloqueados){
   var roleLabels = {admin:'Administrador', lider:'Líder', planejador:'Planejador'};
   var roleColors = {admin:'#002F6C', lider:'#007E7A', planejador:'#3CB5E5'};
 
+  var usuariosFiltrados = usuarios.filter(function(u){
+    if(USR_FILTERS.nome.length && USR_FILTERS.nome.indexOf(u.nome||u.email)<0) return false;
+    if(USR_FILTERS.squad.length){
+      var uSquad = u.squad || '(sem squad)';
+      if(USR_FILTERS.squad.indexOf(uSquad)<0) return false;
+    }
+    return true;
+  });
+  var _filtrosAtivos = USR_FILTERS.nome.length || USR_FILTERS.squad.length;
+
   var html = '';
   html += '<div style="padding:24px">';
   html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">';
   html += '<div><h2 style="font-size:18px;font-weight:800;color:var(--sb);margin-bottom:4px">&#128101; Gestão de Usuários</h2>';
-  html += '<p style="font-size:12px;color:var(--muted)">' + usuarios.length + ' usuário(s) cadastrado(s)</p></div>';
+  var _usrCountTxt = _filtrosAtivos
+    ? usuariosFiltrados.length + ' de ' + usuarios.length + ' usuário(s)'
+    : usuarios.length + ' usuário(s) cadastrado(s)';
+  html += '<p style="font-size:12px;color:var(--muted)">' + _usrCountTxt + '</p></div>';
   html += '<button onclick="renderUsuarios()" style="background:var(--acc);color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">&#8635; Atualizar</button>';
   html += '</div>';
 
+  // Filtros locais desta aba (usuário e squad) — independentes da barra global
+  html += '<div class="filters" style="margin-bottom:16px;overflow:visible;flex-wrap:wrap;gap:8px;align-items:flex-end">';
+  html += '<div class="fg" style="min-width:220px"><label>Usuário</label>'
+    + '<div class="ms-wrap" id="ms-usr-nome"><div class="ms-input" onclick="toggleMs(\'ms-usr-nome\')">'
+    + '<span class="ms-label" id="ms-usr-nome-label">...</span>'
+    + '<span style="color:var(--muted);font-size:10px">▾</span></div>'
+    + '<div class="ms-drop" id="ms-usr-nome-drop" style="display:none"></div></div></div>';
+  html += '<div class="fg" style="min-width:180px"><label>Squad</label>'
+    + '<div class="ms-wrap" id="ms-usr-squad"><div class="ms-input" onclick="toggleMs(\'ms-usr-squad\')">'
+    + '<span class="ms-label" id="ms-usr-squad-label">...</span>'
+    + '<span style="color:var(--muted);font-size:10px">▾</span></div>'
+    + '<div class="ms-drop" id="ms-usr-squad-drop" style="display:none"></div></div></div>';
+  if(_filtrosAtivos){
+    html += '<button onclick="USR_FILTERS.nome=[];USR_FILTERS.squad=[];renderUsuariosHTML(document.getElementById(\'v-usuarios\'),_usrCache.usuarios,_usrCache.bloqueados)" style="padding:7px 12px;border:1px solid var(--bord);border-radius:6px;font-size:12px;background:#fff;cursor:pointer">↺ Limpar</button>';
+  }
+  html += '</div>';
+
+  if(!usuariosFiltrados.length){
+    html += '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Nenhum usuário encontrado com esses filtros.</div>';
+  }
+
   html += '<div class="users-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px">';
 
-  usuarios.forEach(function(u, idx){
+  usuariosFiltrados.forEach(function(u, idx){
     var inicial = (u.nome||u.email||'U').charAt(0).toUpperCase();
     var corRole = roleColors[u.role] || '#64748b';
     var labelRole = roleLabels[u.role] || u.role;
@@ -6281,6 +6327,14 @@ function renderUsuariosHTML(el, usuarios, bloqueados){
     navigator.clipboard.writeText('https://dashboard-dotacoes-production.up.railway.app')
       .then(function(){ toast('Link copiado!','green'); });
   });
+
+  // Popula os dropdowns de filtro (usuário e squad) desta aba
+  var nomesUsr = [...new Set(usuarios.map(function(u){ return u.nome||u.email; }).filter(Boolean))].sort();
+  buildMsDrop('ms-usr-nome', nomesUsr, USR_FILTERS.nome, null);
+  updateMsLabel('ms-usr-nome', USR_FILTERS.nome);
+  var squadsUsr = [...new Set(usuarios.map(function(u){ return u.squad||'(sem squad)'; }))].sort();
+  buildMsDrop('ms-usr-squad', squadsUsr, USR_FILTERS.squad, null);
+  updateMsLabel('ms-usr-squad', USR_FILTERS.squad);
 }
 
 async function updateUsuarioRole(userId, newRole){
