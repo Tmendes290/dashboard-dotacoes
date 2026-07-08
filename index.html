@@ -850,7 +850,9 @@ input,select,textarea{font-size:16px!important} /* prevent iOS zoom on focus */
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 // ── SUPABASE CONFIG ─────────────────────────────────────────────
-const SUPA_URL = 'https://ehbiyqqpzqrluvuqrljp.supabase.co';
+// Passa pelo proxy do próprio servidor (server.js /db) em vez de falar direto
+// com supabase.co — evita bloqueio do domínio em redes corporativas (ex: Vale).
+const SUPA_URL = window.location.origin + '/db';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoYml5cXFwenFybHV2dXFybGpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzMjM3MTcsImV4cCI6MjA5NDg5OTcxN30.lW_Jdc7SC7FKh9OJPBCYdfN-QMXFTYGjterU3eWOFTc';
 let supa = null;
 let CURRENT_USER = null;

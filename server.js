@@ -1,12 +1,26 @@
 const express = require('express');
 const path = require('path');
 const compression = require('compression');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const SUPA_URL = 'https://ehbiyqqpzqrluvuqrljp.supabase.co';
 const SUPA_SERVICE_KEY = process.env.SUPA_SERVICE_KEY;
+
+// ── PROXY SUPABASE: contorna bloqueio de *.supabase.co em redes corporativas ──
+// (ex.: rede da Vale faz inspeção SSL e derruba conexões diretas ao domínio do Supabase)
+// O navegador passa a falar só com o domínio do Railway; este proxy repassa
+// REST/Auth/Storage (HTTP) e Realtime (WebSocket) para o Supabase de verdade.
+// Tem que vir ANTES de compression()/express.json() pra não interferir no streaming do body.
+const supabaseProxy = createProxyMiddleware({
+  target: SUPA_URL,
+  changeOrigin: true,
+  ws: true,
+  pathRewrite: { '^/db': '' }
+});
+app.use('/db', supabaseProxy);
 
 // Gzip compression — reduz o index.html de ~1.2MB para ~150KB
 app.use(compression());
@@ -372,6 +386,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Dashboard de Dotacoes rodando na porta ${PORT}`);
 });
+server.on('upgrade', supabaseProxy.upgrade);
