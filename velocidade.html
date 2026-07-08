@@ -983,7 +983,7 @@ function renderAll(){
   if(INACTIVE_DAYS>0){
     var _cut=new Date();_cut.setDate(_cut.getDate()-INACTIVE_DAYS);var _cutStr=_cut.toISOString().slice(0,10);
     drvData=drvData.filter(function(d){return d.lastDt>=_cutStr;});
-    if(MODO_12S)kpiDrvData=kpiDrvData.filter(function(d){return d.lastDt>=_cutStr;});
+    kpiDrvData=kpiDrvData.filter(function(d){return d.lastDt>=_cutStr;});
   }
   // Em modo 12s a matriz exibe apenas motoristas com eventos >12s (mesmos do kpiDrvData)
   if(MODO_12S)drvData=kpiDrvData;
