@@ -8139,7 +8139,47 @@ function _matDashHtml(data){
   return cards + charts;
 }
 
+// Rótulo de dados desenhado direto no canvas (sem plugin externo — evita
+// depender de mais um CDN que pode ser bloqueado em redes corporativas).
+function _registerMatDataLabels(){
+  if(window._matDataLabelsRegistered) return;
+  Chart.register({
+    id:'matDataLabels',
+    afterDatasetsDraw:function(chart){
+      var opts=(chart.options.plugins||{}).matDataLabels;
+      if(!opts) return;
+      var ctx=chart.ctx;
+      chart.data.datasets.forEach(function(dataset,dsIndex){
+        if(dataset.type==='line') return; // não rotula a linha de %
+        var meta=chart.getDatasetMeta(dsIndex);
+        if(meta.hidden) return;
+        meta.data.forEach(function(el,i){
+          var value=dataset.data[i];
+          if(value===null||value===undefined||value===0) return;
+          var label=opts.formatter(value,dsIndex,i);
+          var pos=el.tooltipPosition?el.tooltipPosition():{x:el.x,y:el.y};
+          ctx.save();
+          ctx.fillStyle=opts.color||'#334155';
+          ctx.font='bold 9px Inter, sans-serif';
+          if(chart.options.indexAxis==='y'){
+            ctx.textAlign='left'; ctx.textBaseline='middle';
+            ctx.fillText(label,pos.x+6,pos.y);
+          } else {
+            ctx.textAlign='center'; ctx.textBaseline='bottom';
+            ctx.fillText(label,pos.x,pos.y-4);
+          }
+          ctx.restore();
+        });
+      });
+    }
+  });
+  window._matDataLabelsRegistered=true;
+}
+function _matOnHoverPointer(evt,elements){ evt.native.target.style.cursor=elements.length?'pointer':'default'; }
+function _fmtMoneyK(v){ return v>=1e6 ? 'R$ '+(v/1e6).toFixed(1)+'M' : 'R$ '+(v/1000).toFixed(0)+'k'; }
+
 function buildMatCharts(data){
+  _registerMatDataLabels();
   var nomesMeses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   var COLORS = ['#2563eb','#7c3aed','#16a34a','#d97706','#dc2626','#0891b2','#db2777','#65a30d','#9333ea','#ea580c','#0d9488','#f59e0b'];
 
@@ -8152,7 +8192,18 @@ function buildMatCharts(data){
   if(c1){ _matCharts.sit = new Chart(c1.getContext('2d'),{
     type:'doughnut',
     data:{labels:sitLabels, datasets:[{data:sitVals, backgroundColor:COLORS, borderWidth:2}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:10},boxWidth:12}}}}
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'right',labels:{font:{size:10},boxWidth:12}},
+        matDataLabels:{color:'#fff',formatter:function(v){return v;}}
+      },
+      onHover:_matOnHoverPointer,
+      onClick:function(evt,elements){
+        if(!elements.length) return;
+        MAT_FILTERS.situacao=[sitLabels[elements[0].index]];
+        MAT_PAGE=1; setMatTab('tabela');
+      }
+    }
   });}
 
   // Chart 2: Top 10 Fornecedores (bar horizontal)
@@ -8165,8 +8216,19 @@ function buildMatCharts(data){
     type:'bar',
     data:{labels:fornSorted, datasets:[{label:'Valor Total',data:fornVals,backgroundColor:'#7c3aed99',borderColor:'#7c3aed',borderWidth:1}]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ' R$ '+ctx.parsed.x.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});}}}},
-      scales:{x:{ticks:{callback:function(v){return 'R$ '+(v/1000).toFixed(0)+'k';}},grid:{display:false}},y:{ticks:{font:{size:10}}}}}
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:function(ctx){return ' R$ '+ctx.parsed.x.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});}}},
+        matDataLabels:{color:'#334155',formatter:function(v){return _fmtMoneyK(v);}}
+      },
+      scales:{x:{ticks:{callback:function(v){return 'R$ '+(v/1000).toFixed(0)+'k';}},grid:{display:false}},y:{ticks:{font:{size:10}}}},
+      onHover:_matOnHoverPointer,
+      onClick:function(evt,elements){
+        if(!elements.length) return;
+        MAT_FILTERS.fornecedor=[fornSorted[elements[0].index]];
+        MAT_PAGE=1; setMatTab('tabela');
+      }
+    }
   });}
 
   // Chart 3: Previsão de Entrega por Mês (bar)
@@ -8190,8 +8252,20 @@ function buildMatCharts(data){
     type:'bar',
     data:{labels:mesSorted, datasets:[{label:'Itens',data:mesVals,backgroundColor:'#2563eb99',borderColor:'#2563eb',borderWidth:1}]},
     options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{x:{ticks:{font:{size:10}}},y:{ticks:{stepSize:1},grid:{display:false}}}}
+      plugins:{
+        legend:{display:false},
+        matDataLabels:{color:'#334155',formatter:function(v){return v;}}
+      },
+      scales:{x:{ticks:{font:{size:10}}},y:{ticks:{stepSize:1},grid:{display:false}}},
+      onHover:_matOnHoverPointer,
+      onClick:function(evt,elements){
+        if(!elements.length) return;
+        var parts=mesSorted[elements[0].index].split('/');
+        MAT_FILTERS.ano=parts[1];
+        MAT_FILTERS.mes=String(nomesMeses.indexOf(parts[0])+1).padStart(2,'0');
+        MAT_PAGE=1; setMatTab('tabela');
+      }
+    }
   });}
 
   // Chart 5: Aderência de Entregas por Mês (bar + line)
@@ -8240,12 +8314,22 @@ function buildMatCharts(data){
         tooltip:{callbacks:{label:function(ctx){
           if(ctx.dataset.label==='% Aderência') return ctx.parsed.y!==null?' Aderência: '+ctx.parsed.y+'%':'';
           return ' '+ctx.dataset.label+': '+(ctx.parsed.y!==null?ctx.parsed.y.toLocaleString('pt-BR'):'-')+' itens';
-        }}}
+        }}},
+        matDataLabels:{color:'#334155',formatter:function(v){return v;}}
       },
       scales:{
         y:{position:'left',ticks:{font:{size:9},stepSize:1},grid:{display:false}},
         y2:{position:'right',min:0,max:120,ticks:{font:{size:9},callback:function(v){return v+'%';}},grid:{color:'#f1f5f9'}},
         x:{ticks:{font:{size:9}}}
+      },
+      onHover:_matOnHoverPointer,
+      onClick:function(evt,elements,chart){
+        var barEl=elements.filter(function(el){return chart.data.datasets[el.datasetIndex].type==='bar';})[0];
+        if(!barEl) return;
+        var parts=aderKeys[barEl.index].split('/');
+        MAT_FILTERS.ano='20'+parts[1];
+        MAT_FILTERS.mes=String(nomesMeses.indexOf(parts[0])+1).padStart(2,'0');
+        MAT_PAGE=1; setMatTab('tabela');
       }
     }
   });}
@@ -8260,8 +8344,20 @@ function buildMatCharts(data){
     type:'bar',
     data:{labels:sqSorted, datasets:[{label:'Valor',data:sqVals,backgroundColor:sqSorted.map(function(_,i){return COLORS[i%COLORS.length]+'99';}),borderColor:sqSorted.map(function(_,i){return COLORS[i%COLORS.length];}),borderWidth:1}]},
     options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ' R$ '+ctx.parsed.y.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});}}}},
-      scales:{x:{ticks:{font:{size:10}}},y:{ticks:{callback:function(v){return 'R$ '+(v/1000).toFixed(0)+'k';}},grid:{display:false}}}}
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:function(ctx){return ' R$ '+ctx.parsed.y.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});}}},
+        matDataLabels:{color:'#334155',formatter:function(v){return _fmtMoneyK(v);}}
+      },
+      scales:{x:{ticks:{font:{size:10}}},y:{ticks:{callback:function(v){return 'R$ '+(v/1000).toFixed(0)+'k';}},grid:{display:false}}},
+      onHover:_matOnHoverPointer,
+      onClick:function(evt,elements){
+        if(!elements.length) return;
+        var label=sqSorted[elements[0].index];
+        MAT_FILTERS.squad=[label==='Sem Squad'?'':label];
+        MAT_PAGE=1; setMatTab('tabela');
+      }
+    }
   });}
 }
 
