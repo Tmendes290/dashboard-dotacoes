@@ -8143,37 +8143,42 @@ function _matDashHtml(data){
 // depender de mais um CDN que pode ser bloqueado em redes corporativas).
 function _registerMatDataLabels(){
   if(window._matDataLabelsRegistered) return;
-  Chart.register({
-    id:'matDataLabels',
-    afterDatasetsDraw:function(chart){
-      var opts=(chart.options.plugins||{}).matDataLabels;
-      if(!opts) return;
-      var ctx=chart.ctx;
-      chart.data.datasets.forEach(function(dataset,dsIndex){
-        if(dataset.type==='line') return; // não rotula a linha de %
-        var meta=chart.getDatasetMeta(dsIndex);
-        if(meta.hidden) return;
-        meta.data.forEach(function(el,i){
-          var value=dataset.data[i];
-          if(value===null||value===undefined||value===0) return;
-          var label=opts.formatter(value,dsIndex,i);
-          var pos=el.tooltipPosition?el.tooltipPosition():{x:el.x,y:el.y};
-          ctx.save();
-          ctx.fillStyle=opts.color||'#334155';
-          ctx.font='bold 9px Inter, sans-serif';
-          if(chart.options.indexAxis==='y'){
-            ctx.textAlign='left'; ctx.textBaseline='middle';
-            ctx.fillText(label,pos.x+6,pos.y);
-          } else {
-            ctx.textAlign='center'; ctx.textBaseline='bottom';
-            ctx.fillText(label,pos.x,pos.y-4);
-          }
-          ctx.restore();
-        });
-      });
-    }
-  });
-  window._matDataLabelsRegistered=true;
+  window._matDataLabelsRegistered=true; // marca antes: nunca tenta registrar de novo, mesmo se falhar
+  try{
+    Chart.register({
+      id:'matDataLabels',
+      afterDatasetsDraw:function(chart){
+        try{
+          var opts=(chart.options.plugins||{}).matDataLabels;
+          if(!opts) return;
+          var ctx=chart.ctx;
+          chart.data.datasets.forEach(function(dataset,dsIndex){
+            if(dataset.type==='line') return; // não rotula a linha de %
+            var meta=chart.getDatasetMeta(dsIndex);
+            if(!meta||meta.hidden) return;
+            meta.data.forEach(function(el,i){
+              var value=dataset.data[i];
+              if(value===null||value===undefined||value===0) return;
+              var label=opts.formatter(value,dsIndex,i);
+              var pos=(el&&el.tooltipPosition)?el.tooltipPosition():null;
+              if(!pos) return;
+              ctx.save();
+              ctx.fillStyle=opts.color||'#334155';
+              ctx.font='bold 9px Inter, sans-serif';
+              if(chart.options.indexAxis==='y'){
+                ctx.textAlign='left'; ctx.textBaseline='middle';
+                ctx.fillText(String(label),pos.x+6,pos.y);
+              } else {
+                ctx.textAlign='center'; ctx.textBaseline='bottom';
+                ctx.fillText(String(label),pos.x,pos.y-4);
+              }
+              ctx.restore();
+            });
+          });
+        }catch(eDraw){ console.warn('[matDataLabels] draw:',eDraw); }
+      }
+    });
+  }catch(eReg){ console.warn('[matDataLabels] register:',eReg); }
 }
 function _matOnHoverPointer(evt,elements){ evt.native.target.style.cursor=elements.length?'pointer':'default'; }
 function _fmtMoneyK(v){ return v>=1e6 ? 'R$ '+(v/1e6).toFixed(1)+'M' : 'R$ '+(v/1000).toFixed(0)+'k'; }
