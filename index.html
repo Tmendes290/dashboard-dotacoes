@@ -8141,6 +8141,11 @@ function _matDashHtml(data){
 
 // Rótulo de dados desenhado direto no canvas (sem plugin externo — evita
 // depender de mais um CDN que pode ser bloqueado em redes corporativas).
+// Config fica fora do sistema de "options" do Chart.js (indexado por id do
+// canvas), porque o Chart.js tenta resolver funções dentro de options.plugins
+// como "scriptable options" e embaralha a referência (opts.formatter vira
+// não-função). Guardando à parte, a função chega intacta no draw.
+var _matLabelConfigs={};
 function _registerMatDataLabels(){
   if(window._matDataLabelsRegistered) return;
   window._matDataLabelsRegistered=true; // marca antes: nunca tenta registrar de novo, mesmo se falhar
@@ -8149,7 +8154,7 @@ function _registerMatDataLabels(){
       id:'matDataLabels',
       afterDatasetsDraw:function(chart){
         try{
-          var opts=(chart.options.plugins||{}).matDataLabels;
+          var opts=_matLabelConfigs[chart.canvas.id];
           if(!opts) return;
           var ctx=chart.ctx;
           chart.data.datasets.forEach(function(dataset,dsIndex){
@@ -8194,13 +8199,13 @@ function buildMatCharts(data){
   var sitLabels = Object.keys(sitMap);
   var sitVals = sitLabels.map(function(k){return sitMap[k];});
   var c1 = document.getElementById('mat-chart-sit');
-  if(c1){ _matCharts.sit = new Chart(c1.getContext('2d'),{
+  if(c1){ _matLabelConfigs['mat-chart-sit']={color:'#fff',formatter:function(v){return v;}};
+    _matCharts.sit = new Chart(c1.getContext('2d'),{
     type:'doughnut',
     data:{labels:sitLabels, datasets:[{data:sitVals, backgroundColor:COLORS, borderWidth:2}]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{
-        legend:{position:'right',labels:{font:{size:10},boxWidth:12}},
-        matDataLabels:{color:'#fff',formatter:function(v){return v;}}
+        legend:{position:'right',labels:{font:{size:10},boxWidth:12}}
       },
       onHover:_matOnHoverPointer,
       onClick:function(evt,elements){
@@ -8217,14 +8222,14 @@ function buildMatCharts(data){
   var fornSorted = Object.keys(fornMap).sort(function(a,b){return fornMap[b]-fornMap[a];}).slice(0,10);
   var fornVals = fornSorted.map(function(k){return fornMap[k];});
   var c2 = document.getElementById('mat-chart-forn');
-  if(c2){ _matCharts.forn = new Chart(c2.getContext('2d'),{
+  if(c2){ _matLabelConfigs['mat-chart-forn']={color:'#334155',formatter:function(v){return _fmtMoneyK(v);}};
+    _matCharts.forn = new Chart(c2.getContext('2d'),{
     type:'bar',
     data:{labels:fornSorted, datasets:[{label:'Valor Total',data:fornVals,backgroundColor:'#7c3aed99',borderColor:'#7c3aed',borderWidth:1}]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
       plugins:{
         legend:{display:false},
-        tooltip:{callbacks:{label:function(ctx){return ' R$ '+ctx.parsed.x.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});}}},
-        matDataLabels:{color:'#334155',formatter:function(v){return _fmtMoneyK(v);}}
+        tooltip:{callbacks:{label:function(ctx){return ' R$ '+ctx.parsed.x.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});}}}
       },
       scales:{x:{ticks:{callback:function(v){return 'R$ '+(v/1000).toFixed(0)+'k';}},grid:{display:false}},y:{ticks:{font:{size:10}}}},
       onHover:_matOnHoverPointer,
@@ -8253,13 +8258,13 @@ function buildMatCharts(data){
   }).reverse().slice(0,12);
   var mesVals = mesSorted.map(function(k){return mesMap[k];});
   var c3 = document.getElementById('mat-chart-mes');
-  if(c3){ _matCharts.mes = new Chart(c3.getContext('2d'),{
+  if(c3){ _matLabelConfigs['mat-chart-mes']={color:'#334155',formatter:function(v){return v;}};
+    _matCharts.mes = new Chart(c3.getContext('2d'),{
     type:'bar',
     data:{labels:mesSorted, datasets:[{label:'Itens',data:mesVals,backgroundColor:'#2563eb99',borderColor:'#2563eb',borderWidth:1}]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{
-        legend:{display:false},
-        matDataLabels:{color:'#334155',formatter:function(v){return v;}}
+        legend:{display:false}
       },
       scales:{x:{ticks:{font:{size:10}}},y:{ticks:{stepSize:1},grid:{display:false}}},
       onHover:_matOnHoverPointer,
@@ -8306,7 +8311,8 @@ function buildMatCharts(data){
     return (real!==null && prev>0) ? Math.round(real/prev*100) : null;
   });
   var c5 = document.getElementById('mat-chart-ader');
-  if(c5){ _matCharts.ader = new Chart(c5.getContext('2d'),{
+  if(c5){ _matLabelConfigs['mat-chart-ader']={color:'#334155',formatter:function(v){return v;}};
+    _matCharts.ader = new Chart(c5.getContext('2d'),{
     data:{labels:aderKeys,datasets:[
       {type:'bar',label:'Previsto',data:aderPrevVals,backgroundColor:'#2563eb55',borderColor:'#2563eb',borderWidth:1,yAxisID:'y'},
       {type:'bar',label:'Entregue',data:aderRealVals,backgroundColor:'#16a34a55',borderColor:'#16a34a',borderWidth:1,yAxisID:'y'},
@@ -8319,8 +8325,7 @@ function buildMatCharts(data){
         tooltip:{callbacks:{label:function(ctx){
           if(ctx.dataset.label==='% Aderência') return ctx.parsed.y!==null?' Aderência: '+ctx.parsed.y+'%':'';
           return ' '+ctx.dataset.label+': '+(ctx.parsed.y!==null?ctx.parsed.y.toLocaleString('pt-BR'):'-')+' itens';
-        }}},
-        matDataLabels:{color:'#334155',formatter:function(v){return v;}}
+        }}}
       },
       scales:{
         y:{position:'left',ticks:{font:{size:9},stepSize:1},grid:{display:false}},
@@ -8345,14 +8350,14 @@ function buildMatCharts(data){
   var sqSorted = Object.keys(sqMap).sort(function(a,b){return sqMap[b]-sqMap[a];});
   var sqVals = sqSorted.map(function(k){return sqMap[k];});
   var c4 = document.getElementById('mat-chart-squad');
-  if(c4){ _matCharts.squad = new Chart(c4.getContext('2d'),{
+  if(c4){ _matLabelConfigs['mat-chart-squad']={color:'#334155',formatter:function(v){return _fmtMoneyK(v);}};
+    _matCharts.squad = new Chart(c4.getContext('2d'),{
     type:'bar',
     data:{labels:sqSorted, datasets:[{label:'Valor',data:sqVals,backgroundColor:sqSorted.map(function(_,i){return COLORS[i%COLORS.length]+'99';}),borderColor:sqSorted.map(function(_,i){return COLORS[i%COLORS.length];}),borderWidth:1}]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{
         legend:{display:false},
-        tooltip:{callbacks:{label:function(ctx){return ' R$ '+ctx.parsed.y.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});}}},
-        matDataLabels:{color:'#334155',formatter:function(v){return _fmtMoneyK(v);}}
+        tooltip:{callbacks:{label:function(ctx){return ' R$ '+ctx.parsed.y.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});}}}
       },
       scales:{x:{ticks:{font:{size:10}}},y:{ticks:{callback:function(v){return 'R$ '+(v/1000).toFixed(0)+'k';}},grid:{display:false}}},
       onHover:_matOnHoverPointer,
