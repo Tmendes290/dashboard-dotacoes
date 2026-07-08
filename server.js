@@ -199,6 +199,7 @@ app.post('/api/import-velocidade', async (req, res) => {
     function getSev(pct) { return pct > 30 ? 'GV' : pct > 20 ? 'G' : pct > 10 ? 'M' : 'B'; }
 
     const map = {}, map12s = {}, driverSet = new Set();
+    const eventosRaw = [];
     for (let i = 1; i < rawRows.length; i++) {
       const r = rawRows[i];
       const dt = parseDate(r[iData]);
@@ -212,6 +213,8 @@ app.post('/api/import-velocidade', async (req, res) => {
       if (pct < 1) continue;
       const sev = getSev(pct);
       const key = dt + '|' + drv;
+      // Evento individual (drill-down por dia na Telemetria)
+      eventosRaw.push({ dt, motorista: drv, duracao: dur, velocidade: maxV, limite: lim });
       // % puro — todos os eventos
       if (!map[key]) map[key] = { dt, drv, b: 0, m: 0, g: 0, gv: 0, dur: 0, maxV: 0, limAtMax: 0 };
       const e = map[key];
@@ -260,10 +263,42 @@ app.post('/api/import-velocidade', async (req, res) => {
       return res.status(500).json({ error: 'Erro Supabase: ' + err });
     }
 
-    console.log(`[import-velocidade] ${rows.length} rows, ${drivers.length} drivers`);
-    res.json({ ok: true, rows: rows.length, drivers: drivers.length, ranulfo: ranulfo.length });
+    // Substitui os eventos individuais (drill-down por dia) — apaga tudo e reinsere em lotes
+    const evHeaders = {
+      'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
+      'apikey': SUPA_SERVICE_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    };
+    const delEv = await fetch(`${SUPA_URL}/rest/v1/vel_eventos?id=gte.0`, { method: 'DELETE', headers: evHeaders });
+    if (!delEv.ok) console.error('[import-velocidade] erro ao limpar vel_eventos:', await delEv.text());
+    const evBatchSize = 500;
+    for (let i = 0; i < eventosRaw.length; i += evBatchSize) {
+      const batch = eventosRaw.slice(i, i + evBatchSize);
+      const insEv = await fetch(`${SUPA_URL}/rest/v1/vel_eventos`, { method: 'POST', headers: evHeaders, body: JSON.stringify(batch) });
+      if (!insEv.ok) { console.error(`[import-velocidade] erro ao inserir eventos (lote ${i}):`, await insEv.text()); break; }
+    }
+
+    console.log(`[import-velocidade] ${rows.length} rows, ${drivers.length} drivers, ${eventosRaw.length} eventos individuais`);
+    res.json({ ok: true, rows: rows.length, drivers: drivers.length, ranulfo: ranulfo.length, eventos: eventosRaw.length });
   } catch (e) {
     console.error('[import-velocidade]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── VELOCIDADE: EVENTOS INDIVIDUAIS DE UM DIA (drill-down) ─────
+app.get('/api/velocidade-eventos', async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  const { motorista, dt } = req.query;
+  if (!motorista || !dt) return res.status(400).json({ error: 'motorista e dt são obrigatórios' });
+  try {
+    const url = `${SUPA_URL}/rest/v1/vel_eventos?motorista=eq.${encodeURIComponent(motorista)}&dt=eq.${encodeURIComponent(dt)}&select=duracao,velocidade,limite&order=duracao.desc`;
+    const r = await fetch(url, { headers: { 'Authorization': `Bearer ${SUPA_SERVICE_KEY}`, 'apikey': SUPA_SERVICE_KEY } });
+    if (!r.ok) return res.status(500).json({ error: await r.text() });
+    const data = await r.json();
+    res.json({ eventos: data });
+  } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });

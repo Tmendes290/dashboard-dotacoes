@@ -684,10 +684,31 @@ function toggleExpand(idx) {
 }
 var _lastComiteDrivers = [];
 var _top10Drivers=[];var _top10Rows=[];var _top10Expanded=new Set();
+var _top10EventosOpen=new Set();var _top10EventosCache={};
 
 function toggleTop10(idx){
   if(_top10Expanded.has(idx))_top10Expanded.delete(idx);else _top10Expanded.add(idx);
   renderTop10Inner();
+}
+
+function toggleEventoDia(i, di){
+  var key=i+'|'+di;
+  if(_top10EventosOpen.has(key)){ _top10EventosOpen.delete(key); renderTop10Inner(); return; }
+  _top10EventosOpen.add(key);
+  var d=_top10Drivers[i];
+  var dRows=_top10Rows.filter(function(r){return r[1]===d.drv;}).sort(function(a,b){return (b[2]+b[3]+b[4]+b[5])-(a[2]+a[3]+a[4]+a[5]);});
+  var r=dRows[di];
+  renderTop10Inner();
+  if(!r) return;
+  var cacheKey=d.drv+'|'+r[0];
+  if(_top10EventosCache[cacheKey]) return; // já carregado
+  fetch('/api/velocidade-eventos?motorista='+encodeURIComponent(d.drv)+'&dt='+encodeURIComponent(r[0]))
+    .then(function(resp){return resp.json();})
+    .then(function(data){
+      _top10EventosCache[cacheKey]=(data&&data.eventos)?data.eventos:[];
+      renderTop10Inner();
+    })
+    .catch(function(){ _top10EventosCache[cacheKey]='error'; renderTop10Inner(); });
 }
 function renderTop10Inner(){
   var tbody=document.getElementById('top10-tbody');
@@ -709,7 +730,7 @@ function renderTop10Inner(){
     var detailRow='';
     if(isOpen){
       var dRows=_top10Rows.filter(function(r){return r[1]===d.drv;}).sort(function(a,b){return (b[2]+b[3]+b[4]+b[5])-(a[2]+a[3]+a[4]+a[5]);});
-      var tblRows=dRows.map(function(r){
+      var tblRows=dRows.map(function(r,di){
         var dt=r[0].slice(8,10)+'/'+r[0].slice(5,7)+'/'+r[0].slice(0,4);
         var ev=r[2]+r[3]+r[4]+r[5];
         var lim=r[8]||0;
@@ -718,7 +739,9 @@ function renderTop10Inner(){
         var sc=pc>30?'#b91c1c':pc>20?'#c2410c':pc>10?'#a16207':'#15803d';
         var sb=pc>30?'#fee2e2':pc>20?'#ffedd5':pc>10?'#fef9c3':'#dcfce7';
         var dur=r[6]<60?r[6]+'s':Math.round(r[6]/60)+'min';
-        return '<tr style="border-bottom:1px solid #e0e7ef">'
+        var evKey=i+'|'+di;
+        var evOpen=_top10EventosOpen.has(evKey);
+        var dayRow='<tr style="border-bottom:1px solid #e0e7ef;cursor:pointer" onclick="toggleEventoDia('+i+','+di+')">'
           +'<td style="padding:4px 10px;font-weight:600">'+dt+'</td>'
           +'<td style="padding:4px 10px;text-align:center;font-weight:700;color:var(--danger)">'+ev+'</td>'
           +'<td style="padding:4px 10px;text-align:center;color:#15803d">'+r[2]+'</td>'
@@ -729,8 +752,41 @@ function renderTop10Inner(){
           +'<td style="padding:4px 10px;color:var(--muted)">'+(lim>0?lim+' km/h':'—')+'</td>'
           +'<td style="padding:4px 10px;font-weight:700;color:'+sc+'">+'+(lim>0?pc+'%':'—')+'</td>'
           +'<td style="padding:4px 10px"><span style="background:'+sb+';color:'+sc+';padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">'+sv+'</span></td>'
-          +'<td style="padding:4px 10px;color:var(--muted)">'+dur+'</td>'
+          +'<td style="padding:4px 10px;color:var(--muted)">'+dur+' '+(evOpen?'▲':'▼')+'</td>'
           +'</tr>';
+        var evosRow='';
+        if(evOpen){
+          var cacheKey=d.drv+'|'+r[0];
+          var cached=_top10EventosCache[cacheKey];
+          var inner;
+          if(cached==='error'){
+            inner='<div style="padding:8px;color:var(--danger);font-size:11px">Erro ao carregar eventos.</div>';
+          } else if(!cached){
+            inner='<div style="padding:8px;color:var(--muted);font-size:11px">Carregando eventos...</div>';
+          } else if(!cached.length){
+            inner='<div style="padding:8px;color:var(--muted);font-size:11px">Nenhum evento encontrado.</div>';
+          } else {
+            inner='<table style="width:100%;border-collapse:collapse;font-size:10px"><thead><tr style="background:#f8fafc">'
+              +'<th style="padding:3px 8px;text-align:left;color:var(--muted);text-transform:uppercase;font-size:9px">Duração</th>'
+              +'<th style="padding:3px 8px;text-align:left;color:var(--muted);text-transform:uppercase;font-size:9px">Velocidade</th>'
+              +'<th style="padding:3px 8px;text-align:left;color:var(--muted);text-transform:uppercase;font-size:9px">Limite</th>'
+              +'<th style="padding:3px 8px;text-align:left;color:var(--muted);text-transform:uppercase;font-size:9px">Excesso</th>'
+              +'</tr></thead><tbody>'
+              +cached.map(function(ev){
+                var evPc=ev.limite>0?Math.round((ev.velocidade/ev.limite-1)*100):0;
+                var puniu=ev.duracao>12;
+                return '<tr style="border-bottom:1px solid #f1f5f9'+(puniu?';background:#fff7ed':'')+'">'
+                  +'<td style="padding:3px 8px;font-weight:700;color:'+(puniu?'#c2410c':'var(--text)')+'">'+ev.duracao+'s'+(puniu?' ⚠':'')+'</td>'
+                  +'<td style="padding:3px 8px">'+ev.velocidade+' km/h</td>'
+                  +'<td style="padding:3px 8px;color:var(--muted)">'+ev.limite+' km/h</td>'
+                  +'<td style="padding:3px 8px;font-weight:700">+'+evPc+'%</td>'
+                  +'</tr>';
+              }).join('')
+              +'</tbody></table>';
+          }
+          evosRow='<tr><td colspan="11" style="padding:6px 10px 10px 24px;background:#fafcff">'+inner+'</td></tr>';
+        }
+        return dayRow+evosRow;
       }).join('');
       detailRow='<tr style="background:#f0f6ff"><td colspan="7" style="padding:10px 14px">'
         +'<div style="font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Histórico completo — '+d.drv+'</div>'
