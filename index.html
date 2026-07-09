@@ -8132,11 +8132,17 @@ function _matDashHtml(data){
   }).length;
   var pctEntregue  = data.length ? Math.round(entregues/data.length*100) : 0;
   var rcSemPedido  = data.filter(function(r){ return r.situacao === 'RC sem pedido'; });
+  var valorReal    = data.reduce(function(s,r){
+    var real = _matParseDMY(r.dataEntregaReal);
+    if(!real){ var sit=(r.situacao||'').toLowerCase(); real = sit.includes('entregue')||sit.includes('antecipado'); }
+    return s + (real ? (parseFloat(r.valorTotal)||0) : 0);
+  }, 0);
 
-  var cards = '<div class="g4" style="gap:14px;margin-bottom:' + (rcSemPedido.length ? '10' : '20') + 'px">'
+  var cards = '<div class="g5" style="gap:14px;margin-bottom:' + (rcSemPedido.length ? '10' : '20') + 'px">'
     + _matCard('🗂','Pedidos',totalPedidos,'#2563eb')
     + _matCard('📋','RCs',totalRCs,'#7c3aed')
-    + _matCard('💰','Valor Total',MAT_VALORES_VISIVEIS ? valorTotal.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : '<span style="letter-spacing:3px;color:#94a3b8">••••••</span>','#16a34a')
+    + _matCard('💰','Valor Previsto',MAT_VALORES_VISIVEIS ? valorTotal.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : '<span style="letter-spacing:3px;color:#94a3b8">••••••</span>','#16a34a')
+    + _matCard('💵','Valor Real (até agora)',MAT_VALORES_VISIVEIS ? valorReal.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : '<span style="letter-spacing:3px;color:#94a3b8">••••••</span>','#0d9488')
     + _matCard('✅','% Entregues',pctEntregue+'%','#0891b2')
     + '</div>'
     + (rcSemPedido.length
