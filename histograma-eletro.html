@@ -1260,14 +1260,17 @@ function importPlanilha(file){
       DISC_SHEETS.forEach(disc=>{
         const ws=wb.Sheets[disc];if(!ws)return;
         const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:0});
-        rows.forEach(row=>{
-          const code=(row[0]||'').toString().trim();
-          if(!code||code.length<5)return;
-          const idx=PROJETOS.findIndex(p=>p.Disciplina===disc&&p.Projeto.startsWith(code));
+        rows.slice(2).forEach(row=>{
+          // Coluna do nome/código do projeto é a 3ª (índice 2) — "Squad" (índice 0)
+          // nunca bate com PROJETOS[].Projeto, então a importação nunca atualizava nada.
+          const projetoStr=(row[2]||'').toString().trim();
+          if(!projetoStr||projetoStr.length<5)return;
+          const idx=PROJETOS.findIndex(p=>p.Disciplina===disc&&p.Projeto===projetoStr);
           if(idx<0)return;
           const newEq=Array(17).fill(0);
           for(let ci=0;ci<17;ci++){
-            const v=parseFloat(row[9+ci]);
+            // Colunas de mês começam no índice 8 (não 9 — estava puxando o mês seguinte)
+            const v=parseFloat(row[8+ci]);
             newEq[ci]=isNaN(v)||v<0?0:v;
           }
           PROJETOS[idx].Eq=newEq;
