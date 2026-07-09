@@ -7849,9 +7849,14 @@ function handleMateriaisUpload(file){
       });
 
       var merged = [];
+      // Pedidos cobertos pelo BD_DILIG — usado depois pra saber quais pedidos do
+      // BD_MATRIZ (que tem TODOS os pedidos, incluindo já entregues/fechados) ainda
+      // faltam adicionar, já que o BD_DILIG só traz o que está em diligenciamento ativo.
+      var diligPedidoSet = {};
       diligRows.forEach(function(r){
         var pedido = String(r['PEDIDO']||'').trim();
         var desc = String(r['DESCRIÇÃO BREVE']||'').trim();
+        if(pedido) diligPedidoSet[pedido] = true;
         if(!pedido && !desc) return;
 
         // Tentar join por IDFerramenta, depois por Pedido
@@ -7916,12 +7921,16 @@ function handleMateriaisUpload(file){
       console.log('[MATRIZ] Total linhas:', matrizRows.length);
       var semPedidoCount = 0;
 
-      // Adiciona RCs do BD_MATRIZ que ainda não geraram pedido
+      // Adiciona linhas do BD_MATRIZ que o BD_DILIG não cobre:
+      // (a) RC sem pedido gerado ainda, ou (b) pedido já existe mas não está mais no
+      //     BD_DILIG — normalmente porque já foi totalmente entregue e saiu da lista
+      //     de diligenciamento ativo (o BD_MATRIZ é o histórico completo).
+      var semDiligCount = 0;
       matrizRows.forEach(function(mx){
         var pedido = String(mx['Pedido']||'').trim();
-        if(pedido) return; // já tem pedido — coberto pelo BD_DILIG
+        if(pedido && diligPedidoSet[pedido]) return; // já coberto pelo BD_DILIG
         var rc = String(mx['RC']||'').trim();
-        if(!rc) return;
+        if(!pedido && !rc) return;
         var pepCode = String(mx['Elemento PEP']||'').trim();
         var projetoRaw = String(mx['Projeto']||'').trim();
         var sqInfo = (pepCode && typeof getSquadInfo === 'function') ? getSquadInfo(pepCode) : {squad:'',lider:'',planejador:''};
@@ -7930,21 +7939,34 @@ function handleMateriaisUpload(file){
         var escopoGeral = String(mx['Escopo Geral']||'').trim();
         // Inclui Escopo Geral no projetoRaw para aparecer abaixo do PEP na coluna Projeto
         var projetoRawMx = escopoGeral ? (pepCode + ' - ' + escopoGeral) : projetoRaw;
+
+        // Sem pedido: usa Status/Farol da RC. Com pedido (fora do BD_DILIG): usa
+        // Status PMO do BD_MATRIZ (normalmente ENTREGUE, já que saiu da diligenciamento).
+        var situacao = !pedido ? 'RC sem pedido' : (String(mx['Status PMO']||'').trim().replace(/_/g,' ') || 'PEDIDO SEM DETALHE');
+
+        // Pedido já feito: prioriza qtd./valor negociados no pedido (mais precisos que a estimativa da RC).
+        var qtde      = pedido ? (mx['Qtd.do pedido']||mx['Qtd.solicitada (RC)']||'') : (mx['Qtd.solicitada (RC)']||'');
+        var unMedida  = pedido ? String(mx['Un. Pedido']||mx['Un. (RC)']||'').trim() : String(mx['Un. (RC)']||'').trim();
+        var valorUni  = pedido ? (mx['Preço líquido pedido']||mx['Preço avaliação (RC)']||0) : (mx['Preço avaliação (RC)']||0);
+        var valorTotal= pedido ? (mx['Valor líquido pedido']||mx['Valor total (RC)']||0) : (mx['Valor total (RC)']||0);
+
         merged.push({
-          pedido:'', rc:rc, projeto:projetoLabel, projetoRaw:projetoRawMx,
-          descricao:escopoGeral, qtde:mx['Qtd.solicitada (RC)']||'', unMedida:String(mx['Un. (RC)']||'').trim(),
-          fornecedor:String(mx['Nome do fornecedor']||'').trim(), situacao:'RC sem pedido',
-          prevEntrega:fmtMatDate(mx['Previsão Entrega']), dataSolicitacao:fmtMatDate(mx['Data da solicitação (RC)']||mx['CriadoEm']), dataRemessa:'', dataFaturamento:'',
-          valorUni:mx['Preço avaliação (RC)']||0, valorTotal:mx['Valor total (RC)']||0, observacao:'', comentario:'',
+          pedido:pedido, rc:rc, projeto:projetoLabel, projetoRaw:projetoRawMx,
+          descricao:escopoGeral, qtde:qtde, unMedida:unMedida,
+          fornecedor:String(mx['Nome do fornecedor']||'').trim(), situacao:situacao,
+          prevEntrega:fmtMatDate(mx['Previsão Entrega']||mx['Data de remessa']), dataSolicitacao:fmtMatDate(mx['Data da solicitação (RC)']||mx['CriadoEm']),
+          dataRemessa:pedido?fmtMatDate(mx['Data de remessa']):'', dataFaturamento:'',
+          valorUni:valorUni, valorTotal:valorTotal, observacao:'', comentario:'',
           pep:pepCode, squad:sqInfo.squad||'', lider:sqInfo.lider||String(mx['Líder']||'').trim()||'',
           liderItem:String(mx['Líder']||'').trim(),
           planejador:sqInfo.planejador||'', idFerramenta:String(mx['IDFerramenta']||'').trim(),
           farol:String(mx['Farol']||'').trim(), statusCaptura:String(mx['Status da Captura']||'').trim(),
           statusEntrega:'', dataEntregaReal:''
         });
-        semPedidoCount++;
+        if(!pedido) semPedidoCount++; else semDiligCount++;
       });
       console.log('[MATRIZ] RCs sem pedido encontradas:', semPedidoCount);
+      console.log('[MATRIZ] Pedidos fora do BD_DILIG (já entregues/fechados) encontrados:', semDiligCount);
 
       STATE_MATERIAIS = merged;
       var matImportInfo = {file:file.name, date: new Date().toLocaleString('pt-BR')};
