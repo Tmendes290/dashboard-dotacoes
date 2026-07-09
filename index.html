@@ -7889,7 +7889,13 @@ function handleMateriaisUpload(file){
           ? pepCode + ' — ' + pepRef[1]
           : (projetoRaw || pepCode);
 
+        var itemNum = String(r['ITEM REFERENCIA']||'').trim();
+        // Pedido+Item nem sempre é único sozinho (remessas parciais do mesmo item
+        // repetem o número) — valor+data de entrega como desempate deixa a chave
+        // praticamente única, mantendo o histórico item a item entre importações.
+        var _key = 'P|'+pedido+'|'+itemNum+'|'+Math.round((parseFloat(r['VALOR TOTAL'])||0)*100)+'|'+String(r['PREVISÃO DE ENTREGA']||'');
         merged.push({
+          _key: _key,
           pedido: pedido,
           rc: rc,
           projeto: projetoLabel,
@@ -7949,8 +7955,13 @@ function handleMateriaisUpload(file){
         var unMedida  = pedido ? String(mx['Un. Pedido']||mx['Un. (RC)']||'').trim() : String(mx['Un. (RC)']||'').trim();
         var valorUni  = pedido ? (mx['Preço líquido pedido']||mx['Preço avaliação (RC)']||0) : (mx['Preço avaliação (RC)']||0);
         var valorTotal= pedido ? (mx['Valor líquido pedido']||mx['Valor total (RC)']||0) : (mx['Valor total (RC)']||0);
+        var itemNumMx = pedido ? String(mx['Item do pedido']||'').trim() : String(mx['Item ReqC']||'').trim();
+        // Valor+data como desempate (mesma razão da branch do BD_DILIG acima)
+        var keyMx = (pedido ? ('P|'+pedido+'|'+itemNumMx) : ('R|'+rc+'|'+itemNumMx))
+          +'|'+Math.round((parseFloat(valorTotal)||0)*100)+'|'+String(mx['Previsão Entrega']||mx['Data de remessa']||'');
 
         merged.push({
+          _key: keyMx,
           pedido:pedido, rc:rc, projeto:projetoLabel, projetoRaw:projetoRawMx,
           descricao:escopoGeral, qtde:qtde, unMedida:unMedida,
           fornecedor:String(mx['Nome do fornecedor']||'').trim(), situacao:situacao,
@@ -7968,10 +7979,23 @@ function handleMateriaisUpload(file){
       console.log('[MATRIZ] RCs sem pedido encontradas:', semPedidoCount);
       console.log('[MATRIZ] Pedidos fora do BD_DILIG (já entregues/fechados) encontrados:', semDiligCount);
 
-      STATE_MATERIAIS = merged;
+      // Nunca substitui a base inteira: atualiza itens já conhecidos (pela chave
+      // Pedido/RC+Item) com o dado mais recente e adiciona os novos, mas mantém
+      // qualquer item antigo que não veio nesta importação (histórico nunca é apagado).
+      var _prevByKey = {};
+      (STATE_MATERIAIS||[]).forEach(function(r){ if(r._key) _prevByKey[r._key] = r; });
+      var _novosCount = 0, _atualizadosCount = 0;
+      merged.forEach(function(r){
+        if(_prevByKey[r._key]) _atualizadosCount++; else _novosCount++;
+        _prevByKey[r._key] = r;
+      });
+      var merged2 = Object.keys(_prevByKey).map(function(k){ return _prevByKey[k]; });
+      console.log('[MATERIAIS] Itens novos:', _novosCount, '| atualizados:', _atualizadosCount, '| mantidos do histórico (não vieram nesta planilha):', merged2.length - merged.length);
+
+      STATE_MATERIAIS = merged2;
       var matImportInfo = {file:file.name, date: new Date().toLocaleString('pt-BR')};
       try {
-        localStorage.setItem('mat_data', JSON.stringify(merged));
+        localStorage.setItem('mat_data', JSON.stringify(merged2));
         localStorage.setItem('mat_import', JSON.stringify(matImportInfo));
       } catch(eQuota) {
         // localStorage cheio — limpa e depende do Supabase como storage
@@ -7981,12 +8005,12 @@ function handleMateriaisUpload(file){
       }
       // Salva no Supabase para todos os usuários verem
       if(supa){
-        supa.from('mat_config').upsert({id:1, data:merged, import_file:file.name, import_date:matImportInfo.date, updated_at:new Date().toISOString()})
+        supa.from('mat_config').upsert({id:1, data:merged2, import_file:file.name, import_date:matImportInfo.date, updated_at:new Date().toISOString()})
           .then(function(r){ if(r.error) console.error('Erro ao salvar materiais no Supabase:', r.error); });
       }
       var nb = document.getElementById('nb-mat');
-      if(nb){ nb.textContent = merged.length; nb.style.display = 'inline-flex'; }
-      toast('✔ ' + merged.length + ' itens importados!', 'green');
+      if(nb){ nb.textContent = merged2.length; nb.style.display = 'inline-flex'; }
+      toast('✔ ' + _novosCount + ' novos, ' + _atualizadosCount + ' atualizados (' + merged2.length + ' itens no total)', 'green');
       if(_medidoSyncChannel&&CURRENT_USER){
         _medidoSyncChannel.send({type:'broadcast',event:'mat-updated',payload:{uploadedBy:CURRENT_USER.email}}).catch(function(e){console.warn('[Broadcast] mat:',e);});
       }
