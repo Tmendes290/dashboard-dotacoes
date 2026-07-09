@@ -1447,7 +1447,8 @@ var STATE_CJI3 = { months: [], rows: [] };
 var REF_FISCAIS = {}; // fiscal nome -> squad (carregado do Supabase)
 var _cji3F = { years: [], months: [], gers: [], sites: [], projs: [], forns: [] }; // empty array = todos
 var _cji3Open = {}; // proj|wbs -> expanded bool
-var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
+var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
+var MAT_MESES_NOMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
 var MAT_PAGE = 1;
@@ -4647,6 +4648,7 @@ function updateMsLabel(id, selected){
     'ms-squad': 'Todos os Squads',
     'ms-lider': 'Todos',
     'ms-plan': 'Todos',
+    'ms-mat-mes': 'Todos os Meses',
     'ms-mat-pedido': 'Todos os Pedidos...',
     'ms-mat-rc': 'Todas as RCs...',
     'ms-mat-projeto': 'Todos os Projetos...',
@@ -7414,7 +7416,7 @@ function toggleMatValores(){
 }
 
 function clearMatFilters(){
-  MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:'', projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
+  MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
   MAT_PAGE = 1;
   renderMateriais();
 }
@@ -7440,8 +7442,11 @@ function _matRowPasses(r, skip){
   if(skip!=='ano'       && MAT_FILTERS.ano){
     var da = r.prevEntrega||''; if(da.length < 10 || da.substring(6,10) !== MAT_FILTERS.ano) return false;
   }
-  if(skip!=='mes'       && MAT_FILTERS.mes){
-    var dm = r.prevEntrega||''; if(dm.length < 5 || dm.substring(3,5) !== MAT_FILTERS.mes) return false;
+  if(skip!=='mes'       && MAT_FILTERS.mes.length){
+    var dm = r.prevEntrega||'';
+    var dmIdx = dm.length >= 5 ? parseInt(dm.substring(3,5),10)-1 : -1;
+    var dmNome = dmIdx >= 0 ? MAT_MESES_NOMES[dmIdx] : '';
+    if(MAT_FILTERS.mes.indexOf(dmNome) < 0) return false;
   }
   if(skip!=='projeto' && MAT_FILTERS.projeto.length){
     var _rKey = r.pep || r.projeto || '';
@@ -8019,18 +8024,10 @@ function renderMateriais(){
   }).filter(Boolean))].sort();
 
   var hasFilters = MAT_FILTERS.pedido.length || MAT_FILTERS.rc.length || MAT_FILTERS.descricao.length
-    || MAT_FILTERS.ano || MAT_FILTERS.mes
+    || MAT_FILTERS.ano || MAT_FILTERS.mes.length
     || MAT_FILTERS.projeto.length || MAT_FILTERS.projetoSearch
     || MAT_FILTERS.fornecedor.length
     || MAT_FILTERS.squad.length || MAT_FILTERS.situacao.length;
-
-  var nomesMeses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-                    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-  var mesOpts = '<option value="">Todos</option>'
-    + nomesMeses.map(function(nm, i){
-        var v = String(i+1).padStart(2,'0');
-        return '<option value="'+v+'"'+(MAT_FILTERS.mes===v?' selected':'')+'>'+nm+'</option>';
-      }).join('');
 
   var inpSt = 'padding:7px 10px;border:1px solid var(--bord);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#fff;';
 
@@ -8050,9 +8047,7 @@ function renderMateriais(){
     + '<div class="fg"><label>Ano</label>'
     +   '<select style="'+inpSt+'" onchange="MAT_FILTERS.ano=this.value;MAT_PAGE=1;renderMateriais()">'+anoOpts+'</select>'
     + '</div>'
-    + '<div class="fg"><label>Mês (Prev. Entrega)</label>'
-    +   '<select style="'+inpSt+'" onchange="MAT_FILTERS.mes=this.value;MAT_PAGE=1;renderMateriais()">'+mesOpts+'</select>'
-    + '</div>'
+    + msWrap('ms-mat-mes','Mês (Prev. Entrega)',170)
     + msWrap('ms-mat-pedido','Nº Pedido',150)
     + msWrap('ms-mat-rc','Nº RC',140)
     + msWrap('ms-mat-descricao','Descrição',200)
@@ -8102,6 +8097,7 @@ function renderMateriais(){
 
   el.innerHTML = '<div style="padding:24px">' + importBadge + filterBar + subTabs + content + '</div>';
 
+  buildMsDrop('ms-mat-mes', MAT_MESES_NOMES, MAT_FILTERS.mes, null);
   buildMsDrop('ms-mat-pedido', pedidos, MAT_FILTERS.pedido, null);
   buildMsDrop('ms-mat-rc', rcs, MAT_FILTERS.rc, null);
   buildMsDrop('ms-mat-descricao', descricoes, MAT_FILTERS.descricao, null);
@@ -8110,6 +8106,7 @@ function renderMateriais(){
   buildMsDrop('ms-mat-squad', squads, MAT_FILTERS.squad, null);
   buildMsDrop('ms-mat-situacao', situacoes, MAT_FILTERS.situacao, null);
 
+  updateMsLabel('ms-mat-mes', MAT_FILTERS.mes);
   updateMsLabel('ms-mat-pedido', MAT_FILTERS.pedido);
   updateMsLabel('ms-mat-rc', MAT_FILTERS.rc);
   updateMsLabel('ms-mat-descricao', MAT_FILTERS.descricao);
@@ -8325,7 +8322,7 @@ function buildMatCharts(data){
         if(!elements.length) return;
         var parts=mesSorted[elements[0].index].split('/');
         MAT_FILTERS.ano=parts[1];
-        MAT_FILTERS.mes=String(nomesMeses.indexOf(parts[0])+1).padStart(2,'0');
+        MAT_FILTERS.mes=[MAT_MESES_NOMES[nomesMeses.indexOf(parts[0])]];
         MAT_PAGE=1; setMatTab('tabela');
       }
     }
@@ -8391,7 +8388,7 @@ function buildMatCharts(data){
         if(!barEl) return;
         var parts=aderKeys[barEl.index].split('/');
         MAT_FILTERS.ano='20'+parts[1];
-        MAT_FILTERS.mes=String(nomesMeses.indexOf(parts[0])+1).padStart(2,'0');
+        MAT_FILTERS.mes=[MAT_MESES_NOMES[nomesMeses.indexOf(parts[0])]];
         MAT_PAGE=1; setMatTab('tabela');
       }
     }
@@ -8454,8 +8451,8 @@ function buildMatCharts(data){
         var barEl=elements.filter(function(el){return chart.data.datasets[el.datasetIndex].type==='bar';})[0];
         if(!barEl) return;
         var key=vpKeys[barEl.index];
-        if(vpIsAno){ MAT_FILTERS.ano=key; MAT_FILTERS.mes=''; }
-        else { var parts=key.split('/'); MAT_FILTERS.ano='20'+parts[1]; MAT_FILTERS.mes=String(nomesMeses.indexOf(parts[0])+1).padStart(2,'0'); }
+        if(vpIsAno){ MAT_FILTERS.ano=key; MAT_FILTERS.mes=[]; }
+        else { var parts=key.split('/'); MAT_FILTERS.ano='20'+parts[1]; MAT_FILTERS.mes=[MAT_MESES_NOMES[nomesMeses.indexOf(parts[0])]]; }
         MAT_PAGE=1; setMatTab('tabela');
       }
     }
