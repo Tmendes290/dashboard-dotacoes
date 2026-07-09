@@ -8242,7 +8242,7 @@ function buildMatCharts(data){
 
   // Chart 2: Top 10 Fornecedores (bar horizontal)
   var fornMap = {};
-  data.forEach(function(r){ var f=r.fornecedor||'Não informado'; fornMap[f]=(fornMap[f]||0)+(parseFloat(r.valorTotal)||0); });
+  data.forEach(function(r){ var f=r.fornecedor||(r.situacao==='RC sem pedido'?'RC sem pedido':'Não informado'); fornMap[f]=(fornMap[f]||0)+(parseFloat(r.valorTotal)||0); });
   var fornSorted = Object.keys(fornMap).sort(function(a,b){return fornMap[b]-fornMap[a];}).slice(0,10);
   var fornVals = fornSorted.map(function(k){return fornMap[k];});
   var c2 = document.getElementById('mat-chart-forn');
