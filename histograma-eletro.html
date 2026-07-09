@@ -1276,7 +1276,7 @@ function importPlanilha(file){
       });
       // Limpa overrides pois a planilha está atualizada
       localStorage.removeItem(EQ_OVERRIDES_KEY);
-      if(supa)supa.from('histograma_eq_overrides').delete().neq('projeto_idx',-1).catch(()=>{});
+      if(supa)supa.from('histograma_eq_overrides').delete().neq('projeto_idx',-1).then(function(r){ if(r&&r.error) console.warn('[Histograma] erro ao limpar overrides:',r.error); });
       // Recalibra somas originais com os novos dados
       initEqOrigSums();
       renderAll();
