@@ -8162,6 +8162,7 @@ function renderMateriais(){
   updateMsLabel('ms-mat-situacao', MAT_FILTERS.situacao);
 
   if(MAT_TAB === 'dashboard') setTimeout(function(){ buildMatCharts(data); }, 50);
+  else if(MAT_TAB === 'tabela') setTimeout(_matInitTopScroll, 50);
 }
 
 function _matDashHtml(data){
@@ -8669,7 +8670,8 @@ function _matTabelaHtml(data){
   }
 
   return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden">'
-    +'<div style="overflow-x:auto">'
+    +'<div id="mat-table-topscroll" style="overflow-x:auto;overflow-y:hidden;height:14px;border-bottom:1px solid #e2e8f0"><div id="mat-table-topscroll-inner" style="height:1px"></div></div>'
+    +'<div id="mat-table-scroll" style="overflow-x:auto">'
     +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
     +'<thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0">'
     +_matTh('Pedido')+_matTh('RC')+_matTh('Projeto')+_matTh('Descrição')
@@ -8694,6 +8696,20 @@ function _matCard(ico, label, val, color){
 
 function _matTh(txt){
   return '<th style="padding:10px;text-align:left;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+txt+'</th>';
+}
+
+// Barra de rolagem horizontal espelhada no topo da tabela (tabela é larga
+// demais e a barra nativa só aparece embaixo, obrigando rolar a página
+// inteira pra conseguir rolar pros lados).
+function _matInitTopScroll(){
+  var top = document.getElementById('mat-table-topscroll');
+  var topInner = document.getElementById('mat-table-topscroll-inner');
+  var main = document.getElementById('mat-table-scroll');
+  if(!top || !topInner || !main) return;
+  topInner.style.width = main.scrollWidth + 'px';
+  var syncing = false;
+  top.onscroll = function(){ if(syncing) return; syncing=true; main.scrollLeft = top.scrollLeft; syncing=false; };
+  main.onscroll = function(){ if(syncing) return; syncing=true; top.scrollLeft = main.scrollLeft; syncing=false; };
 }
 
 // ══════════════════════════════════════════════════════════════════
