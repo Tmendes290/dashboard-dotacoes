@@ -8168,7 +8168,7 @@ function renderMateriais(){
 function _matDashHtml(data){
   var totalPedidos = new Set(data.map(function(r){return r.pedido;})).size;
   var totalRCs     = new Set(data.filter(function(r){return r.rc;}).map(function(r){return r.rc;})).size;
-  var valorTotal   = data.reduce(function(s,r){ return s+(parseFloat(r.valorTotal)||0); }, 0);
+  var valorTotal   = data.reduce(function(s,r){ return (r.situacao||'').toLowerCase().includes('cancelad') ? s : s+(parseFloat(r.valorTotal)||0); }, 0);
   var entregues    = data.filter(function(r){ return (r.situacao||'').toLowerCase().includes('entregue'); }).length;
   var aguardando   = data.filter(function(r){
     var sit = (r.situacao||'').toLowerCase();
@@ -8315,7 +8315,10 @@ function buildMatCharts(data){
 
   // Chart 2: Top 10 Fornecedores (bar horizontal)
   var fornMap = {};
-  data.forEach(function(r){ var f=r.fornecedor||(r.situacao==='RC sem pedido'?'RC sem pedido':'Não informado'); fornMap[f]=(fornMap[f]||0)+(parseFloat(r.valorTotal)||0); });
+  data.forEach(function(r){
+    if((r.situacao||'').toLowerCase().includes('cancelad')) return;
+    var f=r.fornecedor||(r.situacao==='RC sem pedido'?'RC sem pedido':'Não informado'); fornMap[f]=(fornMap[f]||0)+(parseFloat(r.valorTotal)||0);
+  });
   var fornSorted = Object.keys(fornMap).sort(function(a,b){return fornMap[b]-fornMap[a];}).slice(0,10);
   var fornVals = fornSorted.map(function(k){return fornMap[k];});
   var c2 = document.getElementById('mat-chart-forn');
@@ -8445,6 +8448,7 @@ function buildMatCharts(data){
   var vpIsAno = MAT_VALOR_PERIODO === 'ano';
   var vpPrevMap = {}, vpRealMap = {};
   data.forEach(function(r){
+    if((r.situacao||'').toLowerCase().includes('cancelad')) return;
     var val = parseFloat(r.valorTotal)||0;
     var dtPrev = _matParseDMY(r.prevEntrega);
     var kPrev = dtPrev ? (vpIsAno ? String(dtPrev.y) : (nomesMeses[dtPrev.m-1]+'/'+String(dtPrev.y).substring(2))) : null;
@@ -8507,7 +8511,10 @@ function buildMatCharts(data){
 
   // Chart 4: Valor por Squad (bar)
   var sqMap = {};
-  data.forEach(function(r){ var s=r.squad||'Sem Squad'; sqMap[s]=(sqMap[s]||0)+(parseFloat(r.valorTotal)||0); });
+  data.forEach(function(r){
+    if((r.situacao||'').toLowerCase().includes('cancelad')) return;
+    var s=r.squad||'Sem Squad'; sqMap[s]=(sqMap[s]||0)+(parseFloat(r.valorTotal)||0);
+  });
   var sqSorted = Object.keys(sqMap).sort(function(a,b){return sqMap[b]-sqMap[a];});
   var sqVals = sqSorted.map(function(k){return sqMap[k];});
   var c4 = document.getElementById('mat-chart-squad');
