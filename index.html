@@ -1447,7 +1447,7 @@ var STATE_CJI3 = { months: [], rows: [] };
 var REF_FISCAIS = {}; // fiscal nome -> squad (carregado do Supabase)
 var _cji3F = { years: [], months: [], gers: [], sites: [], projs: [], forns: [] }; // empty array = todos
 var _cji3Open = {}; // proj|wbs -> expanded bool
-var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
+var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:String(new Date().getFullYear()), mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
 var MAT_MESES_NOMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
