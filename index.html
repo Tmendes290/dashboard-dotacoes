@@ -8770,6 +8770,22 @@ function impBuildProjSquad(){
 function impIsAndaime(empresa){
   return !!empresa && empresa.toUpperCase().indexOf('ANDAIME')>=0;
 }
+// Turno pelo horário de Início: ADM 07:00–17:00, Noite 23:00–06:00 (checado antes por ser
+// janela mais específica), Tarde pega o restante (basicamente 17:01–22:59). Sem Início vira ADM
+// (não classificável, fica na tabela principal como sempre foi).
+function impGetTurno(inicioMin){
+  if(inicioMin===null||inicioMin===undefined)return'adm';
+  if(inicioMin>=420&&inicioMin<=1020)return'adm';
+  if(inicioMin>=1380||inicioMin<=360)return'noite';
+  return'tarde';
+}
+// Se o "Horário Ref." atual cai dentro da janela de Tarde ou Noite, esse turno é promovido
+// pra tabela principal e entra nos cálculos de atraso — usando esse mesmo horário como referência.
+function _impTurnoDoRef(refMin){
+  if(refMin>=1380||refMin<=360)return'noite';
+  if(refMin>=840||refMin<=60)return'tarde';
+  return null;
+}
 function _impNormSquad(sq){
   if(!sq)return sq;
   if(sq.toUpperCase().indexOf('TELAMENTO')>=0)return'MINA';
@@ -11117,18 +11133,27 @@ function impToggleDesc(i){
 }
 
 function impRenderRegistros(){
-  var el=document.getElementById('imp-lbl-count'); if(el) el.textContent=IMP_FILTERED.length+' registros';
+  var refStrT=(document.getElementById('imp-ref-time')||{}).value||'08:00';
+  var rpT=refStrT.split(':');var refMinT=parseInt(rpT[0])*60+parseInt(rpT[1]||0);
+  var promotedTurno=_impTurnoDoRef(refMinT);
+  // ADM sempre fica na tabela principal; Tarde/Noite só entram se o Horário Ref. atual
+  // estiver dentro da janela deles — senão vão pra tabela de "outros turnos" e ficam de fora
+  // dos cálculos de atraso (comparar o início deles com 08:00 não faz sentido pra quem trabalha à tarde/noite).
+  var mainRecs=IMP_FILTERED.filter(function(d){var t=impGetTurno(d.inicioMin);return t==='adm'||t===promotedTurno;});
+  var turnoRecs=IMP_FILTERED.filter(function(d){var t=impGetTurno(d.inicioMin);return t!=='adm'&&t!==promotedTurno;});
+  impRenderRegistrosTurno(turnoRecs);
+  var el=document.getElementById('imp-lbl-count'); if(el) el.textContent=mainRecs.length+' registros';
   var tbody=document.getElementById('imp-tbody-reg'); if(!tbody) return;
-  if(!IMP_FILTERED.length){
+  if(!mainRecs.length){
     tbody.innerHTML='<tr><td colspan="15" style="text-align:center;padding:32px;color:var(--muted)">Nenhum registro para os filtros selecionados</td></tr>';
     var sr=document.getElementById('imp-stats-reg'); if(sr) sr.style.display='none'; return;
   }
-  var validos=IMP_FILTERED.filter(function(d){return !impIsExcluido(d);});
+  var validos=mainRecs.filter(function(d){return !impIsExcluido(d);});
   var at=validos.filter(function(d){return d.delayMin>0;});
   var sr=document.getElementById('imp-stats-reg');
   if(sr){ sr.style.display='flex'; sr.innerHTML='<div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">Com atraso: <b style="color:var(--acc)">'+at.length+'</b></div><div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">No prazo: <b style="color:var(--acc)">'+(validos.length-at.length)+'</b></div><div style="background:#f0f8ff;border:1px solid #c7dff5;border-radius:6px;padding:4px 10px;font-size:11px">Total improdutivo: <b style="color:var(--acc)">'+at.reduce(function(s,d){return s+d.delayMin;},0)+' min</b></div>'; }
   var _rows=[];
-  IMP_FILTERED.forEach(function(d,i){
+  mainRecs.forEach(function(d,i){
     try{
     var excluido=impIsExcluido(d);
     var trStyle=excluido?'opacity:.45;':'';
@@ -11185,7 +11210,34 @@ function impRenderRegistros(){
     }catch(e){console.error('[imp] row '+i,e);}
   });
   tbody.innerHTML=_rows.join('');
-  try{impRenderRegistrosExtra();}catch(e){console.error('[imp] reg-extra',e);}
+  try{impRenderRegistrosExtra(mainRecs);}catch(e){console.error('[imp] reg-extra',e);}
+}
+
+function impRenderRegistrosTurno(turnoRecs){
+  var el=document.getElementById('imp-lbl-count-turno'); if(el) el.textContent=turnoRecs.length+' registros';
+  var tbody=document.getElementById('imp-tbody-reg-turno'); if(!tbody) return;
+  if(!turnoRecs.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted)">Nenhum registro de Tarde/Noite nos filtros atuais</td></tr>';return;}
+  var turnoLbl={tarde:'Tarde',noite:'Noite'};
+  var turnoBg={tarde:'#fff7ed;color:#c2410c',noite:'#eef2ff;color:#4338ca'};
+  tbody.innerHTML=turnoRecs.map(function(d){
+    var t=impGetTurno(d.inicioMin);
+    var ch=d.chegadaMin!==null?impToHHMM(d.chegadaMin):'<span style="color:#ccc">—</span>';
+    var pt=d.ptsMin!==null?impToHHMM(d.ptsMin):'<span style="color:#ccc">—</span>';
+    var ini=d.inicioMin!==null?impToHHMM(d.inicioMin):'<span style="color:#ccc">—</span>';
+    var term=d.terminoMin!==null?impToHHMM(d.terminoMin):'<span style="color:#ccc">—</span>';
+    var sq=d.squadInfo;
+    var sqCell=sq&&sq.squad?'<div style="font-weight:600;font-size:11px">'+impEsc(sq.squad)+'</div><div style="font-size:10px;color:var(--muted)">'+impEsc(sq.lider)+'</div>':'<span style="color:#ccc;font-size:11px">—</span>';
+    return'<tr><td style="white-space:nowrap;vertical-align:middle;font-size:12px">'+d.dataStr+'</td>'
+      +'<td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;vertical-align:middle;font-size:12px" title="'+impEsc(d.empresa)+'">'+impEsc(d.empresa)+'</td>'
+      +'<td style="font-family:\'Courier New\',monospace;font-size:11px;color:var(--acc2);font-weight:700;vertical-align:middle;white-space:nowrap">'+impEsc(d.sap)+'</td>'
+      +'<td style="font-size:11px;vertical-align:middle;min-width:100px">'+sqCell+'</td>'
+      +'<td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ch+'</td>'
+      +'<td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+ini+'</td>'
+      +'<td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+pt+'</td>'
+      +'<td style="font-family:\'Courier New\',monospace;font-size:12px;text-align:center;vertical-align:middle;white-space:nowrap">'+term+'</td>'
+      +'<td style="text-align:center;vertical-align:middle"><span style="background:'+turnoBg[t]+';padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">'+turnoLbl[t]+'</span></td>'
+      +'</tr>';
+  }).join('');
 }
 
 // ── Empresas ─────────────────────────────────────────────────────
@@ -11355,9 +11407,9 @@ function impGetMotivo(d){
   if(/lideran[cç]|l[íi]der|planejamento|aloca/.test(j))return'Liderança';
   return'Outros';
 }
-function impRenderRegistrosExtra(){
+function impRenderRegistrosExtra(mainRecs){
   // Apenas atualiza a barra de progresso (os painéis de motivos/pendentes estão na aba Evolução)
-  var at=IMP_FILTERED.filter(function(d){return d.delayMin>0&&!impIsExcluido(d);});
+  var at=(mainRecs||IMP_FILTERED).filter(function(d){return d.delayMin>0&&!impIsExcluido(d);});
   var comJust=at.filter(function(d){return(d.justificativa||'').trim();});
   var pct=at.length?Math.round(comJust.length/at.length*100):0;
   var bar=document.getElementById('reg-just-prog-bar');if(bar)bar.style.width=pct+'%';
@@ -11775,6 +11827,22 @@ async function renderViewImprodutividade(){
   // Barra de progresso justificativas
   +'<div style="padding:8px 14px;border-top:1px solid var(--bord);font-size:10px;color:var(--muted);display:flex;align-items:center;gap:10px"><span id="reg-just-prog-lbl">Progresso das justificativas de atraso</span><div style="flex:1;max-width:220px;background:#f1f5f9;border-radius:20px;height:5px;overflow:hidden"><div id="reg-just-prog-bar" style="height:5px;border-radius:20px;background:#10b981;width:0%"></div></div><span id="reg-just-prog-pct" style="font-weight:700;color:var(--sb)"></span></div>'
   +'</div>'
+
+  // Registros de outros turnos (Tarde/Noite) — fora do cálculo de atraso por padrão
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden;margin-top:14px">'
+  +'<div style="padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700">Registros de outros turnos (Tarde/Noite)</span><span style="font-size:11px;color:var(--muted)" id="imp-lbl-count-turno"></span></div>'
+  +'<div style="padding:8px 16px;font-size:10.5px;color:var(--muted);border-bottom:1px solid var(--bord)">Início fora do horário administrativo (07:00–17:00) — não entram no cálculo de atraso acima. Pra avaliar um desses turnos, mude o "Horário Ref." pra um horário dentro da janela dele (Tarde 14:00–01:00, Noite 23:00–06:00).</div>'
+  +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap">Data</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap">Empresa</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap">Obra (SAP)</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:left;white-space:nowrap">Squad / Líder</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Chegada</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Início</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">PTS</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Término</th>'
+  +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Turno</th>'
+  +'</tr></thead><tbody id="imp-tbody-reg-turno"></tbody></table></div></div>'
 
   // Tab Empresas
   +'<div id="imp-tab-empresas" style="display:none"><div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700">Por Empresa</span><span style="font-size:11px;color:var(--muted)" id="imp-lbl-emp"></span></div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
