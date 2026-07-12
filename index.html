@@ -9584,6 +9584,7 @@ function impRenderDashboard(){
   impChartEmpresas();
   impChartSquads();
   impChartFaixa();
+  impChartFaixaEmp();
   impChartObras();
   impChartProblemas();
 }
@@ -10967,6 +10968,39 @@ function impChartFaixa(prefix){
   impSafeChart(prefix+'chart-faixa',{type:'bar',plugins:[_impDlPlugin(function(v){return v+'';}, 'x')],data:{labels:faixas.map(function(f){return f.l;}),datasets:[{data:faixas.map(function(f){return f.n;}),backgroundColor:faixas.map(function(f){return f.c;}),borderRadius:4,borderSkipped:false}]},options:Object.assign({},_impCT,{plugins:Object.assign({},_impCT.plugins,{tooltip:{callbacks:{label:function(c){return c.raw+' chegadas';}}}}),scales:{x:Object.assign({},_impAXX,{ticks:Object.assign({},_impAXX.ticks,{font:{size:9}})}),y:Object.assign({},_impAXY,{ticks:Object.assign({},_impAXY.ticks,{stepSize:1})})}})});
 }
 
+// Comparativo de chegada por empresa — % de chegadas no prazo (mesmo corte ≤08:00 da legenda
+// da "Distribuição por faixa de chegada"), ranqueado do melhor pro pior.
+function impChartFaixaEmp(){
+  var byE={};
+  IMP_FILTERED.forEach(function(d){
+    var b=d.chegadaMin!==null?d.chegadaMin:d.ptsMin;
+    if(b===null)return;
+    if(!byE[d.empresa])byE[d.empresa]={empresa:d.empresa,total:0,noPrazo:0};
+    byE[d.empresa].total++;
+    if(b<480)byE[d.empresa].noPrazo++;
+  });
+  var list=Object.keys(byE).map(function(e){var o=byE[e];o.pct=o.total?Math.round(o.noPrazo/o.total*100):0;return o;}).sort(function(a,b){return b.pct-a.pct;});
+  var badge=document.getElementById('imp-badge-faixa-emp'); if(badge) badge.textContent=list.length+' empresas';
+  var host=document.getElementById('imp-faixa-emp-list'); if(!host) return;
+  if(!list.length){host.innerHTML='<div style="text-align:center;padding:16px;color:var(--muted);font-size:11px">Sem dados</div>';return;}
+  function tc(p){return p>=80?'#15803d':p>=60?'#1d4ed8':p>=40?'#c2410c':'#dc2626';}
+  function sc(p){return p>=80?'#16a34a':p>=60?'#2563eb':p>=40?'#c2410c':'#dc2626';}
+  function bgc(p){return p>=80?'#f0fdf4':p>=60?'#eff6ff':p>=40?'#fff7ed':'#fef2f2';}
+  function lbl(p){return p>=80?'Ótimo':p>=60?'Bom':p>=40?'Atenção':'Crítico';}
+  var medals=['🥇','🥈','🥉'];
+  host.innerHTML=list.map(function(e,i){
+    var isSel=IMP_CHART_F.empresa===e.empresa;
+    var rankHtml=i<3?'<span style="font-size:15px">'+medals[i]+'</span>':'<span style="font-size:11px;font-weight:800;color:#94a3b8">'+(i+1)+'.</span>';
+    return'<div onclick="impSetChartFilter(\'empresa\',\''+e.empresa.replace(/'/g,"\\'")+'\')" style="display:grid;grid-template-columns:24px 1fr 1fr 50px 70px;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid var(--bord);cursor:pointer'+(isSel?';background:#eff6ff':'')+'" title="Clique pra filtrar por essa empresa">'
+      +'<div>'+rankHtml+'</div>'
+      +'<div style="font-size:11px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+impEsc(e.empresa)+'">'+impEsc(e.empresa)+(isSel?' ✓':'')+'</div>'
+      +'<div style="position:relative;height:14px;background:var(--bg);border-radius:4px"><div style="position:absolute;left:0;top:0;height:100%;border-radius:4px;background:'+sc(e.pct)+';width:'+e.pct+'%"></div></div>'
+      +'<div style="font-size:13px;font-weight:900;text-align:right;color:'+tc(e.pct)+'">'+e.pct+'%</div>'
+      +'<div style="text-align:right"><span style="font-size:9px;font-weight:800;padding:2px 8px;border-radius:20px;background:'+bgc(e.pct)+';color:'+tc(e.pct)+'">'+lbl(e.pct)+'</span></div>'
+      +'</div>';
+  }).join('');
+}
+
 function impFiltrarTop10Obras(){
   var byO={};
   IMP_DATA.forEach(function(d){if(d.delayMin<=0)return;if(!byO[d.sap])byO[d.sap]=0;byO[d.sap]+=d.delayMin;});
@@ -11818,6 +11852,11 @@ async function renderViewImprodutividade(){
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:var(--text)">Distribuição por faixa de chegada</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-faixa"></span></div><div style="position:relative;height:190px"><canvas id="imp-chart-faixa"></canvas></div><div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#10b981;flex-shrink:0"></div>No prazo (≤08:00)</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#f59e0b;flex-shrink:0"></div>Leve atraso</div><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>Atrasado</div></div></div>'
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span style="font-size:12px;font-weight:700;color:var(--text)">Desvios por problema identificado</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-prob"></span></div><div style="font-size:10px;color:var(--muted);margin-bottom:8px">Registros com atraso que possuem problema classificado</div><div style="position:relative;height:190px"><canvas id="imp-chart-prob"></canvas></div></div>'
+  +'</div>'
+  +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px 18px;margin-bottom:16px">'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:700;color:var(--text)">Comparativo de chegada por empresa</span><span style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:2px 8px" id="imp-badge-faixa-emp"></span></div>'
+  +'<div style="font-size:10px;color:var(--muted);margin-bottom:8px">% de chegadas no prazo (≤08:00) por empresa, do melhor pro pior — clique numa linha pra filtrar</div>'
+  +'<div id="imp-faixa-emp-list"></div>'
   +'</div>'
   +'</div>'
 
