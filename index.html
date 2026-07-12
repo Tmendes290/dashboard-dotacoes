@@ -8767,6 +8767,9 @@ function impBuildProjSquad(){
     }
   });
 }
+function impIsAndaime(empresa){
+  return !!empresa && empresa.toUpperCase().indexOf('ANDAIME')>=0;
+}
 function _impNormSquad(sq){
   if(!sq)return sq;
   if(sq.toUpperCase().indexOf('TELAMENTO')>=0)return'MINA';
@@ -9596,6 +9599,7 @@ var _impAderSqChart=null;
 var _impEvoCharts={};
 var _EVO_SQHRS_RECORDS={};
 var _EVO_PRODIMP_BASEDATA=[];
+var _EVO_PRODIMP_ANDAIME_DATA=[];
 var _EVO_PRODIMP_W=null;
 var _impAderChart=null;
 
@@ -9894,6 +9898,7 @@ function impRenderEvolucao(){
   // baseData: todos os dados com filtros empresa/sap/squad (sem filtro de data — usado para período anterior)
   var baseData=IMP_DATA.filter(function(d){
     if(d.terminoMin!==null&&d.terminoMin>fimMin)return false;
+    if(impIsAndaime(d.empresa))return false;
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
@@ -9929,7 +9934,7 @@ function impRenderEvolucao(){
     });
     return s;
   }
-  var currData=IMP_FILTERED.filter(function(d){return !impIsExcluido(d);});
+  var currData=IMP_FILTERED.filter(function(d){return !impIsExcluido(d)&&!impIsAndaime(d.empresa);});
   var _datesArr=currData.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
   if(!dtIni&&!dtFim&&!_datesArr.length){
     var _el=document.getElementById('evo-trend-cards');
@@ -10196,6 +10201,7 @@ function _impBuildChegadaChart(){
   var refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
   var rp=refStr.split(':');var refMin=parseInt(rp[0])*60+parseInt(rp[1]||0);
   var baseData=IMP_FILTERED.filter(function(d){
+    if(impIsAndaime(d.empresa))return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
@@ -10280,6 +10286,7 @@ function _impBuildHorasChart(){
 
   var baseData=IMP_FILTERED.filter(function(d){
     if(impIsExcluido(d))return false;
+    if(impIsAndaime(d.empresa))return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
@@ -10444,10 +10451,16 @@ function _impBuildProdImpChart(){
   // para que "Produtivo" seja exatamente a média real de horasTrab (bate com aquele gráfico).
   var validForChart=IMP_FILTERED.filter(function(d){
     if(impIsExcluido(d))return false;
+    if(impIsAndaime(d.empresa))return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
     return !!d.dataSortKey;
+  });
+  // TOP ANDAIMES sai da população geral (acima) e vira sua própria causa na composição do
+  // improdutivo, somando PTS+atraso+saída+almoço só dela — não entra em nenhum outro gráfico.
+  var andaimeCandidatos=IMP_FILTERED.filter(function(d){
+    return !impIsExcluido(d)&&impIsAndaime(d.empresa)&&d.inicioMin!==null&&d.terminoMin!==null;
   });
   var candidatos=validForChart.filter(function(d){return d.inicioMin!==null&&d.terminoMin!==null;});
   var nSemDados=validForChart.length-candidatos.length;
@@ -10589,9 +10602,20 @@ function _impBuildProdImpChart(){
   var mS=Math.round(avgSaida.reduce(function(s,v){return s+v;},0)/avgSaida.length);
   var mAl=Math.round(avgAlmoco.reduce(function(s,v){return s+v;},0)/avgAlmoco.length);
   var mPts=Math.round(pts.reduce(function(s,v){return s+v;},0)/pts.length);
-  var mTot=(mA+mS+mAl+mPts)||1;
-  _EVO_PRODIMP_BASEDATA=baseData;_EVO_PRODIMP_W=W;
+  // Andaime (TOP ANDAIMES): soma PTS+atraso+saída+almoço por registro dela, à parte da
+  // população geral acima — vira uma única causa na composição em vez de se misturar nas outras.
+  var mAndaime=andaimeCandidatos.length?Math.round(andaimeCandidatos.reduce(function(s,d){
+    var atrasoA=Math.max(0,d.inicioMin-W.ini);
+    var saidaA=Math.max(0,W.fim-d.terminoMin);
+    var almPausaA=(d.almIniMin!==null&&d.almFimMin!==null)?(d.almFimMin-d.almIniMin):0;
+    var almocoA=Math.max(0,almPausaA-60);
+    var ptsA=(d.chegadaMin!==null&&d.ptsMin!==null)?Math.max(0,d.ptsMin-d.chegadaMin):0;
+    return s+atrasoA+saidaA+almocoA+ptsA;
+  },0)/andaimeCandidatos.length):0;
+  var mTot=(mA+mS+mAl+mPts+mAndaime)||1;
+  _EVO_PRODIMP_BASEDATA=baseData;_EVO_PRODIMP_ANDAIME_DATA=andaimeCandidatos;_EVO_PRODIMP_W=W;
   var causes=[{lbl:'Espera pelo PTS',val:mPts,color:'#0ea5e9',key:'pts'},{lbl:'Atraso na entrada',val:mA,color:'#dc2626',key:'atraso'},{lbl:'Saída antecipada',val:mS,color:'#f97316',key:'saida'},{lbl:'Excesso de almoço',val:mAl,color:'#a855f7',key:'almoco'}];
+  if(andaimeCandidatos.length)causes.push({lbl:'Andaime (TOP ANDAIMES)',val:mAndaime,color:'#b45309',key:'andaime'});
   if(cb)cb.innerHTML=causes.map(function(c){
     var pc=Math.round(c.val/mTot*100);
     return'<div onclick="_impProdImpCauseDrillOpen(\''+c.key+'\')" style="cursor:pointer;display:grid;grid-template-columns:150px 1fr 60px;align-items:center;gap:10px;margin-bottom:8px;font-size:11px" title="Clique para ver os registros">'
@@ -10771,9 +10795,9 @@ function _impSquadHorasDrillOpen(sq){
 
 function _impProdImpCauseDrillOpen(cause){
   var W=_EVO_PRODIMP_W||_impProdImpWindow();
-  var baseData=_EVO_PRODIMP_BASEDATA||[];
-  var labelsCause={pts:'Espera pelo PTS',atraso:'Atraso na entrada',saida:'Saída antecipada',almoco:'Excesso de almoço'};
-  var colorsCause={pts:'#0ea5e9',atraso:'#dc2626',saida:'#f97316',almoco:'#a855f7'};
+  var baseData=cause==='andaime'?(_EVO_PRODIMP_ANDAIME_DATA||[]):(_EVO_PRODIMP_BASEDATA||[]);
+  var labelsCause={pts:'Espera pelo PTS',atraso:'Atraso na entrada',saida:'Saída antecipada',almoco:'Excesso de almoço',andaime:'Andaime (TOP ANDAIMES)'};
+  var colorsCause={pts:'#0ea5e9',atraso:'#dc2626',saida:'#f97316',almoco:'#a855f7',andaime:'#b45309'};
   function m2hm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
   function m2hhm(m){if(m===null||m===undefined)return'—';return String(Math.floor(m/60))+'h'+String(m%60).padStart(2,'0');}
   var recs=baseData.map(function(d){
@@ -10783,15 +10807,15 @@ function _impProdImpCauseDrillOpen(cause){
     var saida=completo?Math.max(0,W.fim-d.terminoMin):0;
     var almoco=d.almExcesso||0;
     var pts=(d.chegadaMin!==null&&d.ptsMin!==null)?Math.max(0,d.ptsMin-d.chegadaMin):0;
-    var v=cause==='atraso'?atraso:cause==='saida'?saida:cause==='pts'?pts:almoco;
+    var v=cause==='atraso'?atraso:cause==='saida'?saida:cause==='pts'?pts:cause==='andaime'?(atraso+saida+almoco+pts):almoco;
     return Object.assign({},d,{_entrada:entrada,_completo:completo,_terminoOk:completo,_v:v});
   }).filter(function(d){return d._v>0;}).sort(function(a,b){return b._v-a._v;});
   if(!recs.length)return;
   var avgV=Math.round(recs.reduce(function(s,d){return s+d._v;},0)/recs.length);
   var causeColor=colorsCause[cause];
-  var extraColLabel=cause==='atraso'?'Entrada':cause==='saida'?'Término':cause==='pts'?'Chegada→PTS':'Almoço';
+  var extraColLabel=cause==='atraso'?'Entrada':cause==='saida'?'Término':cause==='pts'?'Chegada→PTS':cause==='andaime'?'Entrada':'Almoço';
   function extraColVal(d){
-    if(cause==='atraso')return m2hm(d._entrada);
+    if(cause==='atraso'||cause==='andaime')return m2hm(d._entrada);
     if(cause==='saida')return d._completo?m2hm(d.terminoMin):'<span style="color:#94a3b8">sem dado</span>';
     if(cause==='pts')return m2hm(d.chegadaMin)+'–'+m2hm(d.ptsMin);
     return(d.almIniMin!==null&&d.almFimMin!==null)?m2hm(d.almIniMin)+'–'+m2hm(d.almFimMin):'—';
