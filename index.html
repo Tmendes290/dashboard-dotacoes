@@ -9917,9 +9917,11 @@ function impRenderEvolucao(){
   var dtFim=(document.getElementById('imp-dt-fim')||{}).value||'';
 
   // baseData: todos os dados com filtros empresa/sap/squad (sem filtro de data — usado para período anterior)
+  var _promTurnoEvo=_impTurnoDoRef(refMin);
   var baseData=IMP_DATA.filter(function(d){
     if(d.terminoMin!==null&&d.terminoMin>fimMin)return false;
     if(impIsAndaime(d.empresa))return false;
+    var _tEvo=impGetTurno(d.inicioMin);if(_tEvo!=='adm'&&_tEvo!==_promTurnoEvo)return false;
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
@@ -9955,7 +9957,7 @@ function impRenderEvolucao(){
     });
     return s;
   }
-  var currData=IMP_FILTERED.filter(function(d){return !impIsExcluido(d)&&!impIsAndaime(d.empresa);});
+  var currData=IMP_FILTERED.filter(function(d){var _tEvo2=impGetTurno(d.inicioMin);return !impIsExcluido(d)&&!impIsAndaime(d.empresa)&&(_tEvo2==='adm'||_tEvo2===_promTurnoEvo);});
   var _datesArr=currData.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
   if(!dtIni&&!dtFim&&!_datesArr.length){
     var _el=document.getElementById('evo-trend-cards');
@@ -10221,8 +10223,10 @@ function _impChegadaDrillOpen(key,baseData,refMin){
 function _impBuildChegadaChart(){
   var refStr=(document.getElementById('imp-ref-time')||{}).value||'08:00';
   var rp=refStr.split(':');var refMin=parseInt(rp[0])*60+parseInt(rp[1]||0);
+  var _promTurnoCh=_impTurnoDoRef(refMin);
   var baseData=IMP_FILTERED.filter(function(d){
     if(impIsAndaime(d.empresa))return false;
+    var _tCh=impGetTurno(d.inicioMin);if(_tCh!=='adm'&&_tCh!==_promTurnoCh)return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
@@ -10305,9 +10309,11 @@ function _impBuildHorasChart(){
   var legEl=document.getElementById('evo-horas-legend-lbl');
   if(legEl)legEl.innerHTML='Término − Início − Almoço &nbsp;·&nbsp; <span style="color:#16a34a;font-weight:700">Verde ≥ '+_impProdImpFmt(meta)+'</span> &nbsp;·&nbsp; <span style="color:#b45309;font-weight:700">Amarelo '+_impProdImpFmt(metaYellow)+'–'+_impProdImpFmt(meta)+'</span> &nbsp;·&nbsp; <span style="color:#dc2626;font-weight:700">Vermelho &lt; '+_impProdImpFmt(metaYellow)+'</span> &nbsp;·&nbsp; <span style="color:var(--muted)">(meta segue o filtro Horário Ref./Término Até)</span>';
 
+  var _promTurnoHr=_impTurnoDoRef(W.ini);
   var baseData=IMP_FILTERED.filter(function(d){
     if(impIsExcluido(d))return false;
     if(impIsAndaime(d.empresa))return false;
+    var _tHr=impGetTurno(d.inicioMin);if(_tHr!=='adm'&&_tHr!==_promTurnoHr)return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
@@ -10470,9 +10476,11 @@ function _impBuildProdImpChart(){
   if(lblEl)lblEl.innerHTML='Base: <strong>'+W.refStr+'</strong> → <strong>'+W.fimStr+'</strong> − 1h almoço = <strong>'+_impProdImpFmt(W.base)+'/equipe</strong> (segue o filtro "Horário Ref." / "Término Até" acima)';
   // Só entram registros com Início E Término — igual à base do gráfico "Horas trabalhadas",
   // para que "Produtivo" seja exatamente a média real de horasTrab (bate com aquele gráfico).
+  var _promTurnoPI=_impTurnoDoRef(W.ini);
   var validForChart=IMP_FILTERED.filter(function(d){
     if(impIsExcluido(d))return false;
     if(impIsAndaime(d.empresa))return false;
+    var _tPI=impGetTurno(d.inicioMin);if(_tPI!=='adm'&&_tPI!==_promTurnoPI)return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
@@ -10480,8 +10488,11 @@ function _impBuildProdImpChart(){
   });
   // TOP ANDAIMES sai da população geral (acima) e vira sua própria causa na composição do
   // improdutivo, somando PTS+atraso+saída+almoço só dela — não entra em nenhum outro gráfico.
+  // Mesmo filtro de turno da população geral, senão um início de Tarde/Noite dela vira um
+  // "atraso" gigante e fake contra a referência ADM.
   var andaimeCandidatos=IMP_FILTERED.filter(function(d){
-    return !impIsExcluido(d)&&impIsAndaime(d.empresa)&&d.inicioMin!==null&&d.terminoMin!==null;
+    var _tA=impGetTurno(d.inicioMin);
+    return !impIsExcluido(d)&&impIsAndaime(d.empresa)&&d.inicioMin!==null&&d.terminoMin!==null&&(_tA==='adm'||_tA===_promTurnoPI);
   });
   var candidatos=validForChart.filter(function(d){return d.inicioMin!==null&&d.terminoMin!==null;});
   var nSemDados=validForChart.length-candidatos.length;
