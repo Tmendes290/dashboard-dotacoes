@@ -8770,20 +8770,20 @@ function impBuildProjSquad(){
 function impIsAndaime(empresa){
   return !!empresa && empresa.toUpperCase().indexOf('ANDAIME')>=0;
 }
-// Turno pelo horário de Início: ADM 07:00–17:00, Noite 23:00–06:00 (checado antes por ser
-// janela mais específica), Tarde pega o restante (basicamente 17:01–22:59). Sem Início vira ADM
-// (não classificável, fica na tabela principal como sempre foi).
+// Turno pelo horário de Início. Noite (23:00–06:00) e Tarde (14:00–22:59) vencem a disputa
+// com "ADM 07:00–17:00" nas pontas — por isso ADM na prática vira só 07:00–13:59. Sem Início
+// vira ADM (não classificável, fica na tabela principal como sempre foi).
 function impGetTurno(inicioMin){
   if(inicioMin===null||inicioMin===undefined)return'adm';
-  if(inicioMin>=420&&inicioMin<=1020)return'adm';
   if(inicioMin>=1380||inicioMin<=360)return'noite';
-  return'tarde';
+  if(inicioMin>=840&&inicioMin<=1379)return'tarde';
+  return'adm';
 }
 // Se o "Horário Ref." atual cai dentro da janela de Tarde ou Noite, esse turno é promovido
-// pra tabela principal e entra nos cálculos de atraso — usando esse mesmo horário como referência.
+// pra tabela/KPIs principais e entra nos cálculos de atraso — usando esse mesmo horário como referência.
 function _impTurnoDoRef(refMin){
   if(refMin>=1380||refMin<=360)return'noite';
-  if(refMin>=840||refMin<=60)return'tarde';
+  if(refMin>=840&&refMin<=1379)return'tarde';
   return null;
 }
 function _impNormSquad(sq){
@@ -9299,7 +9299,10 @@ function impLimpar(){
 
 // ── Render Cards ─────────────────────────────────────────────────
 function impRenderCards(refMin){
-  var validos=IMP_FILTERED.filter(function(d){return !impIsExcluido(d);});
+  // Só conta período ADM por padrão (Tarde/Noite ficam de fora, salvo se o Horário Ref. atual
+  // cair na janela deles — aí entram, avaliados contra essa mesma referência).
+  var _promTurno=_impTurnoDoRef(refMin);
+  var validos=IMP_FILTERED.filter(function(d){return !impIsExcluido(d)&&(impGetTurno(d.inicioMin)==='adm'||impGetTurno(d.inicioMin)===_promTurno);});
   var total=validos.length;
   var at=validos.filter(function(d){return d.delayMin>0;});
   var totalMin=validos.reduce(function(s,d){return s+(d.delayMin||0);},0);
@@ -9414,12 +9417,14 @@ function impGetPrevData(refMin){
   var prevEnd=new Date(dMin.getTime()-86400000),prevStart=new Date(prevEnd.getTime()-(diffDays-1)*86400000);
   var pE=prevEnd.toISOString().slice(0,10),pS=prevStart.toISOString().slice(0,10);
   var fimMin=impGetFimMin();
+  var _promTurnoPrev=_impTurnoDoRef(refMin);
   var prevRaw=IMP_DATA.filter(function(d){
     if(!d.dataSortKey||d.dataSortKey<pS||d.dataSortKey>pE)return false;
     if(d.terminoMin!==null&&d.terminoMin>fimMin)return false;
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
     var sq=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
+    var t=impGetTurno(d.inicioMin);if(t!=='adm'&&t!==_promTurnoPrev)return false;
     return true;
   }).map(function(d){return _impDeriveRow(d,refMin,fimMin);});
   var m=_impCalcMetrics(prevRaw,refMin);
@@ -11826,7 +11831,6 @@ async function renderViewImprodutividade(){
   +'</tr></thead><tbody id="imp-tbody-reg"></tbody></table></div></div>'
   // Barra de progresso justificativas
   +'<div style="padding:8px 14px;border-top:1px solid var(--bord);font-size:10px;color:var(--muted);display:flex;align-items:center;gap:10px"><span id="reg-just-prog-lbl">Progresso das justificativas de atraso</span><div style="flex:1;max-width:220px;background:#f1f5f9;border-radius:20px;height:5px;overflow:hidden"><div id="reg-just-prog-bar" style="height:5px;border-radius:20px;background:#10b981;width:0%"></div></div><span id="reg-just-prog-pct" style="font-weight:700;color:var(--sb)"></span></div>'
-  +'</div>'
 
   // Registros de outros turnos (Tarde/Noite) — fora do cálculo de atraso por padrão
   +'<div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden;margin-top:14px">'
@@ -11843,6 +11847,7 @@ async function renderViewImprodutividade(){
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Término</th>'
   +'<th style="background:#f5f9ff;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--bord);text-align:center;white-space:nowrap">Turno</th>'
   +'</tr></thead><tbody id="imp-tbody-reg-turno"></tbody></table></div></div>'
+  +'</div>'
 
   // Tab Empresas
   +'<div id="imp-tab-empresas" style="display:none"><div style="background:var(--card);border:1px solid var(--bord);border-radius:8px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700">Por Empresa</span><span style="font-size:11px;color:var(--muted)" id="imp-lbl-emp"></span></div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
