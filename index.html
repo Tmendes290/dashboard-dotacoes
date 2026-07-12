@@ -10501,14 +10501,18 @@ function _impBuildProdImpChart(){
   var byP={};
   baseData.forEach(function(d){
     var key=_IMP_PRODIMP_PERIOD==='dia'?d.dataSortKey:_IMP_PRODIMP_PERIOD==='mes'?_impMonthKey(d.dataSortKey):_impWeekKey(d.dataSortKey);
-    if(!byP[key])byP[key]={atraso:0,saida:0,almoco:0,pts:0,prod:0,n:0,key:key};
+    if(!byP[key])byP[key]={atraso:0,saida:0,almoco:0,pts:0,ptsN:0,prod:0,n:0,key:key};
     var atraso=Math.max(0,d.inicioMin-W.ini);
     var saida=Math.max(0,W.fim-d.terminoMin);
     var almPausa=(d.almIniMin!==null&&d.almFimMin!==null)?(d.almFimMin-d.almIniMin):0;
     var almocoExcesso=Math.max(0,almPausa-60);
-    var ptsEspera=(d.chegadaMin!==null&&d.ptsMin!==null)?Math.max(0,d.ptsMin-d.chegadaMin):0;
+    var temPts=d.chegadaMin!==null&&d.ptsMin!==null;
+    var ptsEspera=temPts?Math.max(0,d.ptsMin-d.chegadaMin):0;
     var prodReal=Math.max(0,d.horasTrab);
-    byP[key].atraso+=atraso;byP[key].saida+=saida;byP[key].almoco+=almocoExcesso;byP[key].pts+=ptsEspera;byP[key].prod+=prodReal;byP[key].n++;
+    byP[key].atraso+=atraso;byP[key].saida+=saida;byP[key].almoco+=almocoExcesso;byP[key].prod+=prodReal;byP[key].n++;
+    // Espera pelo PTS só conta quem realmente preencheu Chegada e PTS — senão quem não abre PTS
+    // vira um "0" que dilui a média de quem abriu.
+    if(temPts){byP[key].pts+=ptsEspera;byP[key].ptsN++;}
   });
   var grupos=Object.values(byP).sort(function(a,b){return a.key<b.key?-1:1;}).slice(-12);
   var cv=document.getElementById('evo-chart-prodimp');
@@ -10535,7 +10539,7 @@ function _impBuildProdImpChart(){
   var avgAtraso=grupos.map(function(g){return Math.round(g.atraso/g.n);});
   var avgSaida=grupos.map(function(g){return Math.round(g.saida/g.n);});
   var avgAlmoco=grupos.map(function(g){return Math.round(g.almoco/g.n);});
-  var avgPts=grupos.map(function(g){return Math.round(g.pts/g.n);});
+  var avgPts=grupos.map(function(g){return g.ptsN?Math.round(g.pts/g.ptsN):0;});
   // Produtivo = média real de horasTrab (Término−Início−Almoço real) — mesma fórmula e mesma
   // base de registros do gráfico "Horas trabalhadas", então os dois batem exatamente.
   var prod=grupos.map(function(g){return Math.round(g.prod/g.n);});
