@@ -9868,10 +9868,16 @@ function impRenderAderSquads(){
 }
 
 function _impWeekKey(dateStr){
+  // Semana segunda-a-domingo, ancorada no mesmo Jan/4 que _impISOMonday usa pra montar o
+  // rótulo — a versão antiga fechava a semana no sábado (base domingo), então os dias de
+  // segunda a sexta da semana seguinte caíam escondidos dentro do balde da semana anterior.
   var d=new Date(dateStr+'T00:00:00');
-  var jan4=new Date(d.getFullYear(),0,4);
-  var w=Math.ceil(((d-jan4)/86400000+jan4.getDay()+1)/7);
-  return d.getFullYear()+'-W'+String(w).padStart(2,'0');
+  var y=d.getFullYear();
+  var jan4=new Date(y,0,4);
+  var jan4Mon=new Date(jan4); jan4Mon.setDate(jan4.getDate()-((jan4.getDay()||7)-1));
+  var dMon=new Date(d); dMon.setDate(d.getDate()-((d.getDay()||7)-1));
+  var w=Math.round((dMon-jan4Mon)/(7*86400000))+1;
+  return y+'-W'+String(w).padStart(2,'0');
 }
 function _impMonthKey(dateStr){ return dateStr.slice(0,7); }
 function impRenderEvolucao(){
