@@ -9367,8 +9367,8 @@ function impRenderCards(refMin){
     impCard('#8b5cf6',avgHMin!==null?impFmtDelay(Math.round(avgHMin)):'—','Média horas produtivas','por pessoa/dia (com entrada e saída)',
       'Média de horas trabalhadas por pessoa (registros com início e término preenchidos). Quanto mais próximo de 9h, melhor.',
       prev&&prevAvgH!==null&&avgHMin!==null?'<div>'+_impDeltaHtml(avgHMin,prevAvgH,false,function(v){return Math.round(v)+' min';})+'</div><div style="font-size:9px;color:var(--muted);margin-top:2px">'+pvs+'</div>':null)+
-    impCard('#64748b',Math.floor(liquidoMinC/60)+'h','Jornada líquida/pessoa',_subJornada,
-      'Base da jornada: Horário Ref. ('+refStr2+') → Término Até ('+fimStr2+') − 1h almoço = '+Math.floor(liquidoMinC/60)+'h líquido/pessoa. Improdutivo/p. = média de (atraso na entrada + saída antecipada + excesso de almoço) por registro. Produtivo/p. = líquida − improdutivo médio.',
+    impCard('#64748b',Math.floor(liquidoMinC/60)+'h','Jornada líquida/equipe',_subJornada,
+      'Base da jornada: Horário Ref. ('+refStr2+') → Término Até ('+fimStr2+') − 1h almoço = '+Math.floor(liquidoMinC/60)+'h líquido/equipe (mesma base pra todo mundo, não é média por pessoa). Improdutivo/p. = média de (atraso na entrada + saída antecipada + excesso de almoço) por registro. Produtivo/p. = líquida − improdutivo médio.',
       null);
 }
 function impCard(cor,val,lbl,sub,info,delta){
