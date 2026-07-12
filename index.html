@@ -9193,6 +9193,9 @@ function impApplyFilters(){
     if(IMP_F_MES.length&&d.dataSortKey){var _m=parseInt(d.dataSortKey.split('-')[1])-1;if(IMP_F_MES.indexOf(_IMP_MES_NAMES[_m])<0)return false;}
     if(IMP_F_SEMANA_MS.length&&d.dataSortKey){var _w=_impISOWeekNum(d.dataSortKey);if(IMP_F_SEMANA_MS.indexOf('Sem.'+_w)<0)return false;}
     if(IMP_F_DIAS.length&&d.dataSortKey){var _dow=new Date(d.dataSortKey+'T12:00:00').getDay();if(IMP_F_DIAS.indexOf(_IMP_DIA_NAMES[_dow])<0)return false;}
+    // Fim de semana não conta nos cálculos por padrão — só entra se o usuário escolher
+    // explicitamente Sáb/Dom no filtro de Dias acima.
+    else if(d.dataSortKey){var _dow2=new Date(d.dataSortKey+'T12:00:00').getDay();if(_dow2===0||_dow2===6)return false;}
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa) return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap) return false;
     if(IMP_CHART_F.squad&&impGetSquad(d.sap).squad!==IMP_CHART_F.squad) return false;
@@ -9897,6 +9900,8 @@ function impRenderEvolucao(){
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
     if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
+    if(IMP_F_DIAS.length&&d.dataSortKey){var _dow0=new Date(d.dataSortKey+'T12:00:00').getDay();if(IMP_F_DIAS.indexOf(_IMP_DIA_NAMES[_dow0])<0)return false;}
+    else if(d.dataSortKey){var _dow1=new Date(d.dataSortKey+'T12:00:00').getDay();if(_dow1===0||_dow1===6)return false;}
     return true;
   }).map(function(d){return _impDeriveRow(d,refMin,fimMin);}).filter(function(d){return!impIsExcluido(d);});
 
