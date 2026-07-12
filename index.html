@@ -145,6 +145,7 @@ document.addEventListener('DOMContentLoaded',function(){
   --warn:#f59e0b;--danger:#ef4444;--purple:#8b5cf6;
 }
 body.dark{--bg:#0d1b2e;--card:#162032;--text:#dde6f0;--muted:#7a9ab8;--bord:#253d5c}
+.sq-rank-row:not(.sq-rank-sel):hover{background:var(--bg)}
 /* Base components */
 body.dark .topbar,body.dark .statusbar,body.dark .statusbar-wrap,body.dark .filters,
 body.dark .kpi,body.dark .cc,body.dark .split-card,body.dark .form-card,body.dark .modal,
@@ -9840,30 +9841,23 @@ function impRenderAderSquads(){
   var cCrit=sorted.filter(function(x){return x.pct<40;}).length;
   function chip(val,lbl,tc,bg,bd){return'<div style="flex:1;min-width:80px;padding:12px 14px;border-radius:10px;background:'+bg+';border:1px solid '+bd+';display:flex;flex-direction:column;align-items:center;gap:4px"><span style="font-size:24px;font-weight:900;line-height:1;color:'+tc+'">'+val+'</span><span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;text-align:center;line-height:1.35;color:'+tc+';opacity:.85">'+lbl+'</span></div>';}
   if(kpiEl)kpiEl.innerHTML=chip(avgPct+'%','Média<br>Geral',sqTextColor(avgPct),sqBgColor(avgPct),sqBdColor(avgPct))+chip(cOtimo,'Ótimos<br>≥ 80%','#15803d','#f0fdf4','#bbf7d0')+chip(cBom,'Bons<br>60–79%','#1d4ed8','#eff6ff','#bfdbfe')+chip(cAtenc,'Atenção<br>40–59%','#c2410c','#fff7ed','#fed7aa')+chip(cCrit,'Críticos<br>&lt; 40%','#dc2626','#fef2f2','#fecaca')+chip(nFiscais,'Total<br>Fiscais','#475569','#f8fafc','#e2e8f0');
-  // Cards de squad
+  // Ranking em barras horizontais — 1 linha por squad, ordenado por %
   var medals=['🥇','🥈','🥉'];
   gridEl.innerHTML=sorted.map(function(s,i){
-    var tc=sqTextColor(s.pct);var bg=sqBgColor(s.pct);var bd=sqBdColor(s.pct);var sc=sqSolidColor(s.pct);var lbl=sqLabel(s.pct);
-    var rankHtml=i<3?'<span style="font-size:18px;line-height:1">'+medals[i]+'</span>':'<span style="font-size:13px;font-weight:800;color:#cbd5e1">'+(i+1)+'.</span>';
+    var tc=sqTextColor(s.pct);var bg=sqBgColor(s.pct);var sc=sqSolidColor(s.pct);var lbl=sqLabel(s.pct);
+    var rankHtml=i<3?'<span style="font-size:16px;line-height:1;text-align:center">'+medals[i]+'</span>':'<span style="font-size:12px;font-weight:800;color:#94a3b8;text-align:center;display:block">'+(i+1)+'.</span>';
     var isSel=_IMP_ADER_SQUADS.indexOf(s.sq)>=0;
-    var selBorder=isSel?'border:2px solid #002F6C;box-shadow:0 0 0 3px rgba(0,47,108,.12)':'border:1px solid #e2e8f0';
-    return'<div style="background:#f8fafc;'+selBorder+';border-radius:12px;padding:16px 18px 14px;position:relative;overflow:hidden;cursor:pointer;transition:transform .15s,box-shadow .15s" onclick="impOpenAderPanel(\''+s.sq.replace(/'/g,"\\'")+'\')" onmouseover="this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.transform=\'none\'">'
-      +(isSel?'<div style="position:absolute;top:8px;right:10px;background:#002F6C;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;z-index:2">✓ selecionado</div>':'')
-      +'<div style="position:absolute;top:0;left:0;right:0;height:5px;border-radius:12px 12px 0 0;background:'+sc+'"></div>'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;margin-top:2px">'+rankHtml+'<span style="font-size:30px;font-weight:900;line-height:1;color:'+tc+'">'+s.pct+'%</span></div>'
-      +'<div style="font-size:11px;font-weight:700;color:#334155;line-height:1.35;margin-bottom:11px;min-height:30px">'+impEsc(s.sq)+'</div>'
-      +'<div style="position:relative;margin-bottom:16px">'
-      +'<div style="height:7px;background:#e2e8f0;border-radius:4px;overflow:visible;position:relative">'
-      +'<div style="height:100%;border-radius:4px;background:'+sc+';width:'+s.pct+'%"></div>'
-      +'<div style="position:absolute;top:-4px;left:80%;width:2px;height:15px;background:#002F6C;border-radius:1px;z-index:2"></div>'
+    var rowCls='sq-rank-row'+(isSel?' sq-rank-sel':'');
+    var rowBg=isSel?'background:#eff6ff':'';
+    return'<div class="'+rowCls+'" style="display:grid;grid-template-columns:28px 168px 1fr 52px 78px;align-items:center;gap:12px;padding:9px 4px;border-bottom:1px solid var(--bord);cursor:pointer;'+rowBg+'" onclick="impOpenAderPanel(\''+s.sq.replace(/'/g,"\\'")+'\')" title="'+(isSel?'Clique para remover da comparação':'Clique para comparar (pode selecionar vários)')+'">'
+      +'<div>'+rankHtml+'</div>'
+      +'<div style="font-size:12.5px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+impEsc(s.sq)+(isSel?' <span style="color:#002F6C">✓</span>':'')+'<div style="font-size:9.5px;font-weight:600;color:#94a3b8;margin-top:1px">'+s.n+' fiscal'+(s.n>1?'is':'')+'</div></div>'
+      +'<div style="position:relative;height:16px;background:var(--bg);border-radius:4px;overflow:visible">'
+      +'<div style="position:absolute;left:0;top:0;height:100%;border-radius:4px;background:'+sc+';width:'+s.pct+'%"></div>'
+      +'<div style="position:absolute;top:-3px;left:80%;width:2px;height:22px;background:#002F6C;opacity:.55"></div>'
       +'</div>'
-      +'<div style="position:absolute;top:14px;left:80%;transform:translateX(-50%);font-size:8px;color:#002F6C;font-weight:700;white-space:nowrap">meta 80%</div>'
-      +'</div>'
-      +'<div style="display:flex;justify-content:space-between;align-items:center">'
-      +'<span style="font-size:10px;color:#94a3b8;font-weight:600">'+s.n+' fiscal'+(s.n>1?'is':'')+'</span>'
-      +'<span style="font-size:9px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.3px;background:'+bg+';color:'+tc+'">'+lbl+'</span>'
-      +'</div>'
-      +'<div style="text-align:center;margin-top:10px;font-size:9px;color:#94a3b8;font-weight:600;letter-spacing:.3px">'+(isSel?'Clique para remover da comparação':'Clique para comparar (pode selecionar vários)')+'</div>'
+      +'<div style="font-size:15px;font-weight:900;text-align:right;color:'+tc+'">'+s.pct+'%</div>'
+      +'<div><span style="font-size:9px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.3px;background:'+bg+';color:'+tc+';white-space:nowrap">'+lbl+'</span></div>'
       +'</div>';
   }).join('');
   // Legenda
@@ -11829,7 +11823,8 @@ async function renderViewImprodutividade(){
   +'<div id="evo-sq-period" style="font-size:11px;font-weight:700;color:var(--sb);background:var(--bg);border:1px solid var(--bord);border-radius:20px;padding:4px 12px;white-space:nowrap"></div>'
   +'</div>'
   +'<div id="evo-ader-sq-kpis" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px"></div>'
-  +'<div id="evo-ader-sq-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px"></div>'
+  +'<div id="evo-ader-sq-rank-header" style="display:grid;grid-template-columns:28px 168px 1fr 52px 78px;gap:12px;padding:0 4px 8px;font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px"><span></span><span>Squad</span><span>Aderência</span><span></span><span>Status</span></div>'
+  +'<div id="evo-ader-sq-grid"></div>'
   +'<div id="evo-sq-legend" style="margin-top:16px;font-size:9.5px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;align-items:center"></div>'
   +'</div>'
 
