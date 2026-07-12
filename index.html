@@ -10821,21 +10821,32 @@ function _impProdImpCauseDrillOpen(cause){
     return(d.almIniMin!==null&&d.almFimMin!==null)?m2hm(d.almIniMin)+'–'+m2hm(d.almFimMin):'—';
   }
   var thS='background:#f5f9ff;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);position:sticky;top:0;white-space:nowrap';
+  var isAndaime=cause==='andaime';
+  function almocoVal(d){return(d.almIniMin!==null&&d.almFimMin!==null)?m2hm(d.almIniMin)+'–'+m2hm(d.almFimMin):'—';}
   var rows=recs.map(function(d,i){
     var sq=impGetSquad(d.sap).squad||'—';
     var bg=i%2===0?'#fff':'#f8fafc';
+    var midCols=isAndaime
+      ?'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+m2hm(d.inicioMin)+'</td>'
+       +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+m2hm(d.ptsMin)+'</td>'
+       +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+almocoVal(d)+'</td>'
+       +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+(d._completo?m2hm(d.terminoMin):'<span style="color:#94a3b8">sem dado</span>')+'</td>'
+      :'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+extraColVal(d)+'</td>';
     return'<tr style="background:'+bg+'">'
       +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.dataStr||d.dataSortKey||'—')+'</td>'
       +'<td style="padding:7px 10px;font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+impEsc(d.empresa)+'</td>'
       +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.sap)+'</td>'
       +'<td style="padding:7px 10px;white-space:nowrap">'+impEsc(sq)+'</td>'
-      +'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+extraColVal(d)+'</td>'
+      +midCols
       +'<td style="padding:7px 10px;text-align:center;white-space:nowrap"><span style="font-weight:800;color:'+causeColor+'">'+m2hhm(d._v)+'</span></td>'
       +'</tr>';
   }).join('');
+  var headMid=isAndaime
+    ?'<th style="'+thS+';text-align:center">Início</th><th style="'+thS+';text-align:center">PTS</th><th style="'+thS+';text-align:center">Almoço</th><th style="'+thS+';text-align:center">Fim</th>'
+    :'<th style="'+thS+';text-align:center">'+extraColLabel+'</th>';
   var mo=document.getElementById('imp-prodimpcause-drill-modal');
   if(!mo){mo=document.createElement('div');mo.id='imp-prodimpcause-drill-modal';mo.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';mo.onclick=function(e){if(e.target===mo)mo.style.display='none';};document.body.appendChild(mo);}
-  mo.innerHTML='<div style="background:#fff;border-radius:12px;width:820px;max-width:97vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)">'
+  mo.innerHTML='<div style="background:#fff;border-radius:12px;width:'+(isAndaime?'920px':'820px')+';max-width:97vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)">'
     +'<div style="padding:16px 20px;border-bottom:1px solid var(--bord);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'
     +'<div><div style="font-size:14px;font-weight:800;color:var(--sb)">'+labelsCause[cause]+' — registros do período exibido</div>'
     +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+recs.length+' registros · Média: <strong style="color:'+causeColor+'">'+m2hhm(avgV)+'</strong></div></div>'
@@ -10847,7 +10858,7 @@ function _impProdImpCauseDrillOpen(cause){
     +'<th style="'+thS+';text-align:left">Empresa</th>'
     +'<th style="'+thS+';text-align:left">Obra (SAP)</th>'
     +'<th style="'+thS+';text-align:left">Squad</th>'
-    +'<th style="'+thS+';text-align:center">'+extraColLabel+'</th>'
+    +headMid
     +'<th style="'+thS+';text-align:center">'+labelsCause[cause]+'</th>'
     +'</tr></thead><tbody>'+rows+'</tbody></table>'
     +'</div></div>';
