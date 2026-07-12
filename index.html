@@ -9688,13 +9688,16 @@ function impRenderAderenciaFiscais(){
     if(tableEl)tableEl.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Preencha a coluna "Fiscal" na planilha para ver a aderência.</div>';
     return;
   }
+  // Dias úteis totais SEMPRE vêm de preRecs (todos os squads, antes do filtro) — o filtro
+  // de squad no dropdown só decide quais fiscais aparecem na tabela, não redefine o que é
+  // "100% de presença". Senão um squad de 1 fiscal filtrado isoladamente sempre dá 100%.
   var keyFn=_IMP_ADER_PERIOD==='mes'?_impMonthKey:_impWeekKey;
   var periodSet={};
-  allRecs.forEach(function(d){periodSet[keyFn(d.dataSortKey)]=1;});
+  preRecs.forEach(function(d){periodSet[keyFn(d.dataSortKey)]=1;});
   var periods=Object.keys(periodSet).sort();
   var periodDays={};
   periods.forEach(function(p){periodDays[p]={};});
-  allRecs.forEach(function(d){var p=keyFn(d.dataSortKey);periodDays[p][d.dataSortKey]=1;});
+  preRecs.forEach(function(d){var p=keyFn(d.dataSortKey);periodDays[p][d.dataSortKey]=1;});
   var fiscalSet={};
   allRecs.forEach(function(d){fiscalSet[d.fiscal.trim()]=1;});
   var fiscais=Object.keys(fiscalSet).sort();
