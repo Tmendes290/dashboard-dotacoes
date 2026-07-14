@@ -12362,14 +12362,15 @@ async function iprodHandlePQProjetoFile(file){
         var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
         if(!data.length) return;
         var p=iprodParsePQSheet(data);
-        if(p){ brutas=brutas.concat(p); abasComPq++; }
+        if(p){ p.forEach(function(item){ item.aba=name; }); brutas=brutas.concat(p); abasComPq++; }
       });
       if(!brutas.length){ toast('Não encontrei quantidades nessa planilha — confere os cabeçalhos (Descrição/Atividade + Quantidade)','red'); return; }
       var agrupado={};
       brutas.forEach(function(item){
         var key=item.codCliente||('desc:'+iprodNorm(item.desc));
-        if(!agrupado[key]) agrupado[key]={desc:item.desc,codCliente:item.codCliente,unidade:item.unidade,quantidade:0};
+        if(!agrupado[key]) agrupado[key]={desc:item.desc,codCliente:item.codCliente,unidade:item.unidade,quantidade:0,porAba:[]};
         agrupado[key].quantidade+=item.quantidade;
+        agrupado[key].porAba.push({aba:item.aba,quantidade:item.quantidade});
       });
       var pq=Object.values(agrupado);
       IPROD_PROJETO={pq:pq,nomeArquivo:file.name};
@@ -12769,7 +12770,19 @@ function iprodRenderShell(){
     +'<div class="iprod-panel-note">Quantidades oficiais do projeto por atividade — importadas junto no passo 1. Se uma atividade não estiver aqui, o comparativo cai no cálculo direto pelo índice (sem checagem de quantidade).</div>';
   if(p&&p.pq.length){
     html+='<table class="iprod-tbl"><thead><tr><th>Cód. Cliente</th><th>Descrição da Atividade</th><th>Unid.</th><th>Qtd. Oficial (Projeto)</th></tr></thead><tbody>';
-    p.pq.forEach(function(row){ html+='<tr><td>'+(row.codCliente||'—')+'</td><td>'+row.desc+'</td><td>'+row.unidade+'</td><td>'+iprodFmt(row.quantidade)+'</td></tr>'; });
+    p.pq.forEach(function(row){
+      var temAbas=row.porAba&&row.porAba.length>1;
+      html+='<tr'+(temAbas?' class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')"':'')+'>'
+        +'<td>'+(row.codCliente||'—')+'</td><td>'+row.desc+'</td><td>'+row.unidade+'</td><td>'+iprodFmt(row.quantidade)+'</td></tr>';
+      if(temAbas){
+        html+='<tr class="iprod-drill"><td colspan="4">'
+          +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">Somado a partir de '+row.porAba.length+' aba(s)</div>';
+        row.porAba.forEach(function(a){
+          html+='<div class="iprod-drill-row"><span>'+a.aba+'</span><span>'+iprodFmt(a.quantidade)+' '+row.unidade+'</span></div>';
+        });
+        html+='</td></tr>';
+      }
+    });
     html+='</tbody></table>';
   } else {
     html+='<div style="font-size:11.5px;color:var(--muted)">Nenhuma PQ do Projeto importada ainda.</div>';
