@@ -12355,18 +12355,26 @@ async function iprodHandlePQProjetoFile(file){
     try{
       var wb=XLSX.read(e.target.result,{type:'array'});
       // A PQ do Projeto costuma vir espalhada em várias abas (uma por ativo/equipamento) —
-      // junta as quantidades de todas as abas que tiverem o padrão de PQ reconhecível
-      var pq=[], abasComPq=0;
+      // junta e SOMA as quantidades da mesma atividade entre abas (senão a mesma escavação,
+      // por exemplo, aparece 7x repetida — uma por prédio — em vez do total do projeto)
+      var brutas=[], abasComPq=0;
       wb.SheetNames.forEach(function(name){
         var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
         if(!data.length) return;
         var p=iprodParsePQSheet(data);
-        if(p){ pq=pq.concat(p); abasComPq++; }
+        if(p){ brutas=brutas.concat(p); abasComPq++; }
       });
-      if(!pq.length){ toast('Não encontrei quantidades nessa planilha — confere os cabeçalhos (Descrição/Atividade + Quantidade)','red'); return; }
+      if(!brutas.length){ toast('Não encontrei quantidades nessa planilha — confere os cabeçalhos (Descrição/Atividade + Quantidade)','red'); return; }
+      var agrupado={};
+      brutas.forEach(function(item){
+        var key=item.codCliente||('desc:'+iprodNorm(item.desc));
+        if(!agrupado[key]) agrupado[key]={desc:item.desc,codCliente:item.codCliente,unidade:item.unidade,quantidade:0};
+        agrupado[key].quantidade+=item.quantidade;
+      });
+      var pq=Object.values(agrupado);
       IPROD_PROJETO={pq:pq,nomeArquivo:file.name};
       IPROD_RESULT=null;
-      toast('PQ do Projeto lida: '+pq.length+' atividades (em '+abasComPq+' abas)','green');
+      toast('PQ do Projeto lida: '+pq.length+' atividades somadas de '+brutas.length+' linhas (em '+abasComPq+' abas)','green');
       iprodRenderShell();
     }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
   };
