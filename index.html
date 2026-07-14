@@ -12385,13 +12385,16 @@ async function iprodProcessar(){
   await iprodLoadIndice();
   if(!IPROD_INDICE){ toast('Base de índices de produtividade indisponível','red'); return; }
 
-  var porFuncao={}, porMaterial={}, semIndice=[];
+  var porFuncao={}, porMaterial={}, semIndice=[], porAtividade=[];
   IPROD_CONTRATADA.pq.forEach(function(item){
     var achou=iprodFindIndice(item.codCliente,item.desc,item.unidade);
     if(!achou){ semIndice.push(item); return; }
+    var indiceHHTotal=0, detalhePartes=[];
     achou.rows.forEach(function(r){
       var qtdNec=item.quantidade*(Number(r.indice)||0);
       if(r.tipo==='M'){ // mão de obra (insumo IH*) — vira HH, entra no comparativo por função
+        indiceHHTotal+=Number(r.indice)||0;
+        detalhePartes.push(r.insumo+'-'+(r.descIns||'?')+'('+iprodFmt(r.indice)+')');
         var key=r.descIns||'(sem nome)';
         if(!porFuncao[key]) porFuncao[key]={hhRef:0,atividades:[]};
         porFuncao[key].hhRef+=qtdNec;
@@ -12402,6 +12405,14 @@ async function iprodProcessar(){
         porMaterial[mkey].qtdNec+=qtdNec;
         porMaterial[mkey].atividades.push({desc:item.desc,qtd:item.quantidade,unidade:item.unidade,indice:r.indice,qtdNec:qtdNec,matchTipo:achou.matchTipo,matchCod:achou.matchCod,matchDesc:achou.matchDesc,insumo:r.insumo,descIns:r.descIns});
       }
+    });
+    // Uma linha por atividade da PQ (igual à Planilha1 do modelo): índice HH total = soma de
+    // todos os insumos de mão de obra (IH) daquela composição, e HH Calculado = quantidade × esse total
+    porAtividade.push({
+      desc:item.desc,unidade:item.unidade,quantidade:item.quantidade,
+      codCliente:achou.matchCod,matchDesc:achou.matchDesc,matchTipo:achou.matchTipo,
+      indiceHHTotal:indiceHHTotal,hhCalculado:item.quantidade*indiceHHTotal,
+      detalhe:detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceHHTotal)):'Sem insumo de mão de obra (IH) nessa composição'
     });
   });
 
@@ -12468,7 +12479,7 @@ async function iprodProcessar(){
     return {nome:m,tipo:o.tipo,unidade:o.unidade,qtdNec:o.qtdNec,atividades:o.atividades};
   }).filter(function(m){return m.qtdNec;}).sort(function(a,b){return b.qtdNec-a.qtdNec;});
 
-  IPROD_RESULT={linhas:linhas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais};
+  IPROD_RESULT={linhas:linhas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade};
   toast('Comparativo calculado','green');
   iprodRenderShell();
 }
@@ -12660,7 +12671,22 @@ function iprodRenderShell(){
     html+='<div style="display:flex;justify-content:flex-end;margin:-8px 0 16px">'
       +'<button class="iprod-btn" style="margin-top:0" onclick="iprodSalvarHistorico()">💾 Salvar no histórico</button></div>';
 
-    html+='<div class="iprod-panel"><div class="iprod-panel-title">3. Comparativo por função</div><div class="iprod-panel-note">Clique numa linha pra abrir o detalhamento das atividades que compõem aquele HH de referência.</div>'
+    if(r.porAtividade && r.porAtividade.length){
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. Detalhamento por Atividade da PQ</div><div class="iprod-panel-note">Uma linha por atividade da PQ da contratada — igual ao modelo (Planilha1): código encontrado na base, índice de HH total (soma de todos os insumos de mão de obra dessa composição) e o HH calculado (quantidade × índice). Clique pra ver a composição do índice.</div>'
+        +'<table class="iprod-tbl"><thead><tr><th>Descrição da Atividade</th><th>Unid.</th><th>Quantidade</th><th>Cód. Cliente</th><th>Índice HH Total</th><th>HH Calculado</th></tr></thead><tbody>';
+      r.porAtividade.forEach(function(a){
+        html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
+          +'<td>'+a.desc+'</td><td>'+a.unidade+'</td><td>'+iprodFmt(a.quantidade)+'</td><td>'+(a.codCliente||'—')+'</td><td>'+iprodFmt(a.indiceHHTotal)+'</td><td>'+iprodFmt(a.hhCalculado)+'</td></tr>';
+        html+='<tr class="iprod-drill"><td colspan="6">'
+          +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
+          +'<div style="font-size:11px">'+a.detalhe+'</div>'
+          +'<div style="font-size:9.5px;color:var(--muted);margin-top:6px">↳ Base de índices: <b>'+(a.codCliente||'—')+'</b> — '+(a.matchDesc||'?')+' · '+(a.matchTipo==='código'?'código exato':a.matchTipo)+'</div>'
+          +'</td></tr>';
+      });
+      html+='</tbody></table></div>';
+    }
+
+    html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Comparativo por função</div><div class="iprod-panel-note">Clique numa linha pra abrir o detalhamento das atividades que compõem aquele HH de referência.</div>'
       +'<table class="iprod-tbl"><thead><tr><th>Função</th><th>HH Cobrado</th><th>HH Referência</th><th>HH + Praticabilidade</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
     r.linhas.filter(function(l){return l.hhCobrado||l.hhRef||l.hhAjust||l.dif;}).forEach(function(l){
       html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
@@ -12688,7 +12714,7 @@ function iprodRenderShell(){
     html+='</tbody></table></div>';
 
     if(r.materiais && r.materiais.length){
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Levantamento de Materiais e Equipamentos</div><div class="iprod-panel-note">Quantidade de material/equipamento que o índice da base indica ser necessária pras atividades da PQ (mesmo cruzamento usado pra mão de obra, só que nas linhas de insumo que não são IH). Clique pra ver quais atividades compõem cada item.</div>'
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">5. Levantamento de Materiais e Equipamentos</div><div class="iprod-panel-note">Quantidade de material/equipamento que o índice da base indica ser necessária pras atividades da PQ (mesmo cruzamento usado pra mão de obra, só que nas linhas de insumo que não são IH). Clique pra ver quais atividades compõem cada item.</div>'
         +'<table class="iprod-tbl"><thead><tr><th>Material / Equipamento</th><th>Tipo</th><th>Unid.</th><th>Quantidade Necessária</th></tr></thead><tbody>';
       r.materiais.forEach(function(m){
         html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
@@ -12714,7 +12740,7 @@ function iprodRenderShell(){
     }
 
     if(r.qtdComp.length){
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">5. Quantidades: PQ da empresa vs PQ do projeto</div><div class="iprod-panel-note">Comparação neutra — divergência é ponto de atenção pra conferência manual, não veredito automático de quem errou.</div>'
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">6. Quantidades: PQ da empresa vs PQ do projeto</div><div class="iprod-panel-note">Comparação neutra — divergência é ponto de atenção pra conferência manual, não veredito automático de quem errou.</div>'
         +'<table class="iprod-tbl"><thead><tr><th>Atividade</th><th>Unid.</th><th>Qtd. PQ Empresa</th><th>Qtd. PQ Projeto</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
       r.qtdComp.forEach(function(q){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
