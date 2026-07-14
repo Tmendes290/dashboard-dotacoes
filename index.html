@@ -12271,6 +12271,11 @@ function iprodParsePQSheet(data){
   var iTotal=hdr.findIndex(function(h){return h.indexOf('TOTAL')>=0&&(h.indexOf('BDI')>=0||h.indexOf('R$')>=0||h.indexOf('CUSTO')>=0);});
   if(iTotal<0) iTotal=hdr.findIndex(function(h){return h.indexOf('TOTAL')>=0;});
   var iUnitario=hdr.findIndex(function(h){return h.indexOf('UNITARIO')>=0&&h.indexOf('COD')<0;});
+  // Algumas PQs já vêm com o HH por atividade embutido (não separam material de mão de obra
+  // numa verba à parte) — se existir essa coluna, ela é usada direto em vez do rateio proporcional.
+  // "ÍNDICE HH TOTAL" é taxa por unidade, não o HH total do item — exclui explicitamente
+  var iHH=hdr.findIndex(function(h){return h.indexOf('HH')>=0&&h.indexOf('INDICE')<0&&(h.indexOf('CALCULADO')>=0||h.indexOf('TOTAL')>=0||h.indexOf('COBRADO')>=0||h.indexOf('APONTADO')>=0);});
+  if(iHH<0) iHH=hdr.findIndex(function(h){return h.indexOf('HH')>=0&&h.indexOf('INDICE')<0;});
   if(iDesc<0||iQtd<0) return null;
 
   // Código hierárquico "CÓD. ATIVIDADE" da Vale (K/TT/UU/VVV/WWW) — muitas PQs reais não têm
@@ -12301,7 +12306,12 @@ function iprodParsePQSheet(data){
       var unit=parseFloat(String(row[iUnitario]==null?'':row[iUnitario]).replace(',','.'))||0;
       valorTotal=qtd*unit;
     }
-    out.push({desc:desc,codCliente:cod,unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd,valorTotal:valorTotal});
+    var hhDeclarado=null;
+    if(iHH>=0){
+      var hhVal=parseFloat(String(row[iHH]==null?'':row[iHH]).replace(',','.'));
+      if(isFinite(hhVal)&&hhVal>0) hhDeclarado=hhVal;
+    }
+    out.push({desc:desc,codCliente:cod,unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd,valorTotal:valorTotal,hhDeclarado:hhDeclarado});
   });
   return out.length?out:null;
 }
@@ -12421,11 +12431,22 @@ async function iprodProcessar(){
     achouPorItem.push({item:item,achou:achou});
   });
   var totCobradoHistograma=(IPROD_CONTRATADA.histograma||[]).reduce(function(s,h){return s+h.hh;},0);
-  var somaValorFornecimento=achouPorItem.reduce(function(s,x){return s+(x.item.valorTotal||0);},0);
-  achouPorItem.forEach(function(x){
-    x.item.pctValor=somaValorFornecimento>0?(x.item.valorTotal/somaValorFornecimento):0;
-    x.item.hhAlocado=x.item.pctValor*totCobradoHistograma;
-  });
+  // Se a PQ já vem com HH por atividade embutido (não separa material de mão de obra numa verba
+  // à parte), usa esse HH declarado direto — o rateio proporcional por R$ só faz sentido quando
+  // não existe essa informação e precisa ser estimada a partir do histograma.
+  var pqTemHHDeclarado=achouPorItem.some(function(x){return x.item.hhDeclarado!=null;});
+  if(pqTemHHDeclarado){
+    achouPorItem.forEach(function(x){
+      x.item.hhAlocado=x.item.hhDeclarado||0;
+      x.item.pctValor=null;
+    });
+  } else {
+    var somaValorFornecimento=achouPorItem.reduce(function(s,x){return s+(x.item.valorTotal||0);},0);
+    achouPorItem.forEach(function(x){
+      x.item.pctValor=somaValorFornecimento>0?(x.item.valorTotal/somaValorFornecimento):0;
+      x.item.hhAlocado=x.item.pctValor*totCobradoHistograma;
+    });
+  }
 
   // PASSO 2: monta os comparativos usando o índice e a alocação já calculados
   achouPorItem.forEach(function(x){
@@ -12567,7 +12588,7 @@ async function iprodProcessar(){
     return {nome:m,tipo:o.tipo,unidade:o.unidade,qtdNec:o.qtdNec,atividades:o.atividades};
   }).filter(function(m){return m.qtdNec;}).sort(function(a,b){return b.qtdNec-a.qtdNec;});
 
-  IPROD_RESULT={linhas:linhas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto};
+  IPROD_RESULT={linhas:linhas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,pqTemHHDeclarado:pqTemHHDeclarado};
   toast('Comparativo calculado','green');
   iprodRenderShell();
 }
@@ -12680,7 +12701,7 @@ function iprodRenderShell(){
     +'.iprod-tbl td{padding:8px 11px;border-bottom:1px solid var(--bord);color:var(--text)}'
     +'.iprod-tbl tr.iprod-tot td{background:var(--bg);font-weight:800;color:#1e3a5f;border-top:2px solid var(--bord)}'
     +'.iprod-badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:9px;font-weight:700}'
-    +'.iprod-b-verde{background:#f0fdf4;color:#15803d}.iprod-b-amar{background:#fefce8;color:#a16207}.iprod-b-verm{background:#fef2f2;color:#dc2626}.iprod-b-cinza{background:#f1f5f9;color:#64748b}'
+    +'.iprod-b-verde{background:#f0fdf4;color:#15803d}.iprod-b-amar{background:#fefce8;color:#a16207}.iprod-b-verm{background:#fef2f2;color:#dc2626}.iprod-b-cinza{background:#f1f5f9;color:#64748b}.iprod-b-azul{background:#eff6ff;color:#1d4ed8}'
     +'.iprod-tr-expand{cursor:pointer}.iprod-tr-expand td:first-child::before{content:"▸ ";color:var(--muted);font-size:9px}.iprod-tr-expand.open td:first-child::before{content:"▾ ";color:#1e3a5f}'
     +'.iprod-drill{background:var(--bg);padding:12px 16px;border-left:3px solid #1e3a5f;display:none}.iprod-drill.show{display:block}'
     +'.iprod-drill-row{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px dashed var(--bord)}.iprod-drill-row:last-child{border-bottom:none}'
@@ -12756,7 +12777,8 @@ function iprodRenderShell(){
       +'<div class="iprod-kpi" style="border-top-color:'+(r.pctImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(r.pctImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(r.pctImprod*100)+'%</div><div class="iprod-kpi-lbl">% Horas Improdutivas</div><div class="iprod-kpi-sub">Diferença ÷ HH Cobrado</div></div>'
       +'</div>';
 
-    html+='<div style="display:flex;justify-content:flex-end;margin:-8px 0 16px">'
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin:-8px 0 16px">'
+      +'<span class="iprod-badge '+(r.pqTemHHDeclarado?'iprod-b-azul':'iprod-b-cinza')+'">'+(r.pqTemHHDeclarado?'📄 PQ com HH próprio por atividade':'📊 HH estimado por rateio proporcional (R$)')+'</span>'
       +'<button class="iprod-btn" style="margin-top:0" onclick="iprodSalvarHistorico()">💾 Salvar no histórico</button></div>';
 
     if(r.qtdComp.length){
