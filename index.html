@@ -12195,7 +12195,10 @@ function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB){
 function iprodFindIndice(codCliente,desc,unidade){
   if(!IPROD_INDICE) return null;
   var cod=String(codCliente||'').trim();
-  if(cod && IPROD_INDICE.byCod[cod]) return {rows:IPROD_INDICE.byCod[cod],matchTipo:'código',matchCod:cod,score:1};
+  if(cod && IPROD_INDICE.byCod[cod]){
+    var rowsCod=IPROD_INDICE.byCod[cod];
+    return {rows:rowsCod,matchTipo:'código',matchCod:cod,matchDesc:rowsCod[0].desc,score:1};
+  }
   var pqTokens=iprodTokens(desc);
   if(!pqTokens.length) return null;
   var pqSet={}; pqTokens.forEach(function(t){pqSet[t]=true;});
@@ -12205,7 +12208,7 @@ function iprodFindIndice(codCliente,desc,unidade){
     var score=iprodTokenScore(pqTokens,pqSet,d.tokens,pqUnid,d.unidNorm);
     if(score>bestScore){ bestScore=score; best=d; }
   });
-  if(best && bestScore>=0.45) return {rows:IPROD_INDICE.byCod[best.codCliente],matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)',matchCod:best.codCliente,score:bestScore};
+  if(best && bestScore>=0.45) return {rows:IPROD_INDICE.byCod[best.codCliente],matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)',matchCod:best.codCliente,matchDesc:best.desc,score:bestScore};
   return null;
 }
 
@@ -12370,7 +12373,7 @@ async function iprodProcessar(){
       var key=r.descIns||'(sem nome)';
       if(!porFuncao[key]) porFuncao[key]={hhRef:0,atividades:[]};
       porFuncao[key].hhRef+=hh;
-      porFuncao[key].atividades.push({desc:item.desc,qtd:item.quantidade,unidade:item.unidade,indice:r.indice,hh:hh,matchTipo:achou.matchTipo});
+      porFuncao[key].atividades.push({desc:item.desc,qtd:item.quantidade,unidade:item.unidade,indice:r.indice,hh:hh,matchTipo:achou.matchTipo,matchCod:achou.matchCod,matchDesc:achou.matchDesc,insumo:r.insumo,descIns:r.descIns});
     });
   });
 
@@ -12637,7 +12640,10 @@ function iprodRenderShell(){
       } else {
         html+='<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">Atividades que compõem o HH de referência</div>';
         l.atividades.forEach(function(a){
-          html+='<div class="iprod-drill-row"><span>'+a.desc+' ('+iprodFmt(a.qtd)+' '+a.unidade+' × '+iprodFmt(a.indice)+')'+(a.matchTipo!=='código'?' <em style="color:var(--muted)">['+a.matchTipo+']</em>':'')+'</span><span>'+iprodFmt(a.hh)+' HH</span></div>';
+          html+='<div class="iprod-drill-row" style="align-items:flex-start;flex-direction:column;gap:2px;padding:8px 0">'
+            +'<div style="display:flex;justify-content:space-between;width:100%"><span>'+a.desc+' ('+iprodFmt(a.qtd)+' '+a.unidade+' × '+iprodFmt(a.indice)+')</span><span style="font-weight:700">'+iprodFmt(a.hh)+' HH</span></div>'
+            +'<div style="font-size:9.5px;color:var(--muted)">↳ Base de índices: <b>'+(a.matchCod||'—')+'</b> — '+(a.matchDesc||'?')+' · insumo '+(a.insumo||'?')+' ('+(a.descIns||'?')+') · '+(a.matchTipo==='código'?'código exato':a.matchTipo)+'</div>'
+            +'</div>';
         });
       }
       if(l.semHistograma && !l.semReferencia){
