@@ -12417,10 +12417,20 @@ async function iprodProcessar(){
     });
     // Uma linha por atividade da PQ (igual à Planilha1 do modelo): índice HH total = soma de
     // todos os insumos de mão de obra (IH) daquela composição, e HH Calculado = quantidade × esse total
+    var qtdProjeto=null, diffQtdProjeto=null;
+    if(IPROD_PROJETO && IPROD_PROJETO.pq.length){
+      var prMatch=item.codCliente?IPROD_PROJETO.pq.find(function(p){return p.codCliente===item.codCliente;}):null;
+      if(!prMatch){
+        var achouPr=iprodFindInPq(item.desc,item.unidade,IPROD_PROJETO.pq);
+        if(achouPr) prMatch=achouPr.item;
+      }
+      if(prMatch){ qtdProjeto=prMatch.quantidade; diffQtdProjeto=item.quantidade-prMatch.quantidade; }
+    }
     porAtividade.push({
       desc:item.desc,unidade:item.unidade,quantidade:item.quantidade,
       codCliente:achou.matchCod,matchDesc:achou.matchDesc,matchTipo:achou.matchTipo,
       indiceHHTotal:indiceHHTotal,hhCalculado:item.quantidade*indiceHHTotal,
+      qtdProjeto:qtdProjeto,diffQtdProjeto:diffQtdProjeto,
       detalhe:detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceHHTotal)):'Sem insumo de mão de obra (IH) nessa composição'
     });
   });
@@ -12721,12 +12731,13 @@ function iprodRenderShell(){
     }
 
     if(r.porAtividade && r.porAtividade.length){
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Detalhamento por Atividade da PQ</div><div class="iprod-panel-note">Uma linha por atividade da PQ da contratada — igual ao modelo (Planilha1): código encontrado na base, índice de HH total (soma de todos os insumos de mão de obra dessa composição) e o HH calculado (quantidade × índice). Clique pra ver a composição do índice.</div>'
-        +'<table class="iprod-tbl"><thead><tr><th>Descrição da Atividade</th><th>Unid.</th><th>Quantidade</th><th>Cód. Cliente</th><th>Índice HH Total</th><th>HH Calculado</th></tr></thead><tbody>';
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Detalhamento por Atividade da PQ</div><div class="iprod-panel-note">Uma linha por atividade da PQ da contratada — igual ao modelo (Planilha1): código encontrado na base, índice de HH total (soma de todos os insumos de mão de obra dessa composição) e o HH calculado (quantidade × índice). Qtd. Projeto/Dif. mostram o comparativo com a PQ do Projeto quando disponível. Clique pra ver a composição do índice.</div>'
+        +'<table class="iprod-tbl"><thead><tr><th>Descrição da Atividade</th><th>Unid.</th><th>Quantidade</th><th>Cód. Cliente</th><th>Índice HH Total</th><th>HH Calculado</th><th>Qtd. Projeto</th><th>Dif. Qtd.</th></tr></thead><tbody>';
       r.porAtividade.forEach(function(a){
+        var difCell=a.qtdProjeto==null?'—':(Math.abs(a.diffQtdProjeto)<0.01?'<span class="iprod-badge iprod-b-verde">Bate</span>':'<span class="iprod-badge iprod-b-amar">'+iprodFmt(a.diffQtdProjeto)+'</span>');
         html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
-          +'<td>'+a.desc+'</td><td>'+a.unidade+'</td><td>'+iprodFmt(a.quantidade)+'</td><td>'+(a.codCliente||'—')+'</td><td>'+iprodFmt(a.indiceHHTotal)+'</td><td>'+iprodFmt(a.hhCalculado)+'</td></tr>';
-        html+='<tr class="iprod-drill"><td colspan="6">'
+          +'<td>'+a.desc+'</td><td>'+a.unidade+'</td><td>'+iprodFmt(a.quantidade)+'</td><td>'+(a.codCliente||'—')+'</td><td>'+iprodFmt(a.indiceHHTotal)+'</td><td>'+iprodFmt(a.hhCalculado)+'</td><td>'+(a.qtdProjeto!=null?iprodFmt(a.qtdProjeto):'—')+'</td><td>'+difCell+'</td></tr>';
+        html+='<tr class="iprod-drill"><td colspan="8">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
           +'<div style="font-size:11px">'+a.detalhe+'</div>'
           +'<div style="font-size:9.5px;color:var(--muted);margin-top:6px">↳ Base de índices: <b>'+(a.codCliente||'—')+'</b> — '+(a.matchDesc||'?')+' · '+(a.matchTipo==='código'?'código exato':a.matchTipo)+'</div>'
