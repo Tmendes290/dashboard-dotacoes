@@ -12126,6 +12126,20 @@ function iprodFmt(n){
   return n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
+// Palavras administrativas/gramaticais que não ajudam a diferenciar uma atividade de outra
+// (evita que "Fornecimento de materiais para X" deixe de bater com "X" na base de índices)
+var IPROD_STOPWORDS={};
+['DE','DA','DO','DAS','DOS','E','A','O','AS','OS','EM','PARA','COM','OU','NO','NA','NOS','NAS',
+ 'QUALQUER','INCLUSIVE','FORNECIMENTO','FORNECIMENTOS','MATERIAIS','MATERIAL','INSTALACAO','EXECUCAO',
+ 'SERVICO','SERVICOS','APLICACAO','CONSIDERAR','HISTOGRAMA'].forEach(function(w){IPROD_STOPWORDS[w]=true;});
+
+function iprodTokens(s){
+  return iprodNorm(s).split(/[^A-Z0-9]+/).filter(function(w){return w.length>1 && !IPROD_STOPWORDS[w];});
+}
+function iprodUnitNorm(u){
+  return String(u||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+}
+
 async function iprodLoadIndice(){
   if(IPROD_INDICE) return IPROD_INDICE;
   if(IPROD_INDICE_LOADING) return IPROD_INDICE_LOADING;
@@ -12140,7 +12154,7 @@ async function iprodLoadIndice(){
       byCod[o.codCliente].push(o);
       if(o.codCliente && !seen[o.codCliente]){
         seen[o.codCliente]=true;
-        descIdx.push({codCliente:o.codCliente,desc:o.desc,descNorm:iprodNorm(o.desc)});
+        descIdx.push({codCliente:o.codCliente,desc:o.desc,tokens:iprodTokens(o.desc),unidNorm:iprodUnitNorm(o.unidade)});
       }
     });
     IPROD_INDICE={byCod:byCod,descIdx:descIdx,total:json.rows.length};
@@ -12154,16 +12168,29 @@ async function iprodLoadIndice(){
   return IPROD_INDICE_LOADING;
 }
 
-function iprodFindIndice(codCliente,desc){
+// Cruza por código (quando existir) ou por similaridade de texto (Jaccard de palavras-chave,
+// com bônus se a unidade também bater) — a maioria das PQs reais não tem o código oficial da Vale,
+// só a descrição do serviço, então esse é o caminho principal, não só um fallback.
+function iprodFindIndice(codCliente,desc,unidade){
   if(!IPROD_INDICE) return null;
   var cod=String(codCliente||'').trim();
-  if(cod && IPROD_INDICE.byCod[cod]) return {rows:IPROD_INDICE.byCod[cod],matchTipo:'código',matchCod:cod};
-  var dn=iprodNorm(desc);
-  if(!dn) return null;
-  var exact=IPROD_INDICE.descIdx.find(function(d){return d.descNorm===dn;});
-  if(exact) return {rows:IPROD_INDICE.byCod[exact.codCliente],matchTipo:'descrição exata',matchCod:exact.codCliente};
-  var partial=IPROD_INDICE.descIdx.find(function(d){return dn.length>8 && (d.descNorm.indexOf(dn)>=0||dn.indexOf(d.descNorm)>=0);});
-  if(partial) return {rows:IPROD_INDICE.byCod[partial.codCliente],matchTipo:'descrição aproximada',matchCod:partial.codCliente};
+  if(cod && IPROD_INDICE.byCod[cod]) return {rows:IPROD_INDICE.byCod[cod],matchTipo:'código',matchCod:cod,score:1};
+  var pqTokens=iprodTokens(desc);
+  if(!pqTokens.length) return null;
+  var pqSet={}; pqTokens.forEach(function(t){pqSet[t]=true;});
+  var pqUnid=iprodUnitNorm(unidade);
+  var best=null, bestScore=0;
+  IPROD_INDICE.descIdx.forEach(function(d){
+    if(!d.tokens.length) return;
+    var inter=0;
+    d.tokens.forEach(function(t){ if(pqSet[t]) inter++; });
+    if(inter<2) return; // exige ao menos 2 palavras-chave em comum pra evitar coincidência
+    var union=pqTokens.length+d.tokens.length-inter;
+    var score=inter/union;
+    if(pqUnid && d.unidNorm && pqUnid===d.unidNorm) score+=0.08;
+    if(score>bestScore){ bestScore=score; best=d; }
+  });
+  if(best && bestScore>=0.45) return {rows:IPROD_INDICE.byCod[best.codCliente],matchTipo:'descrição ('+Math.round(bestScore*100)+'% similar)',matchCod:best.codCliente,score:bestScore};
   return null;
 }
 
@@ -12282,7 +12309,7 @@ async function iprodProcessar(){
 
   var porFuncao={}, semIndice=[];
   IPROD_CONTRATADA.pq.forEach(function(item){
-    var achou=iprodFindIndice(item.codCliente,item.desc);
+    var achou=iprodFindIndice(item.codCliente,item.desc,item.unidade);
     if(!achou){ semIndice.push(item); return; }
     achou.rows.forEach(function(r){
       if(r.tipo!=='M') return; // só mão de obra (insumo IH*)
