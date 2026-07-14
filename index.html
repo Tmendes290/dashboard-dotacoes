@@ -12139,6 +12139,11 @@ function iprodTokens(s){
 function iprodUnitNorm(u){
   return String(u||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 }
+function iprodPad(v,len){
+  var s=String(v==null?'':v).trim();
+  while(s.length<len) s='0'+s;
+  return s;
+}
 
 async function iprodLoadIndice(){
   if(IPROD_INDICE) return IPROD_INDICE;
@@ -12168,9 +12173,22 @@ async function iprodLoadIndice(){
   return IPROD_INDICE_LOADING;
 }
 
-// Cruza por código (quando existir) ou por similaridade de texto (Jaccard de palavras-chave,
-// com bônus se a unidade também bater) — a maioria das PQs reais não tem o código oficial da Vale,
-// só a descrição do serviço, então esse é o caminho principal, não só um fallback.
+// Similaridade por palavras-chave (Jaccard), com bônus se a unidade também bater.
+// tokensB não vem pré-computado (uso pontual, ex.: comparação de quantidades entre 2 PQs).
+function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB){
+  if(!tokensB.length) return 0;
+  var inter=0;
+  tokensB.forEach(function(t){ if(setA[t]) inter++; });
+  if(inter<2) return 0; // exige ao menos 2 palavras-chave em comum pra evitar coincidência
+  var union=tokensA.length+tokensB.length-inter;
+  var score=inter/union;
+  if(unidA && unidB && unidA===unidB) score+=0.08;
+  return score;
+}
+
+// Cruza por código (quando existir) ou por similaridade de texto — a maioria das PQs reais
+// não tem o código oficial da Vale, só a descrição do serviço, então esse é o caminho
+// principal, não só um fallback.
 function iprodFindIndice(codCliente,desc,unidade){
   if(!IPROD_INDICE) return null;
   var cod=String(codCliente||'').trim();
@@ -12181,17 +12199,26 @@ function iprodFindIndice(codCliente,desc,unidade){
   var pqUnid=iprodUnitNorm(unidade);
   var best=null, bestScore=0;
   IPROD_INDICE.descIdx.forEach(function(d){
-    if(!d.tokens.length) return;
-    var inter=0;
-    d.tokens.forEach(function(t){ if(pqSet[t]) inter++; });
-    if(inter<2) return; // exige ao menos 2 palavras-chave em comum pra evitar coincidência
-    var union=pqTokens.length+d.tokens.length-inter;
-    var score=inter/union;
-    if(pqUnid && d.unidNorm && pqUnid===d.unidNorm) score+=0.08;
+    var score=iprodTokenScore(pqTokens,pqSet,d.tokens,pqUnid,d.unidNorm);
     if(score>bestScore){ bestScore=score; best=d; }
   });
-  if(best && bestScore>=0.45) return {rows:IPROD_INDICE.byCod[best.codCliente],matchTipo:'descrição ('+Math.round(bestScore*100)+'% similar)',matchCod:best.codCliente,score:bestScore};
+  if(best && bestScore>=0.45) return {rows:IPROD_INDICE.byCod[best.codCliente],matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)',matchCod:best.codCliente,score:bestScore};
   return null;
+}
+
+// Mesma lógica de similaridade, mas pra achar a atividade correspondente numa lista de PQ
+// (usado pra comparar PQ da empresa x PQ do Projeto)
+function iprodFindInPq(desc,unidade,pqList){
+  var pqTokens=iprodTokens(desc);
+  if(!pqTokens.length) return null;
+  var pqSet={}; pqTokens.forEach(function(t){pqSet[t]=true;});
+  var pqUnid=iprodUnitNorm(unidade);
+  var best=null, bestScore=0;
+  pqList.forEach(function(p){
+    var score=iprodTokenScore(pqTokens,pqSet,iprodTokens(p.desc),pqUnid,iprodUnitNorm(p.unidade));
+    if(score>bestScore){ bestScore=score; best=p; }
+  });
+  return (best && bestScore>=0.45) ? {item:best,score:bestScore} : null;
 }
 
 // Detecta linha de cabeçalho da PQ (Descrição/Atividade + Quantidade [+ Cód.Cliente + Unidade])
@@ -12213,12 +12240,31 @@ function iprodParsePQSheet(data){
   if(iCod<0) iCod=hdr.findIndex(function(h){return (h.indexOf('CODIGO')>=0||h.indexOf('COD.')>=0||h==='COD')&&h.indexOf('ATIVIDADE')<0;});
   var iUnid=hdr.findIndex(function(h){return h.indexOf('UNID')>=0;});
   if(iDesc<0||iQtd<0) return null;
+
+  // Código hierárquico "CÓD. ATIVIDADE" da Vale (K/TT/UU/VVV/WWW) — muitas PQs reais não têm
+  // coluna de código direto, só essas 5 colunas que concatenadas formam o Cod.Cliente (ex.: C+25+05+005+015).
+  // Pode estar na própria linha de cabeçalho ou numa sub-linha logo abaixo (cabeçalho de 2 linhas mescladas).
+  var iK=-1;
+  for(var hr=hdrIdx; hr<=hdrIdx+1 && iK<0; hr++){
+    var sub=(data[hr]||[]).map(function(h){return iprodNorm(h);});
+    for(var c=0;c<sub.length-4;c++){
+      if(sub[c]==='K'&&sub[c+1]==='TT'&&sub[c+2]==='UU'&&sub[c+3]==='VVV'&&sub[c+4]==='WWW'){ iK=c; hdrIdx=Math.max(hdrIdx,hr); break; }
+    }
+  }
+
   var out=[];
   data.slice(hdrIdx+1).forEach(function(row){
     var desc=String(row[iDesc]||'').trim();
     var qtd=parseFloat(String(row[iQtd]==null?'':row[iQtd]).replace(',','.'));
     if(!desc||!isFinite(qtd)||qtd===0) return;
-    out.push({desc:desc,codCliente:iCod>=0?String(row[iCod]||'').trim():'',unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd});
+    var cod=iCod>=0?String(row[iCod]||'').trim():'';
+    if(!cod && iK>=0){
+      var k=String(row[iK]||'').trim(), tt=row[iK+1], uu=row[iK+2], vvv=row[iK+3], www=row[iK+4];
+      if(k && tt!=null && tt!=='' && uu!=null && uu!=='' && vvv!=null && vvv!=='' && www!=null && www!==''){
+        cod=k+iprodPad(tt,2)+iprodPad(uu,2)+iprodPad(vvv,3)+iprodPad(www,3);
+      }
+    }
+    out.push({desc:desc,codCliente:cod,unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd});
   });
   return out.length?out:null;
 }
@@ -12280,16 +12326,19 @@ async function iprodHandlePQProjetoFile(file){
   reader.onload=function(e){
     try{
       var wb=XLSX.read(e.target.result,{type:'array'});
-      var pq=null;
+      // A PQ do Projeto costuma vir espalhada em várias abas (uma por ativo/equipamento) —
+      // junta as quantidades de todas as abas que tiverem o padrão de PQ reconhecível
+      var pq=[], abasComPq=0;
       wb.SheetNames.forEach(function(name){
-        if(pq) return;
         var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
-        if(data.length) pq=iprodParsePQSheet(data);
+        if(!data.length) return;
+        var p=iprodParsePQSheet(data);
+        if(p){ pq=pq.concat(p); abasComPq++; }
       });
-      if(!pq){ toast('Não encontrei quantidades nessa planilha — confere os cabeçalhos (Descrição/Atividade + Quantidade)','red'); return; }
+      if(!pq.length){ toast('Não encontrei quantidades nessa planilha — confere os cabeçalhos (Descrição/Atividade + Quantidade)','red'); return; }
       IPROD_PROJETO={pq:pq,nomeArquivo:file.name};
       IPROD_RESULT=null;
-      toast('PQ do Projeto lida: '+pq.length+' atividades','green');
+      toast('PQ do Projeto lida: '+pq.length+' atividades (em '+abasComPq+' abas)','green');
       iprodRenderShell();
     }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
   };
@@ -12362,13 +12411,14 @@ async function iprodProcessar(){
     IPROD_PROJETO.pq.forEach(function(p){ if(p.codCliente) projByCod[p.codCliente]=p; });
     IPROD_CONTRATADA.pq.forEach(function(item){
       var pr=item.codCliente?projByCod[item.codCliente]:null;
+      var matchTipo='código';
       if(!pr){
-        var dn=iprodNorm(item.desc);
-        pr=IPROD_PROJETO.pq.find(function(p){var pn=iprodNorm(p.desc); return pn===dn||(dn.length>8&&(pn.indexOf(dn)>=0||dn.indexOf(pn)>=0));});
+        var achou=iprodFindInPq(item.desc,item.unidade,IPROD_PROJETO.pq);
+        if(achou){ pr=achou.item; matchTipo='descrição ('+Math.min(100,Math.round(achou.score*100))+'% similar)'; }
       }
       if(pr){
         var diff=item.quantidade-pr.quantidade;
-        qtdComp.push({desc:item.desc,unidade:item.unidade,qtdEmpresa:item.quantidade,qtdProjeto:pr.quantidade,diff:diff,status:Math.abs(diff)<0.01?'bate':'divergente'});
+        qtdComp.push({desc:item.desc,unidade:item.unidade,qtdEmpresa:item.quantidade,qtdProjeto:pr.quantidade,diff:diff,status:Math.abs(diff)<0.01?'bate':'divergente',matchTipo:matchTipo});
       } else {
         qtdComp.push({desc:item.desc,unidade:item.unidade,qtdEmpresa:item.quantidade,qtdProjeto:null,diff:null,status:'sem-projeto'});
       }
@@ -12501,7 +12551,8 @@ function iprodRenderShell(){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
           :'<span class="iprod-badge iprod-b-cinza">Sem PQ do Projeto — usando índice direto</span>';
-        html+='<tr><td>'+q.desc+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdEmpresa)+'</td><td>'+(q.qtdProjeto!=null?iprodFmt(q.qtdProjeto):'—')+'</td><td>'+(q.diff!=null?iprodFmt(q.diff):'—')+'</td><td>'+badge+'</td></tr>';
+        var descCell=q.desc+(q.matchTipo&&q.matchTipo!=='código'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':'');
+        html+='<tr><td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdEmpresa)+'</td><td>'+(q.qtdProjeto!=null?iprodFmt(q.qtdProjeto):'—')+'</td><td>'+(q.diff!=null?iprodFmt(q.diff):'—')+'</td><td>'+badge+'</td></tr>';
       });
       html+='</tbody></table></div>';
     }
