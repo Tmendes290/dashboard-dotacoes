@@ -12440,6 +12440,18 @@ async function iprodProcessar(){
 function iprodSetNomeProjeto(v){ IPROD_NOME_PROJETO=v; }
 function iprodSetEmpresa(v){ IPROD_EMPRESA=v; }
 
+// Reseta o arquivo da contratada e o resultado pra rodar uma PQ diferente — mantém a
+// PQ do Projeto carregada (é a referência do projeto, normalmente reaproveitada entre contratadas)
+function iprodNovaAnalise(){
+  IPROD_CONTRATADA=null;
+  IPROD_RESULT=null;
+  IPROD_NOME_PROJETO='';
+  IPROD_EMPRESA='';
+  IPROD_CARREGADO_DE_HIST=null;
+  iprodRenderShell();
+  toast('Pronto pra uma nova análise — a PQ do Projeto continua carregada','green');
+}
+
 async function iprodSalvarHistorico(){
   if(!IPROD_RESULT){ toast('Processe o comparativo antes de salvar','red'); return; }
   if(!IPROD_NOME_PROJETO.trim()){ toast('Preencha o nome do projeto antes de salvar','red'); return; }
@@ -12559,7 +12571,10 @@ function iprodRenderShell(){
   html+='<div id="iprod-tab-comp" class="iprod-tabpanel'+(IPROD_TAB==='comp'?' active':'')+'">';
 
   html+='<div class="iprod-panel">'
+    +'<div style="display:flex;align-items:flex-start;justify-content:space-between">'
     +'<div class="iprod-panel-title">1. Projeto</div>'
+    +((c||p||r)?'<button class="iprod-hist-link" style="font-size:11.5px" onclick="iprodNovaAnalise()">🔄 Fazer nova análise</button>':'')
+    +'</div>'
     +'<div class="iprod-panel-note">Identifica esse comparativo pra poder salvar e consultar depois no histórico.</div>'
     +'<div class="iprod-proj-grid">'
     +'<div><div class="iprod-prat-lbl">Nome do Projeto</div><input class="iprod-text-input" placeholder="ex.: SLB III - Oficina" value="'+(IPROD_NOME_PROJETO||'').replace(/"/g,'&quot;')+'" onchange="iprodSetNomeProjeto(this.value)"></div>'
@@ -12574,7 +12589,9 @@ function iprodRenderShell(){
     +'</div></div>';
 
   if(IPROD_CARREGADO_DE_HIST){
-    html+='<div class="iprod-insight" style="border-left-color:#7c3aed;background:#f5f3ff;color:#4c1d95;margin-bottom:16px">📂 Visualizando resultado salvo no histórico em '+new Date(IPROD_CARREGADO_DE_HIST).toLocaleString('pt-BR')+'. Envie novos arquivos e processe de novo pra atualizar.</div>';
+    html+='<div class="iprod-insight" style="border-left-color:#7c3aed;background:#f5f3ff;color:#4c1d95;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">'
+      +'<span>📂 Visualizando resultado salvo no histórico em '+new Date(IPROD_CARREGADO_DE_HIST).toLocaleString('pt-BR')+'.</span>'
+      +'<button class="iprod-btn" style="margin-top:0;flex-shrink:0" onclick="iprodNovaAnalise()">🔄 Fazer nova análise</button></div>';
   }
 
   html+='<div class="iprod-panel">'
