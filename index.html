@@ -12155,15 +12155,25 @@ async function iprodLoadIndice(){
     if(!r.ok) throw new Error('HTTP '+r.status);
     return r.json();
   }).then(function(json){
-    var byCod={}, descIdx=[], seen={};
+    // Agrupa por código + descrição (não só código): a base tem ~15 códigos reaproveitados
+    // pra atividades diferentes entre disciplinas (ex.: C6510010100 = "Armadura CA-50" na Civil
+    // E "Barra de Transferência" na Mecânica) — agrupar só por código misturaria mão de obra
+    // de atividades sem relação nenhuma.
+    var byCod={}, descIdx=[], groups={};
     json.rows.forEach(function(r){
       var o={disciplina:r[0],composicao:r[1],codCliente:r[2],desc:r[3],unidade:r[4],insumo:r[5],descIns:r[6],unidIns:r[7],indice:r[8],tipo:r[9]};
-      if(!byCod[o.codCliente]) byCod[o.codCliente]=[];
-      byCod[o.codCliente].push(o);
-      if(o.codCliente && !seen[o.codCliente]){
-        seen[o.codCliente]=true;
-        descIdx.push({codCliente:o.codCliente,desc:o.desc,tokens:iprodTokens(o.desc),unidNorm:iprodUnitNorm(o.unidade)});
+      var gKey=o.codCliente+'‖'+iprodNorm(o.desc);
+      var g=groups[gKey];
+      if(!g){
+        g={codCliente:o.codCliente,desc:o.desc,tokens:iprodTokens(o.desc),unidNorm:iprodUnitNorm(o.unidade),rows:[],insumosVistos:{}};
+        groups[gKey]=g;
+        if(!byCod[o.codCliente]) byCod[o.codCliente]=[];
+        byCod[o.codCliente].push(g);
+        descIdx.push(g);
       }
+      // dentro do mesmo grupo, não deixa o mesmo insumo entrar duas vezes (evita contar HH
+      // em dobro quando a mesma composição aparece cadastrada em mais de uma disciplina)
+      if(!g.insumosVistos[o.insumo]){ g.insumosVistos[o.insumo]=true; g.rows.push(o); }
     });
     IPROD_INDICE={byCod:byCod,descIdx:descIdx,total:json.rows.length};
     if(IPROD_TAB) iprodRenderShell();
@@ -12195,20 +12205,32 @@ function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB){
 function iprodFindIndice(codCliente,desc,unidade){
   if(!IPROD_INDICE) return null;
   var cod=String(codCliente||'').trim();
-  if(cod && IPROD_INDICE.byCod[cod]){
-    var rowsCod=IPROD_INDICE.byCod[cod];
-    return {rows:rowsCod,matchTipo:'código',matchCod:cod,matchDesc:rowsCod[0].desc,score:1};
-  }
   var pqTokens=iprodTokens(desc);
-  if(!pqTokens.length) return null;
   var pqSet={}; pqTokens.forEach(function(t){pqSet[t]=true;});
   var pqUnid=iprodUnitNorm(unidade);
+
+  if(cod && IPROD_INDICE.byCod[cod]){
+    var grupos=IPROD_INDICE.byCod[cod];
+    if(grupos.length===1){
+      return {rows:grupos[0].rows,matchTipo:'código',matchCod:cod,matchDesc:grupos[0].desc,score:1};
+    }
+    // esse código tem mais de uma composição diferente cadastrada (colisão entre disciplinas)
+    // — desambigua pela descrição mais parecida em vez de misturar tudo
+    var bestG=null,bestGScore=-1;
+    grupos.forEach(function(g){
+      var s=pqTokens.length?iprodTokenScore(pqTokens,pqSet,g.tokens,pqUnid,g.unidNorm):0;
+      if(s>bestGScore){bestGScore=s;bestG=g;}
+    });
+    if(bestG) return {rows:bestG.rows,matchTipo:'código ('+grupos.length+' composições sob esse código — desambiguado pela descrição)',matchCod:cod,matchDesc:bestG.desc,score:1};
+  }
+
+  if(!pqTokens.length) return null;
   var best=null, bestScore=0;
   IPROD_INDICE.descIdx.forEach(function(d){
     var score=iprodTokenScore(pqTokens,pqSet,d.tokens,pqUnid,d.unidNorm);
     if(score>bestScore){ bestScore=score; best=d; }
   });
-  if(best && bestScore>=0.45) return {rows:IPROD_INDICE.byCod[best.codCliente],matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)',matchCod:best.codCliente,matchDesc:best.desc,score:bestScore};
+  if(best && bestScore>=0.45) return {rows:best.rows,matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)',matchCod:best.codCliente,matchDesc:best.desc,score:bestScore};
   return null;
 }
 
