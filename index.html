@@ -12411,6 +12411,11 @@ async function iprodProcessar(){
   // Mesmo método usado manualmente no modelo de referência.
   var achouPorItem=[];
   IPROD_CONTRATADA.pq.forEach(function(item){
+    // Itens em verba (vb, vb/mês...) são custo administrativo/lump-sum (Administração Local,
+    // Mobilização, Aluguel de Equipamentos, Fornecimento de mão de obra, Reajuste...) — não são
+    // uma composição física, então nunca tentam casar índice (evita falso-positivo por descrição
+    // que inflaria a base de rateio da alocação proporcional).
+    if(iprodNorm(item.unidade).indexOf('VB')===0){ semIndice.push(item); return; }
     var achou=iprodFindIndice(item.codCliente,item.desc,item.unidade);
     if(!achou){ semIndice.push(item); return; }
     achouPorItem.push({item:item,achou:achou});
