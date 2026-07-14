@@ -12621,6 +12621,13 @@ function iprodNovaAnalise(){
   toast('Pronto pra uma nova análise — a PQ do Projeto continua carregada','green');
 }
 
+function iprodLimparPQProjeto(){
+  IPROD_PROJETO=null;
+  IPROD_RESULT=null;
+  iprodRenderShell();
+  toast('PQ do Projeto removida','green');
+}
+
 async function iprodSalvarHistorico(){
   if(!IPROD_RESULT){ toast('Processe o comparativo antes de salvar','red'); return; }
   if(!IPROD_NOME_PROJETO.trim()){ toast('Preencha o nome do projeto antes de salvar','red'); return; }
@@ -12772,7 +12779,8 @@ function iprodRenderShell(){
     +'<div class="iprod-upl-sub">1 planilha com aba de PQ (atividade/código/quantidade) e aba de Histograma (função/HH) — lidas automaticamente</div>'
     +'<div class="iprod-upl-file">'+(c?('✓ '+c.nomeArquivo+' — '+c.pq.length+' ativ. / '+c.histograma.length+' funções'):'')+'</div>'
     +'<input type="file" accept=".xlsx,.xls" style="display:none" onchange="iprodHandleContratadaFile(this.files[0])"></label>'
-    +'<label class="iprod-upl-box'+(p?' filled':'')+'">'
+    +'<label class="iprod-upl-box'+(p?' filled':'')+'" style="position:relative">'
+    +(p?'<span title="Remover PQ do Projeto" onclick="event.preventDefault();event.stopPropagation();iprodLimparPQProjeto()" style="position:absolute;top:8px;right:10px;cursor:pointer;color:#94a3b8;font-weight:900;font-size:14px;line-height:1">×</span>':'')
     +'<div class="iprod-upl-ico">📐</div><div class="iprod-upl-lbl">PQ do Projeto</div>'
     +'<div class="iprod-upl-sub">Quantidade oficial prevista em projeto, por atividade (opcional)</div>'
     +'<div class="iprod-upl-file">'+(p?('✓ '+p.nomeArquivo+' — '+p.pq.length+' ativ.'):'')+'</div>'
