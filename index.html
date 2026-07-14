@@ -12474,8 +12474,12 @@ async function iprodProcessar(){
     IPROD_CONTRATADA.pq.forEach(function(e){ if(e.codCliente) empByCod[e.codCliente]=e; });
     IPROD_PROJETO.pq.forEach(function(pItem){
       var achouIndice=iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade);
-      var indiceTotal=0;
-      if(achouIndice) achouIndice.rows.forEach(function(r){ if(r.tipo==='M') indiceTotal+=Number(r.indice)||0; });
+      var indiceTotal=0, detalhePartes=[];
+      if(achouIndice) achouIndice.rows.forEach(function(r){
+        if(r.tipo!=='M') return;
+        indiceTotal+=Number(r.indice)||0;
+        detalhePartes.push(r.insumo+'-'+(r.descIns||'?')+'('+iprodFmt(r.indice)+')');
+      });
 
       var emp=pItem.codCliente?empByCod[pItem.codCliente]:null;
       var matchTipo='código';
@@ -12494,7 +12498,9 @@ async function iprodProcessar(){
         qtdProjeto:pItem.quantidade,qtdEmpresa:qtdEmpresa,diffQtd:diffQtd,
         indiceTotal:indiceTotal,hhEsperado:hhEsperado,hhEmpresa:hhEmpresa,
         diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
-        status:status,matchTipo:matchTipo});
+        status:status,matchTipo:matchTipo,
+        matchDesc:achouIndice?achouIndice.matchDesc:null,matchCodBase:achouIndice?achouIndice.matchCod:null,
+        detalhe:detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceTotal)):'Sem insumo de mão de obra (IH) nessa composição'});
     });
   }
 
@@ -12695,8 +12701,27 @@ function iprodRenderShell(){
     html+='<div style="display:flex;justify-content:flex-end;margin:-8px 0 16px">'
       +'<button class="iprod-btn" style="margin-top:0" onclick="iprodSalvarHistorico()">💾 Salvar no histórico</button></div>';
 
+    if(r.qtdComp.length){
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto × PQ da Contratada — quantidade e índice</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela. HH Esperado usa a quantidade do projeto; HH da Empresa usa a quantidade que ela cobrou — os dois com o MESMO índice oficial, isolando o efeito de quantidade errada. Clique pra ver a composição do índice.</div>'
+        +'<table class="iprod-tbl"><thead><tr><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>HH Esperado</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
+      r.qtdComp.forEach(function(q){
+        var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
+          :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
+          :'<span class="iprod-badge iprod-b-verm">Faltando na PQ da empresa</span>';
+        var descCell=q.desc+(q.matchTipo&&q.matchTipo!=='código'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':'');
+        html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
+          +'<td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+iprodFmt(q.indiceTotal)+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
+        html+='<tr class="iprod-drill"><td colspan="10">'
+          +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
+          +'<div style="font-size:11px">'+q.detalhe+'</div>'
+          +'<div style="font-size:9.5px;color:var(--muted);margin-top:6px">↳ Base de índices: <b>'+(q.matchCodBase||'—')+'</b> — '+(q.matchDesc||'?')+'</div>'
+          +'</td></tr>';
+      });
+      html+='</tbody></table></div>';
+    }
+
     if(r.porAtividade && r.porAtividade.length){
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. Detalhamento por Atividade da PQ</div><div class="iprod-panel-note">Uma linha por atividade da PQ da contratada — igual ao modelo (Planilha1): código encontrado na base, índice de HH total (soma de todos os insumos de mão de obra dessa composição) e o HH calculado (quantidade × índice). Clique pra ver a composição do índice.</div>'
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Detalhamento por Atividade da PQ</div><div class="iprod-panel-note">Uma linha por atividade da PQ da contratada — igual ao modelo (Planilha1): código encontrado na base, índice de HH total (soma de todos os insumos de mão de obra dessa composição) e o HH calculado (quantidade × índice). Clique pra ver a composição do índice.</div>'
         +'<table class="iprod-tbl"><thead><tr><th>Descrição da Atividade</th><th>Unid.</th><th>Quantidade</th><th>Cód. Cliente</th><th>Índice HH Total</th><th>HH Calculado</th></tr></thead><tbody>';
       r.porAtividade.forEach(function(a){
         html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
@@ -12710,7 +12735,7 @@ function iprodRenderShell(){
       html+='</tbody></table></div>';
     }
 
-    html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Comparativo por função</div><div class="iprod-panel-note">Clique numa linha pra abrir o detalhamento das atividades que compõem aquele HH de referência.</div>'
+    html+='<div class="iprod-panel"><div class="iprod-panel-title">5. Comparativo por função</div><div class="iprod-panel-note">Clique numa linha pra abrir o detalhamento das atividades que compõem aquele HH de referência.</div>'
       +'<table class="iprod-tbl"><thead><tr><th>Função</th><th>HH Cobrado</th><th>HH Referência</th><th>HH + Praticabilidade</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
     r.linhas.filter(function(l){return l.hhCobrado||l.hhRef||l.hhAjust||l.dif;}).forEach(function(l){
       html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
@@ -12738,7 +12763,7 @@ function iprodRenderShell(){
     html+='</tbody></table></div>';
 
     if(r.materiais && r.materiais.length){
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">5. Levantamento de Materiais e Equipamentos</div><div class="iprod-panel-note">Quantidade de material/equipamento que o índice da base indica ser necessária pras atividades da PQ (mesmo cruzamento usado pra mão de obra, só que nas linhas de insumo que não são IH). Clique pra ver quais atividades compõem cada item.</div>'
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">6. Levantamento de Materiais e Equipamentos</div><div class="iprod-panel-note">Quantidade de material/equipamento que o índice da base indica ser necessária pras atividades da PQ (mesmo cruzamento usado pra mão de obra, só que nas linhas de insumo que não são IH). Clique pra ver quais atividades compõem cada item.</div>'
         +'<table class="iprod-tbl"><thead><tr><th>Material / Equipamento</th><th>Tipo</th><th>Unid.</th><th>Quantidade Necessária</th></tr></thead><tbody>';
       r.materiais.forEach(function(m){
         html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
@@ -12760,19 +12785,6 @@ function iprodRenderShell(){
       html+='<div class="iprod-panel"><div class="iprod-panel-title">⚠️ Atividades sem correspondência na base de índices</div><div class="iprod-panel-note">Não achei código de cliente nem descrição parecida na base de produtividade pra essas atividades da PQ da contratada — confere manualmente.</div>'
         +'<table class="iprod-tbl"><thead><tr><th>Descrição</th><th>Código</th><th>Unid.</th><th>Quantidade</th></tr></thead><tbody>';
       r.semIndice.forEach(function(s){ html+='<tr><td>'+s.desc+'</td><td>'+(s.codCliente||'—')+'</td><td>'+s.unidade+'</td><td>'+iprodFmt(s.quantidade)+'</td></tr>'; });
-      html+='</tbody></table></div>';
-    }
-
-    if(r.qtdComp.length){
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">6. PQ do Projeto × PQ da Contratada — quantidade e índice</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela. HH Esperado usa a quantidade do projeto; HH da Empresa usa a quantidade que ela cobrou — os dois com o MESMO índice oficial, isolando o efeito de quantidade errada.</div>'
-        +'<table class="iprod-tbl"><thead><tr><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>HH Esperado</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
-      r.qtdComp.forEach(function(q){
-        var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
-          :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
-          :'<span class="iprod-badge iprod-b-verm">Faltando na PQ da empresa</span>';
-        var descCell=q.desc+(q.matchTipo&&q.matchTipo!=='código'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':'');
-        html+='<tr><td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+iprodFmt(q.indiceTotal)+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
-      });
       html+='</tbody></table></div>';
     }
   } else {
