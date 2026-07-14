@@ -12385,17 +12385,23 @@ async function iprodProcessar(){
   await iprodLoadIndice();
   if(!IPROD_INDICE){ toast('Base de índices de produtividade indisponível','red'); return; }
 
-  var porFuncao={}, semIndice=[];
+  var porFuncao={}, porMaterial={}, semIndice=[];
   IPROD_CONTRATADA.pq.forEach(function(item){
     var achou=iprodFindIndice(item.codCliente,item.desc,item.unidade);
     if(!achou){ semIndice.push(item); return; }
     achou.rows.forEach(function(r){
-      if(r.tipo!=='M') return; // só mão de obra (insumo IH*)
-      var hh=item.quantidade*(Number(r.indice)||0);
-      var key=r.descIns||'(sem nome)';
-      if(!porFuncao[key]) porFuncao[key]={hhRef:0,atividades:[]};
-      porFuncao[key].hhRef+=hh;
-      porFuncao[key].atividades.push({desc:item.desc,qtd:item.quantidade,unidade:item.unidade,indice:r.indice,hh:hh,matchTipo:achou.matchTipo,matchCod:achou.matchCod,matchDesc:achou.matchDesc,insumo:r.insumo,descIns:r.descIns});
+      var qtdNec=item.quantidade*(Number(r.indice)||0);
+      if(r.tipo==='M'){ // mão de obra (insumo IH*) — vira HH, entra no comparativo por função
+        var key=r.descIns||'(sem nome)';
+        if(!porFuncao[key]) porFuncao[key]={hhRef:0,atividades:[]};
+        porFuncao[key].hhRef+=qtdNec;
+        porFuncao[key].atividades.push({desc:item.desc,qtd:item.quantidade,unidade:item.unidade,indice:r.indice,hh:qtdNec,matchTipo:achou.matchTipo,matchCod:achou.matchCod,matchDesc:achou.matchDesc,insumo:r.insumo,descIns:r.descIns});
+      } else if(r.tipo==='X'||r.tipo==='E'){ // material (X) ou equipamento (E) — vira levantamento de quantidade
+        var mkey=r.descIns||'(sem nome)';
+        if(!porMaterial[mkey]) porMaterial[mkey]={tipo:r.tipo,unidade:r.unidIns,qtdNec:0,atividades:[]};
+        porMaterial[mkey].qtdNec+=qtdNec;
+        porMaterial[mkey].atividades.push({desc:item.desc,qtd:item.quantidade,unidade:item.unidade,indice:r.indice,qtdNec:qtdNec,matchTipo:achou.matchTipo,matchCod:achou.matchCod,matchDesc:achou.matchDesc,insumo:r.insumo,descIns:r.descIns});
+      }
     });
   });
 
@@ -12457,7 +12463,12 @@ async function iprodProcessar(){
     });
   }
 
-  IPROD_RESULT={linhas:linhas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp};
+  var materiais=Object.keys(porMaterial).map(function(m){
+    var o=porMaterial[m];
+    return {nome:m,tipo:o.tipo,unidade:o.unidade,qtdNec:o.qtdNec,atividades:o.atividades};
+  }).filter(function(m){return m.qtdNec;}).sort(function(a,b){return b.qtdNec-a.qtdNec;});
+
+  IPROD_RESULT={linhas:linhas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais};
   toast('Comparativo calculado','green');
   iprodRenderShell();
 }
@@ -12676,6 +12687,25 @@ function iprodRenderShell(){
     html+='<tr class="iprod-tot"><td>TOTAL</td><td>'+iprodFmt(r.totCobrado)+'</td><td>'+iprodFmt(r.linhas.reduce(function(s,l){return s+l.hhRef;},0))+'</td><td>'+iprodFmt(r.totRefAjust)+'</td><td>'+iprodFmt(r.totDif)+'</td><td></td></tr>';
     html+='</tbody></table></div>';
 
+    if(r.materiais && r.materiais.length){
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Levantamento de Materiais e Equipamentos</div><div class="iprod-panel-note">Quantidade de material/equipamento que o índice da base indica ser necessária pras atividades da PQ (mesmo cruzamento usado pra mão de obra, só que nas linhas de insumo que não são IH). Clique pra ver quais atividades compõem cada item.</div>'
+        +'<table class="iprod-tbl"><thead><tr><th>Material / Equipamento</th><th>Tipo</th><th>Unid.</th><th>Quantidade Necessária</th></tr></thead><tbody>';
+      r.materiais.forEach(function(m){
+        html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
+          +'<td>'+m.nome+'</td><td>'+(m.tipo==='E'?'Equipamento':'Material')+'</td><td>'+m.unidade+'</td><td>'+iprodFmt(m.qtdNec)+'</td></tr>';
+        html+='<tr class="iprod-drill"><td colspan="4">';
+        html+='<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">Atividades que compõem essa quantidade</div>';
+        m.atividades.forEach(function(a){
+          html+='<div class="iprod-drill-row" style="align-items:flex-start;flex-direction:column;gap:2px;padding:8px 0">'
+            +'<div style="display:flex;justify-content:space-between;width:100%"><span>'+a.desc+' ('+iprodFmt(a.qtd)+' '+a.unidade+' × '+iprodFmt(a.indice)+')</span><span style="font-weight:700">'+iprodFmt(a.qtdNec)+' '+m.unidade+'</span></div>'
+            +'<div style="font-size:9.5px;color:var(--muted)">↳ Base de índices: <b>'+(a.matchCod||'—')+'</b> — '+(a.matchDesc||'?')+' · insumo '+(a.insumo||'?')+' ('+(a.descIns||'?')+') · '+(a.matchTipo==='código'?'código exato':a.matchTipo)+'</div>'
+            +'</div>';
+        });
+        html+='</td></tr>';
+      });
+      html+='</tbody></table></div>';
+    }
+
     if(r.semIndice.length){
       html+='<div class="iprod-panel"><div class="iprod-panel-title">⚠️ Atividades sem correspondência na base de índices</div><div class="iprod-panel-note">Não achei código de cliente nem descrição parecida na base de produtividade pra essas atividades da PQ da contratada — confere manualmente.</div>'
         +'<table class="iprod-tbl"><thead><tr><th>Descrição</th><th>Código</th><th>Unid.</th><th>Quantidade</th></tr></thead><tbody>';
@@ -12684,7 +12714,7 @@ function iprodRenderShell(){
     }
 
     if(r.qtdComp.length){
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Quantidades: PQ da empresa vs PQ do projeto</div><div class="iprod-panel-note">Comparação neutra — divergência é ponto de atenção pra conferência manual, não veredito automático de quem errou.</div>'
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">5. Quantidades: PQ da empresa vs PQ do projeto</div><div class="iprod-panel-note">Comparação neutra — divergência é ponto de atenção pra conferência manual, não veredito automático de quem errou.</div>'
         +'<table class="iprod-tbl"><thead><tr><th>Atividade</th><th>Unid.</th><th>Qtd. PQ Empresa</th><th>Qtd. PQ Projeto</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
       r.qtdComp.forEach(function(q){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
