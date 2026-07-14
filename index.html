@@ -12463,23 +12463,38 @@ async function iprodProcessar(){
   var totDif=totCobrado-totRefAjust;
   var pctImprod=totCobrado>0?(totDif/totCobrado):0;
 
+  // Comparação PQ do Projeto → PQ da Contratada (não o inverso): parte de cada atividade
+  // OFICIAL do projeto e checa se a contratada cobriu com a quantidade certa. Isso também
+  // pega o que o sentido empresa→projeto não pegava: atividade do projeto que a contratada
+  // nem colocou na PQ dela. Junto, mostra o índice oficial e o HH esperado x o HH que a
+  // quantidade da contratada implica (usando o MESMO índice correto da base).
   var qtdComp=[];
   if(IPROD_PROJETO && IPROD_PROJETO.pq.length){
-    var projByCod={};
-    IPROD_PROJETO.pq.forEach(function(p){ if(p.codCliente) projByCod[p.codCliente]=p; });
-    IPROD_CONTRATADA.pq.forEach(function(item){
-      var pr=item.codCliente?projByCod[item.codCliente]:null;
+    var empByCod={};
+    IPROD_CONTRATADA.pq.forEach(function(e){ if(e.codCliente) empByCod[e.codCliente]=e; });
+    IPROD_PROJETO.pq.forEach(function(pItem){
+      var achouIndice=iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade);
+      var indiceTotal=0;
+      if(achouIndice) achouIndice.rows.forEach(function(r){ if(r.tipo==='M') indiceTotal+=Number(r.indice)||0; });
+
+      var emp=pItem.codCliente?empByCod[pItem.codCliente]:null;
       var matchTipo='código';
-      if(!pr){
-        var achou=iprodFindInPq(item.desc,item.unidade,IPROD_PROJETO.pq);
-        if(achou){ pr=achou.item; matchTipo='descrição ('+Math.min(100,Math.round(achou.score*100))+'% similar)'; }
+      if(!emp){
+        var achouEmp=iprodFindInPq(pItem.desc,pItem.unidade,IPROD_CONTRATADA.pq);
+        if(achouEmp){ emp=achouEmp.item; matchTipo='descrição ('+Math.min(100,Math.round(achouEmp.score*100))+'% similar)'; }
       }
-      if(pr){
-        var diff=item.quantidade-pr.quantidade;
-        qtdComp.push({desc:item.desc,unidade:item.unidade,qtdEmpresa:item.quantidade,qtdProjeto:pr.quantidade,diff:diff,status:Math.abs(diff)<0.01?'bate':'divergente',matchTipo:matchTipo});
-      } else {
-        qtdComp.push({desc:item.desc,unidade:item.unidade,qtdEmpresa:item.quantidade,qtdProjeto:null,diff:null,status:'sem-projeto'});
-      }
+
+      var qtdEmpresa=emp?emp.quantidade:null;
+      var diffQtd=qtdEmpresa!=null?(qtdEmpresa-pItem.quantidade):null;
+      var hhEsperado=pItem.quantidade*indiceTotal;
+      var hhEmpresa=qtdEmpresa!=null?qtdEmpresa*indiceTotal:null;
+      var status=emp==null?'faltando-empresa':(Math.abs(diffQtd)<0.01?'bate':'divergente');
+
+      qtdComp.push({desc:pItem.desc,unidade:pItem.unidade,codCliente:pItem.codCliente,
+        qtdProjeto:pItem.quantidade,qtdEmpresa:qtdEmpresa,diffQtd:diffQtd,
+        indiceTotal:indiceTotal,hhEsperado:hhEsperado,hhEmpresa:hhEmpresa,
+        diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
+        status:status,matchTipo:matchTipo});
     });
   }
 
@@ -12749,14 +12764,14 @@ function iprodRenderShell(){
     }
 
     if(r.qtdComp.length){
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">6. Quantidades: PQ da empresa vs PQ do projeto</div><div class="iprod-panel-note">Comparação neutra — divergência é ponto de atenção pra conferência manual, não veredito automático de quem errou.</div>'
-        +'<table class="iprod-tbl"><thead><tr><th>Atividade</th><th>Unid.</th><th>Qtd. PQ Empresa</th><th>Qtd. PQ Projeto</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">6. PQ do Projeto × PQ da Contratada — quantidade e índice</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela. HH Esperado usa a quantidade do projeto; HH da Empresa usa a quantidade que ela cobrou — os dois com o MESMO índice oficial, isolando o efeito de quantidade errada.</div>'
+        +'<table class="iprod-tbl"><thead><tr><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>HH Esperado</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
       r.qtdComp.forEach(function(q){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
-          :'<span class="iprod-badge iprod-b-cinza">Sem PQ do Projeto — usando índice direto</span>';
+          :'<span class="iprod-badge iprod-b-verm">Faltando na PQ da empresa</span>';
         var descCell=q.desc+(q.matchTipo&&q.matchTipo!=='código'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':'');
-        html+='<tr><td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdEmpresa)+'</td><td>'+(q.qtdProjeto!=null?iprodFmt(q.qtdProjeto):'—')+'</td><td>'+(q.diff!=null?iprodFmt(q.diff):'—')+'</td><td>'+badge+'</td></tr>';
+        html+='<tr><td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+iprodFmt(q.indiceTotal)+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
       });
       html+='</tbody></table></div>';
     }
