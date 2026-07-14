@@ -12440,7 +12440,13 @@ async function iprodProcessar(){
     // que inflaria a base de rateio da alocação proporcional).
     if(iprodNorm(item.unidade).indexOf('VB')===0){ semIndice.push(item); return; }
     var achou=iprodFindIndice(item.codCliente,item.desc,item.unidade);
-    if(!achou){ semIndice.push(item); return; }
+    if(!achou){
+      // Não achamos índice na nossa base — mas se a contratada já declarou um HH pra essa
+      // atividade, não é justo tratar como divergência (a lacuna é da NOSSA base, não dela).
+      // Considera os dois iguais em vez de contar como extrapolação.
+      if(item.hhDeclarado!=null){ item.semIndiceMasDeclarado=true; achouPorItem.push({item:item,achou:null}); return; }
+      semIndice.push(item); return;
+    }
     achouPorItem.push({item:item,achou:achou});
   });
   var totCobradoHistograma=(IPROD_CONTRATADA.histograma||[]).reduce(function(s,h){return s+h.hh;},0);
@@ -12465,7 +12471,7 @@ async function iprodProcessar(){
   achouPorItem.forEach(function(x){
     var item=x.item, achou=x.achou;
     var indiceHHTotal=0, detalhePartes=[];
-    achou.rows.forEach(function(r){
+    if(achou) achou.rows.forEach(function(r){
       var qtdNec=item.quantidade*(Number(r.indice)||0);
       if(r.tipo==='M'){ // mão de obra (insumo IH*) — vira HH, entra no comparativo por função
         indiceHHTotal+=Number(r.indice)||0;
@@ -12492,13 +12498,18 @@ async function iprodProcessar(){
       }
       if(prMatch){ qtdProjeto=prMatch.quantidade; diffQtdProjeto=item.quantidade-prMatch.quantidade; }
     }
+    // Sem índice na base mas com HH declarado pela contratada: HH Calculado = o próprio declarado
+    // (considerado igual — sem índice pra calcular por conta própria, sem penalizar a contratada)
+    var hhCalc=achou?(item.quantidade*indiceHHTotal):(item.hhDeclarado||item.hhAlocado||0);
     porAtividade.push({
       desc:item.desc,unidade:item.unidade,quantidade:item.quantidade,
-      codCliente:achou.matchCod,matchDesc:achou.matchDesc,matchTipo:achou.matchTipo,
-      indiceHHTotal:indiceHHTotal,hhCalculado:item.quantidade*indiceHHTotal,
+      codCliente:achou?achou.matchCod:null,matchDesc:achou?achou.matchDesc:null,matchTipo:achou?achou.matchTipo:null,
+      indiceHHTotal:achou?indiceHHTotal:null,hhCalculado:hhCalc,
       qtdProjeto:qtdProjeto,diffQtdProjeto:diffQtdProjeto,
       valorTotal:item.valorTotal,pctValor:item.pctValor,hhAlocado:item.hhAlocado,
-      detalhe:detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceHHTotal)):'Sem insumo de mão de obra (IH) nessa composição'
+      semIndiceMasDeclarado:!achou,
+      detalhe:achou?(detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceHHTotal)):'Sem insumo de mão de obra (IH) nessa composição')
+        :'Sem correspondência na base de índices — considerado igual ao HH declarado pela contratada ('+iprodFmt(hhCalc)+' HH), sem aplicar índice próprio.'
     });
   });
 
@@ -12542,7 +12553,11 @@ async function iprodProcessar(){
   if(semHistogramaPorFuncao&&pqTemHHDeclarado){
     totCobrado=IPROD_CONTRATADA.pq.reduce(function(s,item){return s+(item.hhDeclarado||0);},0);
   }
-  var totRefAjust=linhas.reduce(function(s,l){return s+l.hhAjust;},0);
+  // Atividades sem índice na base mas com HH declarado entram no total "como se fossem iguais"
+  // (não geram diferença) — soma direto o HH declarado, sem o ajuste de praticabilidade (que só
+  // faz sentido pra HH calculado por índice).
+  var totRefAssumido=porAtividade.filter(function(a){return a.semIndiceMasDeclarado;}).reduce(function(s,a){return s+a.hhCalculado;},0);
+  var totRefAjust=linhas.reduce(function(s,l){return s+l.hhAjust;},0)+totRefAssumido;
   var totDif=totCobrado-totRefAjust;
   var pctImprod=totCobrado>0?(totDif/totCobrado):0;
 
@@ -12580,20 +12595,25 @@ async function iprodProcessar(){
 
       var qtdEmpresa=emp?emp.quantidade:null;
       var diffQtd=qtdEmpresa!=null?(qtdEmpresa-pItem.quantidade):null;
-      // HH Esperado já com praticabilidade embutida (Referência × (2 − Praticabilidade), igual à seção 5)
-      var hhEsperado=pItem.quantidade*indiceTotal*(2-IPROD_PRAT);
       // HH da Empresa = alocação proporcional do HH cobrado (histograma) pelo peso em R$ dessa
       // atividade dentro da PQ da contratada — não é mais quantidade×índice
       var hhEmpresa=emp?(emp.hhAlocado||0):null;
+      // HH Esperado já com praticabilidade embutida (Referência × (2 − Praticabilidade), igual à seção 5).
+      // Sem índice na base pra essa atividade do projeto: considera igual ao HH da empresa (não
+      // penaliza por lacuna nossa) em vez de deixar 0 e gerar diferença artificial.
+      var semIndiceProjeto=!achouIndice;
+      var hhEsperado=achouIndice?(pItem.quantidade*indiceTotal*(2-IPROD_PRAT)):(hhEmpresa||0);
+
       var status=emp==null?'faltando-empresa':(Math.abs(diffQtd)<0.01?'bate':'divergente');
 
       qtdComp.push({desc:pItem.desc,unidade:pItem.unidade,codCliente:pItem.codCliente,
         qtdProjeto:pItem.quantidade,qtdEmpresa:qtdEmpresa,diffQtd:diffQtd,
         indiceTotal:indiceTotal,hhEsperado:hhEsperado,hhEmpresa:hhEmpresa,
         diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
-        status:status,matchTipo:matchTipo,
+        status:status,matchTipo:matchTipo,semIndiceProjeto:semIndiceProjeto,
         matchDesc:achouIndice?achouIndice.matchDesc:null,matchCodBase:achouIndice?achouIndice.matchCod:null,
-        detalhe:detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceTotal)):'Sem insumo de mão de obra (IH) nessa composição'});
+        detalhe:achouIndice?(detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceTotal)):'Sem insumo de mão de obra (IH) nessa composição')
+          :'Sem correspondência na base de índices — considerado igual ao HH da empresa, sem aplicar índice próprio.'});
     });
     // Itens de fornecimento da PQ da contratada que não bateram com NENHUMA atividade da PQ do
     // Projeto — o HH alocado deles fica de fora da tabela acima (que só lista atividades do
@@ -12849,8 +12869,9 @@ function iprodRenderShell(){
         +'<table class="iprod-tbl"><thead><tr><th>Descrição da Atividade</th><th>Unid.</th><th>Quantidade</th><th>Cód. Cliente</th><th>Índice HH Total</th><th>HH Calculado</th><th>Qtd. Projeto</th><th>Dif. Qtd.</th></tr></thead><tbody>';
       r.porAtividade.forEach(function(a){
         var difCell=a.qtdProjeto==null?'—':(Math.abs(a.diffQtdProjeto)<0.01?'<span class="iprod-badge iprod-b-verde">Bate</span>':'<span class="iprod-badge iprod-b-amar">'+iprodFmt(a.diffQtdProjeto)+'</span>');
+        var indiceCell=a.semIndiceMasDeclarado?'<span class="iprod-badge iprod-b-cinza" title="Sem índice na base — considerado igual ao declarado">≈ N/D</span>':iprodFmt(a.indiceHHTotal);
         html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
-          +'<td>'+a.desc+'</td><td>'+a.unidade+'</td><td>'+iprodFmt(a.quantidade)+'</td><td>'+(a.codCliente||'—')+'</td><td>'+iprodFmt(a.indiceHHTotal)+'</td><td>'+iprodFmt(a.hhCalculado)+'</td><td>'+(a.qtdProjeto!=null?iprodFmt(a.qtdProjeto):'—')+'</td><td>'+difCell+'</td></tr>';
+          +'<td>'+a.desc+'</td><td>'+a.unidade+'</td><td>'+iprodFmt(a.quantidade)+'</td><td>'+(a.codCliente||'—')+'</td><td>'+indiceCell+'</td><td>'+iprodFmt(a.hhCalculado)+'</td><td>'+(a.qtdProjeto!=null?iprodFmt(a.qtdProjeto):'—')+'</td><td>'+difCell+'</td></tr>';
         html+='<tr class="iprod-drill"><td colspan="8">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
           +'<div style="font-size:11px">'+a.detalhe+'</div>'
