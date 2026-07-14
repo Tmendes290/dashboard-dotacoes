@@ -987,6 +987,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <!-- IMPRODUTIVIDADE -->
     <div class="sb-nav-sec imp-only">Fiscalização</div>
     <div class="sb-item imp-only" data-view="improdutividade" data-label="Improdutividade"><span class="ico">⏱</span><span class="sb-label">Produtividade</span></div>
+    <div class="sb-item imp-only" data-view="indice-produtividade" data-label="Índice de Produtividade"><span class="ico">📐</span><span class="sb-label">Índice de Produtividade</span></div>
     <!-- PLANEJAMENTO (admin only) -->
     <div class="sb-nav-sec admin-only">Planejamento</div>
     <div class="sb-item admin-only" data-view="histograma" data-label="Histograma CTT"><span class="ico">📈</span><span class="sb-label">Histograma CTT</span></div>
@@ -1293,6 +1294,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="v-upload" class="hidden"></div>
     <div id="v-materiais" class="hidden"></div>
     <div id="v-improdutividade" class="hidden"></div>
+    <div id="v-indice-produtividade" class="hidden"></div>
     <div id="v-produtividade-rev2" class="hidden"></div>
     <div id="v-velocidade" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
       <iframe id="vel-iframe" style="width:100%;flex:1;border:none;display:block" allowfullscreen></iframe>
@@ -2200,6 +2202,7 @@ const VIEW_META={
   materiais:{title:'Materiais',sub:'Acompanhamento de pedidos, RCs e diligenciamento'},
   analytics:{title:'Dashboard',sub:'Dotado vs Medido por empresa e PEP'},
   improdutividade:{title:'Produtividade Projetos Salobo',sub:'Registro de chegada e atraso das equipes'},
+  'indice-produtividade':{title:'Índice de Produtividade',sub:'Comparativo de HH cobrado pela contratada vs índice de produtividade do projeto'},
   'produtividade-rev2':{title:'Produtividade REV 02',sub:'Visual em teste (admin) — mesmo dado, novo design'},
   usuarios:{title:'Usuários',sub:'Gestão de acesso e permissões da equipe'}
 };
@@ -2229,14 +2232,14 @@ function _syncBnav(id){
 function setView(id){
   currentView=id;
   _syncBnav(id);
-  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-produtividade-rev2','v-velocidade','v-histograma'].forEach(v=>document.getElementById(v).classList.add('hidden'));
+  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma'].forEach(v=>document.getElementById(v).classList.add('hidden'));
   document.getElementById('v-'+id).classList.remove('hidden');
   // Lazy-load histograma iframe on first visit
   if(id==='histograma'){
     const fr=document.getElementById('histograma-frame');
     if(!fr.src||fr.src==='about:blank')fr.src='/histograma-eletro.html?embed=1';
   }
-  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','produtividade-rev2','velocidade','histograma','cji3','usuarios'].includes(id));
+  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios'].includes(id));
   if(id==='produtividade-rev2'){
     var _mRev2=VIEW_META['produtividade-rev2'];
     var _ptRev2=document.getElementById('page-title');if(_ptRev2)_ptRev2.textContent=_mRev2.title;
@@ -2249,6 +2252,13 @@ function setView(id){
     var _ptImp=document.getElementById('page-title');if(_ptImp)_ptImp.textContent=_mImp.title;
     var _psImp=document.getElementById('page-sub');if(_psImp)_psImp.textContent=_mImp.sub;
     renderViewImprodutividade(); return;
+  }
+  if(id==='indice-produtividade'){
+    var _mIdx=VIEW_META['indice-produtividade'];
+    var _ptIdx=document.getElementById('page-title');if(_ptIdx)_ptIdx.textContent=_mIdx.title;
+    var _psIdx=document.getElementById('page-sub');if(_psIdx)_psIdx.textContent=_mIdx.sub;
+    document.querySelectorAll('.sb-item').forEach(function(el){el.classList.toggle('active',el.dataset.view===id);});
+    renderViewIndiceProdutividade(); return;
   }
   if(id==='velocidade'){
     document.querySelectorAll('.sb-item').forEach(el=>{el.classList.toggle('active',el.dataset.view===id);});
@@ -12098,6 +12108,400 @@ function _rev2InjectStyle(){
     +'.rev2-badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}'
     +'.rev2-badge{font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;border:1px solid}';
   document.head.appendChild(st);
+}
+
+// ============================================================
+// ÍNDICE DE PRODUTIVIDADE — comparativo HH cobrado pela contratada
+// vs índice de produtividade oficial do projeto (base pci00, multi-disciplina)
+// ============================================================
+var IPROD_INDICE=null, IPROD_INDICE_LOADING=null;
+var IPROD_CONTRATADA=null, IPROD_PROJETO=null, IPROD_RESULT=null;
+var IPROD_PRAT=0.6667, IPROD_TAB='comp';
+
+function iprodNorm(s){
+  return String(s==null?'':s).normalize('NFD').replace(/\p{Diacritic}/gu,'').toUpperCase().trim();
+}
+function iprodFmt(n){
+  n=Number(n)||0;
+  return n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+async function iprodLoadIndice(){
+  if(IPROD_INDICE) return IPROD_INDICE;
+  if(IPROD_INDICE_LOADING) return IPROD_INDICE_LOADING;
+  IPROD_INDICE_LOADING=fetch('/data/indice-produtividade.json').then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(json){
+    var byCod={}, descIdx=[], seen={};
+    json.rows.forEach(function(r){
+      var o={disciplina:r[0],composicao:r[1],codCliente:r[2],desc:r[3],unidade:r[4],insumo:r[5],descIns:r[6],unidIns:r[7],indice:r[8],tipo:r[9]};
+      if(!byCod[o.codCliente]) byCod[o.codCliente]=[];
+      byCod[o.codCliente].push(o);
+      if(o.codCliente && !seen[o.codCliente]){
+        seen[o.codCliente]=true;
+        descIdx.push({codCliente:o.codCliente,desc:o.desc,descNorm:iprodNorm(o.desc)});
+      }
+    });
+    IPROD_INDICE={byCod:byCod,descIdx:descIdx,total:json.rows.length};
+    if(IPROD_TAB) iprodRenderShell();
+    return IPROD_INDICE;
+  }).catch(function(e){
+    toast('Erro ao carregar base de índices de produtividade: '+e.message,'red');
+    IPROD_INDICE_LOADING=null;
+    return null;
+  });
+  return IPROD_INDICE_LOADING;
+}
+
+function iprodFindIndice(codCliente,desc){
+  if(!IPROD_INDICE) return null;
+  var cod=String(codCliente||'').trim();
+  if(cod && IPROD_INDICE.byCod[cod]) return {rows:IPROD_INDICE.byCod[cod],matchTipo:'código',matchCod:cod};
+  var dn=iprodNorm(desc);
+  if(!dn) return null;
+  var exact=IPROD_INDICE.descIdx.find(function(d){return d.descNorm===dn;});
+  if(exact) return {rows:IPROD_INDICE.byCod[exact.codCliente],matchTipo:'descrição exata',matchCod:exact.codCliente};
+  var partial=IPROD_INDICE.descIdx.find(function(d){return dn.length>8 && (d.descNorm.indexOf(dn)>=0||dn.indexOf(d.descNorm)>=0);});
+  if(partial) return {rows:IPROD_INDICE.byCod[partial.codCliente],matchTipo:'descrição aproximada',matchCod:partial.codCliente};
+  return null;
+}
+
+// Detecta linha de cabeçalho da PQ (Descrição/Atividade + Quantidade [+ Cód.Cliente + Unidade])
+function iprodParsePQSheet(data){
+  var hdrIdx=0, hdr=(data[0]||[]).map(function(h){return iprodNorm(h);});
+  for(var ri=0;ri<Math.min(data.length,15);ri++){
+    var cand=(data[ri]||[]).map(function(h){return iprodNorm(h);});
+    if(cand.some(function(h){return h.indexOf('DESCRI')>=0;})){ hdrIdx=ri; hdr=cand; break; }
+  }
+  // Descrição: prioriza coluna com "DESCRI"; só usa "ATIVIDADE" isolado se não for uma coluna de código
+  var iDesc=hdr.findIndex(function(h){return h.indexOf('DESCRI')>=0;});
+  if(iDesc<0) iDesc=hdr.findIndex(function(h){return h.indexOf('ATIVIDADE')>=0&&h.indexOf('COD')<0;});
+  var iQtd=hdr.findIndex(function(h){return h.indexOf('QUANTIDADE')>=0;});
+  if(iQtd<0) iQtd=hdr.findIndex(function(h){return h.indexOf('QTD')>=0;});
+  // Código de cliente: prioriza "CLIENTE" ou "VALE" no nome da coluna; evita a coluna de código
+  // hierárquico do cronograma (ex.: "CÓD. ATIVIDADE" do MS Project, que não é o código de composição)
+  var iCod=hdr.findIndex(function(h){return h.indexOf('COD')>=0&&h.indexOf('CLIENTE')>=0;});
+  if(iCod<0) iCod=hdr.findIndex(function(h){return h.indexOf('COD')>=0&&h.indexOf('VALE')>=0;});
+  if(iCod<0) iCod=hdr.findIndex(function(h){return (h.indexOf('CODIGO')>=0||h.indexOf('COD.')>=0||h==='COD')&&h.indexOf('ATIVIDADE')<0;});
+  var iUnid=hdr.findIndex(function(h){return h.indexOf('UNID')>=0;});
+  if(iDesc<0||iQtd<0) return null;
+  var out=[];
+  data.slice(hdrIdx+1).forEach(function(row){
+    var desc=String(row[iDesc]||'').trim();
+    var qtd=parseFloat(String(row[iQtd]==null?'':row[iQtd]).replace(',','.'));
+    if(!desc||!isFinite(qtd)||qtd===0) return;
+    out.push({desc:desc,codCliente:iCod>=0?String(row[iCod]||'').trim():'',unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd});
+  });
+  return out.length?out:null;
+}
+
+// Detecta histograma no padrão "Função | TOTAL | PICO | dias..." terminado numa linha "TOTAL"
+function iprodParseHistSheet(data){
+  var hdrIdx=-1, iFunc=-1, iHH=-1;
+  for(var ri=0;ri<Math.min(data.length,20);ri++){
+    var cand=(data[ri]||[]).map(function(h){return iprodNorm(h);});
+    var iTot=cand.findIndex(function(h){return h==='TOTAL';});
+    if(iTot>0){
+      var fCol=-1;
+      for(var cc=0;cc<iTot;cc++){ if(cand[cc]){ fCol=cc; break; } }
+      if(fCol>=0){ hdrIdx=ri; iFunc=fCol; iHH=iTot; break; }
+    }
+  }
+  if(hdrIdx<0) return null;
+  var out=[];
+  for(var i=hdrIdx+1;i<data.length;i++){
+    var r=data[i]||[];
+    var func=String(r[iFunc]||'').trim();
+    if(!func) break;
+    if(iprodNorm(func)==='TOTAL') break;
+    var hh=Number(r[iHH]);
+    if(!isFinite(hh)) continue;
+    out.push({funcao:func,hh:hh});
+  }
+  return out.length?out:null;
+}
+
+async function iprodHandleContratadaFile(file){
+  if(!file) return;
+  if(typeof XLSX==='undefined'){ toast('Aguardando biblioteca XLSX carregar, tenta de novo em instantes','red'); return; }
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var pq=null, hist=null;
+      wb.SheetNames.forEach(function(name){
+        var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
+        if(!data.length) return;
+        if(!hist){ var h=iprodParseHistSheet(data); if(h){ hist=h; return; } }
+        if(!pq){ var p=iprodParsePQSheet(data); if(p){ pq=p; } }
+      });
+      if(!pq && !hist){ toast('Não encontrei aba de PQ nem de Histograma nesse arquivo — confere os cabeçalhos','red'); return; }
+      IPROD_CONTRATADA={pq:pq||[],histograma:hist||[],nomeArquivo:file.name};
+      IPROD_RESULT=null;
+      toast('Arquivo lido: '+(pq?pq.length:0)+' atividades na PQ, '+(hist?hist.length:0)+' funções no histograma','green');
+      iprodRenderShell();
+    }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function iprodHandlePQProjetoFile(file){
+  if(!file) return;
+  if(typeof XLSX==='undefined'){ toast('Aguardando biblioteca XLSX carregar, tenta de novo em instantes','red'); return; }
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var pq=null;
+      wb.SheetNames.forEach(function(name){
+        if(pq) return;
+        var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
+        if(data.length) pq=iprodParsePQSheet(data);
+      });
+      if(!pq){ toast('Não encontrei quantidades nessa planilha — confere os cabeçalhos (Descrição/Atividade + Quantidade)','red'); return; }
+      IPROD_PROJETO={pq:pq,nomeArquivo:file.name};
+      IPROD_RESULT=null;
+      toast('PQ do Projeto lida: '+pq.length+' atividades','green');
+      iprodRenderShell();
+    }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function iprodSetPrat(v){
+  var n=parseFloat(String(v).replace('%','').replace(',','.'));
+  if(isFinite(n)&&n>0) IPROD_PRAT = n>1 ? n/100 : n;
+}
+
+async function iprodProcessar(){
+  if(!IPROD_CONTRATADA || !IPROD_CONTRATADA.pq.length){ toast('Envie o arquivo da contratada (PQ + Histograma) primeiro','red'); return; }
+  toast('Calculando comparativo...','blue');
+  await iprodLoadIndice();
+  if(!IPROD_INDICE){ toast('Base de índices de produtividade indisponível','red'); return; }
+
+  var porFuncao={}, semIndice=[];
+  IPROD_CONTRATADA.pq.forEach(function(item){
+    var achou=iprodFindIndice(item.codCliente,item.desc);
+    if(!achou){ semIndice.push(item); return; }
+    achou.rows.forEach(function(r){
+      if(r.tipo!=='M') return; // só mão de obra (insumo IH*)
+      var hh=item.quantidade*(Number(r.indice)||0);
+      var key=r.descIns||'(sem nome)';
+      if(!porFuncao[key]) porFuncao[key]={hhRef:0,atividades:[]};
+      porFuncao[key].hhRef+=hh;
+      porFuncao[key].atividades.push({desc:item.desc,qtd:item.quantidade,unidade:item.unidade,indice:r.indice,hh:hh,matchTipo:achou.matchTipo});
+    });
+  });
+
+  var histList=IPROD_CONTRATADA.histograma||[];
+  var usadosHist={};
+  var linhas=[];
+  // Sinônimos comuns entre o nome do insumo na base de índices e o nome usado no histograma da contratada
+  var IPROD_SINONIMOS={'SERVENTE':['AJUDANTE'],'ENCARREGADO':['ENCARREGADOS DE OBRAS','ENCARREGADO DE OBRAS'],
+    'OPERADOR DE ESCAVADEIRA':['OPERADOR DE RETROESCAVADEIRA'],'MOTORISTA DE CAMINHAO':['MOTORISTA DE CAMINHAO BASCULANTE']};
+  Object.keys(porFuncao).forEach(function(fRef){
+    var fRefN=iprodNorm(fRef);
+    var sinonimos=(IPROD_SINONIMOS[fRefN]||[]).map(iprodNorm);
+    var matchIdx=histList.findIndex(function(h,idx){
+      if(usadosHist[idx]) return false;
+      var hn=iprodNorm(h.funcao);
+      if(hn.indexOf(fRefN)>=0||fRefN.indexOf(hn)>=0) return true;
+      return sinonimos.some(function(s){return hn.indexOf(s)>=0||s.indexOf(hn)>=0;});
+    });
+    var hhCobrado=0, semHistograma=true;
+    if(matchIdx>=0){ hhCobrado=histList[matchIdx].hh; usadosHist[matchIdx]=true; semHistograma=false; }
+    var hhRef=porFuncao[fRef].hhRef;
+    var hhAjust=IPROD_PRAT>0?hhRef/IPROD_PRAT:hhRef;
+    var dif=hhCobrado-hhAjust;
+    var status='verde';
+    if(dif>0) status=(dif/Math.max(hhCobrado,1))>0.15?'vermelho':'amarelo';
+    linhas.push({funcao:fRef,hhCobrado:hhCobrado,hhRef:hhRef,hhAjust:hhAjust,dif:dif,status:status,atividades:porFuncao[fRef].atividades,semHistograma:semHistograma});
+  });
+  histList.forEach(function(h,idx){
+    if(usadosHist[idx]) return;
+    linhas.push({funcao:h.funcao,hhCobrado:h.hh,hhRef:0,hhAjust:0,dif:h.hh,status:'cinza',atividades:[],semReferencia:true});
+  });
+  linhas.sort(function(a,b){return b.dif-a.dif;});
+
+  var totCobrado=linhas.reduce(function(s,l){return s+l.hhCobrado;},0);
+  var totRefAjust=linhas.reduce(function(s,l){return s+l.hhAjust;},0);
+  var totDif=totCobrado-totRefAjust;
+  var pctImprod=totCobrado>0?(totDif/totCobrado):0;
+
+  var qtdComp=[];
+  if(IPROD_PROJETO && IPROD_PROJETO.pq.length){
+    var projByCod={};
+    IPROD_PROJETO.pq.forEach(function(p){ if(p.codCliente) projByCod[p.codCliente]=p; });
+    IPROD_CONTRATADA.pq.forEach(function(item){
+      var pr=item.codCliente?projByCod[item.codCliente]:null;
+      if(!pr){
+        var dn=iprodNorm(item.desc);
+        pr=IPROD_PROJETO.pq.find(function(p){var pn=iprodNorm(p.desc); return pn===dn||(dn.length>8&&(pn.indexOf(dn)>=0||dn.indexOf(pn)>=0));});
+      }
+      if(pr){
+        var diff=item.quantidade-pr.quantidade;
+        qtdComp.push({desc:item.desc,unidade:item.unidade,qtdEmpresa:item.quantidade,qtdProjeto:pr.quantidade,diff:diff,status:Math.abs(diff)<0.01?'bate':'divergente'});
+      } else {
+        qtdComp.push({desc:item.desc,unidade:item.unidade,qtdEmpresa:item.quantidade,qtdProjeto:null,diff:null,status:'sem-projeto'});
+      }
+    });
+  }
+
+  IPROD_RESULT={linhas:linhas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp};
+  toast('Comparativo calculado','green');
+  iprodRenderShell();
+}
+
+function iprodBadge(status){
+  var map={verde:['iprod-b-verde','OK'],amarelo:['iprod-b-amar','Atenção'],vermelho:['iprod-b-verm','Extrapolando'],cinza:['iprod-b-cinza','Sem referência']};
+  var m=map[status]||map.cinza;
+  return '<span class="iprod-badge '+m[0]+'">'+m[1]+'</span>';
+}
+
+function iprodShowTab(id){ IPROD_TAB=id; iprodRenderShell(); }
+
+function iprodRenderShell(){
+  var el=document.getElementById('v-indice-produtividade'); if(!el) return;
+  var c=IPROD_CONTRATADA, p=IPROD_PROJETO, r=IPROD_RESULT;
+
+  var html='<style>'
+    +'.iprod-wrap{padding:16px 20px;max-width:1400px;margin:0 auto}'
+    +'.iprod-panel{background:var(--card);border:1px solid var(--bord);border-radius:12px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.04)}'
+    +'.iprod-panel-title{font-size:13px;font-weight:800;color:#1e3a5f;margin-bottom:4px}'
+    +'.iprod-panel-note{font-size:10.5px;color:var(--muted);margin-bottom:14px;line-height:1.5}'
+    +'.iprod-upload-grid{display:grid;grid-template-columns:1fr 1fr 190px;gap:16px;align-items:stretch}'
+    +'.iprod-upl-box{display:block;border:2px dashed var(--bord);border-radius:10px;padding:18px;text-align:center;background:var(--bg);cursor:pointer}'
+    +'.iprod-upl-box.filled{border-style:solid;border-color:#16a34a;background:#f0fdf4}'
+    +'.iprod-upl-ico{font-size:22px;margin-bottom:6px}'
+    +'.iprod-upl-lbl{font-size:12px;font-weight:800;color:#1e3a5f;margin-bottom:3px}'
+    +'.iprod-upl-sub{font-size:10px;color:var(--muted)}'
+    +'.iprod-upl-file{font-size:10.5px;color:#15803d;font-weight:700;margin-top:8px}'
+    +'.iprod-prat-box{display:flex;flex-direction:column;gap:8px;justify-content:center}'
+    +'.iprod-prat-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:1px;font-weight:800;color:var(--muted)}'
+    +'.iprod-prat-input{border:1px solid var(--bord);border-radius:7px;padding:9px 11px;font-size:14px;font-weight:800;color:#1e3a5f;text-align:center;background:var(--card)}'
+    +'.iprod-btn{margin-top:6px;background:#1e3a5f;color:#fff;border:none;border-radius:7px;padding:9px 12px;font-size:11.5px;font-weight:800;cursor:pointer}'
+    +'.iprod-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}'
+    +'.iprod-kpi{background:var(--card);border:1px solid var(--bord);border-radius:12px;padding:16px 16px 14px;border-top:3px solid;box-shadow:0 1px 3px rgba(0,0,0,.04)}'
+    +'.iprod-kpi-val{font-size:25px;font-weight:900;line-height:1.05}'
+    +'.iprod-kpi-lbl{font-size:11px;color:var(--muted);margin-top:6px;font-weight:700}'
+    +'.iprod-kpi-sub{font-size:9.5px;color:var(--muted);margin-top:2px}'
+    +'.iprod-tbl{width:100%;border-collapse:collapse;font-size:11.5px}'
+    +'.iprod-tbl th{background:#1e3a5f;color:#fff;font-size:9.5px;font-weight:700;padding:9px 11px;text-align:left;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}'
+    +'.iprod-tbl td{padding:8px 11px;border-bottom:1px solid var(--bord);color:var(--text)}'
+    +'.iprod-tbl tr.iprod-tot td{background:var(--bg);font-weight:800;color:#1e3a5f;border-top:2px solid var(--bord)}'
+    +'.iprod-badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:9px;font-weight:700}'
+    +'.iprod-b-verde{background:#f0fdf4;color:#15803d}.iprod-b-amar{background:#fefce8;color:#a16207}.iprod-b-verm{background:#fef2f2;color:#dc2626}.iprod-b-cinza{background:#f1f5f9;color:#64748b}'
+    +'.iprod-tr-expand{cursor:pointer}.iprod-tr-expand td:first-child::before{content:"▸ ";color:var(--muted);font-size:9px}.iprod-tr-expand.open td:first-child::before{content:"▾ ";color:#1e3a5f}'
+    +'.iprod-drill{background:var(--bg);padding:12px 16px;border-left:3px solid #1e3a5f;display:none}.iprod-drill.show{display:block}'
+    +'.iprod-drill-row{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px dashed var(--bord)}.iprod-drill-row:last-child{border-bottom:none}'
+    +'.iprod-tabbar{display:flex;border-bottom:2px solid var(--bord);margin-bottom:18px;gap:2px}'
+    +'.iprod-tab{padding:9px 18px;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px}'
+    +'.iprod-tab.active{color:#1e3a5f;border-bottom-color:#1e3a5f}'
+    +'.iprod-tabpanel{display:none}.iprod-tabpanel.active{display:block}'
+    +'.iprod-insight{padding:10px 12px;border-radius:8px;border-left:3px solid #2563eb;background:#eff6ff;font-size:10.5px;line-height:1.6;color:#1e3a5f}'
+    +'</style>';
+
+  html+='<div class="iprod-wrap">';
+  html+='<div class="iprod-tabbar">'
+    +'<div class="iprod-tab'+(IPROD_TAB==='comp'?' active':'')+'" onclick="iprodShowTab(\'comp\')">Comparativo da Contratada</div>'
+    +'<div class="iprod-tab'+(IPROD_TAB==='pq'?' active':'')+'" onclick="iprodShowTab(\'pq\')">PQ do Projeto (referência)</div>'
+    +'</div>';
+
+  html+='<div id="iprod-tab-comp" class="iprod-tabpanel'+(IPROD_TAB==='comp'?' active':'')+'">';
+  html+='<div class="iprod-panel">'
+    +'<div class="iprod-panel-title">1. Importar dados para o comparativo</div>'
+    +'<div class="iprod-panel-note">A contratada se baseia tanto no projeto quanto na PQ dela pra executar o serviço — por isso as quantidades das duas PQs entram lado a lado. Uma divergência não significa automaticamente que a contratada errou: pode ser a engenharia do projeto que precisa revisar o quantitativo.</div>'
+    +'<div class="iprod-upload-grid">'
+    +'<label class="iprod-upl-box'+(c?' filled':'')+'">'
+    +'<div class="iprod-upl-ico">📄</div><div class="iprod-upl-lbl">Arquivo da Contratada</div>'
+    +'<div class="iprod-upl-sub">1 planilha com aba de PQ (atividade/código/quantidade) e aba de Histograma (função/HH) — lidas automaticamente</div>'
+    +'<div class="iprod-upl-file">'+(c?('✓ '+c.nomeArquivo+' — '+c.pq.length+' ativ. / '+c.histograma.length+' funções'):'')+'</div>'
+    +'<input type="file" accept=".xlsx,.xls" style="display:none" onchange="iprodHandleContratadaFile(this.files[0])"></label>'
+    +'<label class="iprod-upl-box'+(p?' filled':'')+'">'
+    +'<div class="iprod-upl-ico">📐</div><div class="iprod-upl-lbl">PQ do Projeto</div>'
+    +'<div class="iprod-upl-sub">Quantidade oficial prevista em projeto, por atividade (opcional)</div>'
+    +'<div class="iprod-upl-file">'+(p?('✓ '+p.nomeArquivo+' — '+p.pq.length+' ativ.'):'')+'</div>'
+    +'<input type="file" accept=".xlsx,.xls" style="display:none" onchange="iprodHandlePQProjetoFile(this.files[0])"></label>'
+    +'<div class="iprod-prat-box"><div class="iprod-prat-lbl">Praticabilidade</div>'
+    +'<input class="iprod-prat-input" value="'+(Math.round(IPROD_PRAT*10000)/100)+'%" onchange="iprodSetPrat(this.value)">'
+    +'<button class="iprod-btn" onclick="iprodProcessar()">Processar comparativo</button></div>'
+    +'</div></div>';
+
+  if(r){
+    html+='<div class="iprod-kpis">'
+      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(r.totCobrado)+'</div><div class="iprod-kpi-lbl">HH Cobrado (Histograma)</div><div class="iprod-kpi-sub">Soma de todas as funções apontadas</div></div>'
+      +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(r.totRefAjust)+'</div><div class="iprod-kpi-lbl">HH Referência + Praticabilidade</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div></div>'
+      +'<div class="iprod-kpi" style="border-top-color:'+(r.totDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(r.totDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(r.totDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div></div>'
+      +'<div class="iprod-kpi" style="border-top-color:'+(r.pctImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(r.pctImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(r.pctImprod*100)+'%</div><div class="iprod-kpi-lbl">% Horas Improdutivas</div><div class="iprod-kpi-sub">Diferença ÷ HH Cobrado</div></div>'
+      +'</div>';
+
+    html+='<div class="iprod-panel"><div class="iprod-panel-title">2. Comparativo por função</div><div class="iprod-panel-note">Clique numa linha pra abrir o detalhamento das atividades que compõem aquele HH de referência.</div>'
+      +'<table class="iprod-tbl"><thead><tr><th>Função</th><th>HH Cobrado</th><th>HH Referência</th><th>HH + Praticabilidade</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
+    r.linhas.forEach(function(l){
+      html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
+        +'<td>'+l.funcao+'</td><td>'+iprodFmt(l.hhCobrado)+'</td><td>'+iprodFmt(l.hhRef)+'</td><td>'+iprodFmt(l.hhAjust)+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';
+      html+='<tr class="iprod-drill"><td colspan="6">';
+      if(l.semReferencia){
+        html+='<div class="iprod-insight" style="border-left-color:#94a3b8;background:var(--bg);color:var(--muted)">⚠️ Função apontada no histograma mas sem nenhuma composição correspondente na PQ — pode ser indireto (encarregado, técnico SSMA, apontador) ou fora do escopo mapeado.</div>';
+      } else if(!l.atividades.length){
+        html+='<div class="iprod-panel-note" style="margin:0">Sem atividades mapeadas.</div>';
+      } else {
+        html+='<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">Atividades que compõem o HH de referência</div>';
+        l.atividades.forEach(function(a){
+          html+='<div class="iprod-drill-row"><span>'+a.desc+' ('+iprodFmt(a.qtd)+' '+a.unidade+' × '+iprodFmt(a.indice)+')'+(a.matchTipo!=='código'?' <em style="color:var(--muted)">['+a.matchTipo+']</em>':'')+'</span><span>'+iprodFmt(a.hh)+' HH</span></div>';
+        });
+      }
+      if(l.semHistograma && !l.semReferencia){
+        html+='<div class="iprod-insight" style="margin-top:8px">⚠️ Não encontrei essa função no histograma da contratada — HH cobrado considerado 0. Confere se o nome da função bate.</div>';
+      }
+      html+='</td></tr>';
+    });
+    html+='<tr class="iprod-tot"><td>TOTAL</td><td>'+iprodFmt(r.totCobrado)+'</td><td>'+iprodFmt(r.linhas.reduce(function(s,l){return s+l.hhRef;},0))+'</td><td>'+iprodFmt(r.totRefAjust)+'</td><td>'+iprodFmt(r.totDif)+'</td><td></td></tr>';
+    html+='</tbody></table></div>';
+
+    if(r.semIndice.length){
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">⚠️ Atividades sem correspondência na base de índices</div><div class="iprod-panel-note">Não achei código de cliente nem descrição parecida na base de produtividade pra essas atividades da PQ da contratada — confere manualmente.</div>'
+        +'<table class="iprod-tbl"><thead><tr><th>Descrição</th><th>Código</th><th>Unid.</th><th>Quantidade</th></tr></thead><tbody>';
+      r.semIndice.forEach(function(s){ html+='<tr><td>'+s.desc+'</td><td>'+(s.codCliente||'—')+'</td><td>'+s.unidade+'</td><td>'+iprodFmt(s.quantidade)+'</td></tr>'; });
+      html+='</tbody></table></div>';
+    }
+
+    if(r.qtdComp.length){
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. Quantidades: PQ da empresa vs PQ do projeto</div><div class="iprod-panel-note">Comparação neutra — divergência é ponto de atenção pra conferência manual, não veredito automático de quem errou.</div>'
+        +'<table class="iprod-tbl"><thead><tr><th>Atividade</th><th>Unid.</th><th>Qtd. PQ Empresa</th><th>Qtd. PQ Projeto</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
+      r.qtdComp.forEach(function(q){
+        var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
+          :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
+          :'<span class="iprod-badge iprod-b-cinza">Sem PQ do Projeto — usando índice direto</span>';
+        html+='<tr><td>'+q.desc+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdEmpresa)+'</td><td>'+(q.qtdProjeto!=null?iprodFmt(q.qtdProjeto):'—')+'</td><td>'+(q.diff!=null?iprodFmt(q.diff):'—')+'</td><td>'+badge+'</td></tr>';
+      });
+      html+='</tbody></table></div>';
+    }
+  } else {
+    html+='<div class="iprod-panel"><div class="iprod-panel-note" style="margin:0;font-size:11.5px">Envie o arquivo da contratada e clique em "Processar comparativo" pra ver o resultado aqui.</div></div>';
+  }
+  html+='</div>'; // /iprod-tab-comp
+
+  html+='<div id="iprod-tab-pq" class="iprod-tabpanel'+(IPROD_TAB==='pq'?' active':'')+'">';
+  html+='<div class="iprod-panel"><div class="iprod-panel-title">PQ do Projeto (base de referência)</div>'
+    +'<div class="iprod-panel-note">Quantidades oficiais do projeto por atividade — importadas junto no passo 1. Se uma atividade não estiver aqui, o comparativo cai no cálculo direto pelo índice (sem checagem de quantidade).</div>';
+  if(p&&p.pq.length){
+    html+='<table class="iprod-tbl"><thead><tr><th>Cód. Cliente</th><th>Descrição da Atividade</th><th>Unid.</th><th>Qtd. Oficial (Projeto)</th></tr></thead><tbody>';
+    p.pq.forEach(function(row){ html+='<tr><td>'+(row.codCliente||'—')+'</td><td>'+row.desc+'</td><td>'+row.unidade+'</td><td>'+iprodFmt(row.quantidade)+'</td></tr>'; });
+    html+='</tbody></table>';
+  } else {
+    html+='<div style="font-size:11.5px;color:var(--muted)">Nenhuma PQ do Projeto importada ainda.</div>';
+  }
+  html+='</div></div>'; // /iprod-tab-pq
+  html+='</div>'; // /iprod-wrap
+  el.innerHTML=html;
+}
+
+async function renderViewIndiceProdutividade(){
+  var el=document.getElementById('v-indice-produtividade'); if(!el) return;
+  iprodRenderShell();
+  iprodLoadIndice();
 }
 
 var _REV2_TAB='dashboard';
