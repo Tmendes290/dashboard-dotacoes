@@ -12256,38 +12256,51 @@ function iprodParsePQSheet(data){
     var cand=(data[ri]||[]).map(function(h){return iprodNorm(h);});
     if(cand.some(function(h){return h.indexOf('DESCRI')>=0;})){ hdrIdx=ri; hdr=cand; break; }
   }
+  // Cabeçalho real às vezes ocupa 2 linhas mescladas (ex.: "QUANTIDADE" numa linha, "HORAS TOTAL"
+  // só aparece na linha de baixo) — junta as duas ANTES de procurar qualquer coluna, mas só quando
+  // a segunda linha realmente parece cabeçalho (vocabulário conhecido), não a primeira linha de dado.
+  var hdr2=(data[hdrIdx+1]||[]).map(function(h){return iprodNorm(h);});
+  var hdr2EhCabecalho=hdr2.some(function(h){
+    return h==='K'||h==='TT'||h==='UU'||h==='VVV'||h==='WWW'||h==='CMS'||h==='SEQ'||h==='XX'||h==='PU'||
+      h.indexOf('UNITARIO')>=0||h.indexOf('TOTAL')>=0||h.indexOf('HORA')>=0||h.indexOf('INDICE')>=0||
+      h.indexOf('AREA')>=0||h.indexOf('SUBAREA')>=0;
+  });
+  var hdrLen=Math.max(hdr.length,hdr2EhCabecalho?hdr2.length:0);
+  var hdrC=[];
+  for(var hc=0;hc<hdrLen;hc++){ hdrC[hc]=hdr[hc]||(hdr2EhCabecalho?hdr2[hc]:'')||''; }
+
   // Descrição: prioriza coluna com "DESCRI"; só usa "ATIVIDADE" isolado se não for uma coluna de código
-  var iDesc=hdr.findIndex(function(h){return h.indexOf('DESCRI')>=0;});
-  if(iDesc<0) iDesc=hdr.findIndex(function(h){return h.indexOf('ATIVIDADE')>=0&&h.indexOf('COD')<0;});
-  var iQtd=hdr.findIndex(function(h){return h.indexOf('QUANTIDADE')>=0;});
-  if(iQtd<0) iQtd=hdr.findIndex(function(h){return h.indexOf('QTD')>=0;});
+  var iDesc=hdrC.findIndex(function(h){return h.indexOf('DESCRI')>=0;});
+  if(iDesc<0) iDesc=hdrC.findIndex(function(h){return h.indexOf('ATIVIDADE')>=0&&h.indexOf('COD')<0;});
+  var iQtd=hdrC.findIndex(function(h){return h.indexOf('QUANTIDADE')>=0;});
+  if(iQtd<0) iQtd=hdrC.findIndex(function(h){return h.indexOf('QTD')>=0;});
   // Código de cliente: prioriza "CLIENTE" ou "VALE" no nome da coluna; evita a coluna de código
   // hierárquico do cronograma (ex.: "CÓD. ATIVIDADE" do MS Project, que não é o código de composição)
-  var iCod=hdr.findIndex(function(h){return h.indexOf('COD')>=0&&h.indexOf('CLIENTE')>=0;});
-  if(iCod<0) iCod=hdr.findIndex(function(h){return h.indexOf('COD')>=0&&h.indexOf('VALE')>=0;});
-  if(iCod<0) iCod=hdr.findIndex(function(h){return (h.indexOf('CODIGO')>=0||h.indexOf('COD.')>=0||h==='COD')&&h.indexOf('ATIVIDADE')<0;});
-  var iUnid=hdr.findIndex(function(h){return h.indexOf('UNID')>=0;});
+  var iCod=hdrC.findIndex(function(h){return h.indexOf('COD')>=0&&h.indexOf('CLIENTE')>=0;});
+  if(iCod<0) iCod=hdrC.findIndex(function(h){return h.indexOf('COD')>=0&&h.indexOf('VALE')>=0;});
+  if(iCod<0) iCod=hdrC.findIndex(function(h){return (h.indexOf('CODIGO')>=0||h.indexOf('COD.')>=0||h==='COD')&&h.indexOf('ATIVIDADE')<0;});
+  var iUnid=hdrC.findIndex(function(h){return h.indexOf('UNID')>=0;});
   // Valor total do item (R$) — usado na alocação proporcional de HH cobrado por atividade
-  var iTotal=hdr.findIndex(function(h){return h.indexOf('TOTAL')>=0&&(h.indexOf('BDI')>=0||h.indexOf('R$')>=0||h.indexOf('CUSTO')>=0);});
-  if(iTotal<0) iTotal=hdr.findIndex(function(h){return h.indexOf('TOTAL')>=0;});
-  var iUnitario=hdr.findIndex(function(h){return h.indexOf('UNITARIO')>=0&&h.indexOf('COD')<0;});
+  var iTotal=hdrC.findIndex(function(h){return h.indexOf('TOTAL')>=0&&(h.indexOf('BDI')>=0||h.indexOf('R$')>=0||h.indexOf('CUSTO')>=0);});
+  if(iTotal<0) iTotal=hdrC.findIndex(function(h){return h.indexOf('TOTAL')>=0&&h.indexOf('HORA')<0&&h.indexOf('HH')<0&&h.indexOf('INDICE')<0;});
+  var iUnitario=hdrC.findIndex(function(h){return h.indexOf('UNITARIO')>=0&&h.indexOf('COD')<0;});
   // Algumas PQs já vêm com o HH por atividade embutido (não separam material de mão de obra
   // numa verba à parte) — se existir essa coluna, ela é usada direto em vez do rateio proporcional.
-  // "ÍNDICE HH TOTAL" é taxa por unidade, não o HH total do item — exclui explicitamente
-  var iHH=hdr.findIndex(function(h){return h.indexOf('HH')>=0&&h.indexOf('INDICE')<0&&(h.indexOf('CALCULADO')>=0||h.indexOf('TOTAL')>=0||h.indexOf('COBRADO')>=0||h.indexOf('APONTADO')>=0);});
-  if(iHH<0) iHH=hdr.findIndex(function(h){return h.indexOf('HH')>=0&&h.indexOf('INDICE')<0;});
+  // "ÍNDICE .../TOTAL" é taxa por unidade, não o HH total do item — exclui explicitamente.
+  // Aceita tanto "HH" quanto "HORAS" (ex.: "HORAS TOTAL", "HORAS DIRETAS (MOD)").
+  var iHH=hdrC.findIndex(function(h){return (h.indexOf('HH')>=0||h.indexOf('HORA')>=0)&&h.indexOf('INDICE')<0&&h.indexOf('TOTAL')>=0;});
+  if(iHH<0) iHH=hdrC.findIndex(function(h){return h.indexOf('HH')>=0&&h.indexOf('INDICE')<0&&(h.indexOf('CALCULADO')>=0||h.indexOf('COBRADO')>=0||h.indexOf('APONTADO')>=0);});
+  if(iHH<0) iHH=hdrC.findIndex(function(h){return (h.indexOf('HH')>=0||h.indexOf('HORA')>=0)&&h.indexOf('INDICE')<0;});
   if(iDesc<0||iQtd<0) return null;
 
   // Código hierárquico "CÓD. ATIVIDADE" da Vale (K/TT/UU/VVV/WWW) — muitas PQs reais não têm
   // coluna de código direto, só essas 5 colunas que concatenadas formam o Cod.Cliente (ex.: C+25+05+005+015).
-  // Pode estar na própria linha de cabeçalho ou numa sub-linha logo abaixo (cabeçalho de 2 linhas mescladas).
   var iK=-1;
-  for(var hr=hdrIdx; hr<=hdrIdx+1 && iK<0; hr++){
-    var sub=(data[hr]||[]).map(function(h){return iprodNorm(h);});
-    for(var c=0;c<sub.length-4;c++){
-      if(sub[c]==='K'&&sub[c+1]==='TT'&&sub[c+2]==='UU'&&sub[c+3]==='VVV'&&sub[c+4]==='WWW'){ iK=c; hdrIdx=Math.max(hdrIdx,hr); break; }
-    }
+  for(var c=0;c<hdrC.length-4;c++){
+    if(hdrC[c]==='K'&&hdrC[c+1]==='TT'&&hdrC[c+2]==='UU'&&hdrC[c+3]==='VVV'&&hdrC[c+4]==='WWW'){ iK=c; break; }
   }
+  // A partir daqui os dados começam depois das 2 linhas de cabeçalho já consideradas
+  hdrIdx=hdrIdx+(hdr2EhCabecalho?1:0);
 
   var out=[];
   data.slice(hdrIdx+1).forEach(function(row){
