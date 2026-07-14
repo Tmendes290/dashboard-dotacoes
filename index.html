@@ -12388,7 +12388,10 @@ async function iprodProcessar(){
     var hhCobrado=0, semHistograma=true;
     if(matchIdx>=0){ hhCobrado=histList[matchIdx].hh; usadosHist[matchIdx]=true; semHistograma=false; }
     var hhRef=porFuncao[fRef].hhRef;
-    var hhAjust=IPROD_PRAT>0?hhRef/IPROD_PRAT:hhRef;
+    // HH + Praticabilidade = Referência + Horas não praticável, onde Horas não praticável =
+    // Referência × (1 − Praticabilidade) — ou seja, Referência × (2 − Praticabilidade).
+    // (conferido contra o modelo validado: Pedreiro 451,76 × 1,3333 = 602,35, não uma divisão)
+    var hhAjust=hhRef*(2-IPROD_PRAT);
     var dif=hhCobrado-hhAjust;
     var status='verde';
     if(dif>0) status=(dif/Math.max(hhCobrado,1))>0.15?'vermelho':'amarelo';
