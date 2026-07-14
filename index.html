@@ -12117,6 +12117,9 @@ function _rev2InjectStyle(){
 var IPROD_INDICE=null, IPROD_INDICE_LOADING=null;
 var IPROD_CONTRATADA=null, IPROD_PROJETO=null, IPROD_RESULT=null;
 var IPROD_PRAT=0.6667, IPROD_TAB='comp';
+var IPROD_NOME_PROJETO='', IPROD_EMPRESA='';
+var IPROD_HISTORICO=null, IPROD_HISTORICO_LOADING=false, IPROD_CARREGADO_DE_HIST=null;
+var IPROD_EMPRESAS=['APIA','LUK','ÔMEGA','TOP ANDAIMES','MILPLAN'];
 
 function iprodNorm(s){
   return String(s==null?'':s).normalize('NFD').replace(/\p{Diacritic}/gu,'').toUpperCase().trim();
@@ -12352,6 +12355,7 @@ function iprodSetPrat(v){
 
 async function iprodProcessar(){
   if(!IPROD_CONTRATADA || !IPROD_CONTRATADA.pq.length){ toast('Envie o arquivo da contratada (PQ + Histograma) primeiro','red'); return; }
+  IPROD_CARREGADO_DE_HIST=null;
   toast('Calculando comparativo...','blue');
   await iprodLoadIndice();
   if(!IPROD_INDICE){ toast('Base de índices de produtividade indisponível','red'); return; }
@@ -12433,13 +12437,71 @@ async function iprodProcessar(){
   iprodRenderShell();
 }
 
+function iprodSetNomeProjeto(v){ IPROD_NOME_PROJETO=v; }
+function iprodSetEmpresa(v){ IPROD_EMPRESA=v; }
+
+async function iprodSalvarHistorico(){
+  if(!IPROD_RESULT){ toast('Processe o comparativo antes de salvar','red'); return; }
+  if(!IPROD_NOME_PROJETO.trim()){ toast('Preencha o nome do projeto antes de salvar','red'); return; }
+  if(!IPROD_EMPRESA){ toast('Selecione a empresa/contratada antes de salvar','red'); return; }
+  if(!supa){ toast('Sem conexão com o banco','red'); return; }
+  toast('Salvando no histórico...','blue');
+  var {error}=await supa.from('iprod_historico').insert([{
+    projeto:IPROD_NOME_PROJETO.trim(),
+    empresa:IPROD_EMPRESA,
+    praticabilidade:IPROD_PRAT,
+    arquivo_contratada:IPROD_CONTRATADA?IPROD_CONTRATADA.nomeArquivo:null,
+    arquivo_projeto:IPROD_PROJETO?IPROD_PROJETO.nomeArquivo:null,
+    resultado:IPROD_RESULT
+  }]);
+  if(error){ toast('Erro ao salvar: '+error.message,'red'); return; }
+  toast('Salvo no histórico!','green');
+  IPROD_HISTORICO=null; // força recarregar a lista na próxima vez que abrir a aba
+}
+
+async function iprodCarregarHistoricoLista(){
+  if(!supa) return;
+  IPROD_HISTORICO_LOADING=true; iprodRenderShell();
+  var {data,error}=await supa.from('iprod_historico').select('id,projeto,empresa,praticabilidade,arquivo_contratada,arquivo_projeto,resultado,criado_em').order('criado_em',{ascending:false});
+  IPROD_HISTORICO_LOADING=false;
+  if(error){ toast('Erro ao carregar histórico: '+error.message,'red'); IPROD_HISTORICO=[]; iprodRenderShell(); return; }
+  IPROD_HISTORICO=data||[];
+  iprodRenderShell();
+}
+
+function iprodVerHistorico(id){
+  var reg=(IPROD_HISTORICO||[]).find(function(h){return String(h.id)===String(id);});
+  if(!reg) return;
+  IPROD_RESULT=reg.resultado;
+  IPROD_NOME_PROJETO=reg.projeto;
+  IPROD_EMPRESA=reg.empresa;
+  IPROD_PRAT=Number(reg.praticabilidade)||IPROD_PRAT;
+  IPROD_CARREGADO_DE_HIST=reg.criado_em;
+  IPROD_TAB='comp';
+  iprodRenderShell();
+}
+
+async function iprodExcluirHistorico(id){
+  if(!supa) return;
+  if(!confirm('Excluir esse registro do histórico?')) return;
+  var {error}=await supa.from('iprod_historico').delete().eq('id',id);
+  if(error){ toast('Erro ao excluir: '+error.message,'red'); return; }
+  IPROD_HISTORICO=(IPROD_HISTORICO||[]).filter(function(h){return String(h.id)!==String(id);});
+  toast('Excluído','green');
+  iprodRenderShell();
+}
+
 function iprodBadge(status){
   var map={verde:['iprod-b-verde','OK'],amarelo:['iprod-b-amar','Atenção'],vermelho:['iprod-b-verm','Extrapolando'],cinza:['iprod-b-cinza','Sem referência']};
   var m=map[status]||map.cinza;
   return '<span class="iprod-badge '+m[0]+'">'+m[1]+'</span>';
 }
 
-function iprodShowTab(id){ IPROD_TAB=id; iprodRenderShell(); }
+function iprodShowTab(id){
+  IPROD_TAB=id;
+  iprodRenderShell();
+  if(id==='hist' && IPROD_HISTORICO===null && !IPROD_HISTORICO_LOADING) iprodCarregarHistoricoLista();
+}
 
 function iprodRenderShell(){
   var el=document.getElementById('v-indice-produtividade'); if(!el) return;
@@ -12480,17 +12542,43 @@ function iprodRenderShell(){
     +'.iprod-tab.active{color:#1e3a5f;border-bottom-color:#1e3a5f}'
     +'.iprod-tabpanel{display:none}.iprod-tabpanel.active{display:block}'
     +'.iprod-insight{padding:10px 12px;border-radius:8px;border-left:3px solid #2563eb;background:#eff6ff;font-size:10.5px;line-height:1.6;color:#1e3a5f}'
+    +'.iprod-proj-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}'
+    +'.iprod-text-input{width:100%;border:1px solid var(--bord);border-radius:7px;padding:9px 11px;font-size:12.5px;color:var(--text);background:var(--card);font-family:inherit}'
+    +'.iprod-hist-actions{display:flex;gap:8px}'
+    +'.iprod-hist-link{background:none;border:none;color:#2563eb;font-size:11px;font-weight:700;cursor:pointer;padding:0}'
+    +'.iprod-hist-del{background:none;border:none;color:#dc2626;font-size:11px;font-weight:700;cursor:pointer;padding:0}'
     +'</style>';
 
   html+='<div class="iprod-wrap">';
   html+='<div class="iprod-tabbar">'
     +'<div class="iprod-tab'+(IPROD_TAB==='comp'?' active':'')+'" onclick="iprodShowTab(\'comp\')">Comparativo da Contratada</div>'
     +'<div class="iprod-tab'+(IPROD_TAB==='pq'?' active':'')+'" onclick="iprodShowTab(\'pq\')">PQ do Projeto (referência)</div>'
+    +'<div class="iprod-tab'+(IPROD_TAB==='hist'?' active':'')+'" onclick="iprodShowTab(\'hist\')">Histórico</div>'
     +'</div>';
 
   html+='<div id="iprod-tab-comp" class="iprod-tabpanel'+(IPROD_TAB==='comp'?' active':'')+'">';
+
   html+='<div class="iprod-panel">'
-    +'<div class="iprod-panel-title">1. Importar dados para o comparativo</div>'
+    +'<div class="iprod-panel-title">1. Projeto</div>'
+    +'<div class="iprod-panel-note">Identifica esse comparativo pra poder salvar e consultar depois no histórico.</div>'
+    +'<div class="iprod-proj-grid">'
+    +'<div><div class="iprod-prat-lbl">Nome do Projeto</div><input class="iprod-text-input" placeholder="ex.: SLB III - Oficina" value="'+(IPROD_NOME_PROJETO||'').replace(/"/g,'&quot;')+'" onchange="iprodSetNomeProjeto(this.value)"></div>'
+    +'<div><div class="iprod-prat-lbl">Empresa / Contratada</div><select class="iprod-text-input" onchange="iprodSetEmpresa(this.value)">'
+    +'<option value=""'+(!IPROD_EMPRESA?' selected':'')+'>Selecione...</option>'
+    +IPROD_EMPRESAS.map(function(emp){return '<option value="'+emp+'"'+(IPROD_EMPRESA===emp?' selected':'')+'>'+emp+'</option>';}).join('')
+    +'<option value="Outra"'+(IPROD_EMPRESA&&IPROD_EMPRESAS.indexOf(IPROD_EMPRESA)<0?' selected':'')+'>Outra...</option>'
+    +'</select></div>'
+    +(IPROD_EMPRESA==='Outra'||(IPROD_EMPRESA&&IPROD_EMPRESAS.indexOf(IPROD_EMPRESA)<0)
+      ?'<div><div class="iprod-prat-lbl">Qual?</div><input class="iprod-text-input" placeholder="Nome da empresa" value="'+(IPROD_EMPRESAS.indexOf(IPROD_EMPRESA)<0?(IPROD_EMPRESA||''):'')+'" onchange="iprodSetEmpresa(this.value)"></div>'
+      :'')
+    +'</div></div>';
+
+  if(IPROD_CARREGADO_DE_HIST){
+    html+='<div class="iprod-insight" style="border-left-color:#7c3aed;background:#f5f3ff;color:#4c1d95;margin-bottom:16px">📂 Visualizando resultado salvo no histórico em '+new Date(IPROD_CARREGADO_DE_HIST).toLocaleString('pt-BR')+'. Envie novos arquivos e processe de novo pra atualizar.</div>';
+  }
+
+  html+='<div class="iprod-panel">'
+    +'<div class="iprod-panel-title">2. Importar dados para o comparativo</div>'
     +'<div class="iprod-panel-note">A contratada se baseia tanto no projeto quanto na PQ dela pra executar o serviço — por isso as quantidades das duas PQs entram lado a lado. Uma divergência não significa automaticamente que a contratada errou: pode ser a engenharia do projeto que precisa revisar o quantitativo.</div>'
     +'<div class="iprod-upload-grid">'
     +'<label class="iprod-upl-box'+(c?' filled':'')+'">'
@@ -12516,9 +12604,12 @@ function iprodRenderShell(){
       +'<div class="iprod-kpi" style="border-top-color:'+(r.pctImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(r.pctImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(r.pctImprod*100)+'%</div><div class="iprod-kpi-lbl">% Horas Improdutivas</div><div class="iprod-kpi-sub">Diferença ÷ HH Cobrado</div></div>'
       +'</div>';
 
-    html+='<div class="iprod-panel"><div class="iprod-panel-title">2. Comparativo por função</div><div class="iprod-panel-note">Clique numa linha pra abrir o detalhamento das atividades que compõem aquele HH de referência.</div>'
+    html+='<div style="display:flex;justify-content:flex-end;margin:-8px 0 16px">'
+      +'<button class="iprod-btn" style="margin-top:0" onclick="iprodSalvarHistorico()">💾 Salvar no histórico</button></div>';
+
+    html+='<div class="iprod-panel"><div class="iprod-panel-title">3. Comparativo por função</div><div class="iprod-panel-note">Clique numa linha pra abrir o detalhamento das atividades que compõem aquele HH de referência.</div>'
       +'<table class="iprod-tbl"><thead><tr><th>Função</th><th>HH Cobrado</th><th>HH Referência</th><th>HH + Praticabilidade</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
-    r.linhas.forEach(function(l){
+    r.linhas.filter(function(l){return l.hhCobrado||l.hhRef||l.hhAjust||l.dif;}).forEach(function(l){
       html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
         +'<td>'+l.funcao+'</td><td>'+iprodFmt(l.hhCobrado)+'</td><td>'+iprodFmt(l.hhRef)+'</td><td>'+iprodFmt(l.hhAjust)+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';
       html+='<tr class="iprod-drill"><td colspan="6">';
@@ -12548,7 +12639,7 @@ function iprodRenderShell(){
     }
 
     if(r.qtdComp.length){
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. Quantidades: PQ da empresa vs PQ do projeto</div><div class="iprod-panel-note">Comparação neutra — divergência é ponto de atenção pra conferência manual, não veredito automático de quem errou.</div>'
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Quantidades: PQ da empresa vs PQ do projeto</div><div class="iprod-panel-note">Comparação neutra — divergência é ponto de atenção pra conferência manual, não veredito automático de quem errou.</div>'
         +'<table class="iprod-tbl"><thead><tr><th>Atividade</th><th>Unid.</th><th>Qtd. PQ Empresa</th><th>Qtd. PQ Projeto</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
       r.qtdComp.forEach(function(q){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
@@ -12575,6 +12666,26 @@ function iprodRenderShell(){
     html+='<div style="font-size:11.5px;color:var(--muted)">Nenhuma PQ do Projeto importada ainda.</div>';
   }
   html+='</div></div>'; // /iprod-tab-pq
+
+  html+='<div id="iprod-tab-hist" class="iprod-tabpanel'+(IPROD_TAB==='hist'?' active':'')+'">';
+  html+='<div class="iprod-panel"><div class="iprod-panel-title">Histórico de comparativos</div>'
+    +'<div class="iprod-panel-note">Comparativos processados e salvos anteriormente. Clique em "Ver" pra recarregar o resultado na aba Comparativo.</div>';
+  if(IPROD_HISTORICO_LOADING){
+    html+='<div style="font-size:11.5px;color:var(--muted)">Carregando...</div>';
+  } else if(!IPROD_HISTORICO || !IPROD_HISTORICO.length){
+    html+='<div style="font-size:11.5px;color:var(--muted)">Nenhum comparativo salvo ainda.</div>';
+  } else {
+    html+='<table class="iprod-tbl"><thead><tr><th>Projeto</th><th>Empresa</th><th>Data</th><th>HH Cobrado</th><th>Diferença</th><th>% Improd.</th><th></th></tr></thead><tbody>';
+    IPROD_HISTORICO.forEach(function(h){
+      var res=h.resultado||{};
+      html+='<tr><td>'+h.projeto+'</td><td>'+h.empresa+'</td><td>'+new Date(h.criado_em).toLocaleDateString('pt-BR')+'</td>'
+        +'<td>'+iprodFmt(res.totCobrado)+'</td><td>'+iprodFmt(res.totDif)+'</td><td>'+Math.round((res.pctImprod||0)*100)+'%</td>'
+        +'<td><div class="iprod-hist-actions"><button class="iprod-hist-link" onclick="iprodVerHistorico('+h.id+')">Ver</button><button class="iprod-hist-del" onclick="iprodExcluirHistorico('+h.id+')">Excluir</button></div></td></tr>';
+    });
+    html+='</tbody></table>';
+  }
+  html+='</div></div>'; // /iprod-tab-hist
+
   html+='</div>'; // /iprod-wrap
   el.innerHTML=html;
 }
