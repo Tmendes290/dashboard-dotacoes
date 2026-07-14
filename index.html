@@ -12257,17 +12257,26 @@ function iprodParsePQSheet(data){
     if(cand.some(function(h){return h.indexOf('DESCRI')>=0;})){ hdrIdx=ri; hdr=cand; break; }
   }
   // Cabeçalho real às vezes ocupa 2 linhas mescladas (ex.: "QUANTIDADE" numa linha, "HORAS TOTAL"
-  // só aparece na linha de baixo) — junta as duas ANTES de procurar qualquer coluna, mas só quando
-  // a segunda linha realmente parece cabeçalho (vocabulário conhecido), não a primeira linha de dado.
+  // só aparece na linha de baixo). O sinal mais confiável de que a linha de baixo é mesmo
+  // continuação do cabeçalho (não a primeira linha de dado) é ela conter o padrão bem específico
+  // K/TT/UU/VVV/WWW em 5 colunas consecutivas — quase impossível aparecer por acaso numa linha de
+  // dado (ao contrário de palavras soltas tipo "TOTAL", que já bateram sem querer com uma linha
+  // de subtotal do tipo "CUSTO TOTAL").
+  function iprodTemPadraoK(arr){
+    for(var pc=0;pc<arr.length-4;pc++){
+      if(arr[pc]==='K'&&arr[pc+1]==='TT'&&arr[pc+2]==='UU'&&arr[pc+3]==='VVV'&&arr[pc+4]==='WWW') return pc;
+    }
+    return -1;
+  }
   var hdr2=(data[hdrIdx+1]||[]).map(function(h){return iprodNorm(h);});
-  var hdr2EhCabecalho=hdr2.some(function(h){
-    return h==='K'||h==='TT'||h==='UU'||h==='VVV'||h==='WWW'||h==='CMS'||h==='SEQ'||h==='XX'||h==='PU'||
-      h.indexOf('UNITARIO')>=0||h.indexOf('TOTAL')>=0||h.indexOf('HORA')>=0||h.indexOf('INDICE')>=0||
-      h.indexOf('AREA')>=0||h.indexOf('SUBAREA')>=0;
-  });
+  var iKemHdr=iprodTemPadraoK(hdr), iKemHdr2=iprodTemPadraoK(hdr2);
+  var hdr2EhCabecalho=iKemHdr2>=0;
   var hdrLen=Math.max(hdr.length,hdr2EhCabecalho?hdr2.length:0);
   var hdrC=[];
-  for(var hc=0;hc<hdrLen;hc++){ hdrC[hc]=hdr[hc]||(hdr2EhCabecalho?hdr2[hc]:'')||''; }
+  // Prioriza a sub-linha (hdr2) quando ela tem valor — em cabeçalhos mesclados, a célula do grupo
+  // (linha de cima, ex.: "CÓD. ATIVIDADE") às vezes cai na MESMA coluna do rótulo específico da
+  // sub-linha (ex.: "K"), e o rótulo específico é sempre mais útil pra achar a coluna certa.
+  for(var hc=0;hc<hdrLen;hc++){ hdrC[hc]=(hdr2EhCabecalho&&hdr2[hc])||hdr[hc]||''; }
 
   // Descrição: prioriza coluna com "DESCRI"; só usa "ATIVIDADE" isolado se não for uma coluna de código
   var iDesc=hdrC.findIndex(function(h){return h.indexOf('DESCRI')>=0;});
@@ -12295,18 +12304,29 @@ function iprodParsePQSheet(data){
 
   // Código hierárquico "CÓD. ATIVIDADE" da Vale (K/TT/UU/VVV/WWW) — muitas PQs reais não têm
   // coluna de código direto, só essas 5 colunas que concatenadas formam o Cod.Cliente (ex.: C+25+05+005+015).
-  var iK=-1;
-  for(var c=0;c<hdrC.length-4;c++){
-    if(hdrC[c]==='K'&&hdrC[c+1]==='TT'&&hdrC[c+2]==='UU'&&hdrC[c+3]==='VVV'&&hdrC[c+4]==='WWW'){ iK=c; break; }
-  }
+  var iK=hdr2EhCabecalho?iKemHdr2:iKemHdr;
   // A partir daqui os dados começam depois das 2 linhas de cabeçalho já consideradas
   hdrIdx=hdrIdx+(hdr2EhCabecalho?1:0);
+
+  // Categorias de atividade válidas quando a coluna K existe e vem preenchida — C(ivil)/M(ontagem)/
+  // D(esmontagem). Outras letras (ex.: F, T, E) são linhas duplicadas/placeholder sem HH real,
+  // confirmado empiricamente numa PQ real (todas com Horas Total = 0). Não mexe em linha com K
+  // vazio (formato sem esse código, ex.: PQ da APIA, que não quebra por essa letra).
+  var iprodKValidos={'C':true,'M':true,'D':true};
 
   var out=[];
   data.slice(hdrIdx+1).forEach(function(row){
     var desc=String(row[iDesc]||'').trim();
     var qtd=parseFloat(String(row[iQtd]==null?'':row[iQtd]).replace(',','.'));
     if(!desc||!isFinite(qtd)||qtd===0) return;
+    // Itens em verba (vb) já têm tratamento próprio (excluídos do cálculo de índice mais adiante,
+    // mas mantidos visíveis) — o filtro de categoria K só vale pra atividade física de verdade.
+    var unidRow=iUnid>=0?String(row[iUnid]||'').trim():'';
+    var ehVbRow=iprodNorm(unidRow).indexOf('VB')===0;
+    if(iK>=0 && !ehVbRow){
+      var kFiltro=String(row[iK]||'').trim().toUpperCase();
+      if(kFiltro && !iprodKValidos[kFiltro]) return;
+    }
     var cod=iCod>=0?String(row[iCod]||'').trim():'';
     if(!cod && iK>=0){
       var k=String(row[iK]||'').trim(), tt=row[iK+1], uu=row[iK+2], vvv=row[iK+3], www=row[iK+4];
