@@ -12515,6 +12515,10 @@ async function iprodProcessar(){
   if(IPROD_PROJETO && IPROD_PROJETO.pq.length){
     var empByCod={};
     IPROD_CONTRATADA.pq.forEach(function(e){ if(e.codCliente) empByCod[e.codCliente]=e; });
+    // Evita que o mesmo item da PQ da contratada seja "reivindicado" (e seu HH alocado contado)
+    // por mais de uma atividade do projeto — ex.: concreto fck=10 e fck=30 do projeto batendo
+    // os dois com a única linha de concreto da contratada, duplicando o HH no total.
+    var usadosEmp=[];
     IPROD_PROJETO.pq.forEach(function(pItem){
       var achouIndice=iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade);
       var indiceTotal=0, detalhePartes=[];
@@ -12525,11 +12529,14 @@ async function iprodProcessar(){
       });
 
       var emp=pItem.codCliente?empByCod[pItem.codCliente]:null;
+      if(emp&&usadosEmp.indexOf(emp)>=0) emp=null;
       var matchTipo='código';
       if(!emp){
-        var achouEmp=iprodFindInPq(pItem.desc,pItem.unidade,IPROD_CONTRATADA.pq);
+        var candidatos=IPROD_CONTRATADA.pq.filter(function(e){return usadosEmp.indexOf(e)<0;});
+        var achouEmp=iprodFindInPq(pItem.desc,pItem.unidade,candidatos);
         if(achouEmp){ emp=achouEmp.item; matchTipo='descrição ('+Math.min(100,Math.round(achouEmp.score*100))+'% similar)'; }
       }
+      if(emp) usadosEmp.push(emp);
 
       var qtdEmpresa=emp?emp.quantidade:null;
       var diffQtd=qtdEmpresa!=null?(qtdEmpresa-pItem.quantidade):null;
