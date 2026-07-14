@@ -12536,6 +12536,12 @@ async function iprodProcessar(){
   linhas.sort(function(a,b){return b.dif-a.dif;});
 
   var totCobrado=linhas.reduce(function(s,l){return s+l.hhCobrado;},0);
+  // Sem histograma por função (PQ já traz o HH declarado por atividade, sem quebrar por
+  // Encarregado/Servente/etc.) — usa a soma do HH declarado na PQ inteira como "cobrado".
+  var semHistogramaPorFuncao=!(IPROD_CONTRATADA.histograma&&IPROD_CONTRATADA.histograma.length);
+  if(semHistogramaPorFuncao&&pqTemHHDeclarado){
+    totCobrado=IPROD_CONTRATADA.pq.reduce(function(s,item){return s+(item.hhDeclarado||0);},0);
+  }
   var totRefAjust=linhas.reduce(function(s,l){return s+l.hhAjust;},0);
   var totDif=totCobrado-totRefAjust;
   var pctImprod=totCobrado>0?(totDif/totCobrado):0;
@@ -12601,7 +12607,7 @@ async function iprodProcessar(){
     return {nome:m,tipo:o.tipo,unidade:o.unidade,qtdNec:o.qtdNec,atividades:o.atividades};
   }).filter(function(m){return m.qtdNec;}).sort(function(a,b){return b.qtdNec-a.qtdNec;});
 
-  IPROD_RESULT={linhas:linhas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,pqTemHHDeclarado:pqTemHHDeclarado};
+  IPROD_RESULT={linhas:linhas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao};
   toast('Comparativo calculado','green');
   iprodRenderShell();
 }
@@ -12792,7 +12798,7 @@ function iprodRenderShell(){
 
   if(r){
     html+='<div class="iprod-kpis">'
-      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(r.totCobrado)+'</div><div class="iprod-kpi-lbl">HH Cobrado (Histograma)</div><div class="iprod-kpi-sub">Soma de todas as funções apontadas</div></div>'
+      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(r.totCobrado)+'</div><div class="iprod-kpi-lbl">HH Cobrado</div><div class="iprod-kpi-sub">'+(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma')+'</div></div>'
       +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(r.totRefAjust)+'</div><div class="iprod-kpi-lbl">HH Referência + Praticabilidade</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div></div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(r.totDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(r.totDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(r.totDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div></div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(r.pctImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(r.pctImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(r.pctImprod*100)+'%</div><div class="iprod-kpi-lbl">% Horas Improdutivas</div><div class="iprod-kpi-sub">Diferença ÷ HH Cobrado</div></div>'
@@ -12854,6 +12860,10 @@ function iprodRenderShell(){
       html+='</tbody></table></div>';
     }
 
+    if(r.semHistogramaPorFuncao){
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">5. Comparativo por função</div>'
+        +'<div class="iprod-panel-note" style="margin:0">Essa PQ não tem histograma quebrado por função (Encarregado/Servente/Pedreiro...) — o HH já vem por atividade (ver seção 4), não dá pra comparar por função aqui.</div></div>';
+    } else {
     html+='<div class="iprod-panel"><div class="iprod-panel-title">5. Comparativo por função</div><div class="iprod-panel-note">Clique numa linha pra abrir o detalhamento das atividades que compõem aquele HH de referência.</div>'
       +'<table class="iprod-tbl"><thead><tr><th>Função</th><th>HH Cobrado</th><th>HH Referência</th><th>HH + Praticabilidade</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
     r.linhas.filter(function(l){return l.hhCobrado||l.hhRef||l.hhAjust||l.dif;}).forEach(function(l){
@@ -12880,6 +12890,7 @@ function iprodRenderShell(){
     });
     html+='<tr class="iprod-tot"><td>TOTAL</td><td>'+iprodFmt(r.totCobrado)+'</td><td>'+iprodFmt(r.linhas.reduce(function(s,l){return s+l.hhRef;},0))+'</td><td>'+iprodFmt(r.totRefAjust)+'</td><td>'+iprodFmt(r.totDif)+'</td><td></td></tr>';
     html+='</tbody></table></div>';
+    }
 
     if(r.materiais && r.materiais.length){
       html+='<div class="iprod-panel"><div class="iprod-panel-title">6. Levantamento de Materiais e Equipamentos</div><div class="iprod-panel-note">Quantidade de material/equipamento que o índice da base indica ser necessária pras atividades da PQ (mesmo cruzamento usado pra mão de obra, só que nas linhas de insumo que não são IH). Clique pra ver quais atividades compõem cada item.</div>'
