@@ -12511,7 +12511,7 @@ async function iprodProcessar(){
   // pega o que o sentido empresa→projeto não pegava: atividade do projeto que a contratada
   // nem colocou na PQ dela. Junto, mostra o índice oficial e o HH esperado x o HH que a
   // quantidade da contratada implica (usando o MESMO índice correto da base).
-  var qtdComp=[];
+  var qtdComp=[], contratadaSemProjeto=[];
   if(IPROD_PROJETO && IPROD_PROJETO.pq.length){
     var empByCod={};
     IPROD_CONTRATADA.pq.forEach(function(e){ if(e.codCliente) empByCod[e.codCliente]=e; });
@@ -12555,6 +12555,11 @@ async function iprodProcessar(){
         matchDesc:achouIndice?achouIndice.matchDesc:null,matchCodBase:achouIndice?achouIndice.matchCod:null,
         detalhe:detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceTotal)):'Sem insumo de mão de obra (IH) nessa composição'});
     });
+    // Itens de fornecimento da PQ da contratada que não bateram com NENHUMA atividade da PQ do
+    // Projeto — o HH alocado deles fica de fora da tabela acima (que só lista atividades do
+    // projeto). Mostrar à parte pra fechar 100% do HH cobrado.
+    contratadaSemProjeto=achouPorItem.filter(function(x){return usadosEmp.indexOf(x.item)<0;})
+      .map(function(x){return {desc:x.item.desc,unidade:x.item.unidade,quantidade:x.item.quantidade,hhAlocado:x.item.hhAlocado||0};});
   }
 
   var materiais=Object.keys(porMaterial).map(function(m){
@@ -12562,7 +12567,7 @@ async function iprodProcessar(){
     return {nome:m,tipo:o.tipo,unidade:o.unidade,qtdNec:o.qtdNec,atividades:o.atividades};
   }).filter(function(m){return m.qtdNec;}).sort(function(a,b){return b.qtdNec-a.qtdNec;});
 
-  IPROD_RESULT={linhas:linhas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade};
+  IPROD_RESULT={linhas:linhas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto};
   toast('Comparativo calculado','green');
   iprodRenderShell();
 }
@@ -12771,9 +12776,23 @@ function iprodRenderShell(){
           +'</td></tr>';
       });
       var totHhEsperado=r.qtdComp.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
-      var totHhEmpresa=r.qtdComp.reduce(function(s,q){return s+(q.hhEmpresa||0);},0);
-      html+='<tr class="iprod-tot"><td>TOTAL</td><td></td><td></td><td></td><td></td><td></td><td>'+iprodFmt(totHhEsperado)+'</td><td>'+iprodFmt(totHhEmpresa)+'</td><td>'+iprodFmt(totHhEmpresa-totHhEsperado)+'</td><td></td></tr>';
+      var totHhEmpresaMatched=r.qtdComp.reduce(function(s,q){return s+(q.hhEmpresa||0);},0);
+      var totHhSemProjeto=(r.contratadaSemProjeto||[]).reduce(function(s,c){return s+(c.hhAlocado||0);},0);
+      var totHhEmpresa=totHhEmpresaMatched+totHhSemProjeto;
+      html+='<tr class="iprod-tot"><td>TOTAL (atividades do projeto)</td><td></td><td></td><td></td><td></td><td></td><td>'+iprodFmt(totHhEsperado)+'</td><td>'+iprodFmt(totHhEmpresaMatched)+'</td><td>'+iprodFmt(totHhEmpresaMatched-totHhEsperado)+'</td><td></td></tr>';
       html+='</tbody></table></div>';
+
+      if(r.contratadaSemProjeto && r.contratadaSemProjeto.length){
+        html+='<div class="iprod-panel"><div class="iprod-panel-title">⚠️ Itens da PQ da contratada sem atividade correspondente no projeto</div><div class="iprod-panel-note">A contratada cobrou por isso, mas não achei atividade equivalente na PQ do Projeto — por isso não aparece na tabela acima. O HH alocado deles soma aqui pra fechar 100% do HH cobrado no histograma.</div>'
+          +'<table class="iprod-tbl"><thead><tr><th>Descrição</th><th>Unid.</th><th>Quantidade</th><th>HH Alocado</th></tr></thead><tbody>';
+        r.contratadaSemProjeto.forEach(function(c){
+          html+='<tr><td>'+c.desc+'</td><td>'+c.unidade+'</td><td>'+iprodFmt(c.quantidade)+'</td><td>'+iprodFmt(c.hhAlocado)+'</td></tr>';
+        });
+        html+='<tr class="iprod-tot"><td colspan="3">TOTAL sem correspondência</td><td>'+iprodFmt(totHhSemProjeto)+'</td></tr>';
+        html+='</tbody></table>'
+          +'<div class="iprod-insight" style="margin-top:12px">Σ HH da Empresa (com + sem correspondência no projeto) = <b>'+iprodFmt(totHhEmpresa)+'</b> — deve bater com o HH Cobrado total do histograma (seção 5).</div>'
+          +'</div>';
+      }
     }
 
     if(r.porAtividade && r.porAtividade.length){
