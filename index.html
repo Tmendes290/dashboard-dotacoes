@@ -12267,6 +12267,10 @@ function iprodParsePQSheet(data){
   if(iCod<0) iCod=hdr.findIndex(function(h){return h.indexOf('COD')>=0&&h.indexOf('VALE')>=0;});
   if(iCod<0) iCod=hdr.findIndex(function(h){return (h.indexOf('CODIGO')>=0||h.indexOf('COD.')>=0||h==='COD')&&h.indexOf('ATIVIDADE')<0;});
   var iUnid=hdr.findIndex(function(h){return h.indexOf('UNID')>=0;});
+  // Valor total do item (R$) — usado na alocação proporcional de HH cobrado por atividade
+  var iTotal=hdr.findIndex(function(h){return h.indexOf('TOTAL')>=0&&(h.indexOf('BDI')>=0||h.indexOf('R$')>=0||h.indexOf('CUSTO')>=0);});
+  if(iTotal<0) iTotal=hdr.findIndex(function(h){return h.indexOf('TOTAL')>=0;});
+  var iUnitario=hdr.findIndex(function(h){return h.indexOf('UNITARIO')>=0&&h.indexOf('COD')<0;});
   if(iDesc<0||iQtd<0) return null;
 
   // Código hierárquico "CÓD. ATIVIDADE" da Vale (K/TT/UU/VVV/WWW) — muitas PQs reais não têm
@@ -12292,7 +12296,12 @@ function iprodParsePQSheet(data){
         cod=k+iprodPad(tt,2)+iprodPad(uu,2)+iprodPad(vvv,3)+iprodPad(www,3);
       }
     }
-    out.push({desc:desc,codCliente:cod,unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd});
+    var valorTotal=iTotal>=0?(parseFloat(String(row[iTotal]==null?'':row[iTotal]).replace(',','.'))||0):0;
+    if(!valorTotal && iUnitario>=0){
+      var unit=parseFloat(String(row[iUnitario]==null?'':row[iUnitario]).replace(',','.'))||0;
+      valorTotal=qtd*unit;
+    }
+    out.push({desc:desc,codCliente:cod,unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd,valorTotal:valorTotal});
   });
   return out.length?out:null;
 }
@@ -12395,9 +12404,27 @@ async function iprodProcessar(){
   if(!IPROD_INDICE){ toast('Base de índices de produtividade indisponível','red'); return; }
 
   var porFuncao={}, porMaterial={}, semIndice=[], porAtividade=[];
+
+  // PASSO 1: acha o índice de cada item da PQ e calcula a alocação proporcional do HH cobrado
+  // (histograma) por atividade — % do valor (R$) de cada item de fornecimento sobre a soma de
+  // todos os itens de fornecimento (os que bateram com algum índice), × HH total do histograma.
+  // Mesmo método usado manualmente no modelo de referência.
+  var achouPorItem=[];
   IPROD_CONTRATADA.pq.forEach(function(item){
     var achou=iprodFindIndice(item.codCliente,item.desc,item.unidade);
     if(!achou){ semIndice.push(item); return; }
+    achouPorItem.push({item:item,achou:achou});
+  });
+  var totCobradoHistograma=(IPROD_CONTRATADA.histograma||[]).reduce(function(s,h){return s+h.hh;},0);
+  var somaValorFornecimento=achouPorItem.reduce(function(s,x){return s+(x.item.valorTotal||0);},0);
+  achouPorItem.forEach(function(x){
+    x.item.pctValor=somaValorFornecimento>0?(x.item.valorTotal/somaValorFornecimento):0;
+    x.item.hhAlocado=x.item.pctValor*totCobradoHistograma;
+  });
+
+  // PASSO 2: monta os comparativos usando o índice e a alocação já calculados
+  achouPorItem.forEach(function(x){
+    var item=x.item, achou=x.achou;
     var indiceHHTotal=0, detalhePartes=[];
     achou.rows.forEach(function(r){
       var qtdNec=item.quantidade*(Number(r.indice)||0);
@@ -12431,6 +12458,7 @@ async function iprodProcessar(){
       codCliente:achou.matchCod,matchDesc:achou.matchDesc,matchTipo:achou.matchTipo,
       indiceHHTotal:indiceHHTotal,hhCalculado:item.quantidade*indiceHHTotal,
       qtdProjeto:qtdProjeto,diffQtdProjeto:diffQtdProjeto,
+      valorTotal:item.valorTotal,pctValor:item.pctValor,hhAlocado:item.hhAlocado,
       detalhe:detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceHHTotal)):'Sem insumo de mão de obra (IH) nessa composição'
     });
   });
@@ -12500,8 +12528,11 @@ async function iprodProcessar(){
 
       var qtdEmpresa=emp?emp.quantidade:null;
       var diffQtd=qtdEmpresa!=null?(qtdEmpresa-pItem.quantidade):null;
-      var hhEsperado=pItem.quantidade*indiceTotal;
-      var hhEmpresa=qtdEmpresa!=null?qtdEmpresa*indiceTotal:null;
+      // HH Esperado já com praticabilidade embutida (Referência × (2 − Praticabilidade), igual à seção 5)
+      var hhEsperado=pItem.quantidade*indiceTotal*(2-IPROD_PRAT);
+      // HH da Empresa = alocação proporcional do HH cobrado (histograma) pelo peso em R$ dessa
+      // atividade dentro da PQ da contratada — não é mais quantidade×índice
+      var hhEmpresa=emp?(emp.hhAlocado||0):null;
       var status=emp==null?'faltando-empresa':(Math.abs(diffQtd)<0.01?'bate':'divergente');
 
       qtdComp.push({desc:pItem.desc,unidade:pItem.unidade,codCliente:pItem.codCliente,
@@ -12712,7 +12743,7 @@ function iprodRenderShell(){
       +'<button class="iprod-btn" style="margin-top:0" onclick="iprodSalvarHistorico()">💾 Salvar no histórico</button></div>';
 
     if(r.qtdComp.length){
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto × PQ da Contratada — quantidade e índice</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela. HH Esperado usa a quantidade do projeto; HH da Empresa usa a quantidade que ela cobrou — os dois com o MESMO índice oficial, isolando o efeito de quantidade errada. Clique pra ver a composição do índice.</div>'
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto × PQ da Contratada — quantidade e índice</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela. <b>HH Esperado</b> = quantidade do projeto × índice, já com a praticabilidade embutida. <b>HH da Empresa</b> = alocação proporcional do HH total cobrado no histograma, distribuído pelo peso (%) do valor (R$) de cada atividade dentro da PQ da contratada — mesmo método usado manualmente na planilha de referência. Clique pra ver a composição do índice.</div>'
         +'<table class="iprod-tbl"><thead><tr><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>HH Esperado</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
       r.qtdComp.forEach(function(q){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
