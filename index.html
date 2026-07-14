@@ -12758,6 +12758,9 @@ function iprodRenderShell(){
           +'<div style="font-size:9.5px;color:var(--muted);margin-top:6px">↳ Base de índices: <b>'+(q.matchCodBase||'—')+'</b> — '+(q.matchDesc||'?')+'</div>'
           +'</td></tr>';
       });
+      var totHhEsperado=r.qtdComp.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
+      var totHhEmpresa=r.qtdComp.reduce(function(s,q){return s+(q.hhEmpresa||0);},0);
+      html+='<tr class="iprod-tot"><td>TOTAL</td><td></td><td></td><td></td><td></td><td></td><td>'+iprodFmt(totHhEsperado)+'</td><td>'+iprodFmt(totHhEmpresa)+'</td><td>'+iprodFmt(totHhEmpresa-totHhEsperado)+'</td><td></td></tr>';
       html+='</tbody></table></div>';
     }
 
