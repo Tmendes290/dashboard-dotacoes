@@ -12186,6 +12186,21 @@ var IPROD_PALAVRAS_FRACAS={};
 ['ACO','ASTM','CARBONO','GALVANIZADO','GALV','INOX','FERRO','GRAU','GR','CLASSE','TIPO','NORMA','CONF','CONFORME']
   .forEach(function(w){IPROD_PALAVRAS_FRACAS[w]=true;});
 
+// Algumas composições da base só têm cadastrado o insumo de SUPERVISÃO (Encarregado/Mestre/
+// Apontador...) sem nenhum insumo de instalador de verdade (Servente/Ajudante/Pedreiro...) — lacuna
+// na planilha-fonte da Vale (~10% da base tem esse padrão, confirmado numa varredura). O índice
+// nesses casos reflete só o tempo do encarregado supervisionando, não o serviço em si — provável
+// subestimação. Sinaliza em vez de aplicar o índice como se fosse completo.
+var IPROD_PALAVRAS_SUPERVISAO=['ENCARREGADO','MESTRE','SUPERVISOR','APONTADOR','TECNICO DE SEGURANCA','ENGENHEIRO'];
+function iprodIndiceSoSupervisao(rows){
+  var mo=rows.filter(function(r){return r.tipo==='M';});
+  if(!mo.length) return false;
+  return mo.every(function(r){
+    var n=iprodNorm(r.descIns||'');
+    return IPROD_PALAVRAS_SUPERVISAO.some(function(p){return n.indexOf(p)>=0;});
+  });
+}
+
 function iprodTokens(s){
   // Funde número decimal com vírgula/ponto (ex.: "1419,6", "4,75") num token só ANTES de separar
   // por pontuação — senão a parte depois da vírgula vira um token numérico solto (ex.: só "6")
@@ -12752,6 +12767,7 @@ async function iprodProcessar(){
       if(ehVerbaProjeto||kProjeto==='F'||ehMaoDeObraHoras) return;
       var achouIndice=iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade);
       var indiceTotal=0, detalhePartes=[];
+      var indiceSoSupervisao=achouIndice&&iprodIndiceSoSupervisao(achouIndice.rows);
       if(achouIndice) achouIndice.rows.forEach(function(r){
         if(r.tipo!=='M') return;
         indiceTotal+=Number(r.indice)||0;
@@ -12813,7 +12829,7 @@ async function iprodProcessar(){
         qtdProjeto:pItem.quantidade,qtdEmpresa:qtdEmpresa,diffQtd:diffQtd,
         indiceTotal:indiceTotal,hhEsperado:hhEsperado,hhEmpresa:hhEmpresa,
         diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
-        status:status,matchTipo:matchTipo,semIndiceProjeto:semIndiceProjeto,indiceOrigem:indiceOrigem,
+        status:status,matchTipo:matchTipo,semIndiceProjeto:semIndiceProjeto,indiceOrigem:indiceOrigem,indiceSoSupervisao:!!indiceSoSupervisao,
         matchDesc:achouIndice?achouIndice.matchDesc:null,matchCodBase:achouIndice?achouIndice.matchCod:null,
         detalhe:achouIndice?(detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceTotal)):'Sem insumo de mão de obra (IH) nessa composição')
           :(indiceOrigem==='contratada'?('Sem correspondência na nossa base de índices — usado o índice de produtividade que a própria contratada declara na PQ dela ('+iprodFmt(indiceContratadaMedio)+').')
@@ -13168,11 +13184,13 @@ function iprodRenderShell(){
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
           :'<span class="iprod-badge iprod-b-verm">Faltando na PQ da empresa</span>';
         var descCell=q.desc+(q.matchTipo&&q.matchTipo!=='código'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':'');
-        var indiceCell=iprodFmt(q.indiceTotal)+(q.indiceOrigem==='contratada'?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="Nossa base não tem essa composição — usado o índice que a própria contratada declara na PQ dela">contratada</span>':'');
+        var indiceCell=iprodFmt(q.indiceTotal)+(q.indiceOrigem==='contratada'?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="Nossa base não tem essa composição — usado o índice que a própria contratada declara na PQ dela">contratada</span>':'')
+          +(q.indiceSoSupervisao?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Composição na base só tem insumo de supervisão (Encarregado/Mestre...) cadastrado, sem instalador — índice provavelmente subestimado">⚠️ só supervisão</span>':'');
         html+='<tr class="iprod-tr-expand" data-busca="'+iprodNorm(q.desc).replace(/"/g,'')+'" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
           +'<td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+indiceCell+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
         html+='<tr class="iprod-drill"><td colspan="10">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
+          +(q.indiceSoSupervisao?'<div class="iprod-insight" style="margin-bottom:8px">⚠️ Essa composição da base só tem insumo de SUPERVISÃO cadastrado (Encarregado/Mestre...), sem instalador de verdade — provável lacuna na planilha-fonte. O índice reflete só o tempo do encarregado, não o serviço em si. Considere isso ao avaliar essa linha.</div>':'')
           +'<div style="font-size:11px">'+q.detalhe+'</div>'
           +'<div style="font-size:9.5px;color:var(--muted);margin-top:6px">↳ Base de índices: <b>'+(q.matchCodBase||'—')+'</b> — '+(q.matchDesc||'?')+'</div>'
           +'<div style="display:flex;gap:6px;align-items:center;margin-top:10px" onclick="event.stopPropagation()">'
