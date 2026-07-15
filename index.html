@@ -12121,8 +12121,14 @@ var IPROD_NOME_PROJETO='', IPROD_EMPRESA='';
 var IPROD_HISTORICO=null, IPROD_HISTORICO_LOADING=false, IPROD_CARREGADO_DE_HIST=null;
 var IPROD_EMPRESAS=['APIA','LUK','ÔMEGA','TOP ANDAIMES','MILPLAN'];
 
+// Frações de polegada (tubo/válvula: ¾", ½"...) viram token numérico comparável — sem isso, o
+// caractere de fração não é letra nem número e some na tokenização, quebrando a desambiguação
+// por diâmetro entre composições de tubulação quase idênticas.
+var IPROD_FRACOES={'¼':'25','½':'50','¾':'75','⅓':'33','⅔':'67','⅛':'125','⅜':'375','⅝':'625','⅞':'875'};
 function iprodNorm(s){
-  return String(s==null?'':s).normalize('NFD').replace(/\p{Diacritic}/gu,'').toUpperCase().trim();
+  var t=String(s==null?'':s);
+  Object.keys(IPROD_FRACOES).forEach(function(f){ t=t.split(f).join(' '+IPROD_FRACOES[f]); });
+  return t.normalize('NFD').replace(/\p{Diacritic}/gu,'').toUpperCase().trim();
 }
 function iprodFmt(n){
   n=Number(n)||0;
@@ -12137,8 +12143,12 @@ var IPROD_STOPWORDS={};
  'SERVICO','SERVICOS','APLICACAO','CONSIDERAR','HISTOGRAMA'].forEach(function(w){IPROD_STOPWORDS[w]=true;});
 
 function iprodTokens(s){
-  return iprodNorm(s).split(/[^A-Z0-9]+/).filter(function(w){return w.length>1 && !IPROD_STOPWORDS[w];});
+  // Números de 1 dígito (diâmetro de tubo tipo 4",6",8", fck, etc.) são mantidos — costumam ser
+  // o principal jeito de desambiguar entre composições quase idênticas (ex.: mesmo tubo em
+  // diâmetros diferentes). Só descarta letra solta (ruído tipo "P", "B" cortado por pontuação).
+  return iprodNorm(s).split(/[^A-Z0-9]+/).filter(function(w){return (w.length>1||/^[0-9]$/.test(w)) && !IPROD_STOPWORDS[w];});
 }
+function iprodTokenPeso(t){ return /^[0-9]+$/.test(t)?2:1; }
 function iprodUnitNorm(u){
   return String(u||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 }
@@ -12186,16 +12196,36 @@ async function iprodLoadIndice(){
   return IPROD_INDICE_LOADING;
 }
 
-// Similaridade por palavras-chave (Jaccard), com bônus se a unidade também bater.
-// tokensB não vem pré-computado (uso pontual, ex.: comparação de quantidades entre 2 PQs).
+// Similaridade por palavras-chave — mistura Jaccard (penaliza palavra sem correspondência dos
+// dois lados) com "cobertura da base" (quanto da descrição OFICIAL foi encontrado na PQ, sem
+// penalizar tanto quando a PQ tem jargão técnico a mais que a base não descreve — ex.: PQ de tubo
+// cheia de código de norma/material ASTM/SCH/NPT que a composição da base nunca detalha). Números
+// contam em dobro (diâmetro/fck costuma ser o principal jeito de desambiguar composições quase
+// idênticas). tokensB não vem pré-computado (uso pontual, ex.: comparação entre 2 PQs).
 function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB){
   if(!tokensB.length) return 0;
-  var inter=0;
-  tokensB.forEach(function(t){ if(setA[t]) inter++; });
-  if(inter<2) return 0; // exige ao menos 2 palavras-chave em comum pra evitar coincidência
-  var union=tokensA.length+tokensB.length-inter;
-  var score=inter/union;
+  var interW=0, totalA=0, totalB=0, matchCount=0;
+  tokensA.forEach(function(t){ totalA+=iprodTokenPeso(t); });
+  tokensB.forEach(function(t){
+    var w=iprodTokenPeso(t);
+    totalB+=w;
+    if(setA[t]){ interW+=w; matchCount++; }
+  });
+  if(matchCount<2) return 0; // exige ao menos 2 palavras-chave em comum pra evitar coincidência
+  var uniao=totalA+totalB-interW;
+  var jaccard=uniao>0?(interW/uniao):0;
+  var coberturaBase=totalB>0?(interW/totalB):0;
+  var score=0.4*jaccard+0.6*coberturaBase;
   if(unidA && unidB && unidA===unidB) score+=0.08;
+  // Descrições de tubo/válvula/estrutura costumam terminar no diâmetro/tamanho — é o principal
+  // jeito de diferenciar composições quase idênticas (mesmo tubo em bitolas diferentes). Se as
+  // duas terminam em número, bater é reforço forte; não bater é penalidade forte (evita casar
+  // com o tamanho errado só por causa do resto do texto parecido).
+  var lastA=tokensA.length?tokensA[tokensA.length-1]:null;
+  var lastB=tokensB.length?tokensB[tokensB.length-1]:null;
+  if(lastA!=null&&lastB!=null&&/^[0-9]+$/.test(lastA)&&/^[0-9]+$/.test(lastB)){
+    score+=(lastA===lastB)?0.2:-0.35;
+  }
   return score;
 }
 
@@ -12230,7 +12260,7 @@ function iprodFindIndice(codCliente,desc,unidade){
     var score=iprodTokenScore(pqTokens,pqSet,d.tokens,pqUnid,d.unidNorm);
     if(score>bestScore){ bestScore=score; best=d; }
   });
-  if(best && bestScore>=0.45) return {rows:best.rows,matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)',matchCod:best.codCliente,matchDesc:best.desc,score:bestScore};
+  if(best && bestScore>=0.35) return {rows:best.rows,matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)',matchCod:best.codCliente,matchDesc:best.desc,score:bestScore};
   return null;
 }
 
@@ -12246,7 +12276,7 @@ function iprodFindInPq(desc,unidade,pqList){
     var score=iprodTokenScore(pqTokens,pqSet,iprodTokens(p.desc),pqUnid,iprodUnitNorm(p.unidade));
     if(score>bestScore){ bestScore=score; best=p; }
   });
-  return (best && bestScore>=0.45) ? {item:best,score:bestScore} : null;
+  return (best && bestScore>=0.35) ? {item:best,score:bestScore} : null;
 }
 
 // Detecta linha de cabeçalho da PQ (Descrição/Atividade + Quantidade [+ Cód.Cliente + Unidade])
