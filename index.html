@@ -12504,9 +12504,23 @@ function iprodParseHistSheet(data){
     var cand=(data[ri]||[]).map(function(h){return iprodNorm(h);});
     var iTot=cand.findIndex(function(h){return h==='TOTAL';});
     if(iTot>0){
-      var fCol=-1;
-      for(var cc=0;cc<iTot;cc++){ if(cand[cc]){ fCol=cc; break; } }
-      if(fCol>=0){ hdrIdx=ri; iFunc=fCol; iHH=iTot; break; }
+      // Confirma que é mesmo cabeçalho de histograma (função × dias), não uma coluna "TOTAL" de
+      // custo que aparece por coincidência numa aba de PQ comum (ex.: "ADM LOCAL/MANUT.
+      // CANTEIRO/HH/HM/TOTAL/PREÇO UNITÁRIO") — exige datas (número tipo serial do Excel,
+      // ~40000-60000) logo depois do TOTAL/PICO preenchendo os dias. Sem isso, uma PQ que venha
+      // ANTES da aba de histograma real no arquivo "rouba" a detecção e a aba de histograma de
+      // verdade nunca chega a ser lida.
+      var rawRow=data[ri]||[];
+      var temDatas=false;
+      for(var dc=iTot+1;dc<Math.min(rawRow.length,iTot+10);dc++){
+        var v=Number(rawRow[dc]);
+        if(isFinite(v)&&v>=40000&&v<=60000){ temDatas=true; break; }
+      }
+      if(temDatas){
+        var fCol=-1;
+        for(var cc=0;cc<iTot;cc++){ if(cand[cc]){ fCol=cc; break; } }
+        if(fCol>=0){ hdrIdx=ri; iFunc=fCol; iHH=iTot; break; }
+      }
     }
   }
   if(hdrIdx<0) return null;
