@@ -12143,10 +12143,15 @@ var IPROD_STOPWORDS={};
  'SERVICO','SERVICOS','APLICACAO','CONSIDERAR','HISTOGRAMA'].forEach(function(w){IPROD_STOPWORDS[w]=true;});
 
 function iprodTokens(s){
+  // Separa número colado direto na unidade sem espaço (ex.: "16mm²", "10M") — sem isso os dois
+  // grudam num token só e a busca por tamanho/seção não reconhece o número. Só separa nesse
+  // sentido (dígito seguido de letra); não mexe em letra seguida de dígito (ex.: "B36","A53"),
+  // que são códigos de norma/material e devem continuar colados.
+  var n=iprodNorm(s).replace(/([0-9])([A-Z])/g,'$1 $2');
   // Números de 1 dígito (diâmetro de tubo tipo 4",6",8", fck, etc.) são mantidos — costumam ser
   // o principal jeito de desambiguar entre composições quase idênticas (ex.: mesmo tubo em
   // diâmetros diferentes). Só descarta letra solta (ruído tipo "P", "B" cortado por pontuação).
-  return iprodNorm(s).split(/[^A-Z0-9]+/).filter(function(w){return (w.length>1||/^[0-9]$/.test(w)) && !IPROD_STOPWORDS[w];});
+  return n.split(/[^A-Z0-9]+/).filter(function(w){return (w.length>1||/^[0-9]$/.test(w)) && !IPROD_STOPWORDS[w];});
 }
 function iprodTokenPeso(t){ return /^[0-9]+$/.test(t)?2:1; }
 function iprodUnitNorm(u){
@@ -12219,14 +12224,23 @@ function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB){
   if(unidA && unidB && unidA===unidB) score+=0.08;
   // Descrições de tubo/válvula/estrutura costumam terminar no diâmetro/tamanho — é o principal
   // jeito de diferenciar composições quase idênticas (mesmo tubo em bitolas diferentes). Se as
-  // duas terminam em número, bater é reforço forte; não bater é penalidade forte (evita casar
-  // com o tamanho errado só por causa do resto do texto parecido).
-  var lastA=tokensA.length?tokensA[tokensA.length-1]:null;
-  var lastB=tokensB.length?tokensB[tokensB.length-1]:null;
-  if(lastA!=null&&lastB!=null&&/^[0-9]+$/.test(lastA)&&/^[0-9]+$/.test(lastB)){
+  // duas terminam perto de um número, bater é reforço forte; não bater é penalidade forte (evita
+  // casar com o tamanho errado só por causa do resto do texto parecido). Não olha só o ÚLTIMO
+  // token — em cabo o número vem antes da unidade ("SEÇÃO 16 MM2", não "SEÇÃO MM2 16").
+  var lastA=iprodUltimoNumero(tokensA), lastB=iprodUltimoNumero(tokensB);
+  if(lastA!=null&&lastB!=null){
     score+=(lastA===lastB)?0.2:-0.35;
   }
   return score;
+}
+// Acha o último token puramente numérico dentro das últimas 4 posições (diâmetro/seção/fck
+// costuma estar perto do fim da descrição, mas às vezes com a unidade escrita depois do número).
+function iprodUltimoNumero(tokens){
+  var ini=Math.max(0,tokens.length-4);
+  for(var i=tokens.length-1;i>=ini;i--){
+    if(/^[0-9]+$/.test(tokens[i])) return tokens[i];
+  }
+  return null;
 }
 
 // Cruza por código (quando existir) ou por similaridade de texto — a maioria das PQs reais
