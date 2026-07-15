@@ -12138,9 +12138,15 @@ function iprodEditarCodigoProjeto(idxProjeto,input){
 // caractere de fração não é letra nem número e some na tokenização, quebrando a desambiguação
 // por diâmetro entre composições de tubulação quase idênticas.
 var IPROD_FRACOES={'¼':'25','½':'50','¾':'75','⅓':'33','⅔':'67','⅛':'125','⅜':'375','⅝':'625','⅞':'875'};
+// Dígito sobrescrito (mm², m³...) vira o dígito normal colado — sem isso "mm²" e "mm2" (a mesma
+// unidade, só que escrita diferente entre linhas da mesma planilha ou entre PQ e base) tokenizam
+// diferente ("²" não é letra nem número, some na tokenização) e podem deixar de ser reconhecidas
+// como o mesmo texto quando não há nenhum código em comum pra salvar a comparação.
+var IPROD_SOBRESCRITOS={'²':'2','³':'3'};
 function iprodNorm(s){
   var t=String(s==null?'':s);
   Object.keys(IPROD_FRACOES).forEach(function(f){ t=t.split(f).join(' '+IPROD_FRACOES[f]); });
+  Object.keys(IPROD_SOBRESCRITOS).forEach(function(f){ t=t.split(f).join(IPROD_SOBRESCRITOS[f]); });
   return t.normalize('NFD').replace(/\p{Diacritic}/gu,'').toUpperCase().trim();
 }
 function iprodFmt(n){
