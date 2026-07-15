@@ -12702,9 +12702,35 @@ async function iprodProcessar(){
       valorTotal:item.valorTotal,pctValor:item.pctValor,hhAlocado:item.hhAlocado,
       semIndiceMasDeclarado:!achou,
       detalhe:achou?(detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceHHTotal)):'Sem insumo de mão de obra (IH) nessa composição')
-        :'Sem correspondência na base de índices — considerado igual ao HH declarado pela contratada ('+iprodFmt(hhCalc)+' HH), sem aplicar índice próprio.'
+        :'Sem correspondência na base de índices — considerado igual ao HH declarado pela contratada ('+iprodFmt(hhCalc)+' HH), sem aplicar índice próprio.',
+      _grupo:grupo
     });
   });
+
+  // Consolida a exibição da seção 4 pelo mesmo grupo da seção 3 (mesmo código OU descrição,
+  // união transitiva) — quando a atividade se repete várias vezes na PQ (ex.: o mesmo cabo
+  // instalado em várias subestações/áreas, cada uma numa linha), mostra UMA linha com a
+  // quantidade e o HH acumulados, em vez de uma linha por ocorrência repetida (o índice por
+  // unidade é o mesmo em todas, só a quantidade some).
+  (function(){
+    var porGrupo=new Map(), consolidado=[];
+    porAtividade.forEach(function(a){
+      var chave=a._grupo||a;
+      var c=porGrupo.get(chave);
+      if(!c){
+        c={desc:a.desc,unidade:a.unidade,quantidade:0,codCliente:a.codCliente,matchDesc:a.matchDesc,matchTipo:a.matchTipo,
+          indiceHHTotal:a.indiceHHTotal,hhCalculado:0,qtdProjeto:a.qtdProjeto,diffQtdProjeto:a.diffQtdProjeto,
+          semIndiceMasDeclarado:a.semIndiceMasDeclarado,detalhe:a.detalhe,ocorrencias:0};
+        porGrupo.set(chave,c);
+        consolidado.push(c);
+      }
+      c.quantidade+=a.quantidade;
+      c.hhCalculado+=a.hhCalculado;
+      c.ocorrencias++;
+    });
+    porAtividade.length=0;
+    consolidado.forEach(function(c){ delete c._grupo; porAtividade.push(c); });
+  })();
 
   var histList=IPROD_CONTRATADA.histograma||[];
   var usadosHist={};
@@ -13018,8 +13044,9 @@ function iprodRenderShell(){
       r.porAtividade.forEach(function(a){
         var difCell=a.qtdProjeto==null?'—':(Math.abs(a.diffQtdProjeto)<0.01?'<span class="iprod-badge iprod-b-verde">Bate</span>':'<span class="iprod-badge iprod-b-amar">'+iprodFmt(a.diffQtdProjeto)+'</span>');
         var indiceCell=a.semIndiceMasDeclarado?'<span class="iprod-badge iprod-b-cinza" title="Sem índice na base — considerado igual ao declarado">≈ N/D</span>':iprodFmt(a.indiceHHTotal);
+        var descCell=a.desc+(a.ocorrencias>1?' <em style="color:var(--muted);font-size:9.5px" title="Essa atividade repete '+a.ocorrencias+' vezes na PQ (ex.: mesmo item em áreas/subáreas diferentes) — quantidade e HH somados">['+a.ocorrencias+'x acumulado]</em>':'');
         html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
-          +'<td>'+a.desc+'</td><td>'+a.unidade+'</td><td>'+iprodFmt(a.quantidade)+'</td><td>'+(a.codCliente||'—')+'</td><td>'+indiceCell+'</td><td>'+iprodFmt(a.hhCalculado)+'</td><td>'+(a.qtdProjeto!=null?iprodFmt(a.qtdProjeto):'—')+'</td><td>'+difCell+'</td></tr>';
+          +'<td>'+descCell+'</td><td>'+a.unidade+'</td><td>'+iprodFmt(a.quantidade)+'</td><td>'+(a.codCliente||'—')+'</td><td>'+indiceCell+'</td><td>'+iprodFmt(a.hhCalculado)+'</td><td>'+(a.qtdProjeto!=null?iprodFmt(a.qtdProjeto):'—')+'</td><td>'+difCell+'</td></tr>';
         html+='<tr class="iprod-drill"><td colspan="8">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
           +'<div style="font-size:11px">'+a.detalhe+'</div>'
