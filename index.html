@@ -12632,11 +12632,26 @@ async function iprodProcessar(){
   // quantidade da contratada implica (usando o MESMO índice correto da base).
   var qtdComp=[], contratadaSemProjeto=[];
   if(IPROD_PROJETO && IPROD_PROJETO.pq.length){
-    var empByCod={};
-    IPROD_CONTRATADA.pq.forEach(function(e){ if(e.codCliente) empByCod[e.codCliente]=e; });
-    // Evita que o mesmo item da PQ da contratada seja "reivindicado" (e seu HH alocado contado)
-    // por mais de uma atividade do projeto — ex.: concreto fck=10 e fck=30 do projeto batendo
-    // os dois com a única linha de concreto da contratada, duplicando o HH no total.
+    // Consolida a PQ da contratada por descrição normalizada antes de comparar. A mesma
+    // atividade normalmente aparece espalhada em várias linhas — uma por Área/SubÁrea, e
+    // também Montagem (K=M) e Desmontagem (K=D) do mesmo item, cada uma com um código
+    // K/TT/UU/VVV/WWW diferente mesmo com a descrição idêntica. Sem somar tudo aqui, o mapa
+    // por código só guardava a ÚLTIMA linha processada e as outras (inclusive toda a
+    // Desmontagem) sumiam da comparação de quantidade.
+    var contratadaAgrupada={}, contratadaAgrupadaList=[];
+    achouPorItem.forEach(function(x){
+      var item=x.item;
+      var key=iprodNorm(item.desc);
+      var g=contratadaAgrupada[key];
+      if(!g){ g=contratadaAgrupada[key]={desc:item.desc,unidade:item.unidade,quantidade:0,hhAlocado:0,codigos:{}}; contratadaAgrupadaList.push(g); }
+      g.quantidade+=item.quantidade;
+      g.hhAlocado+=(item.hhAlocado||0);
+      if(item.codCliente) g.codigos[item.codCliente]=true;
+    });
+    // Evita que a mesma atividade consolidada da contratada seja "reivindicada" (e seu HH
+    // alocado contado) por mais de uma atividade do projeto — ex.: concreto fck=10 e fck=30
+    // do projeto batendo os dois com a única linha de concreto da contratada, duplicando o
+    // HH no total.
     var usadosEmp=[];
     IPROD_PROJETO.pq.forEach(function(pItem){
       var achouIndice=iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade);
@@ -12647,11 +12662,17 @@ async function iprodProcessar(){
         detalhePartes.push(r.insumo+'-'+(r.descIns||'?')+'('+iprodFmt(r.indice)+')');
       });
 
-      var emp=pItem.codCliente?empByCod[pItem.codCliente]:null;
-      if(emp&&usadosEmp.indexOf(emp)>=0) emp=null;
-      var matchTipo='código';
+      var emp=null, matchTipo=null;
+      if(pItem.codCliente){
+        emp=contratadaAgrupadaList.find(function(g){return g.codigos[pItem.codCliente]&&usadosEmp.indexOf(g)<0;});
+        if(emp) matchTipo='código';
+      }
       if(!emp){
-        var candidatos=IPROD_CONTRATADA.pq.filter(function(e){return usadosEmp.indexOf(e)<0;});
+        var gExato=contratadaAgrupada[iprodNorm(pItem.desc)];
+        if(gExato&&usadosEmp.indexOf(gExato)<0){ emp=gExato; matchTipo='descrição (exata)'; }
+      }
+      if(!emp){
+        var candidatos=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;});
         var achouEmp=iprodFindInPq(pItem.desc,pItem.unidade,candidatos);
         if(achouEmp){ emp=achouEmp.item; matchTipo='descrição ('+Math.min(100,Math.round(achouEmp.score*100))+'% similar)'; }
       }
@@ -12682,8 +12703,8 @@ async function iprodProcessar(){
     // Itens de fornecimento da PQ da contratada que não bateram com NENHUMA atividade da PQ do
     // Projeto — o HH alocado deles fica de fora da tabela acima (que só lista atividades do
     // projeto). Mostrar à parte pra fechar 100% do HH cobrado.
-    contratadaSemProjeto=achouPorItem.filter(function(x){return usadosEmp.indexOf(x.item)<0;})
-      .map(function(x){return {desc:x.item.desc,unidade:x.item.unidade,quantidade:x.item.quantidade,hhAlocado:x.item.hhAlocado||0};});
+    contratadaSemProjeto=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;})
+      .map(function(g){return {desc:g.desc,unidade:g.unidade,quantidade:g.quantidade,hhAlocado:g.hhAlocado||0};});
   }
 
   var materiais=Object.keys(porMaterial).map(function(m){
