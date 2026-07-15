@@ -12299,12 +12299,34 @@ function iprodFindIndice(codCliente,desc,unidade){
   }
 
   if(!pqTokens.length) return null;
+  // Primeira letra do código K/TT/UU/VVV/WWW da PQ (M=Montagem, D=Desmontagem) — quando
+  // reconhecível, desempata contra composições candidatas que só diferem entre si por serem a
+  // versão de Montagem ou de Desmontagem do MESMO texto (ex.: "Lançamento" x "Recolhimento" de
+  // cabo, ambas com a mesma cobertura de palavras porque a PQ não repete esse verbo). Só atua
+  // quando a composição candidata também começa com M/D — nunca penaliza texto genuinamente
+  // diferente (isso já é resolvido pelo resto do score).
+  var kQuery=/^[MD]/.test(cod)?cod[0]:null;
+  var pesoK=iprodPesoLetraK(desc);
   var best=null, bestScore=0;
   IPROD_INDICE.descIdx.forEach(function(d){
     var score=iprodTokenScore(pqTokens,pqSet,d.tokens,pqUnid,d.unidNorm);
+    var kBase=/^[MD]/.test(d.codCliente||'')?d.codCliente[0]:null;
+    if(kBase){
+      if(kQuery) score+=(kBase===kQuery)?0.05:-0.3;
+      else if(pesoK) score+=(kBase===pesoK)?0.05:-0.3;
+    }
     if(score>bestScore){ bestScore=score; best=d; }
   });
   if(best && bestScore>=0.35) return {rows:best.rows,matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)',matchCod:best.codCliente,matchDesc:best.desc,score:bestScore};
+  return null;
+}
+// Quando a PQ não tem código próprio (a maioria), tenta inferir Montagem x Desmontagem pelo
+// verbo típico da descrição — mesma discriminação usada acima, só que pela palavra em vez do código.
+var IPROD_VERBOS_M=['MONTAGEM','LANCAMENTO','INSTALACAO','FORNECIMENTO'],IPROD_VERBOS_D=['DESMONTAGEM','RECOLHIMENTO','REMOCAO','RETIRADA'];
+function iprodPesoLetraK(desc){
+  var n=iprodNorm(desc);
+  if(IPROD_VERBOS_D.some(function(v){return n.indexOf(v)>=0;})) return 'D';
+  if(IPROD_VERBOS_M.some(function(v){return n.indexOf(v)>=0;})) return 'M';
   return null;
 }
 
