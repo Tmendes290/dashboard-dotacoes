@@ -12120,6 +12120,19 @@ var IPROD_PRAT=0.6667, IPROD_TAB='comp';
 var IPROD_NOME_PROJETO='', IPROD_EMPRESA='';
 var IPROD_HISTORICO=null, IPROD_HISTORICO_LOADING=false, IPROD_CARREGADO_DE_HIST=null;
 var IPROD_EMPRESAS=['APIA','LUK','ÔMEGA','TOP ANDAIMES','MILPLAN'];
+var IPROD_FILTRO_STATUS='todos';
+
+function iprodSetFiltroStatus(v){ IPROD_FILTRO_STATUS=v; iprodRenderShell(); }
+
+// Corrige o Cód. Cliente de uma atividade da PQ do Projeto direto pela tela (a planilha fonte às
+// vezes traz o código errado ou de outra disciplina — ver conferência manual) e recalcula tudo.
+function iprodEditarCodigoProjeto(idxProjeto,input){
+  if(!IPROD_PROJETO||!IPROD_PROJETO.pq[idxProjeto]) return;
+  var novo=String(input.value||'').trim().toUpperCase();
+  IPROD_PROJETO.pq[idxProjeto].codCliente=novo||null;
+  toast('Código atualizado — recalculando...','blue');
+  iprodProcessar();
+}
 
 // Frações de polegada (tubo/válvula: ¾", ½"...) viram token numérico comparável — sem isso, o
 // caractere de fração não é letra nem número e some na tokenização, quebrando a desambiguação
@@ -12589,7 +12602,7 @@ async function iprodProcessar(){
     // do projeto batendo os dois com a única linha de concreto da contratada, duplicando o
     // HH no total.
     var usadosEmp=[];
-    IPROD_PROJETO.pq.forEach(function(pItem){
+    IPROD_PROJETO.pq.forEach(function(pItem,idxProjeto){
       var achouIndice=iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade);
       var indiceTotal=0, detalhePartes=[];
       if(achouIndice) achouIndice.rows.forEach(function(r){
@@ -12634,7 +12647,7 @@ async function iprodProcessar(){
 
       var status=emp==null?'faltando-empresa':(Math.abs(diffQtd)<0.01?'bate':'divergente');
 
-      qtdComp.push({desc:pItem.desc,unidade:pItem.unidade,codCliente:pItem.codCliente,
+      qtdComp.push({desc:pItem.desc,unidade:pItem.unidade,codCliente:pItem.codCliente,idxProjeto:idxProjeto,
         qtdProjeto:pItem.quantidade,qtdEmpresa:qtdEmpresa,diffQtd:diffQtd,
         indiceTotal:indiceTotal,hhEsperado:hhEsperado,hhEmpresa:hhEmpresa,
         diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
@@ -12948,9 +12961,19 @@ function iprodRenderShell(){
       +'<button class="iprod-btn" style="margin-top:0" onclick="iprodSalvarHistorico()">💾 Salvar no histórico</button></div>';
 
     if(r.qtdComp.length){
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto × PQ da Contratada — quantidade e índice</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela. <b>HH Esperado</b> = quantidade do projeto × índice, já com a praticabilidade embutida. <b>HH da Empresa</b> = alocação proporcional do HH total cobrado no histograma, distribuído pelo peso (%) do valor (R$) de cada atividade dentro da PQ da contratada — mesmo método usado manualmente na planilha de referência. Clique pra ver a composição do índice.</div>'
+      var qtdCompCont={todos:r.qtdComp.length,bate:0,divergente:0,'faltando-empresa':0};
+      r.qtdComp.forEach(function(q){ qtdCompCont[q.status]=(qtdCompCont[q.status]||0)+1; });
+      if(!qtdCompCont[IPROD_FILTRO_STATUS]&&IPROD_FILTRO_STATUS!=='todos') IPROD_FILTRO_STATUS='todos';
+      var qtdCompFiltrado=IPROD_FILTRO_STATUS==='todos'?r.qtdComp:r.qtdComp.filter(function(q){return q.status===IPROD_FILTRO_STATUS;});
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto × PQ da Contratada — quantidade e índice</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela. <b>HH Esperado</b> = quantidade do projeto × índice, já com a praticabilidade embutida. <b>HH da Empresa</b> = alocação proporcional do HH total cobrado no histograma, distribuído pelo peso (%) do valor (R$) de cada atividade dentro da PQ da contratada — mesmo método usado manualmente na planilha de referência. Clique pra ver a composição do índice e corrigir o Cód. Cliente, se precisar.</div>'
+        +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 12px">'
+        +[['todos','Todos'],['bate','Bate'],['divergente','Divergente'],['faltando-empresa','Faltando']].map(function(f){
+          var ativo=IPROD_FILTRO_STATUS===f[0];
+          return '<span onclick="iprodSetFiltroStatus(\''+f[0]+'\')" style="cursor:pointer;font-size:10.5px;font-weight:800;padding:4px 11px;border-radius:20px;border:1px solid '+(ativo?'#2563eb':'var(--border)')+';background:'+(ativo?'#2563eb':'transparent')+';color:'+(ativo?'#fff':'var(--muted)')+'">'+f[1]+' ('+(qtdCompCont[f[0]]||0)+')</span>';
+        }).join('')
+        +'</div>'
         +'<table class="iprod-tbl"><thead><tr><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>HH Esperado</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
-      r.qtdComp.forEach(function(q){
+      qtdCompFiltrado.forEach(function(q){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
           :'<span class="iprod-badge iprod-b-verm">Faltando na PQ da empresa</span>';
@@ -12961,6 +12984,12 @@ function iprodRenderShell(){
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
           +'<div style="font-size:11px">'+q.detalhe+'</div>'
           +'<div style="font-size:9.5px;color:var(--muted);margin-top:6px">↳ Base de índices: <b>'+(q.matchCodBase||'—')+'</b> — '+(q.matchDesc||'?')+'</div>'
+          +'<div style="display:flex;gap:6px;align-items:center;margin-top:10px" onclick="event.stopPropagation()">'
+          +'<span style="font-size:9.5px;color:var(--muted);font-weight:700">Cód. Cliente (projeto):</span>'
+          +'<input value="'+(q.codCliente||'')+'" placeholder="sem código" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;width:140px;text-transform:uppercase" '
+          +'onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\') iprodEditarCodigoProjeto('+q.idxProjeto+',this)">'
+          +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px" onclick="event.stopPropagation();iprodEditarCodigoProjeto('+q.idxProjeto+',this.previousElementSibling)">Salvar e recalcular</button>'
+          +'</div>'
           +'</td></tr>';
       });
       var totHhEsperado=r.qtdComp.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
