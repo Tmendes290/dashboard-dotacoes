@@ -12114,7 +12114,7 @@ function _rev2InjectStyle(){
 // ÍNDICE DE PRODUTIVIDADE — comparativo HH cobrado pela contratada
 // vs índice de produtividade oficial do projeto (base pci00, multi-disciplina)
 // ============================================================
-var IPROD_INDICE=null, IPROD_INDICE_LOADING=null;
+var IPROD_INDICE=null, IPROD_INDICE_LOADING=null, IPROD_FALLBACK=null;
 var IPROD_CONTRATADA=null, IPROD_PROJETO=null, IPROD_RESULT=null;
 var IPROD_PRAT=0.6667, IPROD_TAB='comp';
 var IPROD_NOME_PROJETO='', IPROD_EMPRESA='';
@@ -12228,6 +12228,36 @@ function iprodPad(v,len){
   return s;
 }
 
+// Agrupa por código + descrição (não só código): a base tem ~15 códigos reaproveitados
+// pra atividades diferentes entre disciplinas (ex.: C6510010100 = "Armadura CA-50" na Civil
+// E "Barra de Transferência" na Mecânica) — agrupar só por código misturaria mão de obra
+// de atividades sem relação nenhuma. Mesma lógica serve pras fontes de fallback (PAREX,
+// Equalização, REDE), só que elas não têm Cod.Cliente (fica '') — nesse caso o agrupamento
+// vira 1 grupo por descrição normalizada.
+function iprodConstruirIndice(json){
+  var byCod={}, descIdx=[], groups={};
+  json.rows.forEach(function(r){
+    var o={disciplina:r[0],composicao:r[1],codCliente:r[2],desc:r[3],unidade:r[4],insumo:r[5],descIns:r[6],unidIns:r[7],indice:r[8],tipo:r[9]};
+    var gKey=o.codCliente+'‖'+iprodNorm(o.desc);
+    var g=groups[gKey];
+    if(!g){
+      g={codCliente:o.codCliente,desc:o.desc,tokens:iprodTokens(o.desc),unidNorm:iprodUnitNorm(o.unidade),rows:[],insumosVistos:{}};
+      groups[gKey]=g;
+      if(!byCod[o.codCliente]) byCod[o.codCliente]=[];
+      byCod[o.codCliente].push(g);
+      descIdx.push(g);
+    }
+    // dentro do mesmo grupo, não deixa o mesmo insumo entrar duas vezes (evita contar HH
+    // em dobro quando a mesma composição aparece cadastrada em mais de uma disciplina)
+    if(!g.insumosVistos[o.insumo]){ g.insumosVistos[o.insumo]=true; g.rows.push(o); }
+  });
+  return {byCod:byCod,descIdx:descIdx,total:json.rows.length};
+}
+var IPROD_FONTES_FALLBACK=[
+  {nome:'PAREX Carajas',arquivo:'/data/indice-produtividade-parex.json'},
+  {nome:'Equalização',arquivo:'/data/indice-produtividade-equalizacao.json'},
+  {nome:'REDE',arquivo:'/data/indice-produtividade-rede.json'}
+];
 async function iprodLoadIndice(){
   if(IPROD_INDICE) return IPROD_INDICE;
   if(IPROD_INDICE_LOADING) return IPROD_INDICE_LOADING;
@@ -12235,29 +12265,19 @@ async function iprodLoadIndice(){
     if(!r.ok) throw new Error('HTTP '+r.status);
     return r.json();
   }).then(function(json){
-    // Agrupa por código + descrição (não só código): a base tem ~15 códigos reaproveitados
-    // pra atividades diferentes entre disciplinas (ex.: C6510010100 = "Armadura CA-50" na Civil
-    // E "Barra de Transferência" na Mecânica) — agrupar só por código misturaria mão de obra
-    // de atividades sem relação nenhuma.
-    var byCod={}, descIdx=[], groups={};
-    json.rows.forEach(function(r){
-      var o={disciplina:r[0],composicao:r[1],codCliente:r[2],desc:r[3],unidade:r[4],insumo:r[5],descIns:r[6],unidIns:r[7],indice:r[8],tipo:r[9]};
-      var gKey=o.codCliente+'‖'+iprodNorm(o.desc);
-      var g=groups[gKey];
-      if(!g){
-        g={codCliente:o.codCliente,desc:o.desc,tokens:iprodTokens(o.desc),unidNorm:iprodUnitNorm(o.unidade),rows:[],insumosVistos:{}};
-        groups[gKey]=g;
-        if(!byCod[o.codCliente]) byCod[o.codCliente]=[];
-        byCod[o.codCliente].push(g);
-        descIdx.push(g);
-      }
-      // dentro do mesmo grupo, não deixa o mesmo insumo entrar duas vezes (evita contar HH
-      // em dobro quando a mesma composição aparece cadastrada em mais de uma disciplina)
-      if(!g.insumosVistos[o.insumo]){ g.insumosVistos[o.insumo]=true; g.rows.push(o); }
+    IPROD_INDICE=iprodConstruirIndice(json);
+    // A base oficial (Vale) é a principal — as 3 fontes abaixo só entram como fallback quando
+    // a Vale não tiver NENHUM match pra um item (ver iprodFindIndiceCru). Carrega em paralelo,
+    // sem travar a base principal se alguma delas falhar.
+    IPROD_FALLBACK=[];
+    return Promise.all(IPROD_FONTES_FALLBACK.map(function(f){
+      return fetch(f.arquivo).then(function(r){ return r.ok?r.json():null; }).then(function(j){
+        if(j&&j.rows&&j.rows.length) IPROD_FALLBACK.push({nome:f.nome,indice:iprodConstruirIndice(j)});
+      }).catch(function(){});
+    })).then(function(){
+      if(IPROD_TAB) iprodRenderShell();
+      return IPROD_INDICE;
     });
-    IPROD_INDICE={byCod:byCod,descIdx:descIdx,total:json.rows.length};
-    if(IPROD_TAB) iprodRenderShell();
-    return IPROD_INDICE;
   }).catch(function(e){
     toast('Erro ao carregar base de índices de produtividade: '+e.message,'red');
     IPROD_INDICE_LOADING=null;
@@ -12347,15 +12367,15 @@ function iprodSanarIndiceD(resultado){
   }
   return resultado;
 }
-function iprodFindIndiceCru(codCliente,desc,unidade){
-  if(!IPROD_INDICE) return null;
+function iprodBuscarNaFonte(fonte,codCliente,desc,unidade){
+  if(!fonte) return null;
   var cod=String(codCliente||'').trim();
   var pqTokens=iprodTokens(desc);
   var pqSet={}; pqTokens.forEach(function(t){pqSet[t]=true;});
   var pqUnid=iprodUnitNorm(unidade);
 
-  if(cod && IPROD_INDICE.byCod[cod]){
-    var grupos=IPROD_INDICE.byCod[cod];
+  if(cod && fonte.byCod[cod]){
+    var grupos=fonte.byCod[cod];
     if(grupos.length===1){
       // Mesmo com o código batendo, se a descrição da PQ não tem NENHUMA relação de conteúdo com
       // a composição cadastrada sob esse código (ex.: código de tubo, por erro na planilha fonte
@@ -12386,7 +12406,7 @@ function iprodFindIndiceCru(codCliente,desc,unidade){
   var kQuery=/^[MD]/.test(cod)?cod[0]:null;
   var pesoK=iprodPesoLetraK(desc);
   var best=null, bestScore=0;
-  IPROD_INDICE.descIdx.forEach(function(d){
+  fonte.descIdx.forEach(function(d){
     var score=iprodTokenScore(pqTokens,pqSet,d.tokens,pqUnid,d.unidNorm);
     var kBase=/^[MD]/.test(d.codCliente||'')?d.codCliente[0]:null;
     if(kBase){
@@ -12396,6 +12416,22 @@ function iprodFindIndiceCru(codCliente,desc,unidade){
     if(score>bestScore){ bestScore=score; best=d; }
   });
   if(best && bestScore>=0.35) return {rows:best.rows,matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)',matchCod:best.codCliente,matchDesc:best.desc,score:bestScore};
+  return null;
+}
+function iprodFindIndiceCru(codCliente,desc,unidade){
+  if(!IPROD_INDICE) return null;
+  var direto=iprodBuscarNaFonte(IPROD_INDICE,codCliente,desc,unidade);
+  if(direto) return direto;
+  // A base oficial (Vale) não achou NADA pra esse item — só aí busca nas fontes de fallback
+  // (PAREX Carajas, Equalização, REDE), na que tiver o match de maior confiança entre as três.
+  if(IPROD_FALLBACK&&IPROD_FALLBACK.length){
+    var melhor=null;
+    IPROD_FALLBACK.forEach(function(f){
+      var r=iprodBuscarNaFonte(f.indice,codCliente,desc,unidade);
+      if(r&&(!melhor||r.score>melhor.score)){ r.matchTipo+=' — fonte: '+f.nome; melhor=r; }
+    });
+    if(melhor) return melhor;
+  }
   return null;
 }
 // Quando a PQ não tem código próprio (a maioria), tenta inferir Montagem x Desmontagem pelo
