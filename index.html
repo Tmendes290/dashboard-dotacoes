@@ -12541,6 +12541,115 @@ async function iprodProcessar(){
     });
   }
 
+  // Consolida a PQ da contratada por "mesmo código OU mesma descrição" — a mesma atividade real
+  // aparece espalhada em várias linhas cruas por dois motivos que não se resolvem com uma chave
+  // única: (1) Área/SubÁrea diferentes, e também Montagem (K=M) x Desmontagem (K=D) do mesmo
+  // item, com código K/TT/UU/VVV/WWW diferente mas descrição idêntica; (2) o MESMO código
+  // aparecendo com descrição em sinônimo diferente entre linhas (ex.: "TUBO..." numa linha e
+  // "TUBULAÇÃO..." noutra, ambas com o mesmo código). Une tudo por componentes conectados
+  // (union-find): dois itens entram no mesmo grupo se compartilham código OU descrição
+  // normalizada, de forma transitiva. Cada item cru guarda uma referência de volta pro seu
+  // grupo (_iprodGrupo) — usado logo abaixo tanto pra comparar com o projeto quanto pra
+  // mostrar, no detalhamento por linha, a quantidade e diferença do TOTAL da atividade (não só
+  // dessa linha isolada, que sozinha não é comparável com o total oficial do projeto).
+  var contratadaAgrupada={}, contratadaAgrupadaList=[];
+  (function(){
+    var itens=achouPorItem.map(function(x){return x.item;});
+    var pai=itens.map(function(_,i){return i;});
+    function acha(i){ while(pai[i]!==i){ pai[i]=pai[pai[i]]; i=pai[i]; } return i; }
+    function une(i,j){ var ri=acha(i), rj=acha(j); if(ri!==rj) pai[ri]=rj; }
+    var porCod={}, porDesc={};
+    itens.forEach(function(it,i){
+      if(it.codCliente){ if(porCod[it.codCliente]!=null) une(i,porCod[it.codCliente]); else porCod[it.codCliente]=i; }
+      var dkey=iprodNorm(it.desc);
+      if(porDesc[dkey]!=null) une(i,porDesc[dkey]); else porDesc[dkey]=i;
+    });
+    var porRaiz={};
+    itens.forEach(function(it,i){
+      var r=acha(i), g=porRaiz[r];
+      if(!g){ g=porRaiz[r]={desc:it.desc,unidade:it.unidade,quantidade:0,hhAlocado:0,codigos:{},descs:{}}; contratadaAgrupadaList.push(g); }
+      g.quantidade+=it.quantidade;
+      g.hhAlocado+=(it.hhAlocado||0);
+      if(it.codCliente) g.codigos[it.codCliente]=true;
+      g.descs[iprodNorm(it.desc)]=true;
+      it._iprodGrupo=g;
+    });
+    contratadaAgrupadaList.forEach(function(g){ Object.keys(g.descs).forEach(function(dk){ contratadaAgrupada[dk]=g; }); });
+  })();
+
+  // Comparação PQ do Projeto → PQ da Contratada (não o inverso): parte de cada atividade
+  // OFICIAL do projeto e checa se a contratada cobriu com a quantidade certa. Isso também
+  // pega o que o sentido empresa→projeto não pegava: atividade do projeto que a contratada
+  // nem colocou na PQ dela. Junto, mostra o índice oficial e o HH esperado x o HH que a
+  // quantidade da contratada implica (usando o MESMO índice correto da base).
+  var qtdComp=[], contratadaSemProjeto=[];
+  if(IPROD_PROJETO && IPROD_PROJETO.pq.length){
+    // Evita que a mesma atividade consolidada da contratada seja "reivindicada" (e seu HH
+    // alocado contado) por mais de uma atividade do projeto — ex.: concreto fck=10 e fck=30
+    // do projeto batendo os dois com a única linha de concreto da contratada, duplicando o
+    // HH no total.
+    var usadosEmp=[];
+    IPROD_PROJETO.pq.forEach(function(pItem){
+      var achouIndice=iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade);
+      var indiceTotal=0, detalhePartes=[];
+      if(achouIndice) achouIndice.rows.forEach(function(r){
+        if(r.tipo!=='M') return;
+        indiceTotal+=Number(r.indice)||0;
+        detalhePartes.push(r.insumo+'-'+(r.descIns||'?')+'('+iprodFmt(r.indice)+')');
+      });
+
+      var emp=null, matchTipo=null;
+      if(pItem.codCliente){
+        emp=contratadaAgrupadaList.find(function(g){return g.codigos[pItem.codCliente]&&usadosEmp.indexOf(g)<0;});
+        if(emp) matchTipo='código';
+      }
+      if(!emp){
+        var gExato=contratadaAgrupada[iprodNorm(pItem.desc)];
+        if(gExato&&usadosEmp.indexOf(gExato)<0){ emp=gExato; matchTipo='descrição (exata)'; }
+      }
+      if(!emp){
+        var candidatos=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;});
+        var achouEmp=iprodFindInPq(pItem.desc,pItem.unidade,candidatos);
+        if(achouEmp){ emp=achouEmp.item; matchTipo='descrição ('+Math.min(100,Math.round(achouEmp.score*100))+'% similar)'; }
+      }
+      if(emp){
+        usadosEmp.push(emp);
+        // Guarda no próprio grupo a quantidade oficial do projeto e a diferença — usado pelo
+        // detalhamento por linha (PASSO 2) pra mostrar o comparativo do TOTAL da atividade em
+        // vez de comparar uma linha isolada contra o total do projeto (que nunca bate).
+        emp._qtdProjetoTotal=pItem.quantidade;
+        emp._diffQtdTotal=emp.quantidade-pItem.quantidade;
+      }
+
+      var qtdEmpresa=emp?emp.quantidade:null;
+      var diffQtd=qtdEmpresa!=null?(qtdEmpresa-pItem.quantidade):null;
+      // HH da Empresa = alocação proporcional do HH cobrado (histograma) pelo peso em R$ dessa
+      // atividade dentro da PQ da contratada — não é mais quantidade×índice
+      var hhEmpresa=emp?(emp.hhAlocado||0):null;
+      // HH Esperado já com praticabilidade embutida (Referência × (2 − Praticabilidade), igual à seção 5).
+      // Sem índice na base pra essa atividade do projeto: considera igual ao HH da empresa (não
+      // penaliza por lacuna nossa) em vez de deixar 0 e gerar diferença artificial.
+      var semIndiceProjeto=!achouIndice;
+      var hhEsperado=achouIndice?(pItem.quantidade*indiceTotal*(2-IPROD_PRAT)):(hhEmpresa||0);
+
+      var status=emp==null?'faltando-empresa':(Math.abs(diffQtd)<0.01?'bate':'divergente');
+
+      qtdComp.push({desc:pItem.desc,unidade:pItem.unidade,codCliente:pItem.codCliente,
+        qtdProjeto:pItem.quantidade,qtdEmpresa:qtdEmpresa,diffQtd:diffQtd,
+        indiceTotal:indiceTotal,hhEsperado:hhEsperado,hhEmpresa:hhEmpresa,
+        diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
+        status:status,matchTipo:matchTipo,semIndiceProjeto:semIndiceProjeto,
+        matchDesc:achouIndice?achouIndice.matchDesc:null,matchCodBase:achouIndice?achouIndice.matchCod:null,
+        detalhe:achouIndice?(detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceTotal)):'Sem insumo de mão de obra (IH) nessa composição')
+          :'Sem correspondência na base de índices — considerado igual ao HH da empresa, sem aplicar índice próprio.'});
+    });
+    // Itens de fornecimento da PQ da contratada que não bateram com NENHUMA atividade da PQ do
+    // Projeto — o HH alocado deles fica de fora da tabela acima (que só lista atividades do
+    // projeto). Mostrar à parte pra fechar 100% do HH cobrado.
+    contratadaSemProjeto=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;})
+      .map(function(g){return {desc:g.desc,unidade:g.unidade,quantidade:g.quantidade,hhAlocado:g.hhAlocado||0};});
+  }
+
   // PASSO 2: monta os comparativos usando o índice e a alocação já calculados
   achouPorItem.forEach(function(x){
     var item=x.item, achou=x.achou;
@@ -12562,16 +12671,13 @@ async function iprodProcessar(){
       }
     });
     // Uma linha por atividade da PQ (igual à Planilha1 do modelo): índice HH total = soma de
-    // todos os insumos de mão de obra (IH) daquela composição, e HH Calculado = quantidade × esse total
-    var qtdProjeto=null, diffQtdProjeto=null;
-    if(IPROD_PROJETO && IPROD_PROJETO.pq.length){
-      var prMatch=item.codCliente?IPROD_PROJETO.pq.find(function(p){return p.codCliente===item.codCliente;}):null;
-      if(!prMatch){
-        var achouPr=iprodFindInPq(item.desc,item.unidade,IPROD_PROJETO.pq);
-        if(achouPr) prMatch=achouPr.item;
-      }
-      if(prMatch){ qtdProjeto=prMatch.quantidade; diffQtdProjeto=item.quantidade-prMatch.quantidade; }
-    }
+    // todos os insumos de mão de obra (IH) daquela composição, e HH Calculado = quantidade × esse total.
+    // Qtd. Projeto/Dif. Qtd. vêm do grupo consolidado (mesmo código OU descrição, ver acima) —
+    // é o TOTAL da atividade inteira comparado com o projeto, não só essa linha isolada (uma
+    // linha crua sozinha, ex. só uma Área/SubÁrea, nunca bate contra o total oficial do projeto).
+    var grupo=item._iprodGrupo;
+    var qtdProjeto=grupo&&grupo._qtdProjetoTotal!=null?grupo._qtdProjetoTotal:null;
+    var diffQtdProjeto=grupo&&grupo._diffQtdTotal!=null?grupo._diffQtdTotal:null;
     // Sem índice na base mas com HH declarado pela contratada: HH Calculado = o próprio declarado
     // (considerado igual — sem índice pra calcular por conta própria, sem penalizar a contratada)
     var hhCalc=achou?(item.quantidade*indiceHHTotal):(item.hhDeclarado||item.hhAlocado||0);
@@ -12634,103 +12740,6 @@ async function iprodProcessar(){
   var totRefAjust=linhas.reduce(function(s,l){return s+l.hhAjust;},0)+totRefAssumido;
   var totDif=totCobrado-totRefAjust;
   var pctImprod=totCobrado>0?(totDif/totCobrado):0;
-
-  // Comparação PQ do Projeto → PQ da Contratada (não o inverso): parte de cada atividade
-  // OFICIAL do projeto e checa se a contratada cobriu com a quantidade certa. Isso também
-  // pega o que o sentido empresa→projeto não pegava: atividade do projeto que a contratada
-  // nem colocou na PQ dela. Junto, mostra o índice oficial e o HH esperado x o HH que a
-  // quantidade da contratada implica (usando o MESMO índice correto da base).
-  var qtdComp=[], contratadaSemProjeto=[];
-  if(IPROD_PROJETO && IPROD_PROJETO.pq.length){
-    // Consolida a PQ da contratada por "mesmo código OU mesma descrição" antes de comparar — a
-    // mesma atividade real aparece espalhada em várias linhas cruas por dois motivos que não se
-    // resolvem com uma chave única: (1) Área/SubÁrea diferentes, e também Montagem (K=M) x
-    // Desmontagem (K=D) do mesmo item, com código K/TT/UU/VVV/WWW diferente mas descrição
-    // idêntica; (2) o MESMO código aparecendo com descrição em sinônimo diferente entre linhas
-    // (ex.: "TUBO..." numa linha e "TUBULAÇÃO..." noutra, ambas com o código M6010020010). Une
-    // tudo por componentes conectados (union-find): dois itens entram no mesmo grupo se
-    // compartilham código OU descrição normalizada, de forma transitiva.
-    var contratadaAgrupada={}, contratadaAgrupadaList=[];
-    (function(){
-      var itens=achouPorItem.map(function(x){return x.item;});
-      var pai=itens.map(function(_,i){return i;});
-      function acha(i){ while(pai[i]!==i){ pai[i]=pai[pai[i]]; i=pai[i]; } return i; }
-      function une(i,j){ var ri=acha(i), rj=acha(j); if(ri!==rj) pai[ri]=rj; }
-      var porCod={}, porDesc={};
-      itens.forEach(function(it,i){
-        if(it.codCliente){ if(porCod[it.codCliente]!=null) une(i,porCod[it.codCliente]); else porCod[it.codCliente]=i; }
-        var dkey=iprodNorm(it.desc);
-        if(porDesc[dkey]!=null) une(i,porDesc[dkey]); else porDesc[dkey]=i;
-      });
-      var porRaiz={};
-      itens.forEach(function(it,i){
-        var r=acha(i), g=porRaiz[r];
-        if(!g){ g=porRaiz[r]={desc:it.desc,unidade:it.unidade,quantidade:0,hhAlocado:0,codigos:{},descs:{}}; contratadaAgrupadaList.push(g); }
-        g.quantidade+=it.quantidade;
-        g.hhAlocado+=(it.hhAlocado||0);
-        if(it.codCliente) g.codigos[it.codCliente]=true;
-        g.descs[iprodNorm(it.desc)]=true;
-      });
-      contratadaAgrupadaList.forEach(function(g){ Object.keys(g.descs).forEach(function(dk){ contratadaAgrupada[dk]=g; }); });
-    })();
-    // Evita que a mesma atividade consolidada da contratada seja "reivindicada" (e seu HH
-    // alocado contado) por mais de uma atividade do projeto — ex.: concreto fck=10 e fck=30
-    // do projeto batendo os dois com a única linha de concreto da contratada, duplicando o
-    // HH no total.
-    var usadosEmp=[];
-    IPROD_PROJETO.pq.forEach(function(pItem){
-      var achouIndice=iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade);
-      var indiceTotal=0, detalhePartes=[];
-      if(achouIndice) achouIndice.rows.forEach(function(r){
-        if(r.tipo!=='M') return;
-        indiceTotal+=Number(r.indice)||0;
-        detalhePartes.push(r.insumo+'-'+(r.descIns||'?')+'('+iprodFmt(r.indice)+')');
-      });
-
-      var emp=null, matchTipo=null;
-      if(pItem.codCliente){
-        emp=contratadaAgrupadaList.find(function(g){return g.codigos[pItem.codCliente]&&usadosEmp.indexOf(g)<0;});
-        if(emp) matchTipo='código';
-      }
-      if(!emp){
-        var gExato=contratadaAgrupada[iprodNorm(pItem.desc)];
-        if(gExato&&usadosEmp.indexOf(gExato)<0){ emp=gExato; matchTipo='descrição (exata)'; }
-      }
-      if(!emp){
-        var candidatos=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;});
-        var achouEmp=iprodFindInPq(pItem.desc,pItem.unidade,candidatos);
-        if(achouEmp){ emp=achouEmp.item; matchTipo='descrição ('+Math.min(100,Math.round(achouEmp.score*100))+'% similar)'; }
-      }
-      if(emp) usadosEmp.push(emp);
-
-      var qtdEmpresa=emp?emp.quantidade:null;
-      var diffQtd=qtdEmpresa!=null?(qtdEmpresa-pItem.quantidade):null;
-      // HH da Empresa = alocação proporcional do HH cobrado (histograma) pelo peso em R$ dessa
-      // atividade dentro da PQ da contratada — não é mais quantidade×índice
-      var hhEmpresa=emp?(emp.hhAlocado||0):null;
-      // HH Esperado já com praticabilidade embutida (Referência × (2 − Praticabilidade), igual à seção 5).
-      // Sem índice na base pra essa atividade do projeto: considera igual ao HH da empresa (não
-      // penaliza por lacuna nossa) em vez de deixar 0 e gerar diferença artificial.
-      var semIndiceProjeto=!achouIndice;
-      var hhEsperado=achouIndice?(pItem.quantidade*indiceTotal*(2-IPROD_PRAT)):(hhEmpresa||0);
-
-      var status=emp==null?'faltando-empresa':(Math.abs(diffQtd)<0.01?'bate':'divergente');
-
-      qtdComp.push({desc:pItem.desc,unidade:pItem.unidade,codCliente:pItem.codCliente,
-        qtdProjeto:pItem.quantidade,qtdEmpresa:qtdEmpresa,diffQtd:diffQtd,
-        indiceTotal:indiceTotal,hhEsperado:hhEsperado,hhEmpresa:hhEmpresa,
-        diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
-        status:status,matchTipo:matchTipo,semIndiceProjeto:semIndiceProjeto,
-        matchDesc:achouIndice?achouIndice.matchDesc:null,matchCodBase:achouIndice?achouIndice.matchCod:null,
-        detalhe:achouIndice?(detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceTotal)):'Sem insumo de mão de obra (IH) nessa composição')
-          :'Sem correspondência na base de índices — considerado igual ao HH da empresa, sem aplicar índice próprio.'});
-    });
-    // Itens de fornecimento da PQ da contratada que não bateram com NENHUMA atividade da PQ do
-    // Projeto — o HH alocado deles fica de fora da tabela acima (que só lista atividades do
-    // projeto). Mostrar à parte pra fechar 100% do HH cobrado.
-    contratadaSemProjeto=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;})
-      .map(function(g){return {desc:g.desc,unidade:g.unidade,quantidade:g.quantidade,hhAlocado:g.hhAlocado||0};});
-  }
 
   var materiais=Object.keys(porMaterial).map(function(m){
     var o=porMaterial[m];
