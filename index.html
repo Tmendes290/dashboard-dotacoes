@@ -12459,6 +12459,10 @@ function iprodParsePQSheet(data){
   var iHH=hdrC.findIndex(function(h){return (h.indexOf('HH')>=0||h.indexOf('HORA')>=0)&&h.indexOf('INDICE')<0&&h.indexOf('TOTAL')>=0;});
   if(iHH<0) iHH=hdrC.findIndex(function(h){return h.indexOf('HH')>=0&&h.indexOf('INDICE')<0&&(h.indexOf('CALCULADO')>=0||h.indexOf('COBRADO')>=0||h.indexOf('APONTADO')>=0);});
   if(iHH<0) iHH=hdrC.findIndex(function(h){return (h.indexOf('HH')>=0||h.indexOf('HORA')>=0)&&h.indexOf('INDICE')<0;});
+  // Algumas contratadas já trazem o índice de produtividade PRÓPRIO delas por linha (ex.: coluna
+  // "ÍNDICE DE PRODUTIVIDADE") — usado como aproximação quando a NOSSA base não tem essa
+  // composição cadastrada, em vez de deixar a atividade sem nenhum comparativo.
+  var iIndiceContratada=hdrC.findIndex(function(h){return h.indexOf('INDICE')>=0&&h.indexOf('PRODUTIV')>=0;});
   if(iDesc<0||iQtd<0) return null;
 
   // Código hierárquico "CÓD. ATIVIDADE" da Vale (K/TT/UU/VVV/WWW) — muitas PQs reais não têm
@@ -12503,7 +12507,12 @@ function iprodParsePQSheet(data){
       var hhVal=parseFloat(String(row[iHH]==null?'':row[iHH]).replace(',','.'));
       if(isFinite(hhVal)&&hhVal>0) hhDeclarado=hhVal;
     }
-    out.push({desc:desc,codCliente:cod,unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd,valorTotal:valorTotal,hhDeclarado:hhDeclarado});
+    var indiceContratada=null;
+    if(iIndiceContratada>=0){
+      var idxVal=parseFloat(String(row[iIndiceContratada]==null?'':row[iIndiceContratada]).replace(',','.'));
+      if(isFinite(idxVal)&&idxVal>0) indiceContratada=idxVal;
+    }
+    out.push({desc:desc,codCliente:cod,unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd,valorTotal:valorTotal,hhDeclarado:hhDeclarado,indiceContratada:indiceContratada});
   });
   return out.length?out:null;
 }
@@ -12648,9 +12657,15 @@ async function iprodProcessar(){
     var achou=iprodFindIndice(item.codCliente,item.desc,item.unidade);
     if(!achou){
       // Não achamos índice na nossa base — mas se a contratada já declarou um HH pra essa
-      // atividade, não é justo tratar como divergência (a lacuna é da NOSSA base, não dela).
-      // Considera os dois iguais em vez de contar como extrapolação.
-      if(item.hhDeclarado!=null){ item.semIndiceMasDeclarado=true; achouPorItem.push({item:item,achou:null}); return; }
+      // atividade, tem valor (R$) pra entrar no rateio proporcional, ou tem o índice de
+      // produtividade PRÓPRIO dela, ainda dá pra comparar quantidade e estimar HH — não é justo
+      // simplesmente sumir com a atividade (a lacuna é da NOSSA base, não da contratada). Só cai
+      // em "sem índice" de verdade quando não sobra nenhuma dessas três informações.
+      if(item.hhDeclarado!=null||item.valorTotal>0||item.indiceContratada!=null){
+        item.semIndiceMasDeclarado=true;
+        achouPorItem.push({item:item,achou:null});
+        return;
+      }
       semIndice.push(item); return;
     }
     achouPorItem.push({item:item,achou:achou});
@@ -12699,9 +12714,10 @@ async function iprodProcessar(){
     var porRaiz={};
     itens.forEach(function(it,i){
       var r=acha(i), g=porRaiz[r];
-      if(!g){ g=porRaiz[r]={desc:it.desc,unidade:it.unidade,quantidade:0,hhAlocado:0,codigos:{},descs:{}}; contratadaAgrupadaList.push(g); }
+      if(!g){ g=porRaiz[r]={desc:it.desc,unidade:it.unidade,quantidade:0,hhAlocado:0,hhViaIndiceContratada:0,codigos:{},descs:{}}; contratadaAgrupadaList.push(g); }
       g.quantidade+=it.quantidade;
       g.hhAlocado+=(it.hhAlocado||0);
+      if(it.indiceContratada!=null) g.hhViaIndiceContratada+=it.quantidade*it.indiceContratada;
       if(it.codCliente) g.codigos[it.codCliente]=true;
       g.descs[iprodNorm(it.desc)]=true;
       it._iprodGrupo=g;
@@ -12770,11 +12786,26 @@ async function iprodProcessar(){
       // HH da Empresa = alocação proporcional do HH cobrado (histograma) pelo peso em R$ dessa
       // atividade dentro da PQ da contratada — não é mais quantidade×índice
       var hhEmpresa=emp?(emp.hhAlocado||0):null;
-      // HH Esperado já com praticabilidade embutida (Referência × (2 − Praticabilidade), igual à seção 5).
-      // Sem índice na base pra essa atividade do projeto: considera igual ao HH da empresa (não
-      // penaliza por lacuna nossa) em vez de deixar 0 e gerar diferença artificial.
+      // Sem índice na NOSSA base pra essa atividade: antes de cair pro "considera igual ao HH da
+      // empresa" (sem checar nada), tenta usar o índice de produtividade que a PRÓPRIA contratada
+      // declarou por linha na PQ dela (quando ela traz essa coluna) — pelo menos valida se a
+      // quantidade oficial do projeto × a taxa que ela mesma diz usar bate com o que ela alocou,
+      // em vez de simplesmente não comparar nada.
       var semIndiceProjeto=!achouIndice;
-      var hhEsperado=achouIndice?(pItem.quantidade*indiceTotal*(2-IPROD_PRAT)):(hhEmpresa||0);
+      var indiceContratadaMedio=(emp&&emp.hhViaIndiceContratada>0&&emp.quantidade>0)?(emp.hhViaIndiceContratada/emp.quantidade):null;
+      var indiceOrigem=achouIndice?'base':(indiceContratadaMedio!=null?'contratada':null);
+      var hhEsperado;
+      if(achouIndice){
+        // HH Esperado já com praticabilidade embutida (Referência × (2 − Praticabilidade), igual à seção 5).
+        hhEsperado=pItem.quantidade*indiceTotal*(2-IPROD_PRAT);
+      } else if(indiceContratadaMedio!=null){
+        // Índice já é o que a contratada mesma pratica (empírico) — não aplica praticabilidade
+        // de novo por cima, senão infla artificialmente uma taxa que já reflete a realidade dela.
+        indiceTotal=indiceContratadaMedio;
+        hhEsperado=pItem.quantidade*indiceContratadaMedio;
+      } else {
+        hhEsperado=hhEmpresa||0;
+      }
 
       var status=emp==null?'faltando-empresa':(Math.abs(diffQtd)<0.01?'bate':'divergente');
 
@@ -12782,10 +12813,11 @@ async function iprodProcessar(){
         qtdProjeto:pItem.quantidade,qtdEmpresa:qtdEmpresa,diffQtd:diffQtd,
         indiceTotal:indiceTotal,hhEsperado:hhEsperado,hhEmpresa:hhEmpresa,
         diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
-        status:status,matchTipo:matchTipo,semIndiceProjeto:semIndiceProjeto,
+        status:status,matchTipo:matchTipo,semIndiceProjeto:semIndiceProjeto,indiceOrigem:indiceOrigem,
         matchDesc:achouIndice?achouIndice.matchDesc:null,matchCodBase:achouIndice?achouIndice.matchCod:null,
         detalhe:achouIndice?(detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceTotal)):'Sem insumo de mão de obra (IH) nessa composição')
-          :'Sem correspondência na base de índices — considerado igual ao HH da empresa, sem aplicar índice próprio.'});
+          :(indiceOrigem==='contratada'?('Sem correspondência na nossa base de índices — usado o índice de produtividade que a própria contratada declara na PQ dela ('+iprodFmt(indiceContratadaMedio)+').')
+            :'Sem correspondência na base de índices — considerado igual ao HH da empresa, sem aplicar índice próprio.')});
     });
     // Itens de fornecimento da PQ da contratada que não bateram com NENHUMA atividade da PQ do
     // Projeto — o HH alocado deles fica de fora da tabela acima (que só lista atividades do
@@ -13136,8 +13168,9 @@ function iprodRenderShell(){
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
           :'<span class="iprod-badge iprod-b-verm">Faltando na PQ da empresa</span>';
         var descCell=q.desc+(q.matchTipo&&q.matchTipo!=='código'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':'');
+        var indiceCell=iprodFmt(q.indiceTotal)+(q.indiceOrigem==='contratada'?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="Nossa base não tem essa composição — usado o índice que a própria contratada declara na PQ dela">contratada</span>':'');
         html+='<tr class="iprod-tr-expand" data-busca="'+iprodNorm(q.desc).replace(/"/g,'')+'" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
-          +'<td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+iprodFmt(q.indiceTotal)+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
+          +'<td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+indiceCell+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
         html+='<tr class="iprod-drill"><td colspan="10">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
           +'<div style="font-size:11px">'+q.detalhe+'</div>'
