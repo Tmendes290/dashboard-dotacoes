@@ -12247,6 +12247,13 @@ function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB){
   if(lastA!=null&&lastB!=null){
     score+=(lastA===lastB)?0.2:-0.35;
   }
+  // O primeiro token costuma ser o "assunto" da descrição (Hidrociclones, Cabo, Tubo...) — só
+  // bônus, nunca penalidade (a base às vezes prefixa com "Montagem de.../Fornecimento de...", que
+  // legitimamente não bate com o primeiro token da PQ mesmo sendo a composição certa). Ajuda a
+  // desempatar casos como "Ciclones Acima 15"" x "Hidrociclones Acima 15"": a PQ cita as duas
+  // palavras (uma no assunto, outra genérica no meio do texto), dando cobertura igual pras duas
+  // sem esse reforço — o empate seria resolvido por acaso, não pelo assunto real da atividade.
+  if(tokensA.length&&tokensB.length&&tokensA[0]===tokensB[0]) score+=0.15;
   return score;
 }
 // Acha o último token puramente numérico dentro das últimas 4 posições (diâmetro/seção/fck
