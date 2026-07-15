@@ -12722,6 +12722,14 @@ async function iprodProcessar(){
     // HH no total.
     var usadosEmp=[];
     IPROD_PROJETO.pq.forEach(function(pItem,idxProjeto){
+      // Atividade administrativa (unidade "vb"/"vb x mês") ou categoria "F" (fornecimento puro,
+      // sem montagem) do próprio projeto: não tem índice de mão de obra pra comparar, sempre
+      // apareceria como "Faltando na PQ da empresa" mesmo quando está tudo certo — só polui a
+      // tabela de quantidade/índice. Continua contando no HH Cobrado total normalmente (isso vem
+      // do histograma, não dessa comparação).
+      var ehVerbaProjeto=iprodNorm(pItem.unidade||'').indexOf('VB')===0;
+      var kProjeto=pItem.codCliente&&/^[A-Z]/.test(pItem.codCliente)?pItem.codCliente[0]:null;
+      if(ehVerbaProjeto||kProjeto==='F') return;
       var achouIndice=iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade);
       var indiceTotal=0, detalhePartes=[];
       if(achouIndice) achouIndice.rows.forEach(function(r){
