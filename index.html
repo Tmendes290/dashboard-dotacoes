@@ -12156,11 +12156,17 @@ var IPROD_STOPWORDS={};
  'SERVICO','SERVICOS','APLICACAO','CONSIDERAR','HISTOGRAMA'].forEach(function(w){IPROD_STOPWORDS[w]=true;});
 
 function iprodTokens(s){
+  // Funde número decimal com vírgula/ponto (ex.: "1419,6", "4,75") num token só ANTES de separar
+  // por pontuação — senão a parte depois da vírgula vira um token numérico solto (ex.: só "6")
+  // que bate por pura coincidência com outro número qualquer solto em texto sem nenhuma relação
+  // (ex.: "Cap. Nominal = 1419,6 t/h" de uma peneira batendo com "Pressão Nominal Pn 6" de um
+  // tubo só porque os dois têm um "6" avulso — mesma classe de bug do "2"/"50" do bueiro).
+  var n=iprodNorm(s).replace(/([0-9])[,.]([0-9])/g,'$1$2');
   // Separa número colado direto na unidade sem espaço (ex.: "16mm²", "10M") — sem isso os dois
   // grudam num token só e a busca por tamanho/seção não reconhece o número. Só separa nesse
   // sentido (dígito seguido de letra); não mexe em letra seguida de dígito (ex.: "B36","A53"),
   // que são códigos de norma/material e devem continuar colados.
-  var n=iprodNorm(s).replace(/([0-9])([A-Z])/g,'$1 $2');
+  n=n.replace(/([0-9])([A-Z])/g,'$1 $2');
   // Números de 1 dígito (diâmetro de tubo tipo 4",6",8", fck, etc.) são mantidos — costumam ser
   // o principal jeito de desambiguar entre composições quase idênticas (ex.: mesmo tubo em
   // diâmetros diferentes). Só descarta letra solta (ruído tipo "P", "B" cortado por pontuação).
@@ -12270,6 +12276,30 @@ function iprodUltimoNumero(tokens){
 // não tem o código oficial da Vale, só a descrição do serviço, então esse é o caminho
 // principal, não só um fallback.
 function iprodFindIndice(codCliente,desc,unidade){
+  return iprodSanarIndiceD(iprodFindIndiceCru(codCliente,desc,unidade));
+}
+// A base tem várias composições de Desmontagem (prefixo D) com o índice de mão de obra
+// absurdamente maior que a Montagem equivalente do MESMO código (ex.: "D6010020017"
+// Desmontagem de tubulação Sch.80 2" = 508,20 HH/m contra 2,86 HH/m da Montagem — 178x mais,
+// implausível: desmontar não pode gastar centenas de vezes mais mão de obra que montar). É erro
+// de digitação/conversão na planilha fonte da Vale, não um problema de correspondência — mas
+// como o índice errado entra direto no cálculo, sana aqui: quando a Desmontagem encontrada é
+// pelo menos 5x maior que a Montagem do mesmo código, usa o índice da Montagem como aproximação
+// (mais seguro que confiar num número phisicamente implausível), deixando isso visível no
+// matchTipo pra não esconder que houve substituição.
+function iprodSanarIndiceD(resultado){
+  if(!resultado||!resultado.matchCod||!IPROD_INDICE||resultado.matchCod[0]!=='D') return resultado;
+  var gruposM=IPROD_INDICE.byCod['M'+resultado.matchCod.slice(1)];
+  if(!gruposM||!gruposM.length) return resultado;
+  var idxD=resultado.rows.filter(function(r){return r.tipo==='M';}).reduce(function(s,r){return s+(Number(r.indice)||0);},0);
+  var compM=gruposM[0];
+  var idxM=compM.rows.filter(function(r){return r.tipo==='M';}).reduce(function(s,r){return s+(Number(r.indice)||0);},0);
+  if(idxM>0&&idxD>idxM*5){
+    return {rows:compM.rows,matchTipo:resultado.matchTipo+' — índice de Desmontagem da base é anômalo ('+iprodFmt(idxD)+' HH), usado o da Montagem equivalente ('+iprodFmt(idxM)+' HH) como aproximação',matchCod:resultado.matchCod,matchDesc:resultado.matchDesc,score:resultado.score};
+  }
+  return resultado;
+}
+function iprodFindIndiceCru(codCliente,desc,unidade){
   if(!IPROD_INDICE) return null;
   var cod=String(codCliente||'').trim();
   var pqTokens=iprodTokens(desc);
