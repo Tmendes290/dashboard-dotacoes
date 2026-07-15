@@ -12642,22 +12642,37 @@ async function iprodProcessar(){
   // quantidade da contratada implica (usando o MESMO índice correto da base).
   var qtdComp=[], contratadaSemProjeto=[];
   if(IPROD_PROJETO && IPROD_PROJETO.pq.length){
-    // Consolida a PQ da contratada por descrição normalizada antes de comparar. A mesma
-    // atividade normalmente aparece espalhada em várias linhas — uma por Área/SubÁrea, e
-    // também Montagem (K=M) e Desmontagem (K=D) do mesmo item, cada uma com um código
-    // K/TT/UU/VVV/WWW diferente mesmo com a descrição idêntica. Sem somar tudo aqui, o mapa
-    // por código só guardava a ÚLTIMA linha processada e as outras (inclusive toda a
-    // Desmontagem) sumiam da comparação de quantidade.
+    // Consolida a PQ da contratada por "mesmo código OU mesma descrição" antes de comparar — a
+    // mesma atividade real aparece espalhada em várias linhas cruas por dois motivos que não se
+    // resolvem com uma chave única: (1) Área/SubÁrea diferentes, e também Montagem (K=M) x
+    // Desmontagem (K=D) do mesmo item, com código K/TT/UU/VVV/WWW diferente mas descrição
+    // idêntica; (2) o MESMO código aparecendo com descrição em sinônimo diferente entre linhas
+    // (ex.: "TUBO..." numa linha e "TUBULAÇÃO..." noutra, ambas com o código M6010020010). Une
+    // tudo por componentes conectados (union-find): dois itens entram no mesmo grupo se
+    // compartilham código OU descrição normalizada, de forma transitiva.
     var contratadaAgrupada={}, contratadaAgrupadaList=[];
-    achouPorItem.forEach(function(x){
-      var item=x.item;
-      var key=iprodNorm(item.desc);
-      var g=contratadaAgrupada[key];
-      if(!g){ g=contratadaAgrupada[key]={desc:item.desc,unidade:item.unidade,quantidade:0,hhAlocado:0,codigos:{}}; contratadaAgrupadaList.push(g); }
-      g.quantidade+=item.quantidade;
-      g.hhAlocado+=(item.hhAlocado||0);
-      if(item.codCliente) g.codigos[item.codCliente]=true;
-    });
+    (function(){
+      var itens=achouPorItem.map(function(x){return x.item;});
+      var pai=itens.map(function(_,i){return i;});
+      function acha(i){ while(pai[i]!==i){ pai[i]=pai[pai[i]]; i=pai[i]; } return i; }
+      function une(i,j){ var ri=acha(i), rj=acha(j); if(ri!==rj) pai[ri]=rj; }
+      var porCod={}, porDesc={};
+      itens.forEach(function(it,i){
+        if(it.codCliente){ if(porCod[it.codCliente]!=null) une(i,porCod[it.codCliente]); else porCod[it.codCliente]=i; }
+        var dkey=iprodNorm(it.desc);
+        if(porDesc[dkey]!=null) une(i,porDesc[dkey]); else porDesc[dkey]=i;
+      });
+      var porRaiz={};
+      itens.forEach(function(it,i){
+        var r=acha(i), g=porRaiz[r];
+        if(!g){ g=porRaiz[r]={desc:it.desc,unidade:it.unidade,quantidade:0,hhAlocado:0,codigos:{},descs:{}}; contratadaAgrupadaList.push(g); }
+        g.quantidade+=it.quantidade;
+        g.hhAlocado+=(it.hhAlocado||0);
+        if(it.codCliente) g.codigos[it.codCliente]=true;
+        g.descs[iprodNorm(it.desc)]=true;
+      });
+      contratadaAgrupadaList.forEach(function(g){ Object.keys(g.descs).forEach(function(dk){ contratadaAgrupada[dk]=g; }); });
+    })();
     // Evita que a mesma atividade consolidada da contratada seja "reivindicada" (e seu HH
     // alocado contado) por mais de uma atividade do projeto — ex.: concreto fck=10 e fck=30
     // do projeto batendo os dois com a única linha de concreto da contratada, duplicando o
