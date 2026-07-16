@@ -107,6 +107,11 @@ select:focus,input:focus{border-color:var(--acc)}
 .evt-bar-wrap.active-filter{outline:2px solid var(--acc);border-color:var(--acc)}
 .evt-bar{height:100%;background:var(--acc);transition:width .25s}
 .evt-n{font-size:10px;font-weight:700;color:var(--muted);width:26px;text-align:right}
+.tabs-bar{display:flex;gap:4px;border-bottom:1px solid var(--bord);margin-bottom:4px}
+.tab-btn{padding:9px 16px;border:none;background:transparent;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;display:flex;align-items:center;gap:6px}
+.tab-btn:hover{color:var(--acc2)}
+.tab-btn.tab-btn-active{color:var(--acc2);border-bottom-color:var(--acc)}
+.tab-badge{font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;background:var(--danger);color:#fff}
 .cons-comite{background:#450a0a!important;color:#fca5a5!important}
 .cons-rest5{background:#fee2e2;color:#b91c1c}
 .cons-rest3{background:#ffedd5;color:#c2410c}
@@ -145,6 +150,8 @@ body.embed .main{width:100%!important}
   body{display:block!important;height:auto!important;overflow:visible!important;width:100%!important;font-size:10px!important}
   .sb{display:none!important}
   .topbar{display:none!important}
+  .tabs-bar{display:none!important}
+  #tab-velocidade,#tab-tratamento{display:block!important}
   .statusbar{position:static!important;height:auto!important;padding:4px 10px!important;font-size:10px!important}
   .main{display:block!important;overflow:visible!important;height:auto!important;width:100%!important}
   .content{display:block!important;overflow:visible!important;height:auto!important;padding:6px 8px!important;gap:8px!important}
@@ -231,6 +238,14 @@ body.embed .main{width:100%!important}
     <div style="margin-left:auto;font-size:10px;font-weight:700;color:var(--acc3)">▼ −92% Jan→Jun 2026</div>
   </div>
   <div class="content">
+
+    <!-- TABS -->
+    <div class="tabs-bar">
+      <button id="tabbtn-vel" class="tab-btn tab-btn-active" onclick="switchTab('vel')">📊 Velocidade</button>
+      <button id="tabbtn-tele" class="tab-btn" onclick="switchTab('tele')">🕐 Status de Tratamento<span id="tele-tab-badge" class="tab-badge" style="display:none"></span></button>
+    </div>
+
+    <div id="tab-velocidade">
 
     <!-- FILTROS -->
     <div class="filters">
@@ -355,54 +370,6 @@ body.embed .main{width:100%!important}
       </div>
     </div>
 
-    <!-- STATUS DE TRATAMENTO (TELEMETRIA) -->
-    <div class="sec">🕐 Status de Tratamento — Casos Reportados</div>
-    <div class="filters" id="tele-empty-hint" style="display:none">
-      <div style="font-size:11px;color:var(--muted)">Nenhum dado de telemetria importado ainda. Clique em <strong>📥 Importar Telemetria</strong> no topo da página.</div>
-    </div>
-    <div id="tele-wrap">
-      <div class="filters">
-        <div class="fg"><label>Gerência / Área</label><div class="ms-wrap" id="ms-ger-tele"></div></div>
-        <div class="fg"><label>Empresa</label><div class="ms-wrap" id="ms-emp-tele"></div></div>
-        <button onclick="resetTeleFilters()" style="margin-left:auto;padding:5px 12px;border:1px solid var(--bord);border-radius:4px;background:var(--bg);color:var(--muted);font-family:Inter,sans-serif;font-size:11px;font-weight:600;cursor:pointer;align-self:flex-end">✕ Limpar tudo</button>
-      </div>
-      <div class="filter-chips" id="tele-filter-chips"></div>
-      <div class="kpi-row">
-        <div class="kpi blue"><div class="kpi-lbl">Total de Casos</div><div class="kpi-val" id="tk-total">—</div><div class="kpi-sub" id="tk-total-sub">todos os tipos de desvio</div></div>
-        <div class="kpi red"><div class="kpi-lbl">Não Tratados</div><div class="kpi-val" id="tk-nt">—</div><div class="kpi-sub" id="tk-nt-sub">—</div></div>
-        <div class="kpi red"><div class="kpi-lbl">Abertos &gt; 15 dias</div><div class="kpi-val" id="tk-15">—</div><div class="kpi-sub" id="tk-15-sub">—</div></div>
-        <div class="kpi orange"><div class="kpi-lbl">Tipos de Desvio</div><div class="kpi-val" id="tk-tipos">—</div><div class="kpi-sub">no recorte selecionado</div></div>
-        <div class="kpi purple"><div class="kpi-lbl">Área Mais Crítica</div><div class="kpi-val" id="tk-area" style="font-size:15px;line-height:1.3">—</div><div class="kpi-sub" id="tk-area-sub">—</div></div>
-      </div>
-      <div class="g2" style="margin-top:12px">
-        <div class="cc">
-          <div class="cc-hdr"><div class="cc-title">Tempo em aberto (SLA de tratamento)</div><div class="cc-badge" id="tsla-badge">—</div></div>
-          <div id="tsla-bars"></div>
-        </div>
-        <div class="cc">
-          <div class="cc-hdr"><div class="cc-title">Casos por tipo de desvio</div><div class="cc-badge" id="tevt-badge">—</div></div>
-          <div id="tevt-bars"></div>
-        </div>
-      </div>
-      <div class="cc">
-        <div class="cc-hdr">
-          <div>
-            <div class="cc-title">🔴 Casos críticos sem tratamento — abertos há mais de 15 dias</div>
-            <div style="font-size:10px;color:var(--muted);margin-top:2px" id="tcrit-sub">—</div>
-          </div>
-          <div style="display:flex;gap:6px">
-            <span class="pill pill-red">Gravíssima</span><span class="pill pill-orange">Grave</span><span class="pill pill-yellow">Média</span><span class="pill pill-green">Baixa</span>
-          </div>
-        </div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>Motorista</th><th>Evento</th><th>Gravidade</th><th>Gerência Área</th><th>Empresa</th><th>Ação já definida</th></tr></thead>
-            <tbody id="tcrit-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
     <!-- TOP 10 + EVOLUÇÃO -->
     <div class="sec">Ranking e Evolução Mensal</div>
     <div class="g-60-40">
@@ -470,6 +437,59 @@ body.embed .main{width:100%!important}
     <div style="text-align:center;padding:14px 0 6px;font-size:10px;color:var(--muted);border-top:1px solid var(--bord)">
       Gerência de Projetos — Salobo Projetos · Plano de Trânsito BMSA Rev.11 – 25/07/2025 · Gerado em 18/06/2026
     </div>
+
+    </div>
+    <!-- /tab-velocidade -->
+
+    <div id="tab-tratamento" style="display:none">
+      <div class="filters" id="tele-empty-hint" style="display:none">
+        <div style="font-size:11px;color:var(--muted)">Nenhum dado de telemetria importado ainda. Clique em <strong>📥 Importar Telemetria</strong> no topo da página.</div>
+      </div>
+      <div id="tele-wrap">
+        <div class="filters">
+          <div class="fg"><label>Gerência / Área</label><div class="ms-wrap" id="ms-ger-tele"></div></div>
+          <div class="fg"><label>Empresa</label><div class="ms-wrap" id="ms-emp-tele"></div></div>
+          <button onclick="resetTeleFilters()" style="margin-left:auto;padding:5px 12px;border:1px solid var(--bord);border-radius:4px;background:var(--bg);color:var(--muted);font-family:Inter,sans-serif;font-size:11px;font-weight:600;cursor:pointer;align-self:flex-end">✕ Limpar tudo</button>
+        </div>
+        <div class="filter-chips" id="tele-filter-chips"></div>
+        <div class="kpi-row">
+          <div class="kpi blue"><div class="kpi-lbl">Total de Casos</div><div class="kpi-val" id="tk-total">—</div><div class="kpi-sub" id="tk-total-sub">todos os tipos de desvio</div></div>
+          <div class="kpi red"><div class="kpi-lbl">Não Tratados</div><div class="kpi-val" id="tk-nt">—</div><div class="kpi-sub" id="tk-nt-sub">—</div></div>
+          <div class="kpi red"><div class="kpi-lbl">Abertos &gt; 15 dias</div><div class="kpi-val" id="tk-15">—</div><div class="kpi-sub" id="tk-15-sub">—</div></div>
+          <div class="kpi orange"><div class="kpi-lbl">Tipos de Desvio</div><div class="kpi-val" id="tk-tipos">—</div><div class="kpi-sub">no recorte selecionado</div></div>
+          <div class="kpi purple"><div class="kpi-lbl">Área Mais Crítica</div><div class="kpi-val" id="tk-area" style="font-size:15px;line-height:1.3">—</div><div class="kpi-sub" id="tk-area-sub">—</div></div>
+        </div>
+        <div class="g2" style="margin-top:12px">
+          <div class="cc">
+            <div class="cc-hdr"><div class="cc-title">Tempo em aberto (SLA de tratamento)</div><div class="cc-badge" id="tsla-badge">—</div></div>
+            <div id="tsla-bars"></div>
+          </div>
+          <div class="cc">
+            <div class="cc-hdr"><div class="cc-title">Casos por tipo de desvio</div><div class="cc-badge" id="tevt-badge">—</div></div>
+            <div id="tevt-bars"></div>
+          </div>
+        </div>
+        <div class="cc">
+          <div class="cc-hdr">
+            <div>
+              <div class="cc-title">🔴 Casos críticos sem tratamento — abertos há mais de 15 dias</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:2px" id="tcrit-sub">—</div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <span class="pill pill-red">Gravíssima</span><span class="pill pill-orange">Grave</span><span class="pill pill-yellow">Média</span><span class="pill pill-green">Baixa</span>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Motorista</th><th>Evento</th><th>Gravidade</th><th>Gerência Área</th><th>Empresa</th><th>Ação já definida</th></tr></thead>
+              <tbody id="tcrit-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- /tab-tratamento -->
+
   </div>
 </div>
 <script>
@@ -1327,6 +1347,15 @@ function handleImport(file){
   reader.readAsArrayBuffer(file);
 }
 
+// ── ABAS (Velocidade / Status de Tratamento) ────────────────────
+function switchTab(name){
+  var isVel=name==='vel';
+  document.getElementById('tab-velocidade').style.display=isVel?'':'none';
+  document.getElementById('tab-tratamento').style.display=isVel?'none':'';
+  document.getElementById('tabbtn-vel').className='tab-btn'+(isVel?' tab-btn-active':'');
+  document.getElementById('tabbtn-tele').className='tab-btn'+(isVel?'':' tab-btn-active');
+}
+
 // ── STATUS DE TRATAMENTO (TELEMETRIA) ──────────────────────────
 var TELE_DATA=[];
 var TELE_SEL_TEMPO=new Set();
@@ -1456,6 +1485,14 @@ function loadTeleData(casos){
   var hasData=TELE_DATA.length>0;
   document.getElementById('tele-wrap').style.display=hasData?'':'none';
   document.getElementById('tele-empty-hint').style.display=hasData?'none':'flex';
+  var badge=document.getElementById('tele-tab-badge');
+  if(hasData){
+    var abertos15=TELE_DATA.filter(function(r){return r.tempo==='Maior que 15 dias';}).length;
+    if(abertos15>0){badge.style.display='inline-flex';badge.textContent=abertos15;}
+    else{badge.style.display='none';}
+  }else{
+    badge.style.display='none';
+  }
   if(!hasData)return;
   var gers=[];TELE_DATA.forEach(function(c){if(c.ger&&gers.indexOf(c.ger)<0)gers.push(c.ger);});gers.sort();
   var emps=[];TELE_DATA.forEach(function(c){if(c.empresa&&emps.indexOf(c.empresa)<0)emps.push(c.empresa);});emps.sort();
