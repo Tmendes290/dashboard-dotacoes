@@ -226,9 +226,6 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);displ
 .admin-only{display:none!important}
 body.is-admin .admin-only{display:block!important}
 body.is-admin .sb-item.admin-only{display:flex!important}
-.imp-only{display:none!important}
-body.is-imp .imp-only{display:block!important}
-body.is-imp .sb-item.imp-only{display:flex!important}
 .sb-toggle{position:absolute;right:-11px;top:20px;width:22px;height:22px;background:var(--acc);border-radius:50%;border:2px solid #fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;z-index:200;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:transform .2s}
 .sb.collapsed .sb-toggle{transform:rotate(180deg)}
 .sb-logo{padding:18px 18px 14px;border-bottom:1px solid rgba(255,255,255,.07)}
@@ -985,9 +982,9 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div class="sb-nav-sec">Materiais</div>
     <div class="sb-item" data-view="materiais" data-label="Materiais"><span class="ico">📦</span><span class="sb-label">Materiais<span class="sb-badge" id="nb-mat" style="display:none;background:#7c3aed"></span></span></div>
     <!-- IMPRODUTIVIDADE -->
-    <div class="sb-nav-sec imp-only">Fiscalização</div>
-    <div class="sb-item imp-only" data-view="improdutividade" data-label="Improdutividade"><span class="ico">⏱</span><span class="sb-label">Produtividade</span></div>
-    <div class="sb-item imp-only" data-view="indice-produtividade" data-label="Índice de Produtividade"><span class="ico">📐</span><span class="sb-label">Índice de Produtividade</span></div>
+    <div class="sb-nav-sec">Fiscalização</div>
+    <div class="sb-item" data-view="improdutividade" data-label="Improdutividade"><span class="ico">⏱</span><span class="sb-label">Produtividade</span></div>
+    <div class="sb-item" data-view="indice-produtividade" data-label="Índice de Produtividade"><span class="ico">📐</span><span class="sb-label">Índice de Produtividade</span></div>
     <!-- PLANEJAMENTO (admin only) -->
     <div class="sb-nav-sec admin-only">Planejamento</div>
     <div class="sb-item admin-only" data-view="histograma" data-label="Histograma CTT"><span class="ico">📈</span><span class="sb-label">Histograma CTT</span></div>
@@ -4292,18 +4289,17 @@ function updateUserBadge(){
   document.body.classList.toggle("is-admin", isAdmin);
   document.body.classList.toggle("is-lider", isLider);
   var _perms = (CURRENT_PERFIL.permissoes && CURRENT_PERFIL.permissoes.length) ? CURRENT_PERFIL.permissoes : ['overview'];
-  document.body.classList.toggle("is-imp", isAdmin || _perms.indexOf('improdutividade') >= 0);
   if(!isAdmin){
-    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','velocidade','cji3'];
+    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','velocidade','cji3','improdutividade','indice-produtividade'];
     document.querySelectorAll('.sb-nav .sb-item').forEach(function(item){
-      if(item.classList.contains('admin-only')||item.classList.contains('imp-only')) return;
+      if(item.classList.contains('admin-only')) return;
       var v=item.dataset.view; if(!v||_permViews.indexOf(v)<0) return;
       item.style.display=(_perms.indexOf(v)>=0)?'flex':'none';
     });
-    document.querySelectorAll('.sb-nav .sb-nav-sec:not(.admin-only):not(.imp-only)').forEach(function(sec){
+    document.querySelectorAll('.sb-nav .sb-nav-sec:not(.admin-only)').forEach(function(sec){
       var sib=sec.nextElementSibling,anyVis=false;
       while(sib&&!sib.classList.contains('sb-nav-sec')){
-        if(sib.classList.contains('sb-item')&&!sib.classList.contains('admin-only')&&!sib.classList.contains('imp-only')&&sib.style.display!=='none'){anyVis=true;break;}
+        if(sib.classList.contains('sb-item')&&!sib.classList.contains('admin-only')&&sib.style.display!=='none'){anyVis=true;break;}
         sib=sib.nextElementSibling;
       }
       sec.style.display=anyVis?'':'none';
@@ -6274,8 +6270,8 @@ function renderUsuariosHTML(el, usuarios, bloqueados){
         {v:'overview',l:'Visão Geral'},{v:'resumo',l:'Resumo Sub PEP'},{v:'dotacoes',l:'Dotações'},
         {v:'alertas',l:'Capex Projetos'},{v:'nova',l:'Nova Dotação'},{v:'regularizar',l:'Regularizar Saldo'},
         {v:'analytics',l:'Dashboard'},{v:'saude-pep',l:'Saúde do PEP'},{v:'materiais',l:'Materiais'},
-        {v:'improdutividade',l:'Produtividade'},{v:'velocidade',l:'Telemetria'},
-        {v:'cji3',l:'CJI3 Tabela'}
+        {v:'improdutividade',l:'Produtividade'},{v:'indice-produtividade',l:'Índice de Produtividade'},
+        {v:'velocidade',l:'Telemetria'},{v:'cji3',l:'CJI3 Tabela'}
       ];
       var _uPerms = u.permissoes || ['overview'];
       html += '<div style="margin-top:10px;border-top:1px solid #f1f5f9;padding-top:10px">';
