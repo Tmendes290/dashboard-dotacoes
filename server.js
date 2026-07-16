@@ -349,6 +349,110 @@ app.post('/api/velocidade', async (req, res) => {
   }
 });
 
+// ── TELEMETRIA (status de tratamento de casos): IMPORTAR EXCEL ──
+app.post('/api/import-telemetria', async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  const { fileBase64 } = req.body;
+  if (!fileBase64) return res.status(400).json({ error: 'no file' });
+
+  try {
+    const XLSX = require('xlsx');
+    const buffer = Buffer.from(fileBase64, 'base64');
+    const wb = XLSX.read(buffer, { type: 'buffer' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    const headers = rawRows[0];
+
+    const fc = (pat) => headers.findIndex(h => pat.test(String(h || '').trim()));
+    const iId       = fc(/^id$/i);
+    const iStatus   = fc(/^status$/i);
+    const iEvento   = fc(/^evento$/i);
+    const iHead     = fc(/head|gerente geral/i);
+    const iGer      = fc(/ger[êe]ncia.*[áa]rea/i);
+    const iComent   = fc(/coment[áa]rios/i);
+    const iNome     = fc(/condutor|motorista/i);
+    const iGrav     = fc(/gravidade/i);
+    const iAcoes    = fc(/^a[çc][õo]es$/i);
+    const iTempo    = fc(/tempo.*abert/i);
+
+    if (iNome < 0 || iEvento < 0) {
+      return res.status(400).json({ error: 'Colunas não encontradas. Headers: ' + headers.slice(0, 14).join(', ') });
+    }
+
+    function normEmpresa(raw) {
+      if (!raw) return 'Não identificada';
+      let s = raw.trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, ' ');
+      if (/^JSL/.test(s)) return 'JSL';
+      if (s === 'VALE') return 'VALE';
+      if (/^REDE/.test(s)) return 'REDE';
+      if (/^OMEGA/.test(s)) return 'OMEGA SERVIÇOS E MONTAGENS';
+      if (/^RCR/.test(s)) return 'RCR LOCAÇÃO';
+      return raw.trim();
+    }
+
+    const casos = [];
+    for (let i = 1; i < rawRows.length; i++) {
+      const r = rawRows[i];
+      const nome = String(r[iNome] || '').trim().toUpperCase();
+      const evento = String(r[iEvento] || '').trim();
+      if (!nome || !evento) continue;
+
+      const comentarios = String(r[iComent] || '');
+      const empMatch = comentarios.match(/Empresa:\s*([^\r\n\/]+)/i);
+
+      casos.push({
+        id: iId >= 0 ? String(r[iId] || '') : String(i),
+        nome,
+        evento,
+        grav: iGrav >= 0 ? String(r[iGrav] || '').trim() : '',
+        ger: iGer >= 0 ? String(r[iGer] || '').trim() : '',
+        head: iHead >= 0 ? String(r[iHead] || '').trim() : '',
+        acao: iAcoes >= 0 ? String(r[iAcoes] || '').trim() : '',
+        tempo: iTempo >= 0 ? String(r[iTempo] || '').trim() : '',
+        status: iStatus >= 0 ? String(r[iStatus] || '').trim() : '',
+        empresa: normEmpresa(empMatch ? empMatch[1] : '')
+      });
+    }
+
+    const payload = { casos };
+    const supa = await fetch(`${SUPA_URL}/rest/v1/telemetria_dados`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
+        'apikey': SUPA_SERVICE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify([{ chave: 'main', payload, atualizado_em: new Date().toISOString() }])
+    });
+    if (!supa.ok) {
+      const err = await supa.text();
+      return res.status(500).json({ error: 'Erro Supabase: ' + err });
+    }
+
+    console.log(`[import-telemetria] ${casos.length} casos`);
+    res.json({ ok: true, casos: casos.length });
+  } catch (e) {
+    console.error('[import-telemetria]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── TELEMETRIA: GET (fetch saved data) ────────────────────────
+app.get('/api/telemetria', async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/telemetria_dados?chave=eq.main&select=payload,atualizado_em`, {
+      headers: { 'Authorization': `Bearer ${SUPA_SERVICE_KEY}`, 'apikey': SUPA_SERVICE_KEY }
+    });
+    const data = await r.json();
+    if (!data[0]) return res.status(404).json({ error: 'no data' });
+    res.json(data[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── CJI3: SALVAR PAYLOAD JÁ AGREGADO (parse feito no browser) ────
 app.post('/api/save-cji3', async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });

@@ -100,6 +100,13 @@ select:focus,input:focus{border-color:var(--acc)}
 .trend-fill{height:100%;border-radius:3px;display:flex;align-items:center;padding-left:7px}
 .trend-txt{font-size:9px;font-weight:700;color:#fff;white-space:nowrap}
 .trend-right{font-size:10px;color:var(--muted);width:46px;text-align:right;flex-shrink:0}
+.evt-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.evt-lbl{font-size:10px;font-weight:600;color:var(--text);width:170px;flex-shrink:0}
+.evt-bar-wrap{flex:1;background:var(--bg);border-radius:3px;height:16px;overflow:hidden;border:1px solid var(--bord);cursor:pointer;transition:opacity .15s}
+.evt-bar-wrap:hover{opacity:.8}
+.evt-bar-wrap.active-filter{outline:2px solid var(--acc);border-color:var(--acc)}
+.evt-bar{height:100%;background:var(--acc);transition:width .25s}
+.evt-n{font-size:10px;font-weight:700;color:var(--muted);width:26px;text-align:right}
 .cons-comite{background:#450a0a!important;color:#fca5a5!important}
 .cons-rest5{background:#fee2e2;color:#b91c1c}
 .cons-rest3{background:#ffedd5;color:#c2410c}
@@ -207,6 +214,8 @@ body.embed .main{width:100%!important}
       <div id="import-status" style="display:none;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--acc2);background:rgba(0,156,222,.08);border:1px solid var(--acc);border-radius:5px;padding:5px 12px"></div>
       <button onclick="document.getElementById('vel-file-input').click()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border:1px solid var(--bord);cursor:pointer;font-family:Inter,sans-serif;font-size:11px;font-weight:600;border-radius:5px;background:#fff;color:var(--text)">📥 Importar Planilha</button>
       <input type="file" id="vel-file-input" accept=".xlsx" style="display:none" onchange="handleImport(this.files[0]);this.value=''">
+      <button onclick="document.getElementById('tele-file-input').click()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border:1px solid var(--bord);cursor:pointer;font-family:Inter,sans-serif;font-size:11px;font-weight:600;border-radius:5px;background:#fff;color:var(--text)">📥 Importar Telemetria</button>
+      <input type="file" id="tele-file-input" accept=".xlsx" style="display:none" onchange="handleImportTelemetria(this.files[0]);this.value=''">
     </div>
   </div>
   <div class="statusbar">
@@ -343,6 +352,54 @@ body.embed .main{width:100%!important}
           </tr></thead>
           <tbody id="mat-tbody"></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- STATUS DE TRATAMENTO (TELEMETRIA) -->
+    <div class="sec">🕐 Status de Tratamento — Casos Reportados</div>
+    <div class="filters" id="tele-empty-hint" style="display:none">
+      <div style="font-size:11px;color:var(--muted)">Nenhum dado de telemetria importado ainda. Clique em <strong>📥 Importar Telemetria</strong> no topo da página.</div>
+    </div>
+    <div id="tele-wrap">
+      <div class="filters">
+        <div class="fg"><label>Gerência / Área</label><div class="ms-wrap" id="ms-ger-tele"></div></div>
+        <div class="fg"><label>Empresa</label><div class="ms-wrap" id="ms-emp-tele"></div></div>
+        <button onclick="resetTeleFilters()" style="margin-left:auto;padding:5px 12px;border:1px solid var(--bord);border-radius:4px;background:var(--bg);color:var(--muted);font-family:Inter,sans-serif;font-size:11px;font-weight:600;cursor:pointer;align-self:flex-end">✕ Limpar tudo</button>
+      </div>
+      <div class="filter-chips" id="tele-filter-chips"></div>
+      <div class="kpi-row">
+        <div class="kpi blue"><div class="kpi-lbl">Total de Casos</div><div class="kpi-val" id="tk-total">—</div><div class="kpi-sub" id="tk-total-sub">todos os tipos de desvio</div></div>
+        <div class="kpi red"><div class="kpi-lbl">Não Tratados</div><div class="kpi-val" id="tk-nt">—</div><div class="kpi-sub" id="tk-nt-sub">—</div></div>
+        <div class="kpi red"><div class="kpi-lbl">Abertos &gt; 15 dias</div><div class="kpi-val" id="tk-15">—</div><div class="kpi-sub" id="tk-15-sub">—</div></div>
+        <div class="kpi orange"><div class="kpi-lbl">Tipos de Desvio</div><div class="kpi-val" id="tk-tipos">—</div><div class="kpi-sub">no recorte selecionado</div></div>
+        <div class="kpi purple"><div class="kpi-lbl">Área Mais Crítica</div><div class="kpi-val" id="tk-area" style="font-size:15px;line-height:1.3">—</div><div class="kpi-sub" id="tk-area-sub">—</div></div>
+      </div>
+      <div class="g2" style="margin-top:12px">
+        <div class="cc">
+          <div class="cc-hdr"><div class="cc-title">Tempo em aberto (SLA de tratamento)</div><div class="cc-badge" id="tsla-badge">—</div></div>
+          <div id="tsla-bars"></div>
+        </div>
+        <div class="cc">
+          <div class="cc-hdr"><div class="cc-title">Casos por tipo de desvio</div><div class="cc-badge" id="tevt-badge">—</div></div>
+          <div id="tevt-bars"></div>
+        </div>
+      </div>
+      <div class="cc">
+        <div class="cc-hdr">
+          <div>
+            <div class="cc-title">🔴 Casos críticos sem tratamento — abertos há mais de 15 dias</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px" id="tcrit-sub">—</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <span class="pill pill-red">Gravíssima</span><span class="pill pill-orange">Grave</span><span class="pill pill-yellow">Média</span><span class="pill pill-green">Baixa</span>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Motorista</th><th>Evento</th><th>Gravidade</th><th>Gerência Área</th><th>Empresa</th><th>Ação já definida</th></tr></thead>
+            <tbody id="tcrit-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -1261,6 +1318,187 @@ function handleImport(file){
                   buildMs('ms-motorista',ALL_DRIVERS,'Todos os motoristas',applyFilters);
                   applyFilters();
                 }
+              }).catch(function(){});
+          } else { st.textContent='Erro: '+(d.error||'desconhecido'); }
+        })
+        .catch(function(err){st.textContent='Erro: '+err.message;});
+    }catch(err){st.textContent='Erro ao ler arquivo: '+err.message;}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── STATUS DE TRATAMENTO (TELEMETRIA) ──────────────────────────
+var TELE_DATA=[];
+var TELE_SEL_TEMPO=new Set();
+var TELE_SEL_EVENTO=new Set();
+var TELE_SEV_ORDER={'Gravíssima':0,'Grave':1,'Média':2,'Baixa':3};
+var TELE_SEV_PILL={'Gravíssima':'pill-red','Grave':'pill-orange','Média':'pill-yellow','Baixa':'pill-green'};
+
+function teleUniqCount(arr,key){
+  var c={};
+  arr.forEach(function(r){c[r[key]]=(c[r[key]]||0)+1;});
+  return Object.keys(c).map(function(k){return [k,c[k]];}).sort(function(a,b){return b[1]-a[1];});
+}
+
+function teleShortAcao(a){
+  a=a||'';
+  if(a.indexOf('Comitê')>-1)return 'Comitê pela Vida';
+  if(a.indexOf('05 dias')>-1)return 'Restrição 05 dias + Advert. formal';
+  if(a.indexOf('03 dias')>-1)return 'Restrição 03 dias + Advert. formal';
+  if(a.indexOf('avaliação médica')>-1)return 'Entrevista + avaliação médica';
+  if(a.indexOf('Entrevista')>-1)return 'Entrevista Direcionada';
+  if(a.indexOf('Reciclagem')>-1)return 'Reciclagem + Advert. formal';
+  if(a.toLowerCase().indexOf('verbal')>-1)return 'Advertência Verbal';
+  if(a.indexOf('Conversa')>-1)return 'Conversa formal — Líder';
+  return a;
+}
+
+function toggleTeleTempo(v){if(TELE_SEL_TEMPO.has(v))TELE_SEL_TEMPO.delete(v);else TELE_SEL_TEMPO.add(v);renderTelemetria();}
+function toggleTeleEvento(v){if(TELE_SEL_EVENTO.has(v))TELE_SEL_EVENTO.delete(v);else TELE_SEL_EVENTO.add(v);renderTelemetria();}
+
+function resetTeleFilters(){
+  if(_msStore['ms-ger-tele'])_msStore['ms-ger-tele'].sel.clear();
+  if(_msStore['ms-emp-tele'])_msStore['ms-emp-tele'].sel.clear();
+  TELE_SEL_TEMPO.clear();TELE_SEL_EVENTO.clear();
+  renderMs('ms-ger-tele');renderMs('ms-emp-tele');
+  renderTelemetria();
+}
+
+function renderTeleChips(){
+  var wrap=document.getElementById('tele-filter-chips');if(!wrap)return;
+  var chips='';
+  var selGer=_msStore['ms-ger-tele']?_msStore['ms-ger-tele'].sel:new Set();
+  var selEmp=_msStore['ms-emp-tele']?_msStore['ms-emp-tele'].sel:new Set();
+  selGer.forEach(function(v){chips+='<div class="fchip" onclick="msTog(\'ms-ger-tele\','+JSON.stringify(v)+')">'+v+' <span>✕</span></div>';});
+  selEmp.forEach(function(v){chips+='<div class="fchip" onclick="msTog(\'ms-emp-tele\','+JSON.stringify(v)+')">'+v+' <span>✕</span></div>';});
+  TELE_SEL_TEMPO.forEach(function(v){chips+='<div class="fchip" onclick="toggleTeleTempo('+JSON.stringify(v)+')">'+v+' <span>✕</span></div>';});
+  TELE_SEL_EVENTO.forEach(function(v){chips+='<div class="fchip" onclick="toggleTeleEvento('+JSON.stringify(v)+')">'+v+' <span>✕</span></div>';});
+  wrap.innerHTML=chips;
+}
+
+function renderTelemetria(){
+  var selGer=_msStore['ms-ger-tele']?_msStore['ms-ger-tele'].sel:new Set();
+  var selEmp=_msStore['ms-emp-tele']?_msStore['ms-emp-tele'].sel:new Set();
+  renderTeleChips();
+
+  var filtered=TELE_DATA.filter(function(r){
+    return (selGer.size===0||selGer.has(r.ger)) && (selEmp.size===0||selEmp.has(r.empresa))
+      && (TELE_SEL_TEMPO.size===0||TELE_SEL_TEMPO.has(r.tempo)) && (TELE_SEL_EVENTO.size===0||TELE_SEL_EVENTO.has(r.evento));
+  });
+
+  var total=filtered.length;
+  var naoTratados=filtered.filter(function(r){return r.status==='Não Tratados';}).length;
+  var abertos15=filtered.filter(function(r){return r.tempo==='Maior que 15 dias';}).length;
+  var tipos=teleUniqCount(filtered,'evento').length;
+
+  document.getElementById('tk-total').textContent=total;
+  document.getElementById('tk-total-sub').textContent=(selGer.size||selEmp.size||TELE_SEL_TEMPO.size||TELE_SEL_EVENTO.size)?'no recorte selecionado':'todos os tipos de desvio importados';
+  document.getElementById('tk-nt').textContent=naoTratados;
+  document.getElementById('tk-nt-sub').textContent=total?Math.round(naoTratados/total*100)+'% do total ainda sem encerramento':'—';
+  document.getElementById('tk-15').textContent=abertos15;
+  document.getElementById('tk-15-sub').textContent=total?Math.round(abertos15/total*100)+'% dos casos — fora do prazo':'—';
+  document.getElementById('tk-tipos').textContent=tipos;
+
+  var gerCounts=teleUniqCount(filtered,'ger');
+  if(gerCounts.length&&gerCounts[0][0]){
+    document.getElementById('tk-area').textContent=gerCounts[0][0].split(' - ')[0];
+    document.getElementById('tk-area-sub').textContent=gerCounts[0][1]+' casos · '+(gerCounts[0][0].split(' - ')[1]||'');
+  }else{
+    document.getElementById('tk-area').textContent='—';
+    document.getElementById('tk-area-sub').textContent='—';
+  }
+
+  // base para os gráficos: respeita Gerência/Empresa; cada gráfico ignora o próprio eixo pra continuar clicável
+  var baseGerEmp=TELE_DATA.filter(function(r){
+    return (selGer.size===0||selGer.has(r.ger)) && (selEmp.size===0||selEmp.has(r.empresa));
+  });
+  var slaBase=baseGerEmp.filter(function(r){return TELE_SEL_EVENTO.size===0||TELE_SEL_EVENTO.has(r.evento);});
+  var evtBase=baseGerEmp.filter(function(r){return TELE_SEL_TEMPO.size===0||TELE_SEL_TEMPO.has(r.tempo);});
+
+  // SLA bars
+  var buckets=[['Menos que 7 dias','< 7 dias','var(--acc3)'],['Entre 7 e 15 dias','7–15 dias','var(--warn)'],['Maior que 15 dias','> 15 dias','var(--danger)']];
+  var slaTotal=slaBase.length;
+  var slaMax=Math.max(1,Math.max.apply(null,buckets.map(function(b){return slaBase.filter(function(r){return r.tempo===b[0];}).length;})));
+  var slaHtml='';
+  buckets.forEach(function(b){
+    var n=slaBase.filter(function(r){return r.tempo===b[0];}).length;
+    var pct=slaTotal?Math.round(n/slaTotal*100):0;
+    var w=Math.round(n/slaMax*100);
+    var active=TELE_SEL_TEMPO.has(b[0])?'active-filter':'';
+    slaHtml+='<div class="trend-row"><div class="trend-lbl">'+b[1]+'</div><div class="trend-wrap '+active+'" onclick="toggleTeleTempo('+JSON.stringify(b[0])+')" title="Clique para filtrar"><div class="trend-fill" style="width:'+w+'%;background:'+b[2]+'"><span class="trend-txt">'+n+'</span></div></div><div class="trend-right">'+pct+'%</div></div>';
+  });
+  document.getElementById('tsla-bars').innerHTML=slaHtml;
+  document.getElementById('tsla-badge').textContent=naoTratados+' casos não tratados · clique para filtrar';
+
+  // Evento bars
+  var evtCounts=teleUniqCount(evtBase,'evento');
+  var evtMax=evtCounts.length?evtCounts[0][1]:1;
+  var evtHtml='';
+  evtCounts.forEach(function(e){
+    var w=Math.round(e[1]/evtMax*100);
+    var active=TELE_SEL_EVENTO.has(e[0])?'active-filter':'';
+    evtHtml+='<div class="evt-row"><div class="evt-lbl">'+e[0]+'</div><div class="evt-bar-wrap '+active+'" onclick="toggleTeleEvento('+JSON.stringify(e[0])+')" title="Clique para filtrar"><div class="evt-bar" style="width:'+w+'%"></div></div><div class="evt-n">'+e[1]+'</div></div>';
+  });
+  document.getElementById('tevt-bars').innerHTML=evtHtml||'<div style="font-size:11px;color:var(--muted)">Nenhum caso no recorte selecionado.</div>';
+  document.getElementById('tevt-badge').textContent=evtCounts.length?evtCounts[0][0]+' lidera · clique para filtrar':'—';
+
+  // Tabela crítica
+  var crit=filtered.filter(function(r){return r.tempo==='Maior que 15 dias';})
+    .sort(function(a,b){return (TELE_SEV_ORDER[a.grav]!==undefined?TELE_SEV_ORDER[a.grav]:9)-(TELE_SEV_ORDER[b.grav]!==undefined?TELE_SEV_ORDER[b.grav]:9);});
+  document.getElementById('tcrit-sub').textContent=crit.length+' casos · ordenados por gravidade';
+  document.getElementById('tcrit-tbody').innerHTML=crit.length?crit.map(function(r){
+    return '<tr><td>'+r.nome+'</td><td>'+r.evento+'</td><td><span class="pill '+(TELE_SEV_PILL[r.grav]||'pill-blue')+'">'+r.grav+'</span></td><td>'+(r.ger.split(' - ')[0]||r.ger)+'</td><td>'+r.empresa+'</td><td>'+teleShortAcao(r.acao)+'</td></tr>';
+  }).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">Nenhum caso &gt;15 dias no recorte selecionado 🎉</td></tr>';
+}
+
+function loadTeleData(casos){
+  TELE_DATA=casos||[];
+  var hasData=TELE_DATA.length>0;
+  document.getElementById('tele-wrap').style.display=hasData?'':'none';
+  document.getElementById('tele-empty-hint').style.display=hasData?'none':'flex';
+  if(!hasData)return;
+  var gers=[];TELE_DATA.forEach(function(c){if(c.ger&&gers.indexOf(c.ger)<0)gers.push(c.ger);});gers.sort();
+  var emps=[];TELE_DATA.forEach(function(c){if(c.empresa&&emps.indexOf(c.empresa)<0)emps.push(c.empresa);});emps.sort();
+  buildMs('ms-ger-tele',gers,'Todas as gerências',renderTelemetria);
+  buildMs('ms-emp-tele',emps,'Todas as empresas',renderTelemetria);
+  TELE_SEL_TEMPO=new Set();TELE_SEL_EVENTO=new Set();
+  renderTelemetria();
+}
+
+document.getElementById('tele-wrap').style.display='none';
+document.getElementById('tele-empty-hint').style.display='flex';
+
+fetch('/api/telemetria')
+  .then(function(r){return r.ok?r.json():null;})
+  .then(function(d){
+    if(d&&d.payload&&d.payload.casos)loadTeleData(d.payload.casos);
+  })
+  .catch(function(){});
+
+function handleImportTelemetria(file){
+  if(!file)return;
+  var st=document.getElementById('import-status');
+  st.style.display='flex';st.textContent='Enviando telemetria...';
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var bytes=new Uint8Array(e.target.result);
+      var bin='';for(var i=0;i<bytes.byteLength;i++)bin+=String.fromCharCode(bytes[i]);
+      var b64=btoa(bin);
+      st.textContent='Processando no servidor...';
+      fetch('/api/import-telemetria',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({fileBase64:b64})
+      })
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(d.ok){
+            st.textContent='✓ '+d.casos.toLocaleString('pt-BR')+' casos salvos';
+            fetch('/api/telemetria')
+              .then(function(r2){return r2.ok?r2.json():null;})
+              .then(function(d2){
+                if(d2&&d2.payload&&d2.payload.casos)loadTeleData(d2.payload.casos);
               }).catch(function(){});
           } else { st.textContent='Erro: '+(d.error||'desconhecido'); }
         })
