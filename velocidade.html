@@ -1382,6 +1382,7 @@ function teleShortAcao(a){
   return a;
 }
 
+function teleEsc(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 function toggleTeleTempo(v){if(TELE_SEL_TEMPO.has(v))TELE_SEL_TEMPO.delete(v);else TELE_SEL_TEMPO.add(v);renderTelemetria();}
 function toggleTeleEvento(v){if(TELE_SEL_EVENTO.has(v))TELE_SEL_EVENTO.delete(v);else TELE_SEL_EVENTO.add(v);renderTelemetria();}
 
@@ -1398,10 +1399,10 @@ function renderTeleChips(){
   var chips='';
   var selGer=_msStore['ms-ger-tele']?_msStore['ms-ger-tele'].sel:new Set();
   var selEmp=_msStore['ms-emp-tele']?_msStore['ms-emp-tele'].sel:new Set();
-  selGer.forEach(function(v){chips+='<div class="fchip" onclick="msTog(\'ms-ger-tele\','+JSON.stringify(v)+')">'+v+' <span>✕</span></div>';});
-  selEmp.forEach(function(v){chips+='<div class="fchip" onclick="msTog(\'ms-emp-tele\','+JSON.stringify(v)+')">'+v+' <span>✕</span></div>';});
-  TELE_SEL_TEMPO.forEach(function(v){chips+='<div class="fchip" onclick="toggleTeleTempo('+JSON.stringify(v)+')">'+v+' <span>✕</span></div>';});
-  TELE_SEL_EVENTO.forEach(function(v){chips+='<div class="fchip" onclick="toggleTeleEvento('+JSON.stringify(v)+')">'+v+' <span>✕</span></div>';});
+  selGer.forEach(function(v){chips+='<div class="fchip" onclick="msTog(\'ms-ger-tele\',\''+teleEsc(v)+'\')">'+v+' <span>✕</span></div>';});
+  selEmp.forEach(function(v){chips+='<div class="fchip" onclick="msTog(\'ms-emp-tele\',\''+teleEsc(v)+'\')">'+v+' <span>✕</span></div>';});
+  TELE_SEL_TEMPO.forEach(function(v){chips+='<div class="fchip" onclick="toggleTeleTempo(\''+teleEsc(v)+'\')">'+v+' <span>✕</span></div>';});
+  TELE_SEL_EVENTO.forEach(function(v){chips+='<div class="fchip" onclick="toggleTeleEvento(\''+teleEsc(v)+'\')">'+v+' <span>✕</span></div>';});
   wrap.innerHTML=chips;
 }
 
@@ -1454,7 +1455,7 @@ function renderTelemetria(){
     var pct=slaTotal?Math.round(n/slaTotal*100):0;
     var w=Math.round(n/slaMax*100);
     var active=TELE_SEL_TEMPO.has(b[0])?'active-filter':'';
-    slaHtml+='<div class="trend-row"><div class="trend-lbl">'+b[1]+'</div><div class="trend-wrap '+active+'" onclick="toggleTeleTempo('+JSON.stringify(b[0])+')" title="Clique para filtrar"><div class="trend-fill" style="width:'+w+'%;background:'+b[2]+'"><span class="trend-txt">'+n+'</span></div></div><div class="trend-right">'+pct+'%</div></div>';
+    slaHtml+='<div class="trend-row"><div class="trend-lbl">'+b[1]+'</div><div class="trend-wrap '+active+'" onclick="toggleTeleTempo(\''+teleEsc(b[0])+'\')" title="Clique para filtrar"><div class="trend-fill" style="width:'+w+'%;background:'+b[2]+'"><span class="trend-txt">'+n+'</span></div></div><div class="trend-right">'+pct+'%</div></div>';
   });
   document.getElementById('tsla-bars').innerHTML=slaHtml;
   document.getElementById('tsla-badge').textContent=naoTratados+' casos não tratados · clique para filtrar';
@@ -1466,7 +1467,7 @@ function renderTelemetria(){
   evtCounts.forEach(function(e){
     var w=Math.round(e[1]/evtMax*100);
     var active=TELE_SEL_EVENTO.has(e[0])?'active-filter':'';
-    evtHtml+='<div class="evt-row"><div class="evt-lbl">'+e[0]+'</div><div class="evt-bar-wrap '+active+'" onclick="toggleTeleEvento('+JSON.stringify(e[0])+')" title="Clique para filtrar"><div class="evt-bar" style="width:'+w+'%"></div></div><div class="evt-n">'+e[1]+'</div></div>';
+    evtHtml+='<div class="evt-row"><div class="evt-lbl">'+e[0]+'</div><div class="evt-bar-wrap '+active+'" onclick="toggleTeleEvento(\''+teleEsc(e[0])+'\')" title="Clique para filtrar"><div class="evt-bar" style="width:'+w+'%"></div></div><div class="evt-n">'+e[1]+'</div></div>';
   });
   document.getElementById('tevt-bars').innerHTML=evtHtml||'<div style="font-size:11px;color:var(--muted)">Nenhum caso no recorte selecionado.</div>';
   document.getElementById('tevt-badge').textContent=evtCounts.length?evtCounts[0][0]+' lidera · clique para filtrar':'—';
