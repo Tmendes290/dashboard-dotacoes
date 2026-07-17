@@ -497,7 +497,7 @@ body.embed .main{width:100%!important}
               <div class="cc-title">Todos os Motoristas — Desvios por Empresa</div>
               <div style="font-size:10px;color:var(--muted);margin-top:2px" id="tall-sub">—</div>
             </div>
-            <div style="font-size:10px;color:var(--muted)">agrupado e ordenado por empresa</div>
+            <div style="font-size:10px;color:var(--muted)">agrupado por empresa · clique num motorista pra ver as ocorrências</div>
           </div>
           <div class="tbl-wrap" style="max-height:460px">
             <table>
@@ -1384,6 +1384,8 @@ function switchTab(name){
 var TELE_DATA=[];
 var TELE_SEL_TEMPO=new Set();
 var TELE_SEL_EVENTO=new Set();
+var TELE_EXPANDED=new Set();
+function toggleTeleDriverExpand(key){if(TELE_EXPANDED.has(key))TELE_EXPANDED.delete(key);else TELE_EXPANDED.add(key);renderTelemetria();}
 var TELE_SEV_ORDER={'Gravíssima':0,'Grave':1,'Média':2,'Baixa':3};
 var TELE_SEV_PILL={'Gravíssima':'pill-red','Grave':'pill-orange','Média':'pill-yellow','Baixa':'pill-green'};
 
@@ -1428,7 +1430,7 @@ function resetTeleFilters(){
   if(_msStore['ms-mes-tele'])_msStore['ms-mes-tele'].sel.clear();
   if(_msStore['ms-ger-tele'])_msStore['ms-ger-tele'].sel.clear();
   if(_msStore['ms-emp-tele'])_msStore['ms-emp-tele'].sel.clear();
-  TELE_SEL_TEMPO.clear();TELE_SEL_EVENTO.clear();
+  TELE_SEL_TEMPO.clear();TELE_SEL_EVENTO.clear();TELE_EXPANDED.clear();
   renderMs('ms-mes-tele');renderMs('ms-ger-tele');renderMs('ms-emp-tele');
   renderTelemetria();
 }
@@ -1554,9 +1556,30 @@ function renderTelemetria(){
   });
   document.getElementById('tall-sub').textContent=allDrv.length+' motoristas · '+total+' desvios no recorte selecionado';
   document.getElementById('tall-tbody').innerHTML=allDrv.length?allDrv.map(function(d){
-    return '<tr><td>'+d.empresa+'</td><td>'+d.nome+'</td><td style="font-weight:700">'+d.total+'</td>'
+    var key=d.nome+'|'+d.empresa;
+    var isOpen=TELE_EXPANDED.has(key);
+    var mainRow='<tr style="cursor:pointer" onclick="toggleTeleDriverExpand(\''+teleEsc(key)+'\')">'
+      +'<td>'+d.empresa+'</td><td>'+d.nome+'</td><td style="font-weight:700">'+d.total+'</td>'
       +'<td>'+(d.b||'—')+'</td><td>'+(d.m||'—')+'</td><td>'+(d.g||'—')+'</td><td>'+(d.gv||'—')+'</td>'
-      +'<td>'+(d.nt?'<span class="pill pill-red">'+d.nt+'</span>':'—')+'</td><td>'+teleMesLabel(d.ultDt)+'</td></tr>';
+      +'<td>'+(d.nt?'<span class="pill pill-red">'+d.nt+'</span>':'—')+'</td>'
+      +'<td>'+teleMesLabel(d.ultDt)+' <span style="color:var(--muted);font-size:9px">'+(isOpen?'▲':'▼')+'</span></td></tr>';
+    var detailRow='';
+    if(isOpen){
+      var casos=filtered.filter(function(r){return r.nome===d.nome&&r.empresa===d.empresa;})
+        .sort(function(a,b){return (b.dt||'')<(a.dt||'')?-1:1;});
+      var rowsHtml=casos.map(function(r){
+        return '<tr><td style="padding:4px 10px">'+r.evento+'</td><td style="padding:4px 10px">'+teleMesLabel(r.dt)+'</td>'
+          +'<td style="padding:4px 10px"><span class="pill '+(TELE_SEV_PILL[r.grav]||'pill-blue')+'" style="font-size:9px">'+(r.grav||'—')+'</span></td>'
+          +'<td style="padding:4px 10px">'+(r.status==='Não Tratados'?'<span class="pill pill-red" style="font-size:9px">Não Tratado</span>':(r.status||'—'))+'</td>'
+          +'<td style="padding:4px 10px">'+teleShortAcao(r.acao)+'</td></tr>';
+      }).join('');
+      detailRow='<tr><td colspan="9" style="padding:10px 14px;background:var(--bg)">'
+        +'<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Ocorrências — '+d.nome+'</div>'
+        +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
+        +'<thead><tr><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Evento</th><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Mês</th><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Gravidade</th><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Status</th><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Ação já definida</th></tr></thead>'
+        +'<tbody>'+rowsHtml+'</tbody></table></td></tr>';
+    }
+    return mainRow+detailRow;
   }).join(''):'<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">Nenhum motorista no recorte selecionado.</td></tr>';
 }
 
