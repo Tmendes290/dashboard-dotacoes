@@ -12309,7 +12309,7 @@ async function iprodLoadIndice(){
 // cheia de código de norma/material ASTM/SCH/NPT que a composição da base nunca detalha). Números
 // contam em dobro (diâmetro/fck costuma ser o principal jeito de desambiguar composições quase
 // idênticas). tokensB não vem pré-computado (uso pontual, ex.: comparação entre 2 PQs).
-function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB){
+function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB,qA,qB){
   if(!tokensB.length) return 0;
   var interW=0, totalA=0, totalB=0, matchCount=0, matchPalavras=0;
   tokensA.forEach(function(t){ totalA+=iprodTokenPeso(t); });
@@ -12334,7 +12334,11 @@ function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB){
   // duas terminam perto de um número, bater é reforço forte; não bater é penalidade forte (evita
   // casar com o tamanho errado só por causa do resto do texto parecido). Não olha só o ÚLTIMO
   // token — em cabo o número vem antes da unidade ("SEÇÃO 16 MM2", não "SEÇÃO MM2 16").
-  var lastA=iprodUltimoNumero(tokensA), lastB=iprodUltimoNumero(tokensB);
+  // Se um dos lados é descrição-coringa ("qualquer diâmetro/malha/bitola"), não tem número de
+  // medida pra comparar de verdade — trata como se não houvesse último número (nem bônus nem
+  // penalidade), em vez de deixar iprodUltimoNumero pegar um número de outra natureza (ex.: grau
+  // do aço em "CA-50") e penalizar um match correto como se fosse tamanho errado.
+  var lastA=qA?null:iprodUltimoNumero(tokensA), lastB=qB?null:iprodUltimoNumero(tokensB);
   if(lastA!=null&&lastB!=null){
     // -0.35 não bastava: composições que diferem só nesse número (ex.: mesmo texto de "Concreto
     // Não-Bombeado em estrutura de fundação fck = X MPa" pra fck=10 e fck=30) chegam a ~0.73 de
@@ -12361,6 +12365,14 @@ function iprodUltimoNumero(tokens){
     if(/^[0-9]+$/.test(tokens[i])) return tokens[i];
   }
   return null;
+}
+// "Qualquer diâmetro/malha/bitola..." é uma descrição-coringa (a contratada não separa por
+// tamanho) — não tem número de medida nenhum pra comparar, então iprodUltimoNumero acaba pegando
+// um número qualquer que sobrar por perto (ex.: o "50" de "CA-50", que é grau do aço, não diâmetro)
+// e penalizando um match correto como se os tamanhos fossem diferentes. "QUALQUER" já é stopword
+// (não sobra nos tokens), então precisa checar a descrição original antes da tokenização.
+function iprodTemQualquer(desc){
+  return /\bQUALQUER\b/.test(iprodNorm(desc));
 }
 
 // Cruza por código (quando existir) ou por similaridade de texto — a maioria das PQs reais
@@ -12396,6 +12408,7 @@ function iprodBuscarNaFonte(fonte,codCliente,desc,unidade){
   var pqTokens=iprodTokens(desc);
   var pqSet={}; pqTokens.forEach(function(t){pqSet[t]=true;});
   var pqUnid=iprodUnitNorm(unidade);
+  var pqQualquer=iprodTemQualquer(desc);
 
   if(cod && fonte.byCod[cod]){
     var grupos=fonte.byCod[cod];
@@ -12404,7 +12417,7 @@ function iprodBuscarNaFonte(fonte,codCliente,desc,unidade){
       // a composição cadastrada sob esse código (ex.: código de tubo, por erro na planilha fonte
       // do projeto ou coincidência de numeração entre disciplinas, apontando pra uma composição de
       // boca de bueiro), não confia cegamente — cai pra busca por descrição no resto da base.
-      if(!pqTokens.length||iprodTokenScore(pqTokens,pqSet,grupos[0].tokens,pqUnid,grupos[0].unidNorm)>0){
+      if(!pqTokens.length||iprodTokenScore(pqTokens,pqSet,grupos[0].tokens,pqUnid,grupos[0].unidNorm,pqQualquer,iprodTemQualquer(grupos[0].desc))>0){
         return {rows:grupos[0].rows,matchTipo:'código',matchCod:cod,matchDesc:grupos[0].desc,score:1};
       }
     } else {
@@ -12412,7 +12425,7 @@ function iprodBuscarNaFonte(fonte,codCliente,desc,unidade){
       // — desambigua pela descrição mais parecida em vez de misturar tudo
       var bestG=null,bestGScore=-1;
       grupos.forEach(function(g){
-        var s=pqTokens.length?iprodTokenScore(pqTokens,pqSet,g.tokens,pqUnid,g.unidNorm):0;
+        var s=pqTokens.length?iprodTokenScore(pqTokens,pqSet,g.tokens,pqUnid,g.unidNorm,pqQualquer,iprodTemQualquer(g.desc)):0;
         if(s>bestGScore){bestGScore=s;bestG=g;}
       });
       if(bestG&&bestGScore>0) return {rows:bestG.rows,matchTipo:'código ('+grupos.length+' composições sob esse código — desambiguado pela descrição)',matchCod:cod,matchDesc:bestG.desc,score:1};
@@ -12430,7 +12443,7 @@ function iprodBuscarNaFonte(fonte,codCliente,desc,unidade){
   var pesoK=iprodPesoLetraK(desc);
   var best=null, bestScore=0;
   fonte.descIdx.forEach(function(d){
-    var score=iprodTokenScore(pqTokens,pqSet,d.tokens,pqUnid,d.unidNorm);
+    var score=iprodTokenScore(pqTokens,pqSet,d.tokens,pqUnid,d.unidNorm,pqQualquer,iprodTemQualquer(d.desc));
     var kBase=/^[MD]/.test(d.codCliente||'')?d.codCliente[0]:null;
     if(kBase){
       if(kQuery) score+=(kBase===kQuery)?0.05:-0.3;
@@ -12474,9 +12487,10 @@ function iprodFindInPq(desc,unidade,pqList){
   if(!pqTokens.length) return null;
   var pqSet={}; pqTokens.forEach(function(t){pqSet[t]=true;});
   var pqUnid=iprodUnitNorm(unidade);
+  var pqQualquer=iprodTemQualquer(desc);
   var best=null, bestScore=0;
   pqList.forEach(function(p){
-    var score=iprodTokenScore(pqTokens,pqSet,iprodTokens(p.desc),pqUnid,iprodUnitNorm(p.unidade));
+    var score=iprodTokenScore(pqTokens,pqSet,iprodTokens(p.desc),pqUnid,iprodUnitNorm(p.unidade),pqQualquer,iprodTemQualquer(p.desc));
     if(score>bestScore){ bestScore=score; best=p; }
   });
   return (best && bestScore>=0.35) ? {item:best,score:bestScore} : null;
@@ -12866,11 +12880,19 @@ async function iprodProcessar(){
       // declarou por linha na PQ dela (quando ela traz essa coluna) — pelo menos valida se a
       // quantidade oficial do projeto × a taxa que ela mesma diz usar bate com o que ela alocou,
       // em vez de simplesmente não comparar nada.
-      var semIndiceProjeto=!achouIndice;
+      // Composição encontrada na base mas sem NENHUM insumo de mão de obra cadastrado (indiceTotal
+      // fica 0) não é "índice de referência zero" de verdade — é lacuna da base-fonte. Tratar como
+      // achou=0 deixava HH Esperado zerado mesmo quando a contratada cobrou um HH real e alto pra
+      // essa atividade (ex.: concreto de laje sem IH cadastrado), escondendo a divergência em vez
+      // de mostrar. Cai pro mesmo fallback de "sem índice": usa o que a contratada mesma declara,
+      // ou na falta disso, considera igual ao HH da empresa — nunca deixa "esperado" em 0 só por
+      // causa de uma composição incompleta na base.
+      var temIndiceValido=!!achouIndice&&indiceTotal>0;
+      var semIndiceProjeto=!temIndiceValido;
       var indiceContratadaMedio=(emp&&emp.hhViaIndiceContratada>0&&emp.quantidade>0)?(emp.hhViaIndiceContratada/emp.quantidade):null;
-      var indiceOrigem=achouIndice?'base':(indiceContratadaMedio!=null?'contratada':null);
+      var indiceOrigem=temIndiceValido?'base':(indiceContratadaMedio!=null?'contratada':null);
       var hhEsperado;
-      if(achouIndice){
+      if(temIndiceValido){
         // HH Esperado já com praticabilidade embutida (Referência × (2 − Praticabilidade), igual à seção 5).
         hhEsperado=pItem.quantidade*indiceTotal*(2-IPROD_PRAT);
       } else if(indiceContratadaMedio!=null){
@@ -12883,6 +12905,7 @@ async function iprodProcessar(){
       }
 
       var status=emp==null?'faltando-empresa':(Math.abs(diffQtd)<0.01?'bate':'divergente');
+      var achouSemMaoDeObra=!!achouIndice&&!temIndiceValido;
 
       qtdComp.push({desc:pItem.desc,unidade:pItem.unidade,codCliente:pItem.codCliente,idxProjeto:idxProjeto,
         qtdProjeto:pItem.quantidade,qtdEmpresa:qtdEmpresa,diffQtd:diffQtd,
@@ -12890,9 +12913,9 @@ async function iprodProcessar(){
         diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
         status:status,matchTipo:matchTipo,semIndiceProjeto:semIndiceProjeto,indiceOrigem:indiceOrigem,indiceSoSupervisao:!!indiceSoSupervisao,
         matchDesc:achouIndice?achouIndice.matchDesc:null,matchCodBase:achouIndice?achouIndice.matchCod:null,
-        detalhe:achouIndice?(detalhePartes.length?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceTotal)):'Sem insumo de mão de obra (IH) nessa composição')
-          :(indiceOrigem==='contratada'?('Sem correspondência na nossa base de índices — usado o índice de produtividade que a própria contratada declara na PQ dela ('+iprodFmt(indiceContratadaMedio)+').')
-            :'Sem correspondência na base de índices — considerado igual ao HH da empresa, sem aplicar índice próprio.')});
+        detalhe:temIndiceValido?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceTotal))
+          :(indiceOrigem==='contratada'?((achouSemMaoDeObra?'Composição achada na base sem insumo de mão de obra (IH) cadastrado — ':'Sem correspondência na nossa base de índices — ')+'usado o índice de produtividade que a própria contratada declara na PQ dela ('+iprodFmt(indiceContratadaMedio)+').')
+            :((achouSemMaoDeObra?'Composição achada na base sem insumo de mão de obra (IH) cadastrado':'Sem correspondência na base de índices')+' — considerado igual ao HH da empresa, sem aplicar índice próprio.'))});
     });
     // Itens de fornecimento da PQ da contratada que não bateram com NENHUMA atividade da PQ do
     // Projeto — o HH alocado deles fica de fora da tabela acima (que só lista atividades do
