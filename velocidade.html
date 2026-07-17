@@ -471,6 +471,10 @@ body.embed .main{width:100%!important}
           </div>
         </div>
         <div class="cc">
+          <div class="cc-hdr"><div class="cc-title">Casos por Gerência / Área</div><div class="cc-badge" id="tge-badge">—</div></div>
+          <div id="tge-bars" style="max-height:340px;overflow-y:auto"></div>
+        </div>
+        <div class="cc">
           <div class="cc-hdr"><div class="cc-title">Casos por Empresa</div><div class="cc-badge" id="tco-badge">—</div></div>
           <div id="tco-bars" style="max-height:340px;overflow-y:auto"></div>
         </div>
@@ -1441,6 +1445,12 @@ function clickTeleEmpresaBar(v){
   renderMs('ms-emp-tele');
   renderTelemetria();
 }
+function clickTeleGerenciaBar(v){
+  var s=_msStore['ms-ger-tele'];if(!s)return;
+  if(s.sel.has(v))s.sel.delete(v);else s.sel.add(v);
+  renderMs('ms-ger-tele');
+  renderTelemetria();
+}
 
 function resetTeleFilters(){
   if(_msStore['ms-mes-tele'])_msStore['ms-mes-tele'].sel.clear();
@@ -1532,6 +1542,23 @@ function renderTelemetria(){
   });
   document.getElementById('tevt-bars').innerHTML=evtHtml||'<div style="font-size:11px;color:var(--muted)">Nenhum caso no recorte selecionado.</div>';
   document.getElementById('tevt-badge').textContent=evtCounts.length?evtCounts[0][0]+' lidera · clique para filtrar':'—';
+
+  // Casos por Gerência/Área (ignora o filtro de Gerência pra manter todas as barras visíveis/clicáveis)
+  var gerBase=TELE_DATA.filter(function(r){
+    return (selMes.size===0||selMes.has(teleMesLabel(r.dt))) && (selEmp.size===0||selEmp.has(r.empresa)) && (TELE_SEL_TEMPO.size===0||TELE_SEL_TEMPO.has(r.tempo)) && (TELE_SEL_EVENTO.size===0||TELE_SEL_EVENTO.has(r.evento));
+  });
+  var gerBarCounts=teleUniqCount(gerBase,'ger');
+  var gerBarMax=gerBarCounts.length?gerBarCounts[0][1]:1;
+  var gerHtml='';
+  gerBarCounts.forEach(function(g){
+    var w=Math.round(g[1]/gerBarMax*100);
+    var active=selGer.has(g[0])?'active-filter':'';
+    var color=teleHeatColor(g[1]/gerBarMax);
+    var lbl=g[0].split(' - ')[0]||g[0];
+    gerHtml+='<div class="evt-row"><div class="evt-lbl" style="width:210px" title="'+g[0]+'">'+lbl+'</div><div class="evt-bar-wrap '+active+'" onclick="clickTeleGerenciaBar(\''+teleEsc(g[0])+'\')" title="Clique para filtrar"><div class="evt-bar" style="width:'+w+'%;background:'+color+'"></div></div><div class="evt-n">'+g[1]+'</div></div>';
+  });
+  document.getElementById('tge-bars').innerHTML=gerHtml||'<div style="font-size:11px;color:var(--muted)">Nenhum caso no recorte selecionado.</div>';
+  document.getElementById('tge-badge').textContent=gerBarCounts.length?(gerBarCounts[0][0].split(' - ')[0]||gerBarCounts[0][0])+' lidera · clique para filtrar':'—';
 
   // Casos por Empresa (ignora o filtro de Empresa pra manter todas as barras visíveis/clicáveis)
   var empBase=TELE_DATA.filter(function(r){
