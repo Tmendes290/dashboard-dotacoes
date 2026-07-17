@@ -48,7 +48,7 @@ async function requireAuth(req, res, next) {
 }
 
 // ── SAVE MEDIDO (server-side, bypasses RLS via service role key) ──────────────
-app.post('/api/save-medido', async (req, res) => {
+app.post('/api/save-medido', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) {
     return res.status(500).json({ error: 'SUPA_SERVICE_KEY não configurado no servidor. Adicione a variável no Railway.' });
   }
@@ -483,7 +483,7 @@ app.get('/api/telemetria', requireAuth, async (req, res) => {
 });
 
 // ── CJI3: SALVAR PAYLOAD JÁ AGREGADO (parse feito no browser) ────
-app.post('/api/save-cji3', async (req, res) => {
+app.post('/api/save-cji3', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
   const { payload } = req.body;
   if (!payload || !payload.rows) return res.status(400).json({ error: 'payload inválido' });
@@ -510,7 +510,7 @@ app.post('/api/save-cji3', async (req, res) => {
   }
 });
 
-app.get('/api/cji3', async (req, res) => {
+app.get('/api/cji3', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
   try {
     const r = await fetch(`${SUPA_URL}/rest/v1/cji3_dados?chave=eq.main&select=payload,atualizado_em`, {

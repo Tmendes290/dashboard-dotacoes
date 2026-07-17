@@ -1,5 +1,6 @@
 ﻿<!DOCTYPE html>
 <!-- v2026-06-19 -->
+<!-- © 2026 Thiago Mendes. Todos os direitos reservados. -->
 <html lang="pt-BR"><head><meta charset="UTF-8"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -10,6 +11,8 @@
 <title>Dashboard de Dotações — Vale Base Metals</title>
 <meta name="author" content="Thiago Mendes Lima">
 <meta name="description" content="Dashboard Gerencial de Dotações — Salobo &amp; Igarapé Bahia — Vale Base Metals">
+<meta name="author" content="Thiago Mendes">
+<meta name="copyright" content="© 2026 Thiago Mendes. Todos os direitos reservados.">
 
 <script>
 // ─── REFRESH DASHBOARD ────────────────────────────────────────
@@ -1009,6 +1012,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
         <button onclick="logoutUser()" title="Sair da sessão" style="background:rgba(239,68,68,.15); border:1px solid rgba(239,68,68,.3); color:#fca5a5; cursor:pointer; font-size:10px; font-weight:700; padding:3px 7px; border-radius:5px; font-family:inherit; flex-shrink:0" onmouseover="this.style.background='rgba(239,68,68,.3)'" onmouseout="this.style.background='rgba(239,68,68,.15)'">⏻ Sair</button>
       </div>
     </div>
+    <div style="padding:8px 12px;border-top:1px solid rgba(255,255,255,.07);font-size:9px;color:rgba(255,255,255,.3);text-align:center;flex-shrink:0">© 2026 Thiago Mendes. Todos os direitos reservados.</div>
 </aside>
 
 <!-- MAIN -->
@@ -7805,7 +7809,10 @@ function handleCji3Upload(file){
         var rows=Object.values(map).filter(function(r){return Object.keys(r.v).length>0;});
         var payload={months,rows,atualizado_em:new Date().toISOString()};
         toast('Salvando '+rows.length+' combinações...','blue');
-        var resp=await fetch('/api/save-cji3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({payload})});
+        var _cji3SessionRes=await supa.auth.getSession();
+        var _cji3Token=_cji3SessionRes.data&&_cji3SessionRes.data.session?_cji3SessionRes.data.session.access_token:null;
+        if(!_cji3Token){toast('Sessão inválida. Faça login novamente.','red');return;}
+        var resp=await fetch('/api/save-cji3',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_cji3Token},body:JSON.stringify({payload})});
         var result=await resp.json();
         if(!resp.ok||result.error){toast('Erro ao salvar: '+(result.error||'falha'),'red');renderCji3();return;}
         STATE_CJI3=payload;
@@ -14367,7 +14374,7 @@ table.rdo-tbl{width:100%;border-collapse:collapse}
 
   </div>
 
-  <div class="ls-footer">Desenvolvido por Thiago Mendes Lima · Vale Base Metals</div>
+  <div class="ls-footer">© 2026 Thiago Mendes. Todos os direitos reservados. · Desenvolvido por Thiago Mendes Lima · Vale Base Metals</div>
 
   <script>
 (function(){
