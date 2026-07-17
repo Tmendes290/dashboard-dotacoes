@@ -1469,6 +1469,20 @@ var STATE_LOADED_AT = null;
 var _syncInProgress = false;
 var _realtimeStarted = false;
 var _medidoSyncChannel = null;
+// PostgREST corta silenciosamente a resposta de .select() em 1000 linhas (sem erro, sem aviso) —
+// paginação com .range() é obrigatória pra qualquer tabela que pode passar disso. Usado por
+// capex, que já passou de 1000 linhas antes (sumia PEP inteiro no reload, sem nenhum erro).
+async function supaFetchAll(table,select){
+  var all=[], offset=0, batch=1000, pages=0;
+  while(pages<200){
+    var res=await supa.from(table).select(select||'*').range(offset,offset+batch-1);
+    if(res.error||!res.data) break;
+    all=all.concat(res.data);
+    if(res.data.length<batch) break;
+    offset+=batch; pages++;
+  }
+  return all;
+}
 async function loadFromSupabase(){
   if(!supa) return;
   if(_syncInProgress){ console.log('[Sync] já em progresso, ignorando chamada duplicada'); return; }
@@ -1513,8 +1527,8 @@ async function loadFromSupabase(){
     // CAPEX
     (async function(){
       try {
-        const {data:cpx,error:e3}=await supa.from('capex').select('*');
-        if(!e3&&cpx&&cpx.length>0){
+        var cpx=await supaFetchAll('capex');
+        if(cpx&&cpx.length>0){
           STATE.capex=cpx.map(function(c){return{pep:c.pep,empresa:c.empresa,grupo:c.grupo||'',capex:parseFloat(c.capex)||0,contratado:parseFloat(c.contratado)||0,pago:parseFloat(c.pago)||0,a_contratar:parseFloat(c.a_contratar)||0,a_pagar:parseFloat(c.a_pagar)||0};});
           _lsSet('dot_capex',JSON.stringify(STATE.capex));
         }
@@ -1656,7 +1670,7 @@ function startRealtime(){
     .on('broadcast', {event: 'capex-updated'}, function(payload){
       (async function(){
         try{
-          var {data:cpx}=await supa.from('capex').select('*');
+          var cpx=await supaFetchAll('capex');
           if(cpx&&cpx.length>0){STATE.capex=cpx.map(function(c){return{pep:c.pep,empresa:c.empresa,grupo:c.grupo||'',capex:parseFloat(c.capex)||0,contratado:parseFloat(c.contratado)||0,pago:parseFloat(c.pago)||0,a_contratar:parseFloat(c.a_contratar)||0,a_pagar:parseFloat(c.a_pagar)||0};});try{localStorage.setItem('dot_capex',JSON.stringify(STATE.capex));}catch(e){}}
           var {data:cpp}=await supa.from('capex_por_pep').select('*');
           if(cpp&&cpp.length>0){STATE.capexPorPep={};cpp.forEach(function(c){STATE.capexPorPep[c.pep]=parseFloat(c.valor)||0;});try{localStorage.setItem('dot_capex_pep',JSON.stringify(STATE.capexPorPep));}catch(e){}}
