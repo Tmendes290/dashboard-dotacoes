@@ -12355,6 +12355,14 @@ function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB,qA,qB){
   // palavras (uma no assunto, outra genérica no meio do texto), dando cobertura igual pras duas
   // sem esse reforço — o empate seria resolvido por acaso, não pelo assunto real da atividade.
   if(tokensA.length&&tokensB.length&&tokensA[0]===tokensB[0]) score+=0.15;
+  // "NÃO" é negação, não enchimento — "Concreto Bombeado" x "Concreto NÃO-Bombeado" são métodos de
+  // lançamento OPOSTOS (composições/índices diferentes), mas "NAO" não é stopword nem palavra fraca:
+  // sozinho ele só custava 1 de peso na cobertura, diluição pequena demais pra evitar um "100%
+  // similar" com o resto do texto idêntico (confirmado com dados reais). Sempre que aparece de um
+  // lado só, é sinal forte de composição errada — mesma magnitude da penalidade de número, e não
+  // depende de qA/qB (não é sobre coringa de medida, é sobre negação de método).
+  var naoA=tokensA.indexOf('NAO')>=0, naoB=tokensB.indexOf('NAO')>=0;
+  if(naoA!==naoB) score-=0.9;
   return score;
 }
 // Acha o último token puramente numérico dentro das últimas 4 posições (diâmetro/seção/fck
