@@ -12374,6 +12374,14 @@ function iprodUltimoNumero(tokens){
 function iprodTemQualquer(desc){
   return /\bQUALQUER\b/.test(iprodNorm(desc));
 }
+// Versão "legível" do último número, pra mostrar pro usuário (ex.: "0,2MM", "12,5MM") — diferente
+// de iprodUltimoNumero (que funde a vírgula decimal num token só, tipo "02", só pra comparação
+// interna). Usada apenas em mensagem, nunca na decisão de score/match.
+function iprodUltimaMedida(desc){
+  var n=iprodNorm(desc);
+  var m=n.match(/(\d+(?:[.,]\d+)?)\s*([A-Z²³%]{0,6})[.\s\)]*$/);
+  return m?(m[1]+(m[2]||'')).trim():null;
+}
 
 // Cruza por código (quando existir) ou por similaridade de texto — a maioria das PQs reais
 // não tem o código oficial da Vale, só a descrição do serviço, então esse é o caminho
@@ -12494,6 +12502,33 @@ function iprodFindInPq(desc,unidade,pqList){
     if(score>bestScore){ bestScore=score; best=p; }
   });
   return (best && bestScore>=0.35) ? {item:best,score:bestScore} : null;
+}
+
+// Fallback de "medida diferente": só chamado numa SEGUNDA passagem, depois que TODOS os itens do
+// projeto já tentaram achar match exato (iprodFindInPq) e reivindicaram seus candidatos — nunca
+// antes, senão um item com medida diferente pode roubar (via score sem a penalidade de número) o
+// candidato que seria o match EXATO de outro item do projeto ainda não processado (ex.: concreto
+// fck=10 do projeto "roubando" o candidato fck=30 da contratada antes do item fck=30 do projeto
+// ser processado — o mesmo bug que a penalidade de número já resolve, só que ao contrário). Com os
+// matches exatos já resolvidos e retirados da lista antes de chamar isso, o que sobrar só pode ser
+// "mesma composição, medida diferente" de verdade (ex.: PQ pede lona 0,2mm, só sobrou lona 0,8mm).
+function iprodFindInPqMedidaDiferente(desc,unidade,pqList){
+  var pqTokens=iprodTokens(desc);
+  if(!pqTokens.length) return null;
+  var pqSet={}; pqTokens.forEach(function(t){pqSet[t]=true;});
+  var pqUnid=iprodUnitNorm(unidade);
+  var best=null, bestScore=0;
+  pqList.forEach(function(p){
+    var score=iprodTokenScore(pqTokens,pqSet,iprodTokens(p.desc),pqUnid,iprodUnitNorm(p.unidade),true,true);
+    if(score>bestScore){ bestScore=score; best=p; }
+  });
+  if(!best||bestScore<0.35) return null;
+  var lastProj=iprodUltimoNumero(pqTokens), lastEmp=iprodUltimoNumero(iprodTokens(best.desc));
+  if(lastProj==null||lastEmp==null||lastProj===lastEmp) return null;
+  return {item:best,score:bestScore,specDiff:{
+    projeto:iprodUltimaMedida(desc)||lastProj,
+    empresa:iprodUltimaMedida(best.desc)||lastEmp
+  }};
 }
 
 // Detecta linha de cabeçalho da PQ (Descrição/Atividade + Quantidade [+ Cód.Cliente + Unidade])
@@ -12825,6 +12860,11 @@ async function iprodProcessar(){
     // do projeto batendo os dois com a única linha de concreto da contratada, duplicando o
     // HH no total.
     var usadosEmp=[];
+    // PRIMEIRA PASSAGEM: só matches exatos (código, descrição exata, similaridade normal com a
+    // penalidade de número ativa) — reivindica candidatos antes de qualquer fallback de "medida
+    // diferente" entrar em jogo, pra não deixar um item roubar o candidato exato de outro item
+    // ainda não processado (ver comentário em iprodFindInPqMedidaDiferente).
+    var pendentes=[];
     IPROD_PROJETO.pq.forEach(function(pItem,idxProjeto){
       // Atividade administrativa (unidade "vb"/"vb x mês"), categoria "F" (fornecimento puro,
       // sem montagem) ou linha de mão de obra direta por hora (Encarregado/Técnico/Montador/
@@ -12861,8 +12901,33 @@ async function iprodProcessar(){
         var achouEmp=iprodFindInPq(pItem.desc,pItem.unidade,candidatos);
         if(achouEmp){ emp=achouEmp.item; matchTipo='descrição ('+Math.min(100,Math.round(achouEmp.score*100))+'% similar)'; }
       }
+      if(emp) usadosEmp.push(emp);
+      pendentes.push({pItem:pItem,idxProjeto:idxProjeto,achouIndice:achouIndice,indiceTotal:indiceTotal,
+        detalhePartes:detalhePartes,indiceSoSupervisao:indiceSoSupervisao,emp:emp,matchTipo:matchTipo,specDiff:null});
+    });
+
+    // SEGUNDA PASSAGEM: só pros itens que sobraram sem match nenhum, e só entre os candidatos que
+    // sobraram sem dono depois da primeira passagem — tenta achar a mesma composição com medida
+    // diferente (ex.: PQ pede lona 0,2mm, contratada só cotou lona 0,8mm) em vez de simplesmente
+    // marcar como "Faltando".
+    pendentes.forEach(function(ctx){
+      if(ctx.emp) return;
+      var candidatos=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;});
+      var achouEmp=iprodFindInPqMedidaDiferente(ctx.pItem.desc,ctx.pItem.unidade,candidatos);
+      if(achouEmp){
+        ctx.emp=achouEmp.item;
+        ctx.specDiff=achouEmp.specDiff;
+        ctx.matchTipo='medida diferente — PQ do projeto pede '+achouEmp.specDiff.projeto+', empresa considerou '+achouEmp.specDiff.empresa;
+        usadosEmp.push(ctx.emp);
+      }
+    });
+
+    // TERCEIRA PASSAGEM: com emp/specDiff já definitivos pra todo mundo, monta o resultado de cada linha.
+    pendentes.forEach(function(ctx){
+      var pItem=ctx.pItem, idxProjeto=ctx.idxProjeto, achouIndice=ctx.achouIndice, indiceTotal=ctx.indiceTotal,
+        detalhePartes=ctx.detalhePartes, indiceSoSupervisao=ctx.indiceSoSupervisao, emp=ctx.emp, matchTipo=ctx.matchTipo, specDiff=ctx.specDiff;
+
       if(emp){
-        usadosEmp.push(emp);
         // Guarda no próprio grupo a quantidade oficial do projeto e a diferença — usado pelo
         // detalhamento por linha (PASSO 2) pra mostrar o comparativo do TOTAL da atividade em
         // vez de comparar uma linha isolada contra o total do projeto (que nunca bate).
@@ -12904,14 +12969,14 @@ async function iprodProcessar(){
         hhEsperado=hhEmpresa||0;
       }
 
-      var status=emp==null?'faltando-empresa':(Math.abs(diffQtd)<0.01?'bate':'divergente');
+      var status=emp==null?'faltando-empresa':(specDiff?'medida-diferente':(Math.abs(diffQtd)<0.01?'bate':'divergente'));
       var achouSemMaoDeObra=!!achouIndice&&!temIndiceValido;
 
       qtdComp.push({desc:pItem.desc,unidade:pItem.unidade,codCliente:pItem.codCliente,idxProjeto:idxProjeto,
         qtdProjeto:pItem.quantidade,qtdEmpresa:qtdEmpresa,diffQtd:diffQtd,
         indiceTotal:indiceTotal,hhEsperado:hhEsperado,hhEmpresa:hhEmpresa,
         diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
-        status:status,matchTipo:matchTipo,semIndiceProjeto:semIndiceProjeto,indiceOrigem:indiceOrigem,indiceSoSupervisao:!!indiceSoSupervisao,
+        status:status,matchTipo:matchTipo,specDiff:specDiff,semIndiceProjeto:semIndiceProjeto,indiceOrigem:indiceOrigem,indiceSoSupervisao:!!indiceSoSupervisao,
         matchDesc:achouIndice?achouIndice.matchDesc:null,matchCodBase:achouIndice?achouIndice.matchCod:null,
         detalhe:temIndiceValido?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceTotal))
           :(indiceOrigem==='contratada'?((achouSemMaoDeObra?'Composição achada na base sem insumo de mão de obra (IH) cadastrado — ':'Sem correspondência na nossa base de índices — ')+'usado o índice de produtividade que a própria contratada declara na PQ dela ('+iprodFmt(indiceContratadaMedio)+').')
@@ -13248,14 +13313,14 @@ function iprodRenderShell(){
       +'<button class="iprod-btn" style="margin-top:0" onclick="iprodSalvarHistorico()">💾 Salvar no histórico</button></div>';
 
     if(r.qtdComp.length){
-      var qtdCompCont={todos:r.qtdComp.length,bate:0,divergente:0,'faltando-empresa':0};
+      var qtdCompCont={todos:r.qtdComp.length,bate:0,divergente:0,'medida-diferente':0,'faltando-empresa':0};
       r.qtdComp.forEach(function(q){ qtdCompCont[q.status]=(qtdCompCont[q.status]||0)+1; });
       if(!qtdCompCont[IPROD_FILTRO_STATUS]&&IPROD_FILTRO_STATUS!=='todos') IPROD_FILTRO_STATUS='todos';
       var qtdCompFiltrado=IPROD_FILTRO_STATUS==='todos'?r.qtdComp:r.qtdComp.filter(function(q){return q.status===IPROD_FILTRO_STATUS;});
       html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto × PQ da Contratada — quantidade e índice</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela. <b>HH Esperado</b> = quantidade do projeto × índice, já com a praticabilidade embutida. <b>HH da Empresa</b> = alocação proporcional do HH total cobrado no histograma, distribuído pelo peso (%) do valor (R$) de cada atividade dentro da PQ da contratada — mesmo método usado manualmente na planilha de referência. Clique pra ver a composição do índice e corrigir o Cód. Cliente, se precisar.</div>'
         +'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 12px">'
         +'<input id="iprod-busca-3" type="text" placeholder="🔎 Buscar atividade..." oninput="iprodFiltrarBusca(this)" style="flex:1;min-width:200px;font-size:11.5px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
-        +[['todos','Todos'],['bate','Bate'],['divergente','Divergente'],['faltando-empresa','Faltando']].map(function(f){
+        +[['todos','Todos'],['bate','Bate'],['divergente','Divergente'],['medida-diferente','Medida diferente'],['faltando-empresa','Faltando']].map(function(f){
           var ativo=IPROD_FILTRO_STATUS===f[0];
           return '<span onclick="iprodSetFiltroStatus(\''+f[0]+'\')" style="cursor:pointer;font-size:10.5px;font-weight:800;padding:4px 11px;border-radius:20px;border:1px solid '+(ativo?'#2563eb':'var(--border)')+';background:'+(ativo?'#2563eb':'transparent')+';color:'+(ativo?'#fff':'var(--muted)')+'">'+f[1]+' ('+(qtdCompCont[f[0]]||0)+')</span>';
         }).join('')
@@ -13264,14 +13329,16 @@ function iprodRenderShell(){
       qtdCompFiltrado.forEach(function(q){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
+          :q.status==='medida-diferente'?'<span class="iprod-badge iprod-b-azul" title="PQ do projeto pede '+q.specDiff.projeto+', a contratada considerou '+q.specDiff.empresa+'">📏 Medida diferente</span>'
           :'<span class="iprod-badge iprod-b-verm">Faltando na PQ da empresa</span>';
-        var descCell=q.desc+(q.matchTipo&&q.matchTipo!=='código'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':'');
+        var descCell=q.desc+(q.status==='medida-diferente'?' <span class="iprod-badge iprod-b-azul" style="font-size:9.5px;padding:1px 6px">PQ pede '+q.specDiff.projeto+', empresa considerou '+q.specDiff.empresa+'</span>':(q.matchTipo&&q.matchTipo!=='código'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':''));
         var indiceCell=iprodFmt(q.indiceTotal)+(q.indiceOrigem==='contratada'?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="Nossa base não tem essa composição — usado o índice que a própria contratada declara na PQ dela">contratada</span>':'')
           +(q.indiceSoSupervisao?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Composição na base só tem insumo de supervisão (Encarregado/Mestre...) cadastrado, sem instalador — índice provavelmente subestimado">⚠️ só supervisão</span>':'');
         html+='<tr class="iprod-tr-expand" data-busca="'+iprodNorm(q.desc).replace(/"/g,'')+'" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
           +'<td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+indiceCell+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
         html+='<tr class="iprod-drill"><td colspan="10">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
+          +(q.status==='medida-diferente'?'<div class="iprod-insight" style="margin-bottom:8px">📏 A PQ do projeto pede <b>'+q.specDiff.projeto+'</b>, mas a contratada só cotou essa atividade com <b>'+q.specDiff.empresa+'</b> na PQ dela — mesma composição, medida diferente. Confira se essa troca foi aprovada antes de aceitar a quantidade/HH como equivalente.</div>':'')
           +(q.indiceSoSupervisao?'<div class="iprod-insight" style="margin-bottom:8px">⚠️ Essa composição da base só tem insumo de SUPERVISÃO cadastrado (Encarregado/Mestre...), sem instalador de verdade — provável lacuna na planilha-fonte. O índice reflete só o tempo do encarregado, não o serviço em si. Considere isso ao avaliar essa linha.</div>':'')
           +'<div style="font-size:11px">'+q.detalhe+'</div>'
           +'<div style="font-size:9.5px;color:var(--muted);margin-top:6px">↳ Base de índices: <b>'+(q.matchCodBase||'—')+'</b> — '+(q.matchDesc||'?')+'</div>'
