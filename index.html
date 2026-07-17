@@ -989,8 +989,8 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div class="sb-item" data-view="improdutividade" data-label="Improdutividade"><span class="ico">⏱</span><span class="sb-label">Produtividade</span></div>
     <div class="sb-item" data-view="indice-produtividade" data-label="Índice de Produtividade"><span class="ico">📐</span><span class="sb-label">Índice de Produtividade</span></div>
     <!-- PLANEJAMENTO (admin only) -->
-    <div class="sb-nav-sec admin-only">Planejamento</div>
-    <div class="sb-item admin-only" data-view="histograma" data-label="Histograma CTT"><span class="ico">📈</span><span class="sb-label">Histograma CTT</span></div>
+    <div class="sb-nav-sec">Planejamento</div>
+    <div class="sb-item" data-view="histograma" data-label="Histograma CTT"><span class="ico">📈</span><span class="sb-label">Histograma CTT</span></div>
     <!-- FROTA -->
     <div class="sb-nav-sec">Frota</div>
     <div class="sb-item" data-view="velocidade"><span class="ico">🚗</span><span class="sb-label">Telemetria <span class="sb-badge" style="background:#ef4444">!</span></span></div>
@@ -4294,7 +4294,7 @@ function updateUserBadge(){
   document.body.classList.toggle("is-lider", isLider);
   var _perms = (CURRENT_PERFIL.permissoes && CURRENT_PERFIL.permissoes.length) ? CURRENT_PERFIL.permissoes : ['overview'];
   if(!isAdmin){
-    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','velocidade','cji3','improdutividade','indice-produtividade'];
+    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','velocidade','cji3','improdutividade','indice-produtividade','histograma'];
     document.querySelectorAll('.sb-nav .sb-item').forEach(function(item){
       if(item.classList.contains('admin-only')) return;
       var v=item.dataset.view; if(!v||_permViews.indexOf(v)<0) return;
@@ -6275,7 +6275,7 @@ function renderUsuariosHTML(el, usuarios, bloqueados){
         {v:'alertas',l:'Capex Projetos'},{v:'nova',l:'Nova Dotação'},{v:'regularizar',l:'Regularizar Saldo'},
         {v:'analytics',l:'Dashboard'},{v:'saude-pep',l:'Saúde do PEP'},{v:'materiais',l:'Materiais'},
         {v:'improdutividade',l:'Produtividade'},{v:'indice-produtividade',l:'Índice de Produtividade'},
-        {v:'velocidade',l:'Telemetria'},{v:'cji3',l:'CJI3 Tabela'}
+        {v:'velocidade',l:'Telemetria'},{v:'cji3',l:'CJI3 Tabela'},{v:'histograma',l:'Histograma CTT'}
       ];
       var _uPerms = u.permissoes || ['overview'];
       html += '<div style="margin-top:10px;border-top:1px solid #f1f5f9;padding-top:10px">';
