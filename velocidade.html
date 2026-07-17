@@ -470,6 +470,10 @@ body.embed .main{width:100%!important}
           </div>
         </div>
         <div class="cc">
+          <div class="cc-hdr"><div class="cc-title">Casos por Empresa</div><div class="cc-badge" id="tco-badge">—</div></div>
+          <div id="tco-bars" style="max-height:340px;overflow-y:auto"></div>
+        </div>
+        <div class="cc">
           <div class="cc-hdr">
             <div>
               <div class="cc-title">🔴 Casos críticos sem tratamento — abertos há mais de 15 dias</div>
@@ -483,6 +487,25 @@ body.embed .main{width:100%!important}
             <table>
               <thead><tr><th>Motorista</th><th>Evento</th><th>Gravidade</th><th>Gerência Área</th><th>Empresa</th><th>Ação já definida</th></tr></thead>
               <tbody id="tcrit-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="cc">
+          <div class="cc-hdr">
+            <div>
+              <div class="cc-title">Todos os Motoristas — Desvios por Empresa</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:2px" id="tall-sub">—</div>
+            </div>
+            <div style="font-size:10px;color:var(--muted)">agrupado e ordenado por empresa</div>
+          </div>
+          <div class="tbl-wrap" style="max-height:460px">
+            <table>
+              <thead><tr>
+                <th>Empresa</th><th>Motorista</th><th>Total Desvios</th>
+                <th style="color:#15803d">Baixa</th><th style="color:#a16207">Média</th><th style="color:#c2410c">Grave</th><th style="color:#b91c1c">Gravíssima</th>
+                <th>Não Tratados</th>
+              </tr></thead>
+              <tbody id="tall-tbody"></tbody>
             </table>
           </div>
         </div>
@@ -1385,6 +1408,12 @@ function teleShortAcao(a){
 function teleEsc(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 function toggleTeleTempo(v){if(TELE_SEL_TEMPO.has(v))TELE_SEL_TEMPO.delete(v);else TELE_SEL_TEMPO.add(v);renderTelemetria();}
 function toggleTeleEvento(v){if(TELE_SEL_EVENTO.has(v))TELE_SEL_EVENTO.delete(v);else TELE_SEL_EVENTO.add(v);renderTelemetria();}
+function clickTeleEmpresaBar(v){
+  var s=_msStore['ms-emp-tele'];if(!s)return;
+  if(s.sel.has(v))s.sel.delete(v);else s.sel.add(v);
+  renderMs('ms-emp-tele');
+  renderTelemetria();
+}
 
 function resetTeleFilters(){
   if(_msStore['ms-ger-tele'])_msStore['ms-ger-tele'].sel.clear();
@@ -1472,6 +1501,21 @@ function renderTelemetria(){
   document.getElementById('tevt-bars').innerHTML=evtHtml||'<div style="font-size:11px;color:var(--muted)">Nenhum caso no recorte selecionado.</div>';
   document.getElementById('tevt-badge').textContent=evtCounts.length?evtCounts[0][0]+' lidera · clique para filtrar':'—';
 
+  // Casos por Empresa (ignora o filtro de Empresa pra manter todas as barras visíveis/clicáveis)
+  var empBase=TELE_DATA.filter(function(r){
+    return (selGer.size===0||selGer.has(r.ger)) && (TELE_SEL_TEMPO.size===0||TELE_SEL_TEMPO.has(r.tempo)) && (TELE_SEL_EVENTO.size===0||TELE_SEL_EVENTO.has(r.evento));
+  });
+  var empCounts=teleUniqCount(empBase,'empresa');
+  var empMax=empCounts.length?empCounts[0][1]:1;
+  var empHtml='';
+  empCounts.forEach(function(e){
+    var w=Math.round(e[1]/empMax*100);
+    var active=selEmp.has(e[0])?'active-filter':'';
+    empHtml+='<div class="evt-row"><div class="evt-lbl" style="width:210px" title="'+e[0]+'">'+e[0]+'</div><div class="evt-bar-wrap '+active+'" onclick="clickTeleEmpresaBar(\''+teleEsc(e[0])+'\')" title="Clique para filtrar"><div class="evt-bar" style="width:'+w+'%"></div></div><div class="evt-n">'+e[1]+'</div></div>';
+  });
+  document.getElementById('tco-bars').innerHTML=empHtml||'<div style="font-size:11px;color:var(--muted)">Nenhum caso no recorte selecionado.</div>';
+  document.getElementById('tco-badge').textContent=empCounts.length?empCounts[0][0]+' lidera · clique para filtrar':'—';
+
   // Tabela crítica
   var crit=filtered.filter(function(r){return r.tempo==='Maior que 15 dias';})
     .sort(function(a,b){return (TELE_SEV_ORDER[a.grav]!==undefined?TELE_SEV_ORDER[a.grav]:9)-(TELE_SEV_ORDER[b.grav]!==undefined?TELE_SEV_ORDER[b.grav]:9);});
@@ -1479,6 +1523,27 @@ function renderTelemetria(){
   document.getElementById('tcrit-tbody').innerHTML=crit.length?crit.map(function(r){
     return '<tr><td>'+r.nome+'</td><td>'+r.evento+'</td><td><span class="pill '+(TELE_SEV_PILL[r.grav]||'pill-blue')+'">'+r.grav+'</span></td><td>'+(r.ger.split(' - ')[0]||r.ger)+'</td><td>'+r.empresa+'</td><td>'+teleShortAcao(r.acao)+'</td></tr>';
   }).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">Nenhum caso &gt;15 dias no recorte selecionado 🎉</td></tr>';
+
+  // Todos os motoristas — agrupado por empresa
+  var drvMap={};
+  filtered.forEach(function(r){
+    var key=r.nome+'|'+r.empresa;
+    if(!drvMap[key])drvMap[key]={nome:r.nome,empresa:r.empresa,total:0,b:0,m:0,g:0,gv:0,nt:0};
+    var d=drvMap[key];
+    d.total++;
+    if(r.grav==='Baixa')d.b++;else if(r.grav==='Média')d.m++;else if(r.grav==='Grave')d.g++;else if(r.grav==='Gravíssima')d.gv++;
+    if(r.status==='Não Tratados')d.nt++;
+  });
+  var allDrv=Object.keys(drvMap).map(function(k){return drvMap[k];}).sort(function(a,b){
+    if(a.empresa!==b.empresa)return a.empresa<b.empresa?-1:1;
+    return b.total-a.total;
+  });
+  document.getElementById('tall-sub').textContent=allDrv.length+' motoristas · '+total+' desvios no recorte selecionado';
+  document.getElementById('tall-tbody').innerHTML=allDrv.length?allDrv.map(function(d){
+    return '<tr><td>'+d.empresa+'</td><td>'+d.nome+'</td><td style="font-weight:700">'+d.total+'</td>'
+      +'<td>'+(d.b||'—')+'</td><td>'+(d.m||'—')+'</td><td>'+(d.g||'—')+'</td><td>'+(d.gv||'—')+'</td>'
+      +'<td>'+(d.nt?'<span class="pill pill-red">'+d.nt+'</span>':'—')+'</td></tr>';
+  }).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">Nenhum motorista no recorte selecionado.</td></tr>';
 }
 
 function loadTeleData(casos){
