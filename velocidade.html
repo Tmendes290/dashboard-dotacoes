@@ -1554,11 +1554,10 @@ function renderTelemetria(){
     var w=Math.round(g[1]/gerBarMax*100);
     var active=selGer.has(g[0])?'active-filter':'';
     var color=teleHeatColor(g[1]/gerBarMax);
-    var lbl=g[0].split(' - ')[0]||g[0];
-    gerHtml+='<div class="evt-row"><div class="evt-lbl" style="width:210px" title="'+g[0]+'">'+lbl+'</div><div class="evt-bar-wrap '+active+'" onclick="clickTeleGerenciaBar(\''+teleEsc(g[0])+'\')" title="Clique para filtrar"><div class="evt-bar" style="width:'+w+'%;background:'+color+'"></div></div><div class="evt-n">'+g[1]+'</div></div>';
+    gerHtml+='<div class="evt-row"><div class="evt-lbl" style="width:260px" title="'+g[0]+'">'+g[0]+'</div><div class="evt-bar-wrap '+active+'" onclick="clickTeleGerenciaBar(\''+teleEsc(g[0])+'\')" title="Clique para filtrar"><div class="evt-bar" style="width:'+w+'%;background:'+color+'"></div></div><div class="evt-n">'+g[1]+'</div></div>';
   });
   document.getElementById('tge-bars').innerHTML=gerHtml||'<div style="font-size:11px;color:var(--muted)">Nenhum caso no recorte selecionado.</div>';
-  document.getElementById('tge-badge').textContent=gerBarCounts.length?(gerBarCounts[0][0].split(' - ')[0]||gerBarCounts[0][0])+' lidera · clique para filtrar':'—';
+  document.getElementById('tge-badge').textContent=gerBarCounts.length?gerBarCounts[0][0]+' lidera · clique para filtrar':'—';
 
   // Casos por Empresa (ignora o filtro de Empresa pra manter todas as barras visíveis/clicáveis)
   var empBase=TELE_DATA.filter(function(r){
