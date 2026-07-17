@@ -12322,7 +12322,13 @@ function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB){
   // token — em cabo o número vem antes da unidade ("SEÇÃO 16 MM2", não "SEÇÃO MM2 16").
   var lastA=iprodUltimoNumero(tokensA), lastB=iprodUltimoNumero(tokensB);
   if(lastA!=null&&lastB!=null){
-    score+=(lastA===lastB)?0.2:-0.35;
+    // -0.35 não bastava: composições que diferem só nesse número (ex.: mesmo texto de "Concreto
+    // Não-Bombeado em estrutura de fundação fck = X MPa" pra fck=10 e fck=30) chegam a ~0.73 de
+    // score bruto antes daqui (texto quase idêntico) — com -0.35 ainda sobrava >0.35 (limiar de
+    // aceitação), casando fck errado com o da PQ da contratada (confirmado com dados reais: dava
+    // 53%). -0.9 garante rejeição mesmo no caso de maior semelhança textual possível (score bruto
+    // máximo teórico ~1.23 com todos os bônus).
+    score+=(lastA===lastB)?0.2:-0.9;
   }
   // O primeiro token costuma ser o "assunto" da descrição (Hidrociclones, Cabo, Tubo...) — só
   // bônus, nunca penalidade (a base às vezes prefixa com "Montagem de.../Fornecimento de...", que
