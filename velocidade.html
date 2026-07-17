@@ -486,7 +486,7 @@ body.embed .main{width:100%!important}
           </div>
           <div class="tbl-wrap">
             <table>
-              <thead><tr><th>Motorista</th><th>Evento</th><th>Mês</th><th>Gravidade</th><th>Gerência Área</th><th>Empresa</th><th>Ação já definida</th></tr></thead>
+              <thead><tr><th>Motorista</th><th>Evento</th><th>Data</th><th>Gravidade</th><th>Gerência Área</th><th>Empresa</th><th>Ação já definida</th></tr></thead>
               <tbody id="tcrit-tbody"></tbody>
             </table>
           </div>
@@ -1417,6 +1417,10 @@ function teleMesLabel(dt){
   return TELE_MES_PT[m-1]+'/'+y.slice(2);
 }
 function teleMesKey(dt){return dt&&dt.length>=7?dt.slice(0,7):'';}
+function teleDateLabel(dt){
+  if(!dt||dt.length<10)return '—';
+  return dt.slice(8,10)+'/'+dt.slice(5,7)+'/'+dt.slice(2,4);
+}
 function teleHeatColor(ratio){
   ratio=Math.max(0,Math.min(1,ratio||0));
   var stops=[[16,185,129],[245,158,11],[239,68,68]]; // verde -> amarelo -> vermelho
@@ -1550,7 +1554,7 @@ function renderTelemetria(){
     .sort(function(a,b){return (TELE_SEV_ORDER[a.grav]!==undefined?TELE_SEV_ORDER[a.grav]:9)-(TELE_SEV_ORDER[b.grav]!==undefined?TELE_SEV_ORDER[b.grav]:9);});
   document.getElementById('tcrit-sub').textContent=crit.length+' casos · ordenados por gravidade';
   document.getElementById('tcrit-tbody').innerHTML=crit.length?crit.map(function(r){
-    return '<tr><td>'+r.nome+'</td><td>'+r.evento+'</td><td>'+teleMesLabel(r.dt)+'</td><td><span class="pill '+(TELE_SEV_PILL[r.grav]||'pill-blue')+'">'+r.grav+'</span></td><td>'+(r.ger.split(' - ')[0]||r.ger)+'</td><td>'+r.empresa+'</td><td>'+teleShortAcao(r.acao)+'</td></tr>';
+    return '<tr><td>'+r.nome+'</td><td>'+r.evento+'</td><td>'+teleDateLabel(r.dt)+'</td><td><span class="pill '+(TELE_SEV_PILL[r.grav]||'pill-blue')+'">'+r.grav+'</span></td><td>'+(r.ger.split(' - ')[0]||r.ger)+'</td><td>'+r.empresa+'</td><td>'+teleShortAcao(r.acao)+'</td></tr>';
   }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">Nenhum caso &gt;15 dias no recorte selecionado 🎉</td></tr>';
 
   // Todos os motoristas — agrupado por empresa
@@ -1576,13 +1580,13 @@ function renderTelemetria(){
       +'<td>'+d.empresa+'</td><td>'+d.nome+'</td><td style="font-weight:700">'+d.total+'</td>'
       +'<td>'+(d.b||'—')+'</td><td>'+(d.m||'—')+'</td><td>'+(d.g||'—')+'</td><td>'+(d.gv||'—')+'</td>'
       +'<td>'+(d.nt?'<span class="pill pill-red">'+d.nt+'</span>':'—')+'</td>'
-      +'<td>'+teleMesLabel(d.ultDt)+' <span style="color:var(--muted);font-size:9px">'+(isOpen?'▲':'▼')+'</span></td></tr>';
+      +'<td>'+teleDateLabel(d.ultDt)+' <span style="color:var(--muted);font-size:9px">'+(isOpen?'▲':'▼')+'</span></td></tr>';
     var detailRow='';
     if(isOpen){
       var casos=filtered.filter(function(r){return r.nome===d.nome&&r.empresa===d.empresa;})
         .sort(function(a,b){return (b.dt||'')<(a.dt||'')?-1:1;});
       var rowsHtml=casos.map(function(r){
-        return '<tr><td style="padding:4px 10px">'+r.evento+'</td><td style="padding:4px 10px">'+teleMesLabel(r.dt)+'</td>'
+        return '<tr><td style="padding:4px 10px">'+r.evento+'</td><td style="padding:4px 10px">'+teleDateLabel(r.dt)+'</td>'
           +'<td style="padding:4px 10px"><span class="pill '+(TELE_SEV_PILL[r.grav]||'pill-blue')+'" style="font-size:9px">'+(r.grav||'—')+'</span></td>'
           +'<td style="padding:4px 10px">'+(r.status==='Não Tratados'?'<span class="pill pill-red" style="font-size:9px">Não Tratado</span>':(r.status||'—'))+'</td>'
           +'<td style="padding:4px 10px">'+teleShortAcao(r.acao)+'</td></tr>';
@@ -1590,7 +1594,7 @@ function renderTelemetria(){
       detailRow='<tr><td colspan="9" style="padding:10px 14px;background:var(--bg)">'
         +'<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Ocorrências — '+d.nome+'</div>'
         +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
-        +'<thead><tr><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Evento</th><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Mês</th><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Gravidade</th><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Status</th><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Ação já definida</th></tr></thead>'
+        +'<thead><tr><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Evento</th><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Data</th><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Gravidade</th><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Status</th><th style="text-align:left;padding:4px 10px;font-size:9px;color:var(--muted);text-transform:uppercase">Ação já definida</th></tr></thead>'
         +'<tbody>'+rowsHtml+'</tbody></table></td></tr>';
     }
     return mainRow+detailRow;
