@@ -1417,6 +1417,18 @@ function teleMesLabel(dt){
   return TELE_MES_PT[m-1]+'/'+y.slice(2);
 }
 function teleMesKey(dt){return dt&&dt.length>=7?dt.slice(0,7):'';}
+function teleHeatColor(ratio){
+  ratio=Math.max(0,Math.min(1,ratio||0));
+  var stops=[[16,185,129],[245,158,11],[239,68,68]]; // verde -> amarelo -> vermelho
+  var pos=ratio*(stops.length-1);
+  var i=Math.min(stops.length-2,Math.floor(pos));
+  var t=pos-i;
+  var c1=stops[i],c2=stops[i+1];
+  var r=Math.round(c1[0]+(c2[0]-c1[0])*t);
+  var g=Math.round(c1[1]+(c2[1]-c1[1])*t);
+  var b=Math.round(c1[2]+(c2[2]-c1[2])*t);
+  return 'rgb('+r+','+g+','+b+')';
+}
 function toggleTeleTempo(v){if(TELE_SEL_TEMPO.has(v))TELE_SEL_TEMPO.delete(v);else TELE_SEL_TEMPO.add(v);renderTelemetria();}
 function toggleTeleEvento(v){if(TELE_SEL_EVENTO.has(v))TELE_SEL_EVENTO.delete(v);else TELE_SEL_EVENTO.add(v);renderTelemetria();}
 function clickTeleEmpresaBar(v){
@@ -1511,7 +1523,8 @@ function renderTelemetria(){
   evtCounts.forEach(function(e){
     var w=Math.round(e[1]/evtMax*100);
     var active=TELE_SEL_EVENTO.has(e[0])?'active-filter':'';
-    evtHtml+='<div class="evt-row"><div class="evt-lbl">'+e[0]+'</div><div class="evt-bar-wrap '+active+'" onclick="toggleTeleEvento(\''+teleEsc(e[0])+'\')" title="Clique para filtrar"><div class="evt-bar" style="width:'+w+'%"></div></div><div class="evt-n">'+e[1]+'</div></div>';
+    var color=teleHeatColor(e[1]/evtMax);
+    evtHtml+='<div class="evt-row"><div class="evt-lbl">'+e[0]+'</div><div class="evt-bar-wrap '+active+'" onclick="toggleTeleEvento(\''+teleEsc(e[0])+'\')" title="Clique para filtrar"><div class="evt-bar" style="width:'+w+'%;background:'+color+'"></div></div><div class="evt-n">'+e[1]+'</div></div>';
   });
   document.getElementById('tevt-bars').innerHTML=evtHtml||'<div style="font-size:11px;color:var(--muted)">Nenhum caso no recorte selecionado.</div>';
   document.getElementById('tevt-badge').textContent=evtCounts.length?evtCounts[0][0]+' lidera · clique para filtrar':'—';
@@ -1526,7 +1539,8 @@ function renderTelemetria(){
   empCounts.forEach(function(e){
     var w=Math.round(e[1]/empMax*100);
     var active=selEmp.has(e[0])?'active-filter':'';
-    empHtml+='<div class="evt-row"><div class="evt-lbl" style="width:210px" title="'+e[0]+'">'+e[0]+'</div><div class="evt-bar-wrap '+active+'" onclick="clickTeleEmpresaBar(\''+teleEsc(e[0])+'\')" title="Clique para filtrar"><div class="evt-bar" style="width:'+w+'%"></div></div><div class="evt-n">'+e[1]+'</div></div>';
+    var color=teleHeatColor(e[1]/empMax);
+    empHtml+='<div class="evt-row"><div class="evt-lbl" style="width:210px" title="'+e[0]+'">'+e[0]+'</div><div class="evt-bar-wrap '+active+'" onclick="clickTeleEmpresaBar(\''+teleEsc(e[0])+'\')" title="Clique para filtrar"><div class="evt-bar" style="width:'+w+'%;background:'+color+'"></div></div><div class="evt-n">'+e[1]+'</div></div>';
   });
   document.getElementById('tco-bars').innerHTML=empHtml||'<div style="font-size:11px;color:var(--muted)">Nenhum caso no recorte selecionado.</div>';
   document.getElementById('tco-badge').textContent=empCounts.length?empCounts[0][0]+' lidera · clique para filtrar':'—';
