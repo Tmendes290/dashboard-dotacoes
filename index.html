@@ -12138,6 +12138,11 @@ var IPROD_NOME_PROJETO='', IPROD_EMPRESA='';
 var IPROD_HISTORICO=null, IPROD_HISTORICO_LOADING=false, IPROD_CARREGADO_DE_HIST=null;
 var IPROD_EMPRESAS=['APIA','LUK','ÔMEGA','TOP ANDAIMES','MILPLAN'];
 var IPROD_FILTRO_STATUS='todos';
+// Catálogo-mestre por empresa: REF_CATALOGO_EMPRESA['APIA']['1290'] = {desc,unidade,preco} — código
+// próprio de cada contratada (estável entre orçamentos de projetos diferentes) → descrição/preço
+// canônicos, carregado do Supabase (ref_catalogo_empresa). Usado pra confirmar com certeza o que um
+// código da PQ da contratada significa, em vez de confiar só em similaridade de texto.
+var REF_CATALOGO_EMPRESA={}, IPROD_CATALOGO_LOADING=null;
 
 function iprodSetFiltroStatus(v){ IPROD_FILTRO_STATUS=v; iprodRenderShell(); }
 
@@ -12301,6 +12306,31 @@ async function iprodLoadIndice(){
     return null;
   });
   return IPROD_INDICE_LOADING;
+}
+
+// Carrega (uma vez, com cache) o catálogo-mestre código→descrição/preço de todas as empresas —
+// ver REF_CATALOGO_EMPRESA acima. Sem paginação aqui daria pra perder linhas silenciosamente se
+// o catálogo de alguma empresa passasse de 1000 (ver supaFetchAll).
+async function iprodLoadCatalogoEmpresa(){
+  if(Object.keys(REF_CATALOGO_EMPRESA).length) return REF_CATALOGO_EMPRESA;
+  if(IPROD_CATALOGO_LOADING) return IPROD_CATALOGO_LOADING;
+  if(!supa){ return REF_CATALOGO_EMPRESA; }
+  IPROD_CATALOGO_LOADING=supaFetchAll('ref_catalogo_empresa').then(function(rows){
+    rows.forEach(function(r){
+      var emp=String(r.empresa||'').trim();
+      var cod=String(r.codigo||'').trim();
+      if(!emp||!cod) return;
+      if(!REF_CATALOGO_EMPRESA[emp]) REF_CATALOGO_EMPRESA[emp]={};
+      REF_CATALOGO_EMPRESA[emp][cod]={desc:r.descricao||'',unidade:r.unidade||'',preco:parseFloat(r.preco_unitario)||0};
+    });
+    IPROD_CATALOGO_LOADING=null;
+    return REF_CATALOGO_EMPRESA;
+  }).catch(function(e){
+    console.warn('[iprod] catálogo empresa:',e);
+    IPROD_CATALOGO_LOADING=null;
+    return REF_CATALOGO_EMPRESA;
+  });
+  return IPROD_CATALOGO_LOADING;
 }
 
 // Similaridade por palavras-chave — mistura Jaccard (penaliza palavra sem correspondência dos
@@ -12578,6 +12608,11 @@ function iprodParsePQSheet(data){
   var iCod=hdrC.findIndex(function(h){return h.indexOf('COD')>=0&&h.indexOf('CLIENTE')>=0;});
   if(iCod<0) iCod=hdrC.findIndex(function(h){return h.indexOf('COD')>=0&&h.indexOf('VALE')>=0;});
   if(iCod<0) iCod=hdrC.findIndex(function(h){return (h.indexOf('CODIGO')>=0||h.indexOf('COD.')>=0||h==='COD')&&h.indexOf('ATIVIDADE')<0;});
+  // Última tentativa: coluna "ITEM" — algumas contratadas (ex.: PQ da APIA) numeram cada linha
+  // com um código próprio (1090, 1290, 1350...) estável entre orçamentos de projetos diferentes,
+  // só que sem nenhuma coluna chamada "código". Sem isso o codCliente ficava sempre vazio pra
+  // essas contratadas e o agrupamento/match dependia 100% de similaridade de texto.
+  if(iCod<0) iCod=hdrC.findIndex(function(h){return h==='ITEM';});
   var iUnid=hdrC.findIndex(function(h){return h.indexOf('UNID')>=0;});
   // Valor total do item (R$) — usado na alocação proporcional de HH cobrado por atividade
   var iTotal=hdrC.findIndex(function(h){return h.indexOf('TOTAL')>=0&&(h.indexOf('BDI')>=0||h.indexOf('R$')>=0||h.indexOf('CUSTO')>=0);});
@@ -12648,6 +12683,80 @@ function iprodParsePQSheet(data){
   return out.length?out:null;
 }
 
+// Catálogo-mestre da contratada (ex.: "pq apia.xlsm") — MESMA estrutura de colunas da PQ normal
+// (ITEM/DESCRIÇÃO/UNID/UNITÁRIO), mas aqui a quantidade é irrelevante (o arquivo é o molde com
+// preço padrão de TODOS os itens possíveis, a maioria com quantidade 0 porque não é de um projeto
+// específico) — por isso não reusa iprodParsePQSheet (que descarta linha com quantidade 0).
+function iprodParseCatalogoSheet(data){
+  var hdrIdx=0, hdr=(data[0]||[]).map(function(h){return iprodNorm(h);});
+  for(var ri=0;ri<Math.min(data.length,15);ri++){
+    var cand=(data[ri]||[]).map(function(h){return iprodNorm(h);});
+    if(cand.some(function(h){return h.indexOf('DESCRI')>=0;})){ hdrIdx=ri; hdr=cand; break; }
+  }
+  var iDesc=hdr.findIndex(function(h){return h.indexOf('DESCRI')>=0;});
+  if(iDesc<0) return null;
+  var iCod=hdr.findIndex(function(h){return h.indexOf('COD')>=0&&(h.indexOf('CLIENTE')>=0||h.indexOf('VALE')>=0);});
+  if(iCod<0) iCod=hdr.findIndex(function(h){return h==='ITEM';});
+  if(iCod<0) return null;
+  var iUnid=hdr.findIndex(function(h){return h.indexOf('UNID')>=0;});
+  var iUnitario=hdr.findIndex(function(h){return h.indexOf('UNITARIO')>=0&&h.indexOf('COD')<0;});
+  var out=[];
+  data.slice(hdrIdx+1).forEach(function(row){
+    var desc=String(row[iDesc]||'').trim();
+    var cod=String(row[iCod]||'').trim();
+    if(!desc||!cod) return;
+    var preco=iUnitario>=0?(parseFloat(String(row[iUnitario]==null?'':row[iUnitario]).replace(',','.'))||0):0;
+    out.push({codigo:cod,desc:desc,unidade:iUnid>=0?String(row[iUnid]||'').trim():'',preco:preco});
+  });
+  return out.length?out:null;
+}
+
+async function iprodHandleCatalogoFile(file){
+  if(!file) return;
+  if(!IPROD_EMPRESA){ toast('Selecione a Empresa/Contratada antes de importar o catálogo','red'); return; }
+  if(typeof XLSX==='undefined'){ toast('Aguardando biblioteca XLSX carregar, tenta de novo em instantes','red'); return; }
+  var empresa=IPROD_EMPRESA;
+  var reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var itens=null;
+      wb.SheetNames.forEach(function(name){
+        if(itens) return;
+        var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
+        if(!data.length) return;
+        var p=iprodParseCatalogoSheet(data);
+        if(p) itens=p;
+      });
+      if(!itens){ toast('Não encontrei colunas de ITEM/Código e Descrição nesse arquivo','red'); return; }
+      // Consolida por código (a mesma planilha pode repetir o código em mais de uma linha/aba) —
+      // fica só a última ocorrência, que é o padrão mais atualizado.
+      var porCodigo={};
+      itens.forEach(function(it){ porCodigo[it.codigo]=it; });
+      var linhas=Object.keys(porCodigo).map(function(c){ return porCodigo[c]; });
+
+      if(supa && CURRENT_USER){
+        try{
+          var {error:delErr}=await supa.from('ref_catalogo_empresa').delete().eq('empresa',empresa);
+          if(delErr) throw delErr;
+          var rows=linhas.map(function(it){ return {empresa:empresa,codigo:it.codigo,descricao:it.desc,unidade:it.unidade,preco_unitario:it.preco}; });
+          for(var bi=0; bi<rows.length; bi+=500){
+            var {error:insErr}=await supa.from('ref_catalogo_empresa').insert(rows.slice(bi,bi+500));
+            if(insErr) throw insErr;
+          }
+        }catch(syncErr){
+          toast('Catálogo lido mas NÃO sincronizado com o servidor ('+syncErr.message+') — vai reverter ao recarregar a página','red');
+        }
+      }
+      REF_CATALOGO_EMPRESA[empresa]={};
+      linhas.forEach(function(it){ REF_CATALOGO_EMPRESA[empresa][it.codigo]={desc:it.desc,unidade:it.unidade,preco:it.preco}; });
+      toast('Catálogo de '+empresa+' importado: '+linhas.length+' códigos','green');
+      iprodRenderShell();
+    }catch(err){ toast('Erro lendo catálogo: '+err.message,'red'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 // Detecta histograma no padrão "Função | TOTAL | PICO | dias..." terminado numa linha "TOTAL"
 // lenient=false (padrão): exige o formato "função × dias" (TOTAL/PICO seguido de datas seriais
 // do Excel) — sinal forte que só um histograma de verdade tem, evita confundir com uma coluna
@@ -12693,7 +12802,7 @@ async function iprodHandleContratadaFile(file){
   if(!file) return;
   if(typeof XLSX==='undefined'){ toast('Aguardando biblioteca XLSX carregar, tenta de novo em instantes','red'); return; }
   var reader=new FileReader();
-  reader.onload=function(e){
+  reader.onload=async function(e){
     try{
       var wb=XLSX.read(e.target.result,{type:'array'});
       var pq=null, hist=null;
@@ -12716,9 +12825,23 @@ async function iprodHandleContratadaFile(file){
         });
       }
       if(!pq && !hist){ toast('Não encontrei aba de PQ nem de Histograma nesse arquivo — confere os cabeçalhos','red'); return; }
+      // Se o código da linha bate com o catálogo-mestre dessa empresa (ver REF_CATALOGO_EMPRESA),
+      // troca a descrição pela canônica do catálogo — mais confiável que o texto dessa planilha
+      // específica (que pode vir truncado/reformatado) pra casar depois com a PQ do projeto.
+      var nCanon=0;
+      if(pq && pq.length && IPROD_EMPRESA){
+        await iprodLoadCatalogoEmpresa();
+        var catEmp=REF_CATALOGO_EMPRESA[IPROD_EMPRESA];
+        if(catEmp){
+          pq.forEach(function(item){
+            var entry=item.codCliente&&catEmp[item.codCliente];
+            if(entry){ item.desc=entry.desc; item.descCanonica=true; nCanon++; }
+          });
+        }
+      }
       IPROD_CONTRATADA={pq:pq||[],histograma:hist||[],nomeArquivo:file.name};
       IPROD_RESULT=null;
-      toast('Arquivo lido: '+(pq?pq.length:0)+' atividades na PQ, '+(hist?hist.length:0)+' funções no histograma','green');
+      toast('Arquivo lido: '+(pq?pq.length:0)+' atividades na PQ, '+(hist?hist.length:0)+' funções no histograma'+(nCanon?' ('+nCanon+' confirmadas pelo catálogo)':''),'green');
       iprodRenderShell();
     }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
   };
@@ -13218,7 +13341,7 @@ function iprodRenderShell(){
     +'.iprod-panel{background:var(--card);border:1px solid var(--bord);border-radius:12px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.04)}'
     +'.iprod-panel-title{font-size:13px;font-weight:800;color:#1e3a5f;margin-bottom:4px}'
     +'.iprod-panel-note{font-size:10.5px;color:var(--muted);margin-bottom:14px;line-height:1.5}'
-    +'.iprod-upload-grid{display:grid;grid-template-columns:1fr 1fr 190px;gap:16px;align-items:stretch}'
+    +'.iprod-upload-grid{display:grid;grid-template-columns:1fr 1fr 1fr 190px;gap:16px;align-items:stretch}'
     +'.iprod-upl-box{display:block;border:2px dashed var(--bord);border-radius:10px;padding:18px;text-align:center;background:var(--bg);cursor:pointer}'
     +'.iprod-upl-box.filled{border-style:solid;border-color:#16a34a;background:#f0fdf4}'
     +'.iprod-upl-ico{font-size:22px;margin-bottom:6px}'
@@ -13303,6 +13426,15 @@ function iprodRenderShell(){
     +'<div class="iprod-upl-sub">Quantidade oficial prevista em projeto, por atividade (opcional)</div>'
     +'<div class="iprod-upl-file">'+(p?('✓ '+p.nomeArquivo+' — '+p.pq.length+' ativ.'):'')+'</div>'
     +'<input type="file" accept=".xlsx,.xls" style="display:none" onchange="iprodHandlePQProjetoFile(this.files[0])"></label>'
+    +(function(){
+      var cat=IPROD_EMPRESA&&REF_CATALOGO_EMPRESA[IPROD_EMPRESA];
+      var n=cat?Object.keys(cat).length:0;
+      return '<label class="iprod-upl-box'+(n?' filled':'')+'" title="'+(IPROD_EMPRESA?'':'Selecione a Empresa/Contratada antes')+'">'
+        +'<div class="iprod-upl-ico">📚</div><div class="iprod-upl-lbl">Catálogo da Empresa</div>'
+        +'<div class="iprod-upl-sub">Código→descrição/preço padrão de TODOS os itens dessa contratada (opcional, cadastra uma vez e vale pra todo projeto)</div>'
+        +'<div class="iprod-upl-file">'+(n?('✓ '+n+' códigos de '+IPROD_EMPRESA):'')+'</div>'
+        +'<input type="file" accept=".xlsx,.xls" style="display:none" onchange="iprodHandleCatalogoFile(this.files[0])"></label>';
+    })()
     +'<div class="iprod-prat-box"><div class="iprod-prat-lbl">Praticabilidade</div>'
     +'<input class="iprod-prat-input" value="'+(Math.round(IPROD_PRAT*10000)/100)+'%" onchange="iprodSetPrat(this.value)">'
     +'<button class="iprod-btn" onclick="iprodProcessar()">Processar comparativo</button></div>'
@@ -13472,6 +13604,7 @@ async function renderViewIndiceProdutividade(){
   var el=document.getElementById('v-indice-produtividade'); if(!el) return;
   iprodRenderShell();
   iprodLoadIndice();
+  iprodLoadCatalogoEmpresa().then(function(){ if(Object.keys(REF_CATALOGO_EMPRESA).length) iprodRenderShell(); });
 }
 
 var _REV2_TAB='dashboard';
