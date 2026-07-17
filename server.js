@@ -28,6 +28,25 @@ app.use(compression());
 // Parse JSON bodies up to 50MB (medido data can be large)
 app.use(express.json({ limit: '50mb' }));
 
+// ── AUTH: exige sessão Supabase válida (Authorization: Bearer <access_token>) ──
+// Usado nas rotas de Velocidade/Telemetria, que hoje são acessíveis direto por
+// URL (velocidade.html não passa pela tela de login do index.html).
+async function requireAuth(req, res, next) {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!token) return res.status(401).json({ error: 'Não autenticado. Faça login para acessar estes dados.' });
+  try {
+    const r = await fetch(`${SUPA_URL}/auth/v1/user`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'apikey': SUPA_SERVICE_KEY }
+    });
+    if (!r.ok) return res.status(401).json({ error: 'Sessão inválida ou expirada. Faça login novamente.' });
+    req.callerUser = await r.json();
+    next();
+  } catch (e) {
+    res.status(401).json({ error: 'Falha ao validar sessão: ' + e.message });
+  }
+}
+
 // ── SAVE MEDIDO (server-side, bypasses RLS via service role key) ──────────────
 app.post('/api/save-medido', async (req, res) => {
   if (!SUPA_SERVICE_KEY) {
@@ -160,7 +179,7 @@ app.post('/api/admin/delete-user', async (req, res) => {
 });
 
 // ── VELOCIDADE: IMPORTAR EXCEL (parse no servidor, salva no Supabase) ──
-app.post('/api/import-velocidade', async (req, res) => {
+app.post('/api/import-velocidade', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
   const { fileBase64 } = req.body;
   if (!fileBase64) return res.status(400).json({ error: 'no file' });
@@ -288,7 +307,7 @@ app.post('/api/import-velocidade', async (req, res) => {
 });
 
 // ── VELOCIDADE: EVENTOS INDIVIDUAIS DE UM DIA (drill-down) ─────
-app.get('/api/velocidade-eventos', async (req, res) => {
+app.get('/api/velocidade-eventos', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
   const { motorista, dt } = req.query;
   if (!motorista || !dt) return res.status(400).json({ error: 'motorista e dt são obrigatórios' });
@@ -304,7 +323,7 @@ app.get('/api/velocidade-eventos', async (req, res) => {
 });
 
 // ── VELOCIDADE: GET (fetch saved data) ────────────────────────
-app.get('/api/velocidade', async (req, res) => {
+app.get('/api/velocidade', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
   try {
     const r = await fetch(`${SUPA_URL}/rest/v1/vel_dados?chave=eq.main&select=payload,atualizado_em`, {
@@ -319,7 +338,7 @@ app.get('/api/velocidade', async (req, res) => {
 });
 
 // ── VELOCIDADE: POST (save imported data) ─────────────────────
-app.post('/api/velocidade', async (req, res) => {
+app.post('/api/velocidade', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
   const { rows, drivers, ranulfo } = req.body;
   if (!rows || !drivers) return res.status(400).json({ error: 'payload inválido' });
@@ -350,7 +369,7 @@ app.post('/api/velocidade', async (req, res) => {
 });
 
 // ── TELEMETRIA (status de tratamento de casos): IMPORTAR EXCEL ──
-app.post('/api/import-telemetria', async (req, res) => {
+app.post('/api/import-telemetria', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
   const { fileBase64 } = req.body;
   if (!fileBase64) return res.status(400).json({ error: 'no file' });
@@ -449,7 +468,7 @@ app.post('/api/import-telemetria', async (req, res) => {
 });
 
 // ── TELEMETRIA: GET (fetch saved data) ────────────────────────
-app.get('/api/telemetria', async (req, res) => {
+app.get('/api/telemetria', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
   try {
     const r = await fetch(`${SUPA_URL}/rest/v1/telemetria_dados?chave=eq.main&select=payload,atualizado_em`, {
