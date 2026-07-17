@@ -374,9 +374,18 @@ app.post('/api/import-telemetria', async (req, res) => {
     const iGrav     = fc(/gravidade/i);
     const iAcoes    = fc(/^a[çc][õo]es$/i);
     const iTempo    = fc(/tempo.*abert/i);
+    const iDtEvento = fc(/data.*evento/i);
 
     if (iNome < 0 || iEvento < 0) {
       return res.status(400).json({ error: 'Colunas não encontradas. Headers: ' + headers.slice(0, 14).join(', ') });
+    }
+
+    function parseDate(v) {
+      if (typeof v === 'number') return new Date((v - 25569) * 86400 * 1000).toISOString().slice(0, 10);
+      const s = String(v || '');
+      const m = s.match(/(\d{2})-(\d{2})-(\d{4})/) || s.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return '';
+      return m[0].length === 10 && m[3].length === 4 ? `${m[3]}-${m[2]}-${m[1]}` : s.slice(0, 10);
     }
 
     function normEmpresa(raw) {
@@ -404,6 +413,7 @@ app.post('/api/import-telemetria', async (req, res) => {
         id: iId >= 0 ? String(r[iId] || '') : String(i),
         nome,
         evento,
+        dt: iDtEvento >= 0 ? parseDate(r[iDtEvento]) : '',
         grav: iGrav >= 0 ? String(r[iGrav] || '').trim() : '',
         ger: iGer >= 0 ? String(r[iGer] || '').trim() : '',
         head: iHead >= 0 ? String(r[iHead] || '').trim() : '',

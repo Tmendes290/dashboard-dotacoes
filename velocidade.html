@@ -447,6 +447,7 @@ body.embed .main{width:100%!important}
       </div>
       <div id="tele-wrap">
         <div class="filters">
+          <div class="fg"><label>Período</label><div class="ms-wrap" id="ms-mes-tele"></div></div>
           <div class="fg"><label>Gerência / Área</label><div class="ms-wrap" id="ms-ger-tele"></div></div>
           <div class="fg"><label>Empresa</label><div class="ms-wrap" id="ms-emp-tele"></div></div>
           <button onclick="resetTeleFilters()" style="margin-left:auto;padding:5px 12px;border:1px solid var(--bord);border-radius:4px;background:var(--bg);color:var(--muted);font-family:Inter,sans-serif;font-size:11px;font-weight:600;cursor:pointer;align-self:flex-end">✕ Limpar tudo</button>
@@ -485,7 +486,7 @@ body.embed .main{width:100%!important}
           </div>
           <div class="tbl-wrap">
             <table>
-              <thead><tr><th>Motorista</th><th>Evento</th><th>Gravidade</th><th>Gerência Área</th><th>Empresa</th><th>Ação já definida</th></tr></thead>
+              <thead><tr><th>Motorista</th><th>Evento</th><th>Mês</th><th>Gravidade</th><th>Gerência Área</th><th>Empresa</th><th>Ação já definida</th></tr></thead>
               <tbody id="tcrit-tbody"></tbody>
             </table>
           </div>
@@ -503,7 +504,7 @@ body.embed .main{width:100%!important}
               <thead><tr>
                 <th>Empresa</th><th>Motorista</th><th>Total Desvios</th>
                 <th style="color:#15803d">Baixa</th><th style="color:#a16207">Média</th><th style="color:#c2410c">Grave</th><th style="color:#b91c1c">Gravíssima</th>
-                <th>Não Tratados</th>
+                <th>Não Tratados</th><th>Última Ocorrência</th>
               </tr></thead>
               <tbody id="tall-tbody"></tbody>
             </table>
@@ -1406,6 +1407,14 @@ function teleShortAcao(a){
 }
 
 function teleEsc(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+var TELE_MES_PT=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+function teleMesLabel(dt){
+  if(!dt||dt.length<7)return '—';
+  var y=dt.slice(0,4),m=parseInt(dt.slice(5,7),10);
+  if(!m||m<1||m>12)return '—';
+  return TELE_MES_PT[m-1]+'/'+y.slice(2);
+}
+function teleMesKey(dt){return dt&&dt.length>=7?dt.slice(0,7):'';}
 function toggleTeleTempo(v){if(TELE_SEL_TEMPO.has(v))TELE_SEL_TEMPO.delete(v);else TELE_SEL_TEMPO.add(v);renderTelemetria();}
 function toggleTeleEvento(v){if(TELE_SEL_EVENTO.has(v))TELE_SEL_EVENTO.delete(v);else TELE_SEL_EVENTO.add(v);renderTelemetria();}
 function clickTeleEmpresaBar(v){
@@ -1416,18 +1425,21 @@ function clickTeleEmpresaBar(v){
 }
 
 function resetTeleFilters(){
+  if(_msStore['ms-mes-tele'])_msStore['ms-mes-tele'].sel.clear();
   if(_msStore['ms-ger-tele'])_msStore['ms-ger-tele'].sel.clear();
   if(_msStore['ms-emp-tele'])_msStore['ms-emp-tele'].sel.clear();
   TELE_SEL_TEMPO.clear();TELE_SEL_EVENTO.clear();
-  renderMs('ms-ger-tele');renderMs('ms-emp-tele');
+  renderMs('ms-mes-tele');renderMs('ms-ger-tele');renderMs('ms-emp-tele');
   renderTelemetria();
 }
 
 function renderTeleChips(){
   var wrap=document.getElementById('tele-filter-chips');if(!wrap)return;
   var chips='';
+  var selMes=_msStore['ms-mes-tele']?_msStore['ms-mes-tele'].sel:new Set();
   var selGer=_msStore['ms-ger-tele']?_msStore['ms-ger-tele'].sel:new Set();
   var selEmp=_msStore['ms-emp-tele']?_msStore['ms-emp-tele'].sel:new Set();
+  selMes.forEach(function(v){chips+='<div class="fchip" onclick="msTog(\'ms-mes-tele\',\''+teleEsc(v)+'\')">'+v+' <span>✕</span></div>';});
   selGer.forEach(function(v){chips+='<div class="fchip" onclick="msTog(\'ms-ger-tele\',\''+teleEsc(v)+'\')">'+v+' <span>✕</span></div>';});
   selEmp.forEach(function(v){chips+='<div class="fchip" onclick="msTog(\'ms-emp-tele\',\''+teleEsc(v)+'\')">'+v+' <span>✕</span></div>';});
   TELE_SEL_TEMPO.forEach(function(v){chips+='<div class="fchip" onclick="toggleTeleTempo(\''+teleEsc(v)+'\')">'+v+' <span>✕</span></div>';});
@@ -1436,12 +1448,13 @@ function renderTeleChips(){
 }
 
 function renderTelemetria(){
+  var selMes=_msStore['ms-mes-tele']?_msStore['ms-mes-tele'].sel:new Set();
   var selGer=_msStore['ms-ger-tele']?_msStore['ms-ger-tele'].sel:new Set();
   var selEmp=_msStore['ms-emp-tele']?_msStore['ms-emp-tele'].sel:new Set();
   renderTeleChips();
 
   var filtered=TELE_DATA.filter(function(r){
-    return (selGer.size===0||selGer.has(r.ger)) && (selEmp.size===0||selEmp.has(r.empresa))
+    return (selMes.size===0||selMes.has(teleMesLabel(r.dt))) && (selGer.size===0||selGer.has(r.ger)) && (selEmp.size===0||selEmp.has(r.empresa))
       && (TELE_SEL_TEMPO.size===0||TELE_SEL_TEMPO.has(r.tempo)) && (TELE_SEL_EVENTO.size===0||TELE_SEL_EVENTO.has(r.evento));
   });
 
@@ -1451,7 +1464,7 @@ function renderTelemetria(){
   var tipos=teleUniqCount(filtered,'evento').length;
 
   document.getElementById('tk-total').textContent=total;
-  document.getElementById('tk-total-sub').textContent=(selGer.size||selEmp.size||TELE_SEL_TEMPO.size||TELE_SEL_EVENTO.size)?'no recorte selecionado':'todos os tipos de desvio importados';
+  document.getElementById('tk-total-sub').textContent=(selMes.size||selGer.size||selEmp.size||TELE_SEL_TEMPO.size||TELE_SEL_EVENTO.size)?'no recorte selecionado':'todos os tipos de desvio importados';
   document.getElementById('tk-nt').textContent=naoTratados;
   document.getElementById('tk-nt-sub').textContent=total?Math.round(naoTratados/total*100)+'% do total ainda sem encerramento':'—';
   document.getElementById('tk-15').textContent=abertos15;
@@ -1467,9 +1480,9 @@ function renderTelemetria(){
     document.getElementById('tk-area-sub').textContent='—';
   }
 
-  // base para os gráficos: respeita Gerência/Empresa; cada gráfico ignora o próprio eixo pra continuar clicável
+  // base para os gráficos: respeita Período/Gerência/Empresa; cada gráfico ignora o próprio eixo pra continuar clicável
   var baseGerEmp=TELE_DATA.filter(function(r){
-    return (selGer.size===0||selGer.has(r.ger)) && (selEmp.size===0||selEmp.has(r.empresa));
+    return (selMes.size===0||selMes.has(teleMesLabel(r.dt))) && (selGer.size===0||selGer.has(r.ger)) && (selEmp.size===0||selEmp.has(r.empresa));
   });
   var slaBase=baseGerEmp.filter(function(r){return TELE_SEL_EVENTO.size===0||TELE_SEL_EVENTO.has(r.evento);});
   var evtBase=baseGerEmp.filter(function(r){return TELE_SEL_TEMPO.size===0||TELE_SEL_TEMPO.has(r.tempo);});
@@ -1503,7 +1516,7 @@ function renderTelemetria(){
 
   // Casos por Empresa (ignora o filtro de Empresa pra manter todas as barras visíveis/clicáveis)
   var empBase=TELE_DATA.filter(function(r){
-    return (selGer.size===0||selGer.has(r.ger)) && (TELE_SEL_TEMPO.size===0||TELE_SEL_TEMPO.has(r.tempo)) && (TELE_SEL_EVENTO.size===0||TELE_SEL_EVENTO.has(r.evento));
+    return (selMes.size===0||selMes.has(teleMesLabel(r.dt))) && (selGer.size===0||selGer.has(r.ger)) && (TELE_SEL_TEMPO.size===0||TELE_SEL_TEMPO.has(r.tempo)) && (TELE_SEL_EVENTO.size===0||TELE_SEL_EVENTO.has(r.evento));
   });
   var empCounts=teleUniqCount(empBase,'empresa');
   var empMax=empCounts.length?empCounts[0][1]:1;
@@ -1521,18 +1534,19 @@ function renderTelemetria(){
     .sort(function(a,b){return (TELE_SEV_ORDER[a.grav]!==undefined?TELE_SEV_ORDER[a.grav]:9)-(TELE_SEV_ORDER[b.grav]!==undefined?TELE_SEV_ORDER[b.grav]:9);});
   document.getElementById('tcrit-sub').textContent=crit.length+' casos · ordenados por gravidade';
   document.getElementById('tcrit-tbody').innerHTML=crit.length?crit.map(function(r){
-    return '<tr><td>'+r.nome+'</td><td>'+r.evento+'</td><td><span class="pill '+(TELE_SEV_PILL[r.grav]||'pill-blue')+'">'+r.grav+'</span></td><td>'+(r.ger.split(' - ')[0]||r.ger)+'</td><td>'+r.empresa+'</td><td>'+teleShortAcao(r.acao)+'</td></tr>';
-  }).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">Nenhum caso &gt;15 dias no recorte selecionado 🎉</td></tr>';
+    return '<tr><td>'+r.nome+'</td><td>'+r.evento+'</td><td>'+teleMesLabel(r.dt)+'</td><td><span class="pill '+(TELE_SEV_PILL[r.grav]||'pill-blue')+'">'+r.grav+'</span></td><td>'+(r.ger.split(' - ')[0]||r.ger)+'</td><td>'+r.empresa+'</td><td>'+teleShortAcao(r.acao)+'</td></tr>';
+  }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">Nenhum caso &gt;15 dias no recorte selecionado 🎉</td></tr>';
 
   // Todos os motoristas — agrupado por empresa
   var drvMap={};
   filtered.forEach(function(r){
     var key=r.nome+'|'+r.empresa;
-    if(!drvMap[key])drvMap[key]={nome:r.nome,empresa:r.empresa,total:0,b:0,m:0,g:0,gv:0,nt:0};
+    if(!drvMap[key])drvMap[key]={nome:r.nome,empresa:r.empresa,total:0,b:0,m:0,g:0,gv:0,nt:0,ultDt:''};
     var d=drvMap[key];
     d.total++;
     if(r.grav==='Baixa')d.b++;else if(r.grav==='Média')d.m++;else if(r.grav==='Grave')d.g++;else if(r.grav==='Gravíssima')d.gv++;
     if(r.status==='Não Tratados')d.nt++;
+    if(r.dt&&r.dt>d.ultDt)d.ultDt=r.dt;
   });
   var allDrv=Object.keys(drvMap).map(function(k){return drvMap[k];}).sort(function(a,b){
     if(a.empresa!==b.empresa)return a.empresa<b.empresa?-1:1;
@@ -1542,8 +1556,8 @@ function renderTelemetria(){
   document.getElementById('tall-tbody').innerHTML=allDrv.length?allDrv.map(function(d){
     return '<tr><td>'+d.empresa+'</td><td>'+d.nome+'</td><td style="font-weight:700">'+d.total+'</td>'
       +'<td>'+(d.b||'—')+'</td><td>'+(d.m||'—')+'</td><td>'+(d.g||'—')+'</td><td>'+(d.gv||'—')+'</td>'
-      +'<td>'+(d.nt?'<span class="pill pill-red">'+d.nt+'</span>':'—')+'</td></tr>';
-  }).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">Nenhum motorista no recorte selecionado.</td></tr>';
+      +'<td>'+(d.nt?'<span class="pill pill-red">'+d.nt+'</span>':'—')+'</td><td>'+teleMesLabel(d.ultDt)+'</td></tr>';
+  }).join(''):'<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">Nenhum motorista no recorte selecionado.</td></tr>';
 }
 
 function loadTeleData(casos){
@@ -1560,8 +1574,11 @@ function loadTeleData(casos){
     badge.style.display='none';
   }
   if(!hasData)return;
+  var mesKeys=[];TELE_DATA.forEach(function(c){var k=teleMesKey(c.dt);if(k&&mesKeys.indexOf(k)<0)mesKeys.push(k);});mesKeys.sort();
+  var mesLabels=mesKeys.map(teleMesLabel);
   var gers=[];TELE_DATA.forEach(function(c){if(c.ger&&gers.indexOf(c.ger)<0)gers.push(c.ger);});gers.sort();
   var emps=[];TELE_DATA.forEach(function(c){if(c.empresa&&emps.indexOf(c.empresa)<0)emps.push(c.empresa);});emps.sort();
+  buildMs('ms-mes-tele',mesLabels,'Todos os períodos',renderTelemetria);
   buildMs('ms-ger-tele',gers,'Todas as gerências',renderTelemetria);
   buildMs('ms-emp-tele',emps,'Todas as empresas',renderTelemetria);
   TELE_SEL_TEMPO=new Set();TELE_SEL_EVENTO=new Set();
