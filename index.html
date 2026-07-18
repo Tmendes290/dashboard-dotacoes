@@ -13253,14 +13253,24 @@ async function iprodProcessar(){
   Object.keys(porFuncao).forEach(function(fRef){
     var fRefN=iprodNorm(fRef);
     var sinonimos=(IPROD_SINONIMOS[fRefN]||[]).map(iprodNorm);
-    var matchIdx=histList.findIndex(function(h,idx){
-      if(usadosHist[idx]) return false;
+    // Soma TODAS as linhas do histograma que baterem com essa função — antes só pegava a
+    // primeira (ex.: "Pedreiro - Hora Normal") e deixava variantes tipo "Pedreiro - 50%",
+    // "Pedreiro - Adicional Noturno" e "Pedreiro - Percentual de Contingência" órfãs, aparecendo
+    // como linha "sem referência" separada em vez de somar no HH cobrado real do Pedreiro.
+    // "Percentual de Contingência" é a folga que a própria contratada aplica pra cobrir escopo
+    // extra/atraso — soma no total (é HH cobrado de verdade), mas guarda à parte pra avisar
+    // quanto do HH cobrado é essa folga, não trabalho medido.
+    var hhCobrado=0, hhContingencia=0, semHistograma=true;
+    histList.forEach(function(h,idx){
+      if(usadosHist[idx]) return;
       var hn=iprodNorm(h.funcao);
-      if(hn.indexOf(fRefN)>=0||fRefN.indexOf(hn)>=0) return true;
-      return sinonimos.some(function(s){return hn.indexOf(s)>=0||s.indexOf(hn)>=0;});
+      var bate=hn.indexOf(fRefN)>=0||fRefN.indexOf(hn)>=0||sinonimos.some(function(s){return hn.indexOf(s)>=0||s.indexOf(hn)>=0;});
+      if(!bate) return;
+      usadosHist[idx]=true;
+      hhCobrado+=h.hh;
+      semHistograma=false;
+      if(/PERCENTUAL DE CONTINGENCIA/.test(hn)) hhContingencia+=h.hh;
     });
-    var hhCobrado=0, semHistograma=true;
-    if(matchIdx>=0){ hhCobrado=histList[matchIdx].hh; usadosHist[matchIdx]=true; semHistograma=false; }
     var hhRef=porFuncao[fRef].hhRef;
     // HH + Praticabilidade = Referência + Horas não praticável, onde Horas não praticável =
     // Referência × (1 − Praticabilidade) — ou seja, Referência × (2 − Praticabilidade).
@@ -13269,7 +13279,7 @@ async function iprodProcessar(){
     var dif=hhCobrado-hhAjust;
     var status='verde';
     if(dif>0) status=(dif/Math.max(hhCobrado,1))>0.15?'vermelho':'amarelo';
-    linhas.push({funcao:fRef,hhCobrado:hhCobrado,hhRef:hhRef,hhAjust:hhAjust,dif:dif,status:status,atividades:porFuncao[fRef].atividades,semHistograma:semHistograma});
+    linhas.push({funcao:fRef,hhCobrado:hhCobrado,hhContingencia:hhContingencia,hhRef:hhRef,hhAjust:hhAjust,dif:dif,status:status,atividades:porFuncao[fRef].atividades,semHistograma:semHistograma});
   });
   histList.forEach(function(h,idx){
     if(usadosHist[idx]) return;
@@ -13588,9 +13598,13 @@ function iprodRenderShell(){
     html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Comparativo por função</div><div class="iprod-panel-note">Clique numa linha pra abrir o detalhamento das atividades que compõem aquele HH de referência.</div>'
       +'<table class="iprod-tbl"><thead><tr><th>Função</th><th>HH Cobrado</th><th>HH Referência</th><th>HH + Praticabilidade</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
     r.linhas.filter(function(l){return l.hhCobrado||l.hhRef||l.hhAjust||l.dif;}).forEach(function(l){
+      var hhCobradoCell=iprodFmt(l.hhCobrado)+(l.hhContingencia?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Percentual de Contingência que a própria contratada aplica pra cobrir escopo extra ou atraso">'+iprodFmt(l.hhContingencia)+' contingência</span>':'');
       html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
-        +'<td>'+l.funcao+'</td><td>'+iprodFmt(l.hhCobrado)+'</td><td>'+iprodFmt(l.hhRef)+'</td><td>'+iprodFmt(l.hhAjust)+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';
+        +'<td>'+l.funcao+'</td><td>'+hhCobradoCell+'</td><td>'+iprodFmt(l.hhRef)+'</td><td>'+iprodFmt(l.hhAjust)+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';
       html+='<tr class="iprod-drill"><td colspan="6">';
+      if(l.hhContingencia){
+        html+='<div class="iprod-insight" style="border-left-color:#d97706;background:#fffbeb;color:#78350f;margin-bottom:8px">📌 Desse total, <b>'+iprodFmt(l.hhContingencia)+' HH</b> é "Percentual de Contingência" que a própria contratada apontou no histograma pra essa função — folga que ela reserva pra escopo adicional ou atraso, não é trabalho medido nessas atividades.</div>';
+      }
       if(l.semReferencia){
         html+='<div class="iprod-insight" style="border-left-color:#94a3b8;background:var(--bg);color:var(--muted)">⚠️ Função apontada no histograma mas sem nenhuma composição correspondente na PQ — pode ser indireto (encarregado, técnico SSMA, apontador) ou fora do escopo mapeado.</div>';
       } else if(!l.atividades.length){
