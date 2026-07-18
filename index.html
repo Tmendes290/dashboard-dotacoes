@@ -13288,9 +13288,24 @@ async function iprodProcessar(){
     if(dif>0) status=(dif/Math.max(hhCobrado,1))>0.15?'vermelho':'amarelo';
     linhas.push({funcao:fRef,hhCobrado:hhCobrado,hhContingencia:hhContingencia,hhRef:hhRef,hhAjust:hhAjust,dif:dif,status:status,atividades:porFuncao[fRef].atividades,semHistograma:semHistograma});
   });
+  // Função sem NENHUMA composição correspondente na base (indireto, ou fora do escopo mapeado) —
+  // mesmo problema das linhas COM referência: "Pedreiro - Hora Normal" e "Pedreiro - Percentual
+  // de Contingência" são a MESMA função, só que aqui nenhuma delas achou porFuncao pra entrar no
+  // merge de cima, então as duas ficavam soltas como linhas "sem referência" duplicadas. Agrupa
+  // pelo nome antes do " - " (Hora Normal/50%/100%/Adicional.../Percentual de Contingência são
+  // todos variantes da MESMA função, não funções diferentes).
+  var semRefAgrupado={}, semRefOrdem=[];
   histList.forEach(function(h,idx){
     if(usadosHist[idx]) return;
-    linhas.push({funcao:h.funcao,hhCobrado:h.hh,hhRef:0,hhAjust:0,dif:h.hh,status:'cinza',atividades:[],semReferencia:true});
+    var partes=h.funcao.split(' - ');
+    var base=(partes.length>1?partes.slice(0,-1).join(' - '):h.funcao).trim();
+    if(!semRefAgrupado[base]){ semRefAgrupado[base]={hhCobrado:0,hhContingencia:0}; semRefOrdem.push(base); }
+    semRefAgrupado[base].hhCobrado+=h.hh;
+    if(/PERCENTUAL DE CONTINGENCIA/.test(iprodNorm(h.funcao))) semRefAgrupado[base].hhContingencia+=h.hh;
+  });
+  semRefOrdem.forEach(function(base){
+    var g=semRefAgrupado[base];
+    linhas.push({funcao:base,hhCobrado:g.hhCobrado,hhContingencia:g.hhContingencia,hhRef:0,hhAjust:0,dif:g.hhCobrado,status:'cinza',atividades:[],semReferencia:true});
   });
   linhas.sort(function(a,b){return b.dif-a.dif;});
 
