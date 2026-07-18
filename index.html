@@ -12242,7 +12242,14 @@ function iprodTokens(s){
 }
 function iprodTokenPeso(t){ return /^[0-9]+$/.test(t)?2:1; }
 function iprodUnitNorm(u){
-  return String(u||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  // "m²"/"m³" com o caractere Unicode de sobrescrito de verdade (²=U+00B2, ³=U+00B3) não é letra
+  // nem número ASCII — sem essa conversão, o replace abaixo descartava o sobrescrito inteiro e
+  // "m²" virava só "m", nunca batendo com "m2" (a maioria das composições da base usa ASCII, não
+  // sobrescrito) — bug real, confirmado com dados: zerava quase toda comparação de unidade em
+  // iprodEstimarInsumosPorMedia (que exige unidade igual, não só como bônus de score).
+  var t=String(u||'');
+  Object.keys(IPROD_SOBRESCRITOS).forEach(function(f){ t=t.split(f).join(IPROD_SOBRESCRITOS[f]); });
+  return t.toLowerCase().replace(/[^a-z0-9]/g,'');
 }
 function iprodPad(v,len){
   var s=String(v==null?'':v).trim();
