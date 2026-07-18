@@ -12421,6 +12421,30 @@ function iprodUltimaMedida(desc){
   return m?(m[1]+(m[2]||'')).trim():null;
 }
 
+// Extrai o fck (resistência) de uma descrição de concreto, ou null se não for concreto/não tiver
+// fck reconhecível. Usado pra reconciliar concreto do MESMO fck cotado pela contratada em
+// "sabores" diferentes de lançamento (Bombeado/Não-Bombeado/Bombeável) — pedido do usuário: pra
+// fins de quantidade, o que importa é a resistência, não o método, quando a contratada não separa
+// isso por aplicação (ver iprodContextoConcreto).
+function iprodExtrairFck(desc){
+  var n=iprodNorm(desc);
+  if(!/\bCONCRETO\b/.test(n)) return null;
+  var m=n.match(/FCK\s*=?\s*(\d+(?:[.,]\d+)?)/);
+  return m?parseFloat(m[1].replace(',','.')):null;
+}
+// Contexto de aplicação do concreto (fundação/elevada/laje) — null quando a descrição não
+// especifica nenhum (ex.: "Concreto usinado Bombeável fck = 30,0 MPa", sem dizer onde vai ser
+// usado). Só concreto SEM contexto é elegível pra entrar na soma de qualquer necessidade daquele
+// fck no projeto — concreto com contexto específico (ex.: "estrutura ELEVADA") fica reservado só
+// pra necessidade daquele mesmo contexto, pra não misturar aplicações diferentes só pelo fck bater.
+function iprodContextoConcreto(desc){
+  var n=iprodNorm(desc);
+  if(/FUNDACAO/.test(n)) return 'FUNDACAO';
+  if(/ELEVADA/.test(n)) return 'ELEVADA';
+  if(/LAJE/.test(n)) return 'LAJE';
+  return null;
+}
+
 // Cruza por código (quando existir) ou por similaridade de texto — a maioria das PQs reais
 // não tem o código oficial da Vale, só a descrição do serviço, então esse é o caminho
 // principal, não só um fallback.
@@ -13019,7 +13043,34 @@ async function iprodProcessar(){
       });
 
       var emp=null, matchTipo=null;
-      if(pItem.codCliente){
+      // Concreto: junta a quantidade de TODO concreto da contratada SEM contexto de aplicação
+      // (ex.: "Bombeável fck=30", sem dizer fundação/elevada/laje) no mesmo fck pedido pelo
+      // projeto — pra fins de quantidade, o que importa é a resistência, não o método de
+      // lançamento, quando a própria contratada não separa isso por aplicação (pedido do
+      // usuário). Concreto com contexto ESPECÍFICO diferente do pedido fica de fora, pra não
+      // misturar aplicações diferentes só porque o fck bateu.
+      var fckProjeto=iprodExtrairFck(pItem.desc);
+      if(fckProjeto!=null){
+        var ctxProjeto=iprodContextoConcreto(pItem.desc);
+        var candidatosFck=contratadaAgrupadaList.filter(function(g){
+          if(usadosEmp.indexOf(g)>=0) return false;
+          if(iprodExtrairFck(g.desc)!==fckProjeto) return false;
+          var ctxG=iprodContextoConcreto(g.desc);
+          return ctxG===null||ctxG===ctxProjeto;
+        });
+        if(candidatosFck.length){
+          var qtdComb=0,hhComb=0,hhIdxComb=0,partesComb=[];
+          candidatosFck.forEach(function(g){
+            qtdComb+=g.quantidade; hhComb+=(g.hhAlocado||0);
+            if(g.hhViaIndiceContratada) hhIdxComb+=g.hhViaIndiceContratada;
+            partesComb.push(g.desc+' ('+iprodFmt(g.quantidade)+')');
+            usadosEmp.push(g);
+          });
+          emp={quantidade:qtdComb,hhAlocado:hhComb,hhViaIndiceContratada:hhIdxComb};
+          matchTipo='concreto fck='+fckProjeto+' combinado — '+partesComb.join(' + ');
+        }
+      }
+      if(!emp && pItem.codCliente){
         emp=contratadaAgrupadaList.find(function(g){return g.codigos[pItem.codCliente]&&usadosEmp.indexOf(g)<0;});
         if(emp) matchTipo='código';
       }
