@@ -13666,12 +13666,12 @@ function iprodRenderShell(){
   if(p&&p.pq.length){
     html+='<table class="iprod-tbl"><thead><tr><th>Cód. Cliente</th><th>Descrição da Atividade</th><th>Unid.</th><th>Qtd. Oficial (Projeto)</th></tr></thead><tbody>';
     p.pq.forEach(function(row){
-      var temAbas=row.porAba&&row.porAba.length>1;
+      var temAbas=row.porAba&&row.porAba.length>0;
       html+='<tr'+(temAbas?' class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')"':'')+'>'
         +'<td>'+(row.codCliente||'—')+'</td><td>'+row.desc+'</td><td>'+row.unidade+'</td><td>'+iprodFmt(row.quantidade)+'</td></tr>';
       if(temAbas){
         html+='<tr class="iprod-drill"><td colspan="4">'
-          +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">Somado a partir de '+row.porAba.length+' aba(s)</div>';
+          +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">'+(row.porAba.length>1?'Somado a partir de '+row.porAba.length+' aba(s)':'Vem da aba')+'</div>';
         row.porAba.forEach(function(a){
           html+='<div class="iprod-drill-row"><span>'+a.aba+'</span><span>'+iprodFmt(a.quantidade)+' '+row.unidade+'</span></div>';
         });
