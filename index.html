@@ -1465,6 +1465,23 @@ var CAPEX_TAB = 'graficos';
 var _matCharts = {};
 var STATE_LOADED_AT = null;
 
+// ── DEBUG: comparar irregularidades CAPEX entre import e reload ──
+// Chame window.debugCapexAlerts() no console: logo após importar a planilha,
+// e de novo depois de dar F5. Compara as duas listas pra achar linhas que
+// mudam de status (provável ruído de arredondamento no round-trip com o Supabase).
+function debugCapexAlerts(){
+  var capex = (STATE.capex||[]).filter(function(r){return r.pep;});
+  function isAlert(r){ return ((!r.contratado||r.contratado===0)&&r.pago>0.001) || (r.a_pagar<-0.001); }
+  var rows = capex.filter(isAlert).map(function(r){
+    return {pep:r.pep, empresa:r.empresa, grupo:r.grupo, contratado:r.contratado, pago:r.pago, a_pagar:r.a_pagar};
+  });
+  console.log('[debugCapexAlerts] total linhas capex:', capex.length, '| alertas:', rows.length);
+  console.table(rows);
+  window._lastCapexAlertDebug = rows;
+  return rows;
+}
+window.debugCapexAlerts = debugCapexAlerts;
+
 // ── SUPABASE: CARREGAR DADOS ─────────────────────────────────────
 var _syncInProgress = false;
 var _realtimeStarted = false;
