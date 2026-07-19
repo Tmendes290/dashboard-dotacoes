@@ -1462,6 +1462,7 @@ var _usrCache = {usuarios:[], bloqueados:[]};
 var SP_FAROL = '';
 var RES_TAB = 'dashboard';
 var CAPEX_TAB = 'graficos';
+var CAPEX_ONLY_ALERT = false;
 var _matCharts = {};
 var STATE_LOADED_AT = null;
 
@@ -2972,6 +2973,7 @@ function renderViewAlertas(res){
     if(fSquads.length&&fSquads.indexOf(getSquad(row.pep))<0) return;
     if(fLiders.length&&fLiders.indexOf(getLider(row.pep))<0) return;
     if(fPlanejadores.length&&fPlanejadores.indexOf(getPlanejador(row.pep))<0) return;
+    if(CAPEX_ONLY_ALERT&&!isAlertRow(row)) return;
     if(!byPep[row.pep]) byPep[row.pep]={capexTotal:STATE.capexPorPep&&STATE.capexPorPep[row.pep]?STATE.capexPorPep[row.pep]:0,grupos:{}};
     var g=row.grupo||'SEM GRUPO';
     if(!byPep[row.pep].grupos[g]) byPep[row.pep].grupos[g]=[];
@@ -3211,11 +3213,12 @@ function renderViewAlertas(res){
 
         // Separador secao tabela
     '<div style="font-size:12px;font-weight:700;color:#002F6C;letter-spacing:.6px;text-transform:uppercase;margin:20px 0 10px;padding-bottom:6px;border-bottom:2px solid #e2e8f0;border-top:2px solid #e2e8f0;padding-top:14px">📋 Detalhamento CAPEX por Projeto</div>'
-    // Legenda
-    +'<div style="display:flex;gap:16px;margin-bottom:10px;font-size:11px;flex-wrap:wrap">'
+    // Legenda + filtro de irregularidades
+    +'<div style="display:flex;align-items:center;gap:16px;margin-bottom:10px;font-size:11px;flex-wrap:wrap">'
       +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:14px;background:#fefce8;border:1px solid #f59e0b;border-radius:2px;display:inline-block"></span> Irregularidade — precisa regularizar</span>'
       +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:14px;background:#fde68a;border-radius:2px;display:inline-block"></span> Valor negativo em A Pagar</span>'
       +'<span style="color:var(--muted)">Clique na linha de empresa para registrar análise</span>'
+      +'<button onclick="CAPEX_ONLY_ALERT=!CAPEX_ONLY_ALERT;render()" style="margin-left:auto;padding:5px 12px;border:1px solid '+(CAPEX_ONLY_ALERT?'#dc2626':'#e2e8f0')+';border-radius:20px;background:'+(CAPEX_ONLY_ALERT?'#fef2f2':'#fff')+';color:'+(CAPEX_ONLY_ALERT?'#dc2626':'#64748b')+';font-size:11px;font-weight:'+(CAPEX_ONLY_ALERT?'700':'500')+';cursor:pointer;white-space:nowrap">⚠ '+(CAPEX_ONLY_ALERT?'Mostrando só irregularidades':'Mostrar apenas irregularidades')+'</button>'
     +'</div>'
     // Tabela
     +'<div class="cc" style="padding:0;overflow:auto">'
