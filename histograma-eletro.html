@@ -1020,41 +1020,79 @@ function renderRestricoes(){
     tbody+='<td class="r-fixed" style="min-width:130px;width:130px;white-space:nowrap;font-size:11px;font-weight:700;color:var(--text)">'+r.squad+'</td>';
     tbody+='<td class="r-fixed r-proj" style="left:130px">'+r.projeto+'</td>';
     tbody+='<td class="r-emp">'+(r.empresa||'—')+'</td>';
-    r.restricoes.forEach((v,ci)=>{ tbody+='<td class="r-dot"><span class="r-d r-d-'+v+'" onclick="cycleRestrDot(event,\''+RESTR_FRENTE+'\','+i+','+ci+')" title="'+(ds.labels[ci]||'').replace(/"/g,'&quot;')+' — clique para alternar"></span></td>'; });
-    tbody+='<td><span class="r-badge '+restrBadgeClass(r.liberada)+'" onclick="cycleRestrStatus(event,\''+RESTR_FRENTE+'\','+i+')" title="Clique para alternar">'+(r.liberada||'—')+'</span></td>';
+    r.restricoes.forEach((v,ci)=>{ tbody+='<td class="r-dot"><span class="r-d r-d-'+v+'" onclick="openRestrDotEditor(event,\''+RESTR_FRENTE+'\','+i+','+ci+',\''+(ds.labels[ci]||'').replace(/'/g,'&#39;').replace(/"/g,'&quot;')+'\')" title="'+(ds.labels[ci]||'').replace(/"/g,'&quot;')+' — clique pra editar"></span></td>'; });
+    tbody+='<td><span class="r-badge '+restrBadgeClass(r.liberada)+'" onclick="openRestrStatusEditor(event,\''+RESTR_FRENTE+'\','+i+')" title="Clique pra editar">'+(r.liberada||'—')+'</span></td>';
     tbody+='</tr>';
   });
   tbody+='</tbody>';
   tbl.innerHTML=thead+tbody;
 }
 
-// ── EDIÇÃO DE RESTRIÇÕES (dots + status) ────────────────────────────────────
+// ── EDIÇÃO DE RESTRIÇÕES (dots + status) — popup de escolha direta ─────────
 const RESTR_OVERRIDES_KEY='histo_restr_ov';
-const RESTR_DOT_CYCLE=['sim','nao','na'];
-const RESTR_STATUS_CYCLE=['LIBERADO TOTAL','LIBERADO PARCIAL','NÃO LIBERADO'];
+const RESTR_DOT_OPTS=[{v:'sim',l:'Sim',c:'#16a34a'},{v:'nao',l:'Não',c:'#dc2626'},{v:'na',l:'N/A',c:'#94a3b8'}];
+const RESTR_STATUS_OPTS=[{v:'LIBERADO TOTAL',cls:'r-badge-total'},{v:'LIBERADO PARCIAL',cls:'r-badge-parcial'},{v:'NÃO LIBERADO',cls:'r-badge-nao'}];
+let _restrCtx=null; // {frente,rowIdx,colIdx} — colIdx=-1 significa o campo de status
 
-function cycleRestrDot(evt,frente,rowIdx,colIdx){
+function _restrPositionEditor(evt){
+  const ed=document.getElementById('restr-editor');
+  const r=evt.target.getBoundingClientRect();
+  ed.style.left=Math.min(r.left,window.innerWidth-190)+'px';
+  const top=r.bottom+6;
+  // Se não couber embaixo, abre pra cima
+  ed.style.top=(top+160>window.innerHeight?Math.max(8,r.top-166):top)+'px';
+  ed.style.display='block';
+}
+function openRestrDotEditor(evt,frente,rowIdx,colIdx,label){
   evt.stopPropagation();
+  _restrCtx={frente,rowIdx,colIdx};
+  document.getElementById('restr-editor-title').textContent=label||'Restrição';
+  document.getElementById('restr-editor-opts').innerHTML=RESTR_DOT_OPTS.map(o=>
+    '<button onclick="pickRestrDot(\''+o.v+'\')" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--bord);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;text-align:left;width:100%">'
+    +'<span style="width:10px;height:10px;border-radius:50%;background:'+o.c+';display:inline-block;flex-shrink:0"></span>'+o.l+'</button>'
+  ).join('');
+  _restrPositionEditor(evt);
+}
+function openRestrStatusEditor(evt,frente,rowIdx){
+  evt.stopPropagation();
+  _restrCtx={frente,rowIdx,colIdx:-1};
+  document.getElementById('restr-editor-title').textContent='Status de liberação';
+  document.getElementById('restr-editor-opts').innerHTML=RESTR_STATUS_OPTS.map(o=>
+    '<button onclick="pickRestrStatus(\''+o.v+'\')" style="padding:7px 10px;border:1px solid var(--bord);border-radius:6px;background:var(--bg);cursor:pointer;text-align:left;width:100%">'
+    +'<span class="r-badge '+o.cls+'">'+o.v+'</span></button>'
+  ).join('');
+  _restrPositionEditor(evt);
+}
+function pickRestrDot(val){
+  if(!_restrCtx)return;
+  const{frente,rowIdx,colIdx}=_restrCtx;
   const ds=frente==='civil'?RESTR_CIVIL:RESTR_ELETRO;
   const row=ds.rows[rowIdx];
-  if(!row)return;
-  const cur=row.restricoes[colIdx];
-  const next=RESTR_DOT_CYCLE[(RESTR_DOT_CYCLE.indexOf(cur)+1)%3];
-  row.restricoes[colIdx]=next;
-  saveRestrOverride(frente,rowIdx,colIdx,next);
+  if(row){ row.restricoes[colIdx]=val; saveRestrOverride(frente,rowIdx,colIdx,val); }
+  closeRestrEditor();
   renderRestricoes();
 }
-function cycleRestrStatus(evt,frente,rowIdx){
-  evt.stopPropagation();
+function pickRestrStatus(val){
+  if(!_restrCtx)return;
+  const{frente,rowIdx}=_restrCtx;
   const ds=frente==='civil'?RESTR_CIVIL:RESTR_ELETRO;
   const row=ds.rows[rowIdx];
-  if(!row)return;
-  const idx=RESTR_STATUS_CYCLE.indexOf(row.liberada);
-  const next=RESTR_STATUS_CYCLE[(idx+1)%3];
-  row.liberada=next;
-  saveRestrOverride(frente,rowIdx,-1,next);
+  if(row){ row.liberada=val; saveRestrOverride(frente,rowIdx,-1,val); }
+  closeRestrEditor();
   renderRestricoes();
 }
+function closeRestrEditor(){
+  _restrCtx=null;
+  const ed=document.getElementById('restr-editor');
+  if(ed)ed.style.display='none';
+}
+document.addEventListener('click',function(e){
+  const ed=document.getElementById('restr-editor');
+  if(ed&&ed.style.display!=='none'&&!ed.contains(e.target))closeRestrEditor();
+});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape')closeRestrEditor();
+});
 async function saveRestrOverride(frente,rowIdx,colIdx,val){
   const key=frente+'_'+rowIdx+'_'+colIdx;
   try{
@@ -1592,6 +1630,11 @@ renderAll();
     <button onclick="closeEmpEditor()" class="btn btn-outline" style="padding:6px;font-size:11px">✕</button>
     <button onclick="resetEmpresaOverrides()" class="btn btn-outline" style="padding:6px;font-size:10px;color:var(--danger);border-color:var(--danger)" title="Desfazer todas as alterações">↺</button>
   </div>
+</div>
+<!-- RESTRIÇÃO EDITOR POPUP -->
+<div id="restr-editor" style="display:none;position:fixed;z-index:9999;background:var(--card);border:1px solid var(--acc);border-radius:8px;padding:10px 12px;box-shadow:0 6px 24px rgba(0,0,0,.18);min-width:170px;max-width:220px">
+  <div id="restr-editor-title" style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px;font-weight:700"></div>
+  <div id="restr-editor-opts" style="display:flex;flex-direction:column;gap:4px"></div>
 </div>
 <!-- MODAL ADICIONAR OBRA -->
 <div id="add-obra-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeAddObraModal()">
