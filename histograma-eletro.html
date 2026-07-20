@@ -150,11 +150,13 @@ td.r-proj{font-size:11px;color:var(--text);min-width:260px;max-width:260px;white
 td.r-emp{font-size:11px;color:var(--muted);min-width:110px}
 th.r-th{writing-mode:vertical-rl;transform:rotate(180deg);text-align:left;vertical-align:bottom;height:150px;font-size:9px;padding:6px 4px!important;letter-spacing:0;text-transform:none;cursor:help}
 td.r-dot{text-align:center;padding:4px 3px!important;min-width:22px}
-.r-d{display:inline-block;width:9px;height:9px;border-radius:50%}
+.r-d{display:inline-block;width:9px;height:9px;border-radius:50%;cursor:pointer;transition:transform .1s}
+.r-d:hover{transform:scale(1.4);outline:2px solid var(--acc);outline-offset:2px}
 .r-d-sim{background:#16a34a}
 .r-d-nao{background:#dc2626}
 .r-d-na{background:#cbd5e1}
-.r-badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap}
+.r-badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap;cursor:pointer;transition:filter .1s}
+.r-badge:hover{filter:brightness(.92)}
 .r-badge-total{background:#dcfce7;color:#15803d}
 .r-badge-parcial{background:#fef9c3;color:#a16207}
 .r-badge-nao{background:#fee2e2;color:#b91c1c}
@@ -1000,7 +1002,7 @@ function renderRestricoes(){
   document.getElementById('restr-title').textContent=(RESTR_FRENTE==='civil'?'Frente Civil':'Frente Eletromecânica')+' — '+ds.rows.length+' obra(s) na planilha';
   const selSquads=new Set(msGetSelected('squad').map(s=>s.toUpperCase()));
   const q=(document.getElementById('restr-search').value||'').trim().toUpperCase();
-  const rows=ds.rows.filter(r=>{
+  const rows=ds.rows.map((r,i)=>({r,i})).filter(({r})=>{
     if(!selSquads.has((r.squad||'').toUpperCase()))return false;
     if(q&&!r.projeto.toUpperCase().includes(q)&&!(r.empresa||'').toUpperCase().includes(q))return false;
     return true;
@@ -1013,17 +1015,93 @@ function renderRestricoes(){
   if(!rows.length){
     tbody+='<tr><td colspan="'+(ds.labels.length+4)+'" style="text-align:center;padding:24px;color:var(--muted)">Nenhuma obra encontrada com os filtros atuais.</td></tr>';
   }
-  rows.forEach(r=>{
+  rows.forEach(({r,i})=>{
     tbody+='<tr>';
     tbody+='<td class="r-fixed" style="min-width:130px;width:130px;white-space:nowrap;font-size:11px;font-weight:700;color:var(--text)">'+r.squad+'</td>';
     tbody+='<td class="r-fixed r-proj" style="left:130px">'+r.projeto+'</td>';
     tbody+='<td class="r-emp">'+(r.empresa||'—')+'</td>';
-    r.restricoes.forEach(v=>{ tbody+='<td class="r-dot"><span class="r-d r-d-'+v+'"></span></td>'; });
-    tbody+='<td><span class="r-badge '+restrBadgeClass(r.liberada)+'">'+(r.liberada||'—')+'</span></td>';
+    r.restricoes.forEach((v,ci)=>{ tbody+='<td class="r-dot"><span class="r-d r-d-'+v+'" onclick="cycleRestrDot(event,\''+RESTR_FRENTE+'\','+i+','+ci+')" title="'+(ds.labels[ci]||'').replace(/"/g,'&quot;')+' — clique para alternar"></span></td>'; });
+    tbody+='<td><span class="r-badge '+restrBadgeClass(r.liberada)+'" onclick="cycleRestrStatus(event,\''+RESTR_FRENTE+'\','+i+')" title="Clique para alternar">'+(r.liberada||'—')+'</span></td>';
     tbody+='</tr>';
   });
   tbody+='</tbody>';
   tbl.innerHTML=thead+tbody;
+}
+
+// ── EDIÇÃO DE RESTRIÇÕES (dots + status) ────────────────────────────────────
+const RESTR_OVERRIDES_KEY='histo_restr_ov';
+const RESTR_DOT_CYCLE=['sim','nao','na'];
+const RESTR_STATUS_CYCLE=['LIBERADO TOTAL','LIBERADO PARCIAL','NÃO LIBERADO'];
+
+function cycleRestrDot(evt,frente,rowIdx,colIdx){
+  evt.stopPropagation();
+  const ds=frente==='civil'?RESTR_CIVIL:RESTR_ELETRO;
+  const row=ds.rows[rowIdx];
+  if(!row)return;
+  const cur=row.restricoes[colIdx];
+  const next=RESTR_DOT_CYCLE[(RESTR_DOT_CYCLE.indexOf(cur)+1)%3];
+  row.restricoes[colIdx]=next;
+  saveRestrOverride(frente,rowIdx,colIdx,next);
+  renderRestricoes();
+}
+function cycleRestrStatus(evt,frente,rowIdx){
+  evt.stopPropagation();
+  const ds=frente==='civil'?RESTR_CIVIL:RESTR_ELETRO;
+  const row=ds.rows[rowIdx];
+  if(!row)return;
+  const idx=RESTR_STATUS_CYCLE.indexOf(row.liberada);
+  const next=RESTR_STATUS_CYCLE[(idx+1)%3];
+  row.liberada=next;
+  saveRestrOverride(frente,rowIdx,-1,next);
+  renderRestricoes();
+}
+async function saveRestrOverride(frente,rowIdx,colIdx,val){
+  const key=frente+'_'+rowIdx+'_'+colIdx;
+  try{
+    const s=localStorage.getItem(RESTR_OVERRIDES_KEY);
+    const obj=s?JSON.parse(s):{};
+    obj[key]=val;
+    localStorage.setItem(RESTR_OVERRIDES_KEY,JSON.stringify(obj));
+  }catch(e){}
+  if(!supa)return;
+  try{
+    const ds=frente==='civil'?RESTR_CIVIL:RESTR_ELETRO;
+    await supa.from('histograma_restr_overrides').upsert(
+      {frente:frente,row_idx:rowIdx,col_idx:colIdx,valor:val,projeto_nome:ds.rows[rowIdx]?.projeto||''},
+      {onConflict:'frente,row_idx,col_idx'}
+    );
+  }catch(e){ console.warn('[Histograma] erro ao salvar restrição:',e); }
+}
+async function loadRestrOverrides(){
+  function applyOne(frente,rowIdx,colIdx,val){
+    const ds=frente==='civil'?RESTR_CIVIL:RESTR_ELETRO;
+    const row=ds.rows[rowIdx];
+    if(!row)return;
+    if(colIdx===-1)row.liberada=val;
+    else if(row.restricoes[colIdx]!==undefined)row.restricoes[colIdx]=val;
+  }
+  try{
+    const s=localStorage.getItem(RESTR_OVERRIDES_KEY);
+    if(s)Object.entries(JSON.parse(s)).forEach(([k,v])=>{
+      const parts=k.split('_');
+      const colIdx=parseInt(parts.pop());
+      const rowIdx=parseInt(parts.pop());
+      const frente=parts.join('_');
+      applyOne(frente,rowIdx,colIdx,v);
+    });
+  }catch(e){}
+  if(!supa)return;
+  try{
+    const{data,error}=await supa.from('histograma_restr_overrides').select('frente,row_idx,col_idx,valor');
+    if(error||!data)return;
+    const fresh={};
+    data.forEach(r=>{
+      applyOne(r.frente,r.row_idx,r.col_idx,r.valor);
+      fresh[`${r.frente}_${r.row_idx}_${r.col_idx}`]=r.valor;
+    });
+    localStorage.setItem(RESTR_OVERRIDES_KEY,JSON.stringify(fresh));
+    renderRestricoes();
+  }catch(e){}
 }
 // ── SUPABASE ──────────────────────────────────────────────────────────────
 const SUPA_URL='https://ehbiyqqpzqrluvuqrljp.supabase.co';
@@ -1072,6 +1150,19 @@ function initRealtime(){
         PROJETOS[r.projeto_idx].Empresa=r.empresa;
       }
       _rtDelay(()=>renderAll());
+    })
+    // Restrição (dot ou status) editada por outro admin
+    .on('postgres_changes',{event:'*',schema:'public',table:'histograma_restr_overrides'},p=>{
+      const r=p.new;
+      if(r){
+        const ds=r.frente==='civil'?RESTR_CIVIL:RESTR_ELETRO;
+        const row=ds.rows[r.row_idx];
+        if(row){
+          if(r.col_idx===-1)row.liberada=r.valor;
+          else if(row.restricoes[r.col_idx]!==undefined)row.restricoes[r.col_idx]=r.valor;
+        }
+      }
+      _rtDelay(()=>renderRestricoes());
     })
     .subscribe();
 }
@@ -1482,6 +1573,7 @@ localStorage.removeItem('histo_virt_entries');
 initEqOrigSums();
 loadEmpresaOverrides();
 loadEquipeOverrides();
+loadRestrOverrides();
 loadVirtualEntries();
 initRealtime(); // escuta mudanças em tempo real de todos os admins
 renderAll();
