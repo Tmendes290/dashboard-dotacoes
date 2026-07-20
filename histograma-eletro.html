@@ -157,12 +157,15 @@ td.r-dot{text-align:center;padding:4px 3px!important;min-width:22px}
 .r-d-na{background:#cbd5e1}
 .r-badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap;cursor:pointer;transition:filter .1s}
 .r-badge:hover{filter:brightness(.92)}
-td.r-tl{min-width:150px;max-width:150px;cursor:pointer}
+td.r-tl{min-width:190px;max-width:190px;cursor:pointer}
 .r-tl-track{position:relative;height:20px;background:var(--bg);border-radius:3px;overflow:hidden}
 td.r-tl:hover .r-tl-track{outline:2px solid var(--acc);outline-offset:1px}
 .r-tl-bar{position:absolute;height:7px;border-radius:2px}
 .r-tl-lb{top:2px;background:#94a3b8}
 .r-tl-tend{top:11px;background:var(--acc)}
+.r-tl-lbl{font-size:9px;font-weight:600;white-space:nowrap;margin-top:2px;font-family:monospace}
+.r-tl-lbl-lb{color:#94a3b8}
+.r-tl-lbl-tend{color:var(--acc)}
 .r-badge-total{background:#dcfce7;color:#15803d}
 .r-badge-parcial{background:#fef9c3;color:#a16207}
 .r-badge-nao{background:#fee2e2;color:#b91c1c}
@@ -1052,6 +1055,17 @@ function restrDateBR(iso){
   const[y,m,d]=iso.split('-');
   return d+'/'+m+'/'+y;
 }
+function restrDateShort(iso){
+  if(!iso)return null;
+  const[y,m,d]=iso.split('-');
+  return d+'/'+m;
+}
+function restrRangeShort(iniISO,fimISO){
+  const a=restrDateShort(iniISO), b=restrDateShort(fimISO);
+  if(!a&&!b)return '—';
+  if(a&&b&&a!==b)return a+'→'+b;
+  return a||b;
+}
 function restrBarStyle(iniISO,fimISO){
   let i0=restrMonthIdx(iniISO), i1=restrMonthIdx(fimISO);
   const len=GANTT_MESES.length;
@@ -1079,7 +1093,9 @@ function restrTimelineHTML(r){
   return '<div class="r-tl-track" title="'+tip.replace(/"/g,'&quot;')+'">'
     +(stLB?'<div class="r-tl-bar r-tl-lb" style="'+stLB+'"></div>':'')
     +(stTend?'<div class="r-tl-bar r-tl-tend" style="'+stTend+'"></div>':'')
-    +'</div>';
+    +'</div>'
+    +'<div class="r-tl-lbl r-tl-lbl-lb">LB '+restrRangeShort(r.dataInicioLB,r.dataTerminoLB)+'</div>'
+    +'<div class="r-tl-lbl r-tl-lbl-tend">T '+restrRangeShort(r.dataInicioTendencia,r.dataTerminoTendencia)+'</div>';
 }
 
 // ── EDIÇÃO DE RESTRIÇÕES (dots + status) — popup de escolha direta ─────────
