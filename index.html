@@ -12181,6 +12181,22 @@ function iprodRestaurarLinhaProjeto(idxProjeto){
   toast('Atividade restaurada — recalculando...','blue');
   iprodProcessar();
 }
+// Funções excluídas da seção 4 (Comparativo por função) — chave é o nome normalizado da função.
+// A linha some da tabela E do TOTAL (HH Cobrado/Referência/Diferença), não só escondida — o filtro
+// roda antes dos reduce() que calculam os totais em iprodProcessar. Útil pra tirar função indireta
+// (Sinaleiro, Apontador, Técnico Segurança...) que não tem como comparar contra índice de verdade.
+var IPROD_FUNCOES_EXCLUIDAS={};
+function iprodExcluirFuncao(funcaoNorm,funcaoLabel){
+  if(!confirm('Excluir a função "'+funcaoLabel+'" dessa análise? Ela sai do total de HH Cobrado/Referência/Diferença (dá pra restaurar depois).')) return;
+  IPROD_FUNCOES_EXCLUIDAS[funcaoNorm]=funcaoLabel;
+  toast('Função excluída — recalculando...','blue');
+  iprodProcessar();
+}
+function iprodRestaurarFuncao(funcaoNorm){
+  delete IPROD_FUNCOES_EXCLUIDAS[funcaoNorm];
+  toast('Função restaurada — recalculando...','blue');
+  iprodProcessar();
+}
 // Catálogo-mestre por empresa: REF_CATALOGO_EMPRESA['APIA']['1290'] = {desc,unidade,preco} — código
 // próprio de cada contratada (estável entre orçamentos de projetos diferentes) → descrição/preço
 // canônicos, carregado do Supabase (ref_catalogo_empresa). Usado pra confirmar com certeza o que um
@@ -13018,6 +13034,9 @@ async function iprodHandleContratadaFile(file){
       }
       IPROD_CONTRATADA={pq:pq||[],histograma:hist||[],nomeArquivo:file.name};
       IPROD_RESULT=null;
+      // Contratada nova = as funções do histograma podem ser outras — exclusões da análise
+      // anterior não fazem mais sentido aqui.
+      IPROD_FUNCOES_EXCLUIDAS={};
       toast('Arquivo lido: '+(pq?pq.length:0)+' atividades na PQ, '+(hist?hist.length:0)+' funções no histograma'+(nCanon?' ('+nCanon+' confirmadas pelo catálogo)':''),'green');
       iprodRenderShell();
     }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
@@ -13170,9 +13189,10 @@ async function iprodProcessar(){
     var porRaiz={};
     itens.forEach(function(it,i){
       var r=acha(i), g=porRaiz[r];
-      if(!g){ g=porRaiz[r]={desc:it.desc,unidade:it.unidade,quantidade:0,hhAlocado:0,hhViaIndiceContratada:0,codigos:{},descs:{}}; contratadaAgrupadaList.push(g); }
+      if(!g){ g=porRaiz[r]={desc:it.desc,unidade:it.unidade,quantidade:0,hhAlocado:0,hhViaIndiceContratada:0,valorTotal:0,codigos:{},descs:{}}; contratadaAgrupadaList.push(g); }
       g.quantidade+=it.quantidade;
       g.hhAlocado+=(it.hhAlocado||0);
+      g.valorTotal+=(it.valorTotal||0);
       if(it.indiceContratada!=null) g.hhViaIndiceContratada+=it.quantidade*it.indiceContratada;
       if(it.codCliente) g.codigos[it.codCliente]=true;
       g.descs[iprodNorm(it.desc)]=true;
@@ -13377,7 +13397,7 @@ async function iprodProcessar(){
     // Projeto — o HH alocado deles fica de fora da tabela acima (que só lista atividades do
     // projeto). Mostrar à parte pra fechar 100% do HH cobrado.
     contratadaSemProjeto=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;})
-      .map(function(g){return {desc:g.desc,unidade:g.unidade,quantidade:g.quantidade,hhAlocado:g.hhAlocado||0};});
+      .map(function(g){return {desc:g.desc,unidade:g.unidade,quantidade:g.quantidade,hhAlocado:g.hhAlocado||0,valorTotal:g.valorTotal||0};});
   }
 
   // PASSO 2: monta os comparativos usando o índice e a alocação já calculados
@@ -13533,6 +13553,10 @@ async function iprodProcessar(){
     linhas.push({funcao:base,hhCobrado:g.hhCobrado,hhContingencia:g.hhContingencia,hhRef:0,hhAjust:0,dif:g.hhCobrado,status:'cinza',atividades:[],semReferencia:true});
   });
   linhas.sort(function(a,b){return b.dif-a.dif;});
+  // Tira as funções excluídas manualmente ANTES dos totais abaixo (todos via linhas.reduce) —
+  // assim HH Cobrado/Referência/Diferença/%Improd já saem recalculados sem elas.
+  var linhasExcluidas=linhas.filter(function(l){return IPROD_FUNCOES_EXCLUIDAS[iprodNorm(l.funcao)];});
+  linhas=linhas.filter(function(l){return !IPROD_FUNCOES_EXCLUIDAS[iprodNorm(l.funcao)];});
 
   var totCobrado=linhas.reduce(function(s,l){return s+l.hhCobrado;},0);
   // Sem histograma por função (PQ já traz o HH declarado por atividade, sem quebrar por
@@ -13562,7 +13586,7 @@ async function iprodProcessar(){
     return {nome:m,tipo:o.tipo,unidade:o.unidade,qtdNec:o.qtdNec,atividades:o.atividades};
   }).filter(function(m){return m.qtdNec;}).sort(function(a,b){return b.qtdNec-a.qtdNec;});
 
-  IPROD_RESULT={linhas:linhas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto};
+  IPROD_RESULT={linhas:linhas,linhasExcluidas:linhasExcluidas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto,totCobradoHistograma:totCobradoHistograma};
   toast(temContratada?'Comparativo calculado':'HH esperado calculado pelo índice do projeto (sem contratada)','green');
   iprodRenderShell();
 }
@@ -13891,10 +13915,20 @@ function iprodRenderShell(){
       }
 
       if(r.contratadaSemProjeto && r.contratadaSemProjeto.length){
-        html+='<div class="iprod-panel"><div class="iprod-panel-title">⚠️ Itens da PQ da contratada sem atividade correspondente no projeto</div><div class="iprod-panel-note">A contratada cobrou por isso, mas não achei atividade equivalente na PQ do Projeto — por isso não aparece na tabela acima. O HH alocado deles soma aqui pra fechar 100% do HH cobrado no histograma.</div>'
+        html+='<div class="iprod-panel"><div class="iprod-panel-title">⚠️ Itens da PQ da contratada sem atividade correspondente no projeto</div><div class="iprod-panel-note">A contratada cobrou por isso, mas não achei atividade equivalente na PQ do Projeto — por isso não aparece na tabela acima. O HH alocado deles soma aqui pra fechar 100% do HH cobrado no histograma. Clique numa linha pra ver como o HH Alocado foi calculado.</div>'
           +'<table class="iprod-tbl"><thead><tr><th>Descrição</th><th>Unid.</th><th>Quantidade</th><th>HH Alocado</th></tr></thead><tbody>';
         r.contratadaSemProjeto.forEach(function(c){
-          html+='<tr><td>'+c.desc+'</td><td>'+c.unidade+'</td><td>'+iprodFmt(c.quantidade)+'</td><td>'+iprodFmt(c.hhAlocado)+'</td></tr>';
+          var pctValorC=r.totCobradoHistograma>0?(c.hhAlocado/r.totCobradoHistograma):0;
+          html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
+            +'<td>'+c.desc+'</td><td>'+c.unidade+'</td><td>'+iprodFmt(c.quantidade)+'</td><td>'+iprodFmt(c.hhAlocado)+'</td></tr>';
+          html+='<tr class="iprod-drill"><td colspan="4">'
+            +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Como esse HH Alocado foi calculado</div>'
+            +'<div class="iprod-drill-row"><span>Valor (R$) dessa atividade na PQ da contratada</span><span style="font-weight:700">R$ '+iprodFmt(c.valorTotal)+'</span></div>'
+            +'<div class="iprod-drill-row"><span>÷ Soma do valor (R$) de TODAS as atividades de fornecimento da PQ da contratada</span><span>= '+(pctValorC*100).toFixed(2).replace('.',',')+'% do total</span></div>'
+            +'<div class="iprod-drill-row"><span>× HH total cobrado no histograma (todas as funções, todos os dias)</span><span style="font-weight:700">'+iprodFmt(r.totCobradoHistograma)+' HH</span></div>'
+            +'<div class="iprod-drill-row" style="border-top:2px solid var(--border);margin-top:4px;padding-top:8px"><span style="font-weight:800">= HH Alocado dessa atividade</span><span style="font-weight:800">'+iprodFmt(c.hhAlocado)+' HH</span></div>'
+            +'<div class="iprod-insight" style="margin-top:8px">O rateio é por PESO NO VALOR (R$), não por quantidade física — atividades mais caras "puxam" mais HH do histograma pra si, mesmo sem saber exatamente quantas pessoas trabalharam em cada atividade no dia a dia. É uma aproximação (mesmo método usado manualmente na planilha de referência), não uma medição direta.</div>'
+            +'</td></tr>';
         });
         html+='<tr class="iprod-tot"><td colspan="3">TOTAL sem correspondência</td><td>'+iprodFmt(totHhSemProjeto)+'</td></tr>';
         html+='</tbody></table>'
@@ -13940,10 +13974,25 @@ function iprodRenderShell(){
       if(l.semHistograma && !l.semReferencia){
         html+='<div class="iprod-insight" style="margin-top:8px">⚠️ Não encontrei essa função no histograma da contratada — HH cobrado considerado 0. Confere se o nome da função bate.</div>';
       }
+      html+='<div style="margin-top:10px" onclick="event.stopPropagation()">'
+        +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#fef2f2;color:#dc2626" onclick="event.stopPropagation();iprodExcluirFuncao(\''+iprodNorm(l.funcao).replace(/'/g,'')+'\',\''+l.funcao.replace(/'/g,'')+'\')">🗑️ Excluir essa função da análise</button>'
+        +'</div>';
       html+='</td></tr>';
     });
     html+='<tr class="iprod-tot"><td>TOTAL</td><td>'+iprodFmt(r.totCobrado)+'</td><td>'+iprodFmt(r.linhas.reduce(function(s,l){return s+l.hhRef;},0))+'</td><td>'+iprodFmt(r.totRefAjust)+'</td><td>'+iprodFmt(r.totDif)+'</td><td></td></tr>';
     html+='</tbody></table></div>';
+
+    if(r.linhasExcluidas && r.linhasExcluidas.length){
+      html+='<div class="iprod-insight" style="border-left-color:#dc2626;background:#fef2f2;color:#7f1d1d;margin-top:-8px;margin-bottom:16px">'
+        +'<div style="font-weight:800;margin-bottom:6px">🗑️ '+r.linhasExcluidas.length+' função(ões) excluída(s) dessa análise (fora do total de HH Cobrado/Referência/Diferença):</div>'
+        +r.linhasExcluidas.map(function(l){
+          return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 0;border-top:1px dashed #fecaca">'
+            +'<span>'+l.funcao+' <span style="color:#991b1b;font-weight:700">('+iprodFmt(l.hhCobrado)+' HH cobrado)</span></span>'
+            +'<button class="iprod-btn" style="margin-top:0;padding:3px 9px;font-size:10px;background:#fff;color:#7f1d1d;border:1px solid #fecaca" onclick="iprodRestaurarFuncao(\''+iprodNorm(l.funcao).replace(/'/g,'')+'\')">↺ Restaurar</button>'
+            +'</div>';
+        }).join('')
+        +'</div>';
+    }
     }
 
     if(r.semIndice.length){
