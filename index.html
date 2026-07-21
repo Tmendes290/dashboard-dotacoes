@@ -12158,6 +12158,11 @@ var IPROD_NOME_PROJETO='', IPROD_EMPRESA='';
 var IPROD_HISTORICO=null, IPROD_HISTORICO_LOADING=false, IPROD_CARREGADO_DE_HIST=null;
 var IPROD_EMPRESAS=['APIA','LUK','ÔMEGA','TOP ANDAIMES','MILPLAN'];
 var IPROD_FILTRO_STATUS='todos';
+// Filtro de exibição da seção 4 (Comparativo por função) — só esconde linha da tela, não tira do
+// cálculo de referência (diferente do "Excluir função"). Quando ativo, o TOTAL da tabela recalcula
+// só a partir do que está visível, pra servir de subtotal do recorte escolhido.
+var IPROD_FUNC_FILTRO='todos';
+function iprodSetFuncFiltro(v){ IPROD_FUNC_FILTRO=v; iprodRenderShell(); }
 // Índice sobrescrito manualmente pelo usuário (seção 3, coluna Índice) — chave é o idxProjeto
 // (índice da linha na PQ do Projeto), valor é o índice em HH/unidade que substitui o achado
 // automaticamente. Ver iprodEditarIndiceProjeto.
@@ -13944,9 +13949,19 @@ function iprodRenderShell(){
       html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Comparativo por função</div>'
         +'<div class="iprod-panel-note" style="margin:0">Essa PQ não tem histograma quebrado por função (Encarregado/Servente/Pedreiro...) — o HH já vem por atividade, não dá pra comparar por função aqui.</div></div>';
     } else {
+    var linhasBase4=r.linhas.filter(function(l){return l.hhCobrado||l.hhRef||l.hhAjust||l.dif;});
+    var nCobradas4=linhasBase4.filter(function(l){return l.hhCobrado>0.001;}).length;
+    var linhasFiltro4=IPROD_FUNC_FILTRO==='cobradas'?linhasBase4.filter(function(l){return l.hhCobrado>0.001;}):linhasBase4;
     html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Comparativo por função</div><div class="iprod-panel-note">Clique numa linha pra abrir o detalhamento das atividades que compõem aquele HH de referência.</div>'
+      +'<div style="display:flex;gap:8px;margin:0 0 12px">'
+      +[['todos','Todas ('+linhasBase4.length+')'],['cobradas','Só cobradas ('+nCobradas4+')']].map(function(f){
+        var ativo=IPROD_FUNC_FILTRO===f[0];
+        return '<span onclick="iprodSetFuncFiltro(\''+f[0]+'\')" style="cursor:pointer;font-size:10.5px;font-weight:800;padding:4px 11px;border-radius:20px;border:1px solid '+(ativo?'#2563eb':'var(--border)')+';background:'+(ativo?'#2563eb':'transparent')+';color:'+(ativo?'#fff':'var(--muted)')+'">'+f[1]+'</span>';
+      }).join('')
+      +'</div>'
+      +(IPROD_FUNC_FILTRO==='cobradas'?'<div class="iprod-panel-note" style="margin:0 0 10px">Mostrando só funções com HH cobrado — o TOTAL abaixo é o subtotal desse recorte, não da análise inteira (os cards no topo continuam mostrando o total geral).</div>':'')
       +'<table class="iprod-tbl"><thead><tr><th>Função</th><th>HH Cobrado</th><th>HH Referência</th><th>HH + Praticabilidade</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
-    r.linhas.filter(function(l){return l.hhCobrado||l.hhRef||l.hhAjust||l.dif;}).forEach(function(l){
+    linhasFiltro4.forEach(function(l){
       var hhCobradoCell=iprodFmt(l.hhCobrado)+(l.hhContingencia?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Percentual de Contingência que a própria contratada aplica pra cobrir escopo extra ou atraso">'+iprodFmt(l.hhContingencia)+' contingência</span>':'');
       var hhRefCell=iprodFmt(l.hhRef)+(l.estimadoPorMedia?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="A composição não tem mão de obra cadastrada na base — estimado pela média de composições semelhantes">≈ estimado</span>':'');
       html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
@@ -13979,7 +13994,11 @@ function iprodRenderShell(){
         +'</div>';
       html+='</td></tr>';
     });
-    html+='<tr class="iprod-tot"><td>TOTAL</td><td>'+iprodFmt(r.totCobrado)+'</td><td>'+iprodFmt(r.linhas.reduce(function(s,l){return s+l.hhRef;},0))+'</td><td>'+iprodFmt(r.totRefAjust)+'</td><td>'+iprodFmt(r.totDif)+'</td><td></td></tr>';
+    var totCobradoFiltro4=linhasFiltro4.reduce(function(s,l){return s+l.hhCobrado;},0);
+    var totRefFiltro4=linhasFiltro4.reduce(function(s,l){return s+l.hhRef;},0);
+    var totAjustFiltro4=linhasFiltro4.reduce(function(s,l){return s+l.hhAjust;},0);
+    var totDifFiltro4=totCobradoFiltro4-totAjustFiltro4;
+    html+='<tr class="iprod-tot"><td>TOTAL'+(IPROD_FUNC_FILTRO==='cobradas'?' (só cobradas)':'')+'</td><td>'+iprodFmt(totCobradoFiltro4)+'</td><td>'+iprodFmt(totRefFiltro4)+'</td><td>'+iprodFmt(totAjustFiltro4)+'</td><td>'+iprodFmt(totDifFiltro4)+'</td><td></td></tr>';
     html+='</tbody></table></div>';
 
     if(r.linhasExcluidas && r.linhasExcluidas.length){
