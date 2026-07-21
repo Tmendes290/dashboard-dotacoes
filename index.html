@@ -12467,6 +12467,22 @@ function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB,qA,qB){
     var naoA=tokensA.indexOf('NAO')>=0, naoB=tokensB.indexOf('NAO')>=0;
     if(naoA!==naoB) score-=0.9;
   }
+  // Armação de aço: "Armadura em aço CA-XX" (barra/vergalhão, grau 25/50/60...) x "Armadura em
+  // tela de aço soldada" (telas pré-fabricadas) são produtos DIFERENTES (índice de mão de obra
+  // bem diferente), mas o texto é quase idêntico (ARMADURA/AÇO/CORTE em comum) — e como a versão
+  // "qualquer diâmetro/malha" de um dos lados já desliga o check de último número acima (ela é
+  // description-coringa), esse par escapava ileso. Confirmado com dados reais: CA-25 x CA-50 deu
+  // 0,73 de score bruto, CA-25 x "tela de aço soldada" deu 0,56 — os dois acima do limiar de
+  // aceitação (0,35) sem esse tratamento, o que juntava a quantidade das duas atividades como se
+  // fossem uma só. Só entra quando dá pra classificar os DOIS lados (grau de CA ou "tela").
+  function categoriaArmacao(tokens){
+    if(tokens.indexOf('TELA')>=0) return 'tela';
+    var i=tokens.indexOf('CA');
+    if(i>=0&&i+1<tokens.length&&/^[0-9]+$/.test(tokens[i+1])) return 'ca'+tokens[i+1];
+    return null;
+  }
+  var catA=categoriaArmacao(tokensA), catB=categoriaArmacao(tokensB);
+  if(catA&&catB) score+=(catA===catB)?0.2:-0.9;
   return score;
 }
 // Acha o último token puramente numérico dentro das últimas 4 posições (diâmetro/seção/fck
@@ -13013,9 +13029,22 @@ async function iprodHandlePQProjetoFile(file){
       var agrupado={};
       brutas.forEach(function(item){
         var key=item.codCliente||('desc:'+iprodNorm(item.desc));
-        if(!agrupado[key]) agrupado[key]={desc:item.desc,codCliente:item.codCliente,unidade:item.unidade,quantidade:0,porAba:[]};
-        agrupado[key].quantidade+=item.quantidade;
-        agrupado[key].porAba.push({aba:item.aba,quantidade:item.quantidade});
+        var g=agrupado[key];
+        // Mesmo código mas descrição sem relação nenhuma = colisão de código na planilha-fonte
+        // (código K/TT/UU/VVV/WWW reaproveitado por engano pra duas atividades diferentes), não a
+        // MESMA atividade repetida — confirmado com dados reais: "Armadura CA-25" e "Armadura em
+        // tela de aço soldada" caíram sob o mesmo código C6510010010 numa PQ real, e sem esse
+        // check as quantidades das duas iam pro mesmo total (score de similaridade só 29%, abaixo
+        // do limiar de 35% já usado no resto do matching). Nesse caso trata como atividade
+        // separada (chave por descrição) em vez de somar.
+        if(g&&iprodNorm(g.desc)!==iprodNorm(item.desc)){
+          var itTok=iprodTokens(item.desc), itSet={}; itTok.forEach(function(t){itSet[t]=true;});
+          var sc=iprodTokenScore(itTok,itSet,iprodTokens(g.desc),iprodUnitNorm(item.unidade),iprodUnitNorm(g.unidade),iprodTemQualquer(item.desc),iprodTemQualquer(g.desc));
+          if(sc<0.35){ key='desc:'+iprodNorm(item.desc); g=agrupado[key]; }
+        }
+        if(!g){ g=agrupado[key]={desc:item.desc,codCliente:item.codCliente,unidade:item.unidade,quantidade:0,porAba:[]}; }
+        g.quantidade+=item.quantidade;
+        g.porAba.push({aba:item.aba,quantidade:item.quantidade});
       });
       var pq=Object.values(agrupado);
       IPROD_PROJETO={pq:pq,nomeArquivo:file.name};
