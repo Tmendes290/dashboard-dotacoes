@@ -12164,6 +12164,23 @@ var IPROD_FILTRO_STATUS='todos';
 var IPROD_INDICE_OVERRIDES={};
 var IPROD_SHOW_AJUDA=false;
 function iprodToggleAjuda(){ IPROD_SHOW_AJUDA=!IPROD_SHOW_AJUDA; iprodRenderShell(); }
+// Atividades da PQ do Projeto excluídas manualmente da análise (seção 3) — chave é o idxProjeto,
+// mesma indexação de IPROD_INDICE_OVERRIDES. A linha excluída não entra em NENHUM cálculo (HH
+// Esperado, seção 4 por função, KPIs) — é tratada como se nunca tivesse existido na PQ, não só
+// escondida na tela. Ver iprodExcluirLinhaProjeto/iprodRestaurarLinhaProjeto.
+var IPROD_LINHAS_EXCLUIDAS={};
+function iprodExcluirLinhaProjeto(idxProjeto){
+  if(!IPROD_PROJETO||!IPROD_PROJETO.pq[idxProjeto]) return;
+  if(!confirm('Excluir "'+IPROD_PROJETO.pq[idxProjeto].desc+'" dessa análise? Ela sai de todos os totais (dá pra restaurar depois).')) return;
+  IPROD_LINHAS_EXCLUIDAS[idxProjeto]=true;
+  toast('Atividade excluída — recalculando...','blue');
+  iprodProcessar();
+}
+function iprodRestaurarLinhaProjeto(idxProjeto){
+  delete IPROD_LINHAS_EXCLUIDAS[idxProjeto];
+  toast('Atividade restaurada — recalculando...','blue');
+  iprodProcessar();
+}
 // Catálogo-mestre por empresa: REF_CATALOGO_EMPRESA['APIA']['1290'] = {desc,unidade,preco} — código
 // próprio de cada contratada (estável entre orçamentos de projetos diferentes) → descrição/preço
 // canônicos, carregado do Supabase (ref_catalogo_empresa). Usado pra confirmar com certeza o que um
@@ -13050,8 +13067,9 @@ async function iprodHandlePQProjetoFile(file){
       IPROD_PROJETO={pq:pq,nomeArquivo:file.name};
       IPROD_RESULT=null;
       // PQ nova = os índices de linha (idxProjeto) apontam pra atividades diferentes agora —
-      // sobrescritas manuais da PQ anterior não fazem mais sentido aqui.
+      // sobrescritas manuais e exclusões da PQ anterior não fazem mais sentido aqui.
       IPROD_INDICE_OVERRIDES={};
+      IPROD_LINHAS_EXCLUIDAS={};
       toast('PQ do Projeto lida: '+pq.length+' atividades somadas de '+brutas.length+' linhas (em '+abasComPq+' abas)','green');
       iprodRenderShell();
     }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
@@ -13181,6 +13199,10 @@ async function iprodProcessar(){
     // ainda não processado (ver comentário em iprodFindInPqMedidaDiferente).
     var pendentes=[];
     IPROD_PROJETO.pq.forEach(function(pItem,idxProjeto){
+      // Atividade excluída manualmente pelo usuário (botão "Excluir" na seção 3) — tratada como
+      // se nunca tivesse existido na PQ: não entra no HH Esperado, na seção 4 por função, nem em
+      // nenhum total/KPI. Ver iprodExcluirLinhaProjeto.
+      if(IPROD_LINHAS_EXCLUIDAS[idxProjeto]) return;
       // Atividade administrativa (unidade "vb"/"vb x mês"), categoria "F" (fornecimento puro,
       // sem montagem) ou linha de mão de obra direta por hora (Encarregado/Técnico/Montador/
       // Inspetor, Horas Extras, Adicional Noturno... unidade "h") do próprio projeto: nenhuma
@@ -13842,6 +13864,9 @@ function iprodRenderShell(){
           +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px" onclick="event.stopPropagation();iprodEditarIndiceProjeto('+q.idxProjeto+',this.previousElementSibling)">Salvar e recalcular</button>'
           +(IPROD_INDICE_OVERRIDES[q.idxProjeto]!=null?'<span style="font-size:9px;color:#d97706;font-weight:700">⚙️ ajustado manualmente</span>':'')
           +'</div>'
+          +'<div style="margin-top:10px" onclick="event.stopPropagation()">'
+          +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#fef2f2;color:#dc2626" onclick="event.stopPropagation();iprodExcluirLinhaProjeto('+q.idxProjeto+')">🗑️ Excluir essa atividade da análise</button>'
+          +'</div>'
           +'</td></tr>';
       });
       var totHhEsperado=r.qtdComp.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
@@ -13850,6 +13875,20 @@ function iprodRenderShell(){
       var totHhEmpresa=totHhEmpresaMatched+totHhSemProjeto;
       html+='<tr class="iprod-tot"><td>TOTAL (atividades do projeto)</td><td></td><td></td><td></td><td></td><td></td><td>'+iprodFmt(totHhEsperado)+'</td><td>'+iprodFmt(totHhEmpresaMatched)+'</td><td>'+iprodFmt(totHhEmpresaMatched-totHhEsperado)+'</td><td></td></tr>';
       html+='</tbody></table></div>';
+
+      var idxExcluidos=Object.keys(IPROD_LINHAS_EXCLUIDAS).filter(function(i){return IPROD_LINHAS_EXCLUIDAS[i]&&IPROD_PROJETO.pq[i];});
+      if(idxExcluidos.length){
+        html+='<div class="iprod-insight" style="border-left-color:#dc2626;background:#fef2f2;color:#7f1d1d;margin-top:-8px;margin-bottom:16px">'
+          +'<div style="font-weight:800;margin-bottom:6px">🗑️ '+idxExcluidos.length+' atividade(s) excluída(s) dessa análise (fora de todos os totais):</div>'
+          +idxExcluidos.map(function(i){
+            var it=IPROD_PROJETO.pq[i];
+            return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 0;border-top:1px dashed #fecaca">'
+              +'<span>'+it.desc+'</span>'
+              +'<button class="iprod-btn" style="margin-top:0;padding:3px 9px;font-size:10px;background:#fff;color:#7f1d1d;border:1px solid #fecaca" onclick="iprodRestaurarLinhaProjeto('+i+')">↺ Restaurar</button>'
+              +'</div>';
+          }).join('')
+          +'</div>';
+      }
 
       if(r.contratadaSemProjeto && r.contratadaSemProjeto.length){
         html+='<div class="iprod-panel"><div class="iprod-panel-title">⚠️ Itens da PQ da contratada sem atividade correspondente no projeto</div><div class="iprod-panel-note">A contratada cobrou por isso, mas não achei atividade equivalente na PQ do Projeto — por isso não aparece na tabela acima. O HH alocado deles soma aqui pra fechar 100% do HH cobrado no histograma.</div>'
