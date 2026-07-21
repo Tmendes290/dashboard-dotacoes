@@ -803,7 +803,22 @@ function buildChartObras(){
 buildChartObras();
 
 // ── GANTT ─────────────────────────────────────────────────────────────────
-const HOJE_MES='jun/26';
+// Mês atual calculado da data real (antes fixo em 'jun/26', ficava desatualizado com o tempo).
+const MESES_ABREV_PT=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function calcHojeMes(){
+  var d=new Date();
+  return MESES_ABREV_PT[d.getMonth()]+'/'+String(d.getFullYear()).slice(2);
+}
+const HOJE_MES=calcHojeMes();
+// O cabeçalho da tabela Gantt tem os 17 meses escritos direto no HTML (com a marcação "HOJE" fixa
+// em jun/26) — corrige aqui a classe hoje-th pro mês que bate com HOJE_MES de verdade, sem precisar
+// reescrever o cabeçalho inteiro por JS.
+function fixGanttHojeHeader(){
+  document.querySelectorAll('#ganttTable thead th.g-month').forEach(function(th){
+    var mes=th.textContent.trim().split(' ')[0];
+    th.classList.toggle('hoje-th',mes===HOJE_MES);
+  });
+}
 function renderGantt(){
   const selSquads=new Set(msGetSelected('squad'));
   const selDiscs=new Set(msGetSelected('disc'));
@@ -1721,6 +1736,7 @@ loadRestrOverrides();
 loadVirtualEntries();
 initRealtime(); // escuta mudanças em tempo real de todos os admins
 renderAll();
+fixGanttHojeHeader();
 </script>
 
 <!-- EMPRESA EDITOR POPUP -->
