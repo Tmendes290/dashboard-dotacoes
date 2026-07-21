@@ -12158,6 +12158,10 @@ var IPROD_NOME_PROJETO='', IPROD_EMPRESA='';
 var IPROD_HISTORICO=null, IPROD_HISTORICO_LOADING=false, IPROD_CARREGADO_DE_HIST=null;
 var IPROD_EMPRESAS=['APIA','LUK','ÔMEGA','TOP ANDAIMES','MILPLAN'];
 var IPROD_FILTRO_STATUS='todos';
+// Índice sobrescrito manualmente pelo usuário (seção 3, coluna Índice) — chave é o idxProjeto
+// (índice da linha na PQ do Projeto), valor é o índice em HH/unidade que substitui o achado
+// automaticamente. Ver iprodEditarIndiceProjeto.
+var IPROD_INDICE_OVERRIDES={};
 // Catálogo-mestre por empresa: REF_CATALOGO_EMPRESA['APIA']['1290'] = {desc,unidade,preco} — código
 // próprio de cada contratada (estável entre orçamentos de projetos diferentes) → descrição/preço
 // canônicos, carregado do Supabase (ref_catalogo_empresa). Usado pra confirmar com certeza o que um
@@ -12189,6 +12193,26 @@ function iprodEditarCodigoProjeto(idxProjeto,input){
   var novo=String(input.value||'').trim().toUpperCase();
   IPROD_PROJETO.pq[idxProjeto].codCliente=novo||null;
   toast('Código atualizado — recalculando...','blue');
+  iprodProcessar();
+}
+// Sobrescreve o índice (HH/unidade) de uma atividade específica da PQ do Projeto — pra quando o
+// usuário não confia no índice achado automaticamente (base incompleta, match duvidoso, etc.) e
+// prefere digitar o valor que considera correto. Aceita vírgula ou ponto decimal. Campo vazio
+// remove a sobrescrita e volta a usar o índice automático.
+function iprodEditarIndiceProjeto(idxProjeto,input){
+  var raw=String(input.value||'').trim();
+  if(!raw){
+    delete IPROD_INDICE_OVERRIDES[idxProjeto];
+    toast('Voltando ao índice automático — recalculando...','blue');
+  } else {
+    // Mesma lógica de parse pt-BR (1.234,56) usada no restante do app — vírgula é decimal,
+    // ponto só é milhar quando aparece ANTES da vírgula.
+    var s=raw.indexOf(',')>raw.indexOf('.')&&raw.indexOf(',')>0?raw.replace(/\./g,'').replace(',','.'):raw.replace(',','.');
+    var v=parseFloat(s);
+    if(isNaN(v)||v<0){ toast('Índice inválido','red'); return; }
+    IPROD_INDICE_OVERRIDES[idxProjeto]=v;
+    toast('Índice ajustado — recalculando...','blue');
+  }
   iprodProcessar();
 }
 
@@ -12420,6 +12444,19 @@ function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB,qA,qB){
   // depende de qA/qB (não é sobre coringa de medida, é sobre negação de método).
   var naoA=tokensA.indexOf('NAO')>=0, naoB=tokensB.indexOf('NAO')>=0;
   if(naoA!==naoB) score-=0.9;
+  // "Convencional" (lançamento manual/grua) é o método OPOSTO de "Bombeado"/"Bombeável"
+  // (lançamento por bomba) em composições de concreto — mesmo problema do "NÃO" acima, só que
+  // "Bombeado" (como a contratada geralmente escreve) e "Bombeável" (como a base da Vale cadastra)
+  // são grafias diferentes da MESMA coisa, então sem tratamento nenhum dos dois pesa no score:
+  // "Concreto Bombeado em laje" empatava EXATO (mesmo score) contra "CONVENCIONAL" e contra
+  // "BOMBEÁVEL" — o desempate virava sorte de ordem de iteração, confirmado com dados reais
+  // (casou com Convencional, quando o certo era Bombeável). Penaliza método oposto e bonifica
+  // grafias equivalentes do mesmo método, igual ao tratamento de NÃO.
+  var bombA=tokensA.indexOf('BOMBEADO')>=0||tokensA.indexOf('BOMBEAVEL')>=0||tokensA.indexOf('BOMBEAMENTO')>=0;
+  var bombB=tokensB.indexOf('BOMBEADO')>=0||tokensB.indexOf('BOMBEAVEL')>=0||tokensB.indexOf('BOMBEAMENTO')>=0;
+  var convA=tokensA.indexOf('CONVENCIONAL')>=0, convB=tokensB.indexOf('CONVENCIONAL')>=0;
+  if((bombA&&convB)||(bombB&&convA)) score-=0.9;
+  else if(bombA&&bombB) score+=0.2;
   return score;
 }
 // Acha o último token puramente numérico dentro das últimas 4 posições (diâmetro/seção/fck
@@ -12973,6 +13010,9 @@ async function iprodHandlePQProjetoFile(file){
       var pq=Object.values(agrupado);
       IPROD_PROJETO={pq:pq,nomeArquivo:file.name};
       IPROD_RESULT=null;
+      // PQ nova = os índices de linha (idxProjeto) apontam pra atividades diferentes agora —
+      // sobrescritas manuais da PQ anterior não fazem mais sentido aqui.
+      IPROD_INDICE_OVERRIDES={};
       toast('PQ do Projeto lida: '+pq.length+' atividades somadas de '+brutas.length+' linhas (em '+abasComPq+' abas)','green');
       iprodRenderShell();
     }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
@@ -12995,6 +13035,10 @@ async function iprodProcessar(){
   if(!IPROD_INDICE){ toast('Base de índices de produtividade indisponível','red'); return; }
 
   var porFuncao={}, porMaterial={}, semIndice=[], porAtividade=[];
+  // porFuncaoProjeto: mesma forma de porFuncao, mas acumulado pela quantidade OFICIAL do projeto
+  // (ver comentário mais abaixo, dentro do loop de qtdComp) — usado como base da seção 4 quando
+  // há PQ do Projeto, pra reconciliar com o HH Esperado da seção 3.
+  var porFuncaoProjeto={}, totRefAssumidoProjeto=0;
 
   // PASSO 1: acha o índice de cada item da PQ e calcula a alocação proporcional do HH cobrado
   // (histograma) por atividade — % do valor (R$) de cada item de fornecimento sobre a soma de
@@ -13113,10 +13157,33 @@ async function iprodProcessar(){
       var achouIndice=iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade);
       var indiceTotal=0, detalhePartes=[];
       var indiceSoSupervisao=achouIndice&&iprodIndiceSoSupervisao(achouIndice.rows);
-      if(achouIndice) achouIndice.rows.forEach(function(r){
+      // Índice ajustado manualmente pelo usuário (coluna Índice editável na seção 3) — substitui
+      // o valor da base inteiro pra essa atividade, sem quebrar por função individual (o usuário
+      // digitou um número só, não uma composição de insumos), mas ainda entra na seção 4 pra não
+      // sumir do total de referência — agrupado numa função sintética só pra deixar rastreável.
+      var indiceManual=IPROD_INDICE_OVERRIDES[idxProjeto];
+      if(indiceManual!=null){
+        indiceTotal=indiceManual;
+        detalhePartes.push('⚙️ índice ajustado manualmente pelo usuário');
+        var qtdNecManual=pItem.quantidade*indiceManual;
+        var keyManual='⚙️ Índice ajustado manualmente';
+        if(!porFuncaoProjeto[keyManual]) porFuncaoProjeto[keyManual]={hhRef:0,atividades:[]};
+        porFuncaoProjeto[keyManual].hhRef+=qtdNecManual;
+        porFuncaoProjeto[keyManual].atividades.push({desc:pItem.desc,qtd:pItem.quantidade,unidade:pItem.unidade,indice:indiceManual,hh:qtdNecManual,matchTipo:'ajuste manual',matchCod:null,matchDesc:null,insumo:null,descIns:keyManual});
+      } else if(achouIndice) achouIndice.rows.forEach(function(r){
         if(r.tipo!=='M') return;
         indiceTotal+=Number(r.indice)||0;
         detalhePartes.push(r.insumo+'-'+(r.descIns||'?')+'('+iprodFmt(r.indice)+')');
+        // Quebra por função usando a quantidade OFICIAL do projeto (pItem.quantidade), não a da
+        // contratada — vira a base da seção 4 (comparativo por função) quando há PQ do Projeto,
+        // pra bater com o HH Esperado da seção 3 (que também usa quantidade do projeto). Antes a
+        // seção 4 rodava sobre a quantidade da PQ da CONTRATADA (achouPorItem, mais abaixo), uma
+        // base diferente da seção 3 — os totais das duas seções nunca reconciliavam.
+        var qtdNecProjeto=pItem.quantidade*(Number(r.indice)||0);
+        var keyProjeto=r.descIns||'(sem nome)';
+        if(!porFuncaoProjeto[keyProjeto]) porFuncaoProjeto[keyProjeto]={hhRef:0,atividades:[]};
+        porFuncaoProjeto[keyProjeto].hhRef+=qtdNecProjeto;
+        porFuncaoProjeto[keyProjeto].atividades.push({desc:pItem.desc,qtd:pItem.quantidade,unidade:pItem.unidade,indice:r.indice,hh:qtdNecProjeto,matchTipo:achouIndice.matchTipo,matchCod:achouIndice.matchCod,matchDesc:achouIndice.matchDesc,insumo:r.insumo,descIns:r.descIns});
       });
 
       var emp=null, matchTipo=null;
@@ -13162,7 +13229,7 @@ async function iprodProcessar(){
       }
       if(emp) usadosEmp.push(emp);
       pendentes.push({pItem:pItem,idxProjeto:idxProjeto,achouIndice:achouIndice,indiceTotal:indiceTotal,
-        detalhePartes:detalhePartes,indiceSoSupervisao:indiceSoSupervisao,emp:emp,matchTipo:matchTipo,specDiff:null});
+        detalhePartes:detalhePartes,indiceSoSupervisao:indiceSoSupervisao,emp:emp,matchTipo:matchTipo,specDiff:null,indiceManual:indiceManual});
     });
 
     // SEGUNDA PASSAGEM: só pros itens que sobraram sem match nenhum, e só entre os candidatos que
@@ -13184,7 +13251,7 @@ async function iprodProcessar(){
     // TERCEIRA PASSAGEM: com emp/specDiff já definitivos pra todo mundo, monta o resultado de cada linha.
     pendentes.forEach(function(ctx){
       var pItem=ctx.pItem, idxProjeto=ctx.idxProjeto, achouIndice=ctx.achouIndice, indiceTotal=ctx.indiceTotal,
-        detalhePartes=ctx.detalhePartes, indiceSoSupervisao=ctx.indiceSoSupervisao, emp=ctx.emp, matchTipo=ctx.matchTipo, specDiff=ctx.specDiff;
+        detalhePartes=ctx.detalhePartes, indiceSoSupervisao=ctx.indiceSoSupervisao, emp=ctx.emp, matchTipo=ctx.matchTipo, specDiff=ctx.specDiff, indiceManual=ctx.indiceManual;
 
       if(emp){
         // Guarda no próprio grupo a quantidade oficial do projeto e a diferença — usado pelo
@@ -13211,10 +13278,10 @@ async function iprodProcessar(){
       // de mostrar. Cai pro mesmo fallback de "sem índice": usa o que a contratada mesma declara,
       // ou na falta disso, considera igual ao HH da empresa — nunca deixa "esperado" em 0 só por
       // causa de uma composição incompleta na base.
-      var temIndiceValido=!!achouIndice&&indiceTotal>0;
+      var temIndiceValido=(!!achouIndice||indiceManual!=null)&&indiceTotal>0;
       var semIndiceProjeto=!temIndiceValido;
       var indiceContratadaMedio=(emp&&emp.hhViaIndiceContratada>0&&emp.quantidade>0)?(emp.hhViaIndiceContratada/emp.quantidade):null;
-      var indiceOrigem=temIndiceValido?'base':(indiceContratadaMedio!=null?'contratada':null);
+      var indiceOrigem=indiceManual!=null?'manual':(temIndiceValido?'base':(indiceContratadaMedio!=null?'contratada':null));
       var hhEsperado;
       if(temIndiceValido){
         // HH Esperado já com praticabilidade embutida (Referência × (2 − Praticabilidade), igual à seção 5).
@@ -13227,6 +13294,10 @@ async function iprodProcessar(){
       } else {
         hhEsperado=hhEmpresa||0;
       }
+      // Sem índice válido pra quebrar por função (base incompleta e sem taxa própria da
+      // contratada) — o HH esperado dessa atividade entra direto no total da seção 4 como "sem
+      // referência por função", pra não sumir da soma (ver totRefAjust mais abaixo).
+      if(!temIndiceValido) totRefAssumidoProjeto+=hhEsperado;
 
       var status=!temContratada?'sem-contratada':(emp==null?'faltando-empresa':(specDiff?'medida-diferente':(Math.abs(diffQtd)<0.01?'bate':'divergente')));
       var achouSemMaoDeObra=!!achouIndice&&!temIndiceValido;
@@ -13340,10 +13411,16 @@ async function iprodProcessar(){
   var histList=(temContratada&&IPROD_CONTRATADA.histograma)||[];
   var usadosHist={};
   var linhas=[];
+  // Com PQ do Projeto, a seção 4 (por função) usa porFuncaoProjeto (quantidade OFICIAL do
+  // projeto × índice) em vez de porFuncao (quantidade da PQ da contratada × índice) — pra somar
+  // o mesmo total de HH Esperado/Referência que a seção 3 mostra por atividade (qtdComp). Sem PQ
+  // do Projeto não existe essa base (qtdComp fica vazio), continua usando porFuncao.
+  var usaBaseProjeto=temProjeto&&Object.keys(porFuncaoProjeto).length>0;
+  var porFuncaoFinal=usaBaseProjeto?porFuncaoProjeto:porFuncao;
   // Sinônimos comuns entre o nome do insumo na base de índices e o nome usado no histograma da contratada
   var IPROD_SINONIMOS={'SERVENTE':['AJUDANTE'],'ENCARREGADO':['ENCARREGADOS DE OBRAS','ENCARREGADO DE OBRAS'],
     'OPERADOR DE ESCAVADEIRA':['OPERADOR DE RETROESCAVADEIRA'],'MOTORISTA DE CAMINHAO':['MOTORISTA DE CAMINHAO BASCULANTE']};
-  Object.keys(porFuncao).forEach(function(fRef){
+  Object.keys(porFuncaoFinal).forEach(function(fRef){
     var fRefN=iprodNorm(fRef);
     var sinonimos=(IPROD_SINONIMOS[fRefN]||[]).map(iprodNorm);
     // Soma TODAS as linhas do histograma que baterem com essa função — antes só pegava a
@@ -13364,7 +13441,7 @@ async function iprodProcessar(){
       semHistograma=false;
       if(/PERCENTUAL DE CONTINGENCIA/.test(hn)) hhContingencia+=h.hh;
     });
-    var hhRef=porFuncao[fRef].hhRef;
+    var hhRef=porFuncaoFinal[fRef].hhRef;
     // HH + Praticabilidade = Referência + Horas não praticável, onde Horas não praticável =
     // Referência × (1 − Praticabilidade) — ou seja, Referência × (2 − Praticabilidade).
     // (conferido contra o modelo validado: Pedreiro 451,76 × 1,3333 = 602,35, não uma divisão)
@@ -13372,8 +13449,8 @@ async function iprodProcessar(){
     var dif=hhCobrado-hhAjust;
     var status='verde';
     if(dif>0) status=(dif/Math.max(hhCobrado,1))>0.15?'vermelho':'amarelo';
-    var temEstimado=porFuncao[fRef].atividades.some(function(a){return a.estimado;});
-    linhas.push({funcao:fRef,hhCobrado:hhCobrado,hhContingencia:hhContingencia,hhRef:hhRef,hhAjust:hhAjust,dif:dif,status:status,atividades:porFuncao[fRef].atividades,semHistograma:semHistograma,estimadoPorMedia:temEstimado});
+    var temEstimado=porFuncaoFinal[fRef].atividades.some(function(a){return a.estimado;});
+    linhas.push({funcao:fRef,hhCobrado:hhCobrado,hhContingencia:hhContingencia,hhRef:hhRef,hhAjust:hhAjust,dif:dif,status:status,atividades:porFuncaoFinal[fRef].atividades,semHistograma:semHistograma,estimadoPorMedia:temEstimado});
   });
   // Função sem NENHUMA composição correspondente na base (indireto, ou fora do escopo mapeado) —
   // mesmo problema das linhas COM referência: "Pedreiro - Hora Normal" e "Pedreiro - Percentual
@@ -13405,8 +13482,12 @@ async function iprodProcessar(){
   }
   // Atividades sem índice na base mas com HH declarado entram no total "como se fossem iguais"
   // (não geram diferença) — soma direto o HH declarado, sem o ajuste de praticabilidade (que só
-  // faz sentido pra HH calculado por índice).
-  var totRefAssumido=porAtividade.filter(function(a){return a.semIndiceMasDeclarado;}).reduce(function(s,a){return s+a.hhCalculado;},0);
+  // faz sentido pra HH calculado por índice). Com base no projeto (usaBaseProjeto), usa
+  // totRefAssumidoProjeto (mesma soma de HH Esperado da seção 3 pras atividades sem índice válido)
+  // em vez de totRefAssumido (que vem de achouPorItem/contratada) — pra fechar totRefAjust
+  // exatamente igual à soma do HH Esperado da seção 3 (totHhEsperadoProjeto, calculado abaixo).
+  var totRefAssumido=usaBaseProjeto?totRefAssumidoProjeto
+    :porAtividade.filter(function(a){return a.semIndiceMasDeclarado;}).reduce(function(s,a){return s+a.hhCalculado;},0);
   var totRefAjust=linhas.reduce(function(s,l){return s+l.hhAjust;},0)+totRefAssumido;
   var totDif=totCobrado-totRefAjust;
   var pctImprod=totCobrado>0?(totDif/totCobrado):0;
@@ -13443,6 +13524,7 @@ function iprodNovaAnalise(){
 function iprodLimparPQProjeto(){
   IPROD_PROJETO=null;
   IPROD_RESULT=null;
+  IPROD_INDICE_OVERRIDES={};
   iprodRenderShell();
   toast('PQ do Projeto removida','green');
 }
@@ -13659,7 +13741,8 @@ function iprodRenderShell(){
           :q.status==='sem-contratada'?'<span class="iprod-badge iprod-b-cinza">Referência (sem contratada)</span>'
           :'<span class="iprod-badge iprod-b-verm">Faltando na PQ da empresa</span>';
         var descCell=q.desc+(q.status==='medida-diferente'?' <span class="iprod-badge iprod-b-azul" style="font-size:9.5px;padding:1px 6px">PQ pede '+q.specDiff.projeto+', empresa considerou '+q.specDiff.empresa+'</span>':(q.matchTipo&&q.matchTipo!=='código'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':''));
-        var indiceCell=iprodFmt(q.indiceTotal)+(q.indiceOrigem==='contratada'?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="Nossa base não tem essa composição — usado o índice que a própria contratada declara na PQ dela">contratada</span>':'')
+        var indiceCell=iprodFmt(q.indiceTotal)+(q.indiceOrigem==='manual'?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Você ajustou esse índice manualmente — clique na linha pra ver/mudar">⚙️ manual</span>'
+            :q.indiceOrigem==='contratada'?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="Nossa base não tem essa composição — usado o índice que a própria contratada declara na PQ dela">contratada</span>':'')
           +(q.indiceSoSupervisao?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Composição na base só tem insumo de supervisão (Encarregado/Mestre...) cadastrado, sem instalador — índice provavelmente subestimado">⚠️ só supervisão</span>':'');
         html+='<tr class="iprod-tr-expand" data-busca="'+iprodNorm(q.desc).replace(/"/g,'')+'" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
           +'<td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+indiceCell+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
@@ -13674,6 +13757,13 @@ function iprodRenderShell(){
           +'<input value="'+(q.codCliente||'')+'" placeholder="sem código" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;width:140px;text-transform:uppercase" '
           +'onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\') iprodEditarCodigoProjeto('+q.idxProjeto+',this)">'
           +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px" onclick="event.stopPropagation();iprodEditarCodigoProjeto('+q.idxProjeto+',this.previousElementSibling)">Salvar e recalcular</button>'
+          +'</div>'
+          +'<div style="display:flex;gap:6px;align-items:center;margin-top:8px" onclick="event.stopPropagation()">'
+          +'<span style="font-size:9.5px;color:var(--muted);font-weight:700">Índice (HH/unid.):</span>'
+          +'<input value="'+(IPROD_INDICE_OVERRIDES[q.idxProjeto]!=null?iprodFmt(IPROD_INDICE_OVERRIDES[q.idxProjeto]):'')+'" placeholder="'+iprodFmt(q.indiceTotal)+' (automático)" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;width:140px" '
+          +'onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\') iprodEditarIndiceProjeto('+q.idxProjeto+',this)">'
+          +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px" onclick="event.stopPropagation();iprodEditarIndiceProjeto('+q.idxProjeto+',this.previousElementSibling)">Salvar e recalcular</button>'
+          +(IPROD_INDICE_OVERRIDES[q.idxProjeto]!=null?'<span style="font-size:9px;color:#d97706;font-weight:700">⚙️ ajustado manualmente</span>':'')
           +'</div>'
           +'</td></tr>';
       });
