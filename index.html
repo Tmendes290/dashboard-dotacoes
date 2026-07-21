@@ -12436,27 +12436,35 @@ function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB,qA,qB){
   // palavras (uma no assunto, outra genérica no meio do texto), dando cobertura igual pras duas
   // sem esse reforço — o empate seria resolvido por acaso, não pelo assunto real da atividade.
   if(tokensA.length&&tokensB.length&&tokensA[0]===tokensB[0]) score+=0.15;
-  // "NÃO" é negação, não enchimento — "Concreto Bombeado" x "Concreto NÃO-Bombeado" são métodos de
-  // lançamento OPOSTOS (composições/índices diferentes), mas "NAO" não é stopword nem palavra fraca:
-  // sozinho ele só custava 1 de peso na cobertura, diluição pequena demais pra evitar um "100%
-  // similar" com o resto do texto idêntico (confirmado com dados reais). Sempre que aparece de um
-  // lado só, é sinal forte de composição errada — mesma magnitude da penalidade de número, e não
-  // depende de qA/qB (não é sobre coringa de medida, é sobre negação de método).
-  var naoA=tokensA.indexOf('NAO')>=0, naoB=tokensB.indexOf('NAO')>=0;
-  if(naoA!==naoB) score-=0.9;
-  // "Convencional" (lançamento manual/grua) é o método OPOSTO de "Bombeado"/"Bombeável"
-  // (lançamento por bomba) em composições de concreto — mesmo problema do "NÃO" acima, só que
-  // "Bombeado" (como a contratada geralmente escreve) e "Bombeável" (como a base da Vale cadastra)
-  // são grafias diferentes da MESMA coisa, então sem tratamento nenhum dos dois pesa no score:
-  // "Concreto Bombeado em laje" empatava EXATO (mesmo score) contra "CONVENCIONAL" e contra
-  // "BOMBEÁVEL" — o desempate virava sorte de ordem de iteração, confirmado com dados reais
-  // (casou com Convencional, quando o certo era Bombeável). Penaliza método oposto e bonifica
-  // grafias equivalentes do mesmo método, igual ao tratamento de NÃO.
-  var bombA=tokensA.indexOf('BOMBEADO')>=0||tokensA.indexOf('BOMBEAVEL')>=0||tokensA.indexOf('BOMBEAMENTO')>=0;
-  var bombB=tokensB.indexOf('BOMBEADO')>=0||tokensB.indexOf('BOMBEAVEL')>=0||tokensB.indexOf('BOMBEAMENTO')>=0;
-  var convA=tokensA.indexOf('CONVENCIONAL')>=0, convB=tokensB.indexOf('CONVENCIONAL')>=0;
-  if((bombA&&convB)||(bombB&&convA)) score-=0.9;
-  else if(bombA&&bombB) score+=0.2;
+  // Método de lançamento do concreto: "Bombeado"/"Bombeável"/"Bombeamento" (com bomba) É OPOSTO de
+  // "Convencional"/"NÃO-Bombeado" (sem bomba — grua/manual). "Convencional" e "NÃO-Bombeado" são
+  // DUAS FORMAS DE ESCREVER A MESMA COISA (confirmado com dados reais: "Concreto Não-Bombeado em
+  // estrutura de fundação" tem que casar com "CONCRETO CONVENCIONAL EM ESTRUTURA DE FUNDAÇÃO" da
+  // base) — por isso a classificação olha NAO+BOMBEADO juntos como equivalente a CONVENCIONAL, em
+  // vez de deixar a regra genérica de "NAO sozinho é sinal de oposto" competir e penalizar duas
+  // vezes um par que na verdade é sinônimo. "Concreto Bombeado" (sem NAO) x "Bombeável"/
+  // "Bombeamento" também são a mesma coisa (grafias diferentes de "com bomba"). Só entra em jogo
+  // quando dá pra classificar o método dos DOIS lados; um dos dois indeterminado fica neutro (nem
+  // toda composição de concreto separa por isso) e cai pra regra genérica de "NÃO" abaixo (usada
+  // por outros pares negação/afirmação que não são sobre bombeamento).
+  function metodoConcreto(tokens){
+    var temNao=tokens.indexOf('NAO')>=0;
+    var temBomb=tokens.indexOf('BOMBEADO')>=0||tokens.indexOf('BOMBEAVEL')>=0||tokens.indexOf('BOMBEAMENTO')>=0;
+    var temConv=tokens.indexOf('CONVENCIONAL')>=0;
+    if(temConv||(temNao&&temBomb)) return 'convencional';
+    if(temBomb&&!temNao) return 'bombeado';
+    return null;
+  }
+  var metA=metodoConcreto(tokensA), metB=metodoConcreto(tokensB);
+  if(metA&&metB){
+    score+=(metA===metB)?0.2:-0.9;
+  } else {
+    // "NÃO" é negação, não enchimento (ex.: material NÃO-estrutural x estrutural) — mesma
+    // magnitude de penalidade de número acima. Só entra quando o par não foi classificado como
+    // método de concreto pela regra específica acima (evita penalizar duas vezes o mesmo motivo).
+    var naoA=tokensA.indexOf('NAO')>=0, naoB=tokensB.indexOf('NAO')>=0;
+    if(naoA!==naoB) score-=0.9;
+  }
   return score;
 }
 // Acha o último token puramente numérico dentro das últimas 4 posições (diâmetro/seção/fck
