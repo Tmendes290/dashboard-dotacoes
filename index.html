@@ -12162,6 +12162,8 @@ var IPROD_FILTRO_STATUS='todos';
 // (índice da linha na PQ do Projeto), valor é o índice em HH/unidade que substitui o achado
 // automaticamente. Ver iprodEditarIndiceProjeto.
 var IPROD_INDICE_OVERRIDES={};
+var IPROD_SHOW_AJUDA=false;
+function iprodToggleAjuda(){ IPROD_SHOW_AJUDA=!IPROD_SHOW_AJUDA; iprodRenderShell(); }
 // Catálogo-mestre por empresa: REF_CATALOGO_EMPRESA['APIA']['1290'] = {desc,unidade,preco} — código
 // próprio de cada contratada (estável entre orçamentos de projetos diferentes) → descrição/preço
 // canônicos, carregado do Supabase (ref_catalogo_empresa). Usado pra confirmar com certeza o que um
@@ -13648,11 +13650,49 @@ function iprodRenderShell(){
     +'</style>';
 
   html+='<div class="iprod-wrap">';
-  html+='<div class="iprod-tabbar">'
+  html+='<div class="iprod-tabbar" style="align-items:center;justify-content:space-between">'
+    +'<div style="display:flex">'
     +'<div class="iprod-tab'+(IPROD_TAB==='comp'?' active':'')+'" onclick="iprodShowTab(\'comp\')">Comparativo da Contratada</div>'
     +'<div class="iprod-tab'+(IPROD_TAB==='pq'?' active':'')+'" onclick="iprodShowTab(\'pq\')">PQ do Projeto (referência)</div>'
     +'<div class="iprod-tab'+(IPROD_TAB==='hist'?' active':'')+'" onclick="iprodShowTab(\'hist\')">Histórico</div>'
+    +'</div>'
+    +'<button class="iprod-hist-link" style="font-size:12px;margin-bottom:8px" onclick="iprodToggleAjuda()">'+(IPROD_SHOW_AJUDA?'✕ Fechar ajuda':'❓ Dúvidas frequentes')+'</button>'
     +'</div>';
+
+  if(IPROD_SHOW_AJUDA){
+    var faq=[
+      ['O que é "Praticabilidade" e como ela entra na conta?',
+       'É um fator único que você digita pra cada análise (ex.: 66,67%) — representa o quanto do tempo a equipe consegue de fato aplicar na atividade, descontando deslocamento, espera de material, etc. A fórmula é <b>HH + Praticabilidade = HH Referência × (2 − Praticabilidade)</b>. Com 66,67%, isso equivale a multiplicar o HH de referência por 1,33 — ou seja, adiciona de volta o tempo "não praticável" que o índice puro não cobre. Quanto MAIOR a praticabilidade, MENOR esse ajuste (100% de praticabilidade = sem ajuste nenhum).'],
+      ['Por que uma atividade aparece "Sem correspondência na base de índices"?',
+       'Quer dizer que não achamos, na base oficial da Vale, nenhuma composição parecida o suficiente com a descrição daquela atividade (nem por código, nem por texto). Nesse caso o sistema tenta usar o índice que a própria contratada declara na PQ dela; se ela também não declarar, considera o HH esperado igual ao HH que ela cobrou (não gera divergência, mas também não valida nada — é uma lacuna da nossa base, não um erro da contratada).'],
+      ['E "Composição achada na base sem insumo de mão de obra (IH) cadastrado"?',
+       'Achamos a composição certa na base da Vale, mas ela só tem material/equipamento cadastrado, sem nenhuma linha de mão de obra (isso acontece em ~10% da base — é uma lacuna real da planilha-fonte, não um bug daqui). Quando isso acontece, o sistema tenta estimar o índice pela média de composições parecidas que TÊM mão de obra (fica marcado "≈ estimado"); se não achar nenhuma parecida, cai pro mesmo fallback do item acima.'],
+      ['O que significa o selo "contratada" do lado do índice?',
+       'Indica que aquele número não veio da base oficial da Vale — veio da própria PQ da contratada (ela mesma declarou qual índice usa pra aquela atividade). É usado só quando não existe nada parecido na nossa base; sirva pra comparar quantidade, mas não é uma referência independente — é o índice dela mesma.'],
+      ['O que significa "⚠️ só supervisão"?',
+       'A composição da base só tem cadastrado Encarregado/Mestre/Apontador (quem supervisiona), sem nenhum instalador de verdade (Servente, Pedreiro...). O índice mostrado reflete só o tempo do encarregado observando o serviço, então tende a estar SUBESTIMADO — é um sinal de alerta, não um erro pra corrigir.'],
+      ['Por que a seção 3 (Atividades) e a seção 4 (Por Função) mostram números de HH diferentes?',
+       '"HH Esperado" (seção 3) e "HH Referência" (seção 4) usam a MESMA base de cálculo (quantidade oficial do projeto × índice) e devem bater quando somados. Já "HH da Empresa" (seção 3, só atividades que casaram com o projeto) e "HH Cobrado" (seção 4, TODO o histograma da contratada) são coisas diferentes de propósito — "HH Cobrado" inclui também atividades que a contratada lançou sem ter uma atividade correspondente na PQ do projeto (aparecem na tabela "Itens sem correspondência" mais abaixo). Não é bug: são dois recortes diferentes do mesmo universo.'],
+      ['O que quer dizer cada Status na tabela de atividades?',
+       '<b>Bate</b> = quantidade da contratada igual à do projeto (dentro de 0,01). <b>Divergente</b> = quantidades diferentes, vale conferir. <b>Medida diferente</b> = mesma composição, mas a contratada cotou noutra unidade/tamanho (ex.: projeto pede lona 0,2mm, ela cotou 0,8mm). <b>Faltando na PQ da empresa</b> = o projeto prevê essa atividade e a contratada nem incluiu na PQ dela.'],
+      ['Achei um índice ou código errado — como eu corrijo?',
+       'Clica na linha da atividade (seção 3) pra abrir o detalhamento. Lá tem dois campos: "Cód. Cliente (projeto)" (corrige o código, o sistema tenta casar de novo automaticamente pelo texto) e "Índice (HH/unid.)" (você digita o valor que considera certo e ele substitui o automático na hora — aparece um selo "⚙️ manual" nessa linha depois). Os dois recalculam a análise inteira ao salvar.'],
+      ['Por que o índice de uma atividade mudou depois que eu importei a planilha de novo?',
+       'A base de índices oficial (Vale) pode ter sido atualizada, ou a correção manual que você fez (código/índice) foi limpa — toda vez que você sobe uma PQ do Projeto NOVA, os ajustes manuais da análise anterior são descartados (porque a linha que era "atividade 5" na PQ antiga pode não ser a mesma "atividade 5" na PQ nova).'],
+      ['Sem contratada, dá pra usar essa aba mesmo assim?',
+       'Dá — suba só a "PQ do Projeto" e clique em Processar. O sistema calcula o HH esperado pelo índice oficial da Vale pra cada atividade (KPI "HH Esperado Total"), sem comparar com nenhuma cobrança — útil pra estimar HH antes mesmo de ter uma cotação da contratada.']
+    ];
+    html+='<div class="iprod-panel" style="border-color:#93c5fd;background:#f8fafc">'
+      +'<div class="iprod-panel-title">❓ Dúvidas frequentes</div>'
+      +'<div class="iprod-panel-note" style="margin-bottom:10px">Respostas rápidas pras perguntas mais comuns sobre como essa aba calcula os números. Clique numa pergunta pra abrir.</div>'
+      +faq.map(function(f){
+        return '<details style="margin-bottom:6px;border:1px solid var(--bord);border-radius:8px;padding:9px 12px;background:var(--card)">'
+          +'<summary style="cursor:pointer;font-size:12px;font-weight:700;color:#1e3a5f">'+f[0]+'</summary>'
+          +'<div style="font-size:11.5px;line-height:1.6;color:var(--text);margin-top:8px">'+f[1]+'</div>'
+          +'</details>';
+      }).join('')
+      +'</div>';
+  }
 
   html+='<div id="iprod-tab-comp" class="iprod-tabpanel'+(IPROD_TAB==='comp'?' active':'')+'">';
 
