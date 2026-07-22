@@ -8979,9 +8979,20 @@ async function impLoadFromSupabase(){
     if(!supa){ _IMP_LOAD_ERR='supa=null (client não inicializou)'; return; }
   }
   try{
-    var {data,error}=await supa.from('improdutividade').select('*').order('data_sort_key',{ascending:true});
-    if(error){ _IMP_LOAD_ERR='Supabase error: '+JSON.stringify(error); return; }
-    if(!data||!data.length){ _IMP_LOAD_ERR='Tabela vazia (0 linhas)'; return; }
+    // O Supabase corta cada resposta em 1000 linhas por padrão — sem paginação, ordenando
+    // crescente por data, os registros mais NOVOS (que ficam no fim da ordenação) são os que
+    // somem silenciosamente assim que a tabela passa de 1000 linhas. Busca em páginas de 1000
+    // até não vir mais nada, pra sempre trazer a tabela inteira.
+    var data=[], PAGE=1000, from=0;
+    while(true){
+      var page=await supa.from('improdutividade').select('*').order('data_sort_key',{ascending:true}).range(from,from+PAGE-1);
+      if(page.error){ _IMP_LOAD_ERR='Supabase error: '+JSON.stringify(page.error); return; }
+      if(!page.data||!page.data.length) break;
+      data=data.concat(page.data);
+      if(page.data.length<PAGE) break;
+      from+=PAGE;
+    }
+    if(!data.length){ _IMP_LOAD_ERR='Tabela vazia (0 linhas)'; return; }
     IMP_DATA=data.map(function(r){return{supaId:r.id,dataStr:r.data_str,dataSortKey:r.data_sort_key,empresa:r.empresa||'',sap:r.sap||'',produto:r.produto||'',descricao:r.descricao||'',projeto:r.projeto||'',fiscal:r.fiscal||'',chegadaMin:r.chegada_min,ptsMin:r.pts_min,inicioMin:r.inicio_min,almIniMin:r.alm_ini_min,almFimMin:r.alm_fim_min,terminoMin:r.termino_min,justificativa:r.justificativa||'',acao:r.acao||'',problemaId:r.problema_id||'',descProblema:r.desc_problema||''};});
     var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
     IMP_DT_MIN=datas[0]||''; IMP_DT_MAX=datas[datas.length-1]||'';
