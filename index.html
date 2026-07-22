@@ -11806,7 +11806,10 @@ async function renderViewImprodutividade(){
   if(IMP_DATA.length===0){
     try{
       var _saved=localStorage.getItem('imp_data');
-      if(_saved){ IMP_DATA=JSON.parse(_saved); var _ds=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort(); IMP_DT_MIN=_ds[0]||''; IMP_DT_MAX=_ds[_ds.length-1]||''; impBuildSapNomes();impBuildProjSquad(); }
+      // Cache local pode estar velho (ex.: de antes de uma correção no fetch do Supabase) —
+      // renderiza com ele pra não deixar a tela em branco, mas marca pra sempre buscar fresco
+      // em seguida, senão o usuário fica preso numa versão desatualizada pra sempre.
+      if(_saved){ IMP_DATA=JSON.parse(_saved); var _ds=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort(); IMP_DT_MIN=_ds[0]||''; IMP_DT_MAX=_ds[_ds.length-1]||''; impBuildSapNomes();impBuildProjSquad(); _bgRefresh=true; }
     }catch(e){}
     if(IMP_DATA.length===0){
       el.innerHTML='<div style="padding:60px;text-align:center;color:var(--muted);font-size:13px">⏳ Carregando dados do servidor...</div>';
@@ -14119,10 +14122,14 @@ var _REV2_TABS=[
 
 async function renderViewProdutividadeRev2(){
   var el=document.getElementById('v-produtividade-rev2'); if(!el) return;
+  var _bgRefresh=false; // se true: dados vieram do cache local ou já em memória — busca fresco em background
   if(IMP_DATA.length===0){
     try{
       var _saved=localStorage.getItem('imp_data');
-      if(_saved){ IMP_DATA=JSON.parse(_saved); var _ds=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort(); IMP_DT_MIN=_ds[0]||''; IMP_DT_MAX=_ds[_ds.length-1]||''; impBuildSapNomes();impBuildProjSquad(); }
+      // Cache local pode estar velho (ex.: de antes de uma correção no fetch do Supabase) —
+      // renderiza com ele pra não deixar a tela em branco, mas marca pra sempre buscar fresco
+      // em seguida, senão o usuário fica preso numa versão desatualizada pra sempre.
+      if(_saved){ IMP_DATA=JSON.parse(_saved); var _ds=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort(); IMP_DT_MIN=_ds[0]||''; IMP_DT_MAX=_ds[_ds.length-1]||''; impBuildSapNomes();impBuildProjSquad(); _bgRefresh=true; }
     }catch(e){}
     if(IMP_DATA.length===0){
       el.innerHTML='<div style="padding:60px;text-align:center;color:var(--muted);font-size:13px">⏳ Carregando dados do servidor...</div>';
@@ -14132,6 +14139,8 @@ async function renderViewProdutividadeRev2(){
         return;
       }
     }
+  } else {
+    _bgRefresh=true;
   }
   impApplyFilters();
   _rev2InjectStyle();
@@ -14145,6 +14154,22 @@ async function renderViewProdutividadeRev2(){
     +'</div>';
 
   rev2ShowTab('dashboard');
+
+  // Sempre busca dados frescos do Supabase em background após renderizar — mesma lógica da
+  // aba Produtividade original (impShowTab/renderViewImprodutividade), senão a REV 02 fica
+  // presa pra sempre na primeira versão que caiu no cache local do navegador.
+  if(_bgRefresh){
+    setTimeout(async function(){
+      await impLoadFromSupabase();
+      if(_IMP_LOAD_ERR){
+        console.warn('[imp rev2] background refresh falhou, mantendo dados em cache local:',_IMP_LOAD_ERR);
+        return;
+      }
+      if(document.getElementById('v-produtividade-rev2')&&!document.getElementById('v-produtividade-rev2').classList.contains('hidden')){
+        try{ impApplyFilters(); rev2ShowTab(document.querySelector('#rev2-tabs .rev2-tab.active')?document.querySelector('#rev2-tabs .rev2-tab.active').dataset.tab:'dashboard'); }catch(e){}
+      }
+    },800);
+  }
 }
 
 function rev2ShowTab(tab){
