@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 
 const SUPA_URL = 'https://ehbiyqqpzqrluvuqrljp.supabase.co';
 const SUPA_SERVICE_KEY = process.env.SUPA_SERVICE_KEY;
-const RELATORIO_TOKEN = process.env.RELATORIO_TOKEN;
+const RELATORIO_TOKEN = (process.env.RELATORIO_TOKEN || '').trim();
 
 // ── PROXY SUPABASE: contorna bloqueio de *.supabase.co em redes corporativas ──
 // (ex.: rede da Vale faz inspeção SSL e derruba conexões diretas ao domínio do Supabase)
