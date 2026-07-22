@@ -95,17 +95,20 @@ function buildSquadMaps(refSquads, refFiscais) {
     if (!sq) return sq;
     return sq.toUpperCase().indexOf('TELAMENTO') >= 0 ? 'MINA' : sq.toUpperCase();
   }
-  function getSquad(sap) {
-    if (!sap) return '';
-    if (bySap[sap]) return normSquad(bySap[sap]);
-    const pep = sap.split('.')[0];
-    if (bySap[pep]) return normSquad(bySap[pep]);
-    return '';
-  }
   function getSquadByFiscal(nome) {
     if (!nome) return '';
     const sq = byFiscal[nome.trim()];
     return sq ? normSquad(sq) : '';
+  }
+  // sap sem cadastro em ref_squads — antes de "Sem vínculo", tenta pelo squad do FISCAL
+  // que registrou (ref_fiscais), mesma lógica de impGetSquad no index.html.
+  function getSquad(sap, fiscal) {
+    if (sap) {
+      if (bySap[sap]) return normSquad(bySap[sap]);
+      const pep = sap.split('.')[0];
+      if (bySap[pep]) return normSquad(bySap[pep]);
+    }
+    return getSquadByFiscal(fiscal);
   }
   return { getSquad: getSquad, getSquadByFiscal: getSquadByFiscal };
 }
@@ -136,7 +139,7 @@ function calcKpis(rows, refMin) {
 function calcSquadCards(rows, refMin, squadMaps) {
   const map = {};
   rows.forEach(function (r) {
-    const sq = squadMaps.getSquad(r.sap) || 'Sem vínculo';
+    const sq = squadMaps.getSquad(r.sap, r.fiscal) || 'Sem vínculo';
     if (!map[sq]) map[sq] = { squad: sq, tribo: getTribo(sq), reg: 0, perf: 0, parc: 0, nao: 0, chegArr: [], iniArr: [] };
     const e = map[sq];
     e.reg++;

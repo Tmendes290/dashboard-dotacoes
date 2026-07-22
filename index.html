@@ -8843,12 +8843,18 @@ function impGetSquadByFiscal(nome){
   var sq=REF_FISCAIS[nome.trim()]||'';
   return sq?_impNormSquad(sq):'';
 }
-function impGetSquad(sap){
-  if(!sap) return{squad:'',lider:'',planejador:''};
-  var r=REF_SQUADS[sap]; if(r) return{squad:_impNormSquad(r.squad),lider:r.lider,planejador:r.planejador};
-  var pep=sap.split('.')[0];
-  var r2=REF_SQUADS[pep]; if(r2) return{squad:_impNormSquad(r2.squad),lider:r2.lider,planejador:r2.planejador};
-  var proj=_IMP_PROJ_SQUAD[sap]||_IMP_PROJ_SQUAD[pep]||'';
+function impGetSquad(sap,fiscal){
+  if(sap){
+    var r=REF_SQUADS[sap]; if(r) return{squad:_impNormSquad(r.squad),lider:r.lider,planejador:r.planejador};
+    var pep=sap.split('.')[0];
+    var r2=REF_SQUADS[pep]; if(r2) return{squad:_impNormSquad(r2.squad),lider:r2.lider,planejador:r2.planejador};
+  }
+  // SAP/PEP sem cadastro em ref_squads — antes de cair em "Sem vínculo", tenta o squad do
+  // FISCAL que registrou (ref_fiscais), que já resolve quase todo mundo (fiscal sempre
+  // pertence a um squad fixo, mesmo quando a obra/SAP dele ainda não foi cadastrada).
+  var byFiscal=impGetSquadByFiscal(fiscal);
+  if(byFiscal) return{squad:byFiscal,lider:'',planejador:''};
+  var proj=sap?(_IMP_PROJ_SQUAD[sap]||_IMP_PROJ_SQUAD[sap.split('.')[0]]||''):'';
   return{squad:_impNormSquad(proj),lider:'',planejador:''};
 }
 
@@ -8923,7 +8929,7 @@ function impBuildSapNomes(){
 function impRebuildMs(){setTimeout(impInitFP,0);
   var empresas=[...new Set(IMP_DATA.map(function(d){return d.empresa;}))].sort();
   var saps=[...new Set(IMP_DATA.map(function(d){return d.sap;}))].sort();
-  var squads=[...new Set(IMP_DATA.map(function(d){return impGetSquad(d.sap).squad;}).filter(Boolean))].sort();
+  var squads=[...new Set(IMP_DATA.map(function(d){return impGetSquad(d.sap,d.fiscal).squad;}).filter(Boolean))].sort();
   buildMsDrop('ms-imp-emp',empresas,IMP_F_EMPS,'impOnMs');
   buildMsDrop('ms-imp-squad',squads,IMP_F_SQUADS,'impOnMs');
   // MÊS — sempre todos os 12 meses
@@ -9265,7 +9271,7 @@ function impApplyFilters(){
     if(d.terminoMin!==null&&d.terminoMin>fimMin) return false;
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0) return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0) return false;
-    var sq=impGetSquad(d.sap).squad;
+    var sq=impGetSquad(d.sap,d.fiscal).squad;
     if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0) return false;
     if(IMP_F_MES.length&&d.dataSortKey){var _m=parseInt(d.dataSortKey.split('-')[1])-1;if(IMP_F_MES.indexOf(_IMP_MES_NAMES[_m])<0)return false;}
     if(IMP_F_SEMANA_MS.length&&d.dataSortKey){var _w=_impISOWeekNum(d.dataSortKey);if(IMP_F_SEMANA_MS.indexOf('Sem.'+_w)<0)return false;}
@@ -9275,7 +9281,7 @@ function impApplyFilters(){
     else if(d.dataSortKey){var _dow2=new Date(d.dataSortKey+'T12:00:00').getDay();if(_dow2===0||_dow2===6)return false;}
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa) return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap) return false;
-    if(IMP_CHART_F.squad&&impGetSquad(d.sap).squad!==IMP_CHART_F.squad) return false;
+    if(IMP_CHART_F.squad&&impGetSquad(d.sap,d.fiscal).squad!==IMP_CHART_F.squad) return false;
     return true;
   });
   IMP_FILTERED.forEach(function(d){
@@ -9284,7 +9290,7 @@ function impApplyFilters(){
     else if(d.chegadaMin!==null){base=d.chegadaMin;bu='Chegada';}
     else if(d.ptsMin!==null){base=d.ptsMin;bu='PTS';}
     d.baseUsada=bu; d.delayMin=base!==null?Math.max(0,base-refMin):null;
-    d.squadInfo=impGetSquad(d.sap);
+    d.squadInfo=impGetSquad(d.sap,d.fiscal);
     var almPausa=(d.almIniMin!==null&&d.almFimMin!==null)?Math.max(0,d.almFimMin-d.almIniMin):0;
     d.horasTrab=(d.inicioMin!==null&&d.terminoMin!==null)?d.terminoMin-d.inicioMin-almPausa:null;
     d.almExcesso=(d.almIniMin!==null&&d.almFimMin!==null)?Math.max(0,(d.almFimMin-d.almIniMin)-60):null;
@@ -9478,7 +9484,7 @@ function impGetPrevData(refMin){
     if(d.terminoMin!==null&&d.terminoMin>fimMin)return false;
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
-    var sq=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
+    var sq=impGetSquad(d.sap,d.fiscal).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
     var t=impGetTurno(d.inicioMin);if(t!=='adm'&&t!==_promTurnoPrev)return false;
     return true;
   }).map(function(d){return _impDeriveRow(d,refMin,fimMin);});
@@ -9751,7 +9757,7 @@ function impRenderAderenciaFiscais(){
     var f=d.fiscal.trim();
     var byName=impGetSquadByFiscal(d.fiscal);
     if(byName) fiscalSquadCanon[f]=byName;
-    else if(!fiscalSquadCanon[f]) fiscalSquadCanon[f]=impGetSquad(d.sap).squad;
+    else if(!fiscalSquadCanon[f]) fiscalSquadCanon[f]=impGetSquad(d.sap,d.fiscal).squad;
   });
   var allRecs=preRecs.filter(function(d){
     var sq=fiscalSquadCanon[d.fiscal.trim()];
@@ -9760,7 +9766,7 @@ function impRenderAderenciaFiscais(){
     return true;
   });
   // Popula ms-drop de squad — usa squad do fiscal (ref_fiscais), fallback SAP
-  var _sqOpts={}; IMP_DATA.filter(function(d){return d.fiscal&&d.fiscal.trim()&&d.dataSortKey;}).forEach(function(d){var sq=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap).squad;if(sq)_sqOpts[sq]=1;});
+  var _sqOpts={}; IMP_DATA.filter(function(d){return d.fiscal&&d.fiscal.trim()&&d.dataSortKey;}).forEach(function(d){var sq=impGetSquadByFiscal(d.fiscal)||impGetSquad(d.sap,d.fiscal).squad;if(sq)_sqOpts[sq]=1;});
   var _allSquads=Object.keys(_sqOpts).sort();
   buildMsDrop('ms-ader-squad',_allSquads,_IMP_ADER_SQUADS,'impAderSquadMs');
   var _lbl=document.getElementById('ms-ader-squad-label');
@@ -9883,7 +9889,7 @@ function impRenderAderSquads(){
     var f=d.fiscal.trim();
     var byName=impGetSquadByFiscal(d.fiscal);
     if(byName) fiscalSquadCanon[f]=byName;
-    else if(!fiscalSquadCanon[f]) fiscalSquadCanon[f]=impGetSquad(d.sap).squad;
+    else if(!fiscalSquadCanon[f]) fiscalSquadCanon[f]=impGetSquad(d.sap,d.fiscal).squad;
   });
   var allRecs=preRecs.filter(function(d){
     var sq=fiscalSquadCanon[d.fiscal.trim()];
@@ -9980,7 +9986,7 @@ function impRenderEvolucao(){
     var _tEvo=impGetTurno(d.inicioMin);if(_tEvo!=='adm'&&_tEvo!==_promTurnoEvo)return false;
     if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
     if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
-    var sq=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
+    var sq=impGetSquad(d.sap,d.fiscal).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq)<0)return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
     if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
@@ -10231,7 +10237,7 @@ function _impChegadaDrillOpen(key,baseData,refMin){
     var diff=d.chegadaMin!==null?d.chegadaMin-meta:null;
     var isLate=diff!==null&&diff>0;
     var bg=i%2===0?'#fff':'#f8fafc';
-    var sq=impGetSquad(d.sap).squad||'—';
+    var sq=impGetSquad(d.sap,d.fiscal).squad||'—';
     var pid=(d.problemaId||'').trim();
     var pidC=pid?(pidColors[pid]||'#475569'):'';
     var just=(d.justificativa||d.descProblema||'').trim();
@@ -10285,7 +10291,7 @@ function _impBuildChegadaChart(){
     var _tCh=impGetTurno(d.inicioMin);if(_tCh!=='adm'&&_tCh!==_promTurnoCh)return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
-    var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
+    var sq=impGetSquad(d.sap,d.fiscal).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
     return d.chegadaMin!==null&&d.dataSortKey;
   });
 
@@ -10372,7 +10378,7 @@ function _impBuildHorasChart(){
     var _tHr=impGetTurno(d.inicioMin);if(_tHr!=='adm'&&_tHr!==_promTurnoHr)return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
-    var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
+    var sq=impGetSquad(d.sap,d.fiscal).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
     return d.inicioMin!==null&&d.terminoMin!==null&&d.dataSortKey;
   });
 
@@ -10474,7 +10480,7 @@ function _impHorasDrillOpen(key,baseData,meta,metaYellow){
   var hasFiscal=recs.some(function(d){return d.fiscal;});
   var thS='background:#f5f9ff;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);position:sticky;top:0;white-space:nowrap';
   var rows=recs.map(function(d,i){
-    var sq=impGetSquad(d.sap).squad||'—';
+    var sq=impGetSquad(d.sap,d.fiscal).squad||'—';
     var bg=i%2===0?'#fff':'#f8fafc';
     var clr=horasColor(d._hTrab);
     return'<tr style="background:'+bg+'">'
@@ -10539,7 +10545,7 @@ function _impBuildProdImpChart(){
     var _tPI=impGetTurno(d.inicioMin);if(_tPI!=='adm'&&_tPI!==_promTurnoPI)return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
-    var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
+    var sq=impGetSquad(d.sap,d.fiscal).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
     return !!d.dataSortKey;
   });
   // TOP ANDAIMES sai da população geral (acima) e vira sua própria causa na composição do
@@ -10757,7 +10763,7 @@ function _impProdImpDrillOpen(key,baseData,W){
   var avgImp=Math.round(recs.reduce(function(s,d){return s+d._imp;},0)/recs.length);
   var thS='background:#f5f9ff;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);position:sticky;top:0;white-space:nowrap';
   var rows=recs.map(function(d,i){
-    var sq=impGetSquad(d.sap).squad||'—';
+    var sq=impGetSquad(d.sap,d.fiscal).squad||'—';
     var bg=i%2===0?'#fff':'#f8fafc';
     return'<tr style="background:'+bg+'">'
       +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.dataStr||d.dataSortKey||'—')+'</td>'
@@ -10809,7 +10815,7 @@ function _impProbDrillOpen(pid){
   var nDias=Object.keys(diasSet).length;
   var thS='background:#f5f9ff;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bord);position:sticky;top:0;white-space:nowrap';
   var rows=recs.map(function(d,i){
-    var sq=impGetSquad(d.sap).squad||'—';
+    var sq=impGetSquad(d.sap,d.fiscal).squad||'—';
     var bg=i%2===0?'#fff':'#f8fafc';
     return'<tr style="background:'+bg+'">'
       +'<td style="padding:7px 10px;color:var(--muted);white-space:nowrap">'+impEsc(d.dataStr||d.dataSortKey||'—')+'</td>'
@@ -10916,7 +10922,7 @@ function _impProdImpCauseDrillOpen(cause){
   var isAndaime=cause==='andaime';
   function almocoVal(d){return(d.almIniMin!==null&&d.almFimMin!==null)?m2hm(d.almIniMin)+'–'+m2hm(d.almFimMin):'—';}
   var rows=recs.map(function(d,i){
-    var sq=impGetSquad(d.sap).squad||'—';
+    var sq=impGetSquad(d.sap,d.fiscal).squad||'—';
     var bg=i%2===0?'#fff':'#f8fafc';
     var midCols=isAndaime
       ?'<td style="padding:7px 10px;text-align:center;white-space:nowrap">'+m2hm(d.inicioMin)+'</td>'
@@ -11397,7 +11403,7 @@ function impRenderSquads(){
   var fimMin=impGetFimMin();
   var causaMap={};
   IMP_FILTERED.forEach(function(d){
-    var sq=impGetSquad(d.sap).squad||'(sem squad)';
+    var sq=impGetSquad(d.sap,d.fiscal).squad||'(sem squad)';
     if(!causaMap[sq]) causaMap[sq]={i:0,t:0,a:0};
     if(d.delayMin>0) causaMap[sq].i+=d.delayMin;
     if(d.terminoMin!==null&&d.terminoMin<fimMin) causaMap[sq].t+=(fimMin-d.terminoMin);
@@ -11448,10 +11454,10 @@ function impRenderSquadsExtra(){
       if(!d.dataSortKey||d.dataSortKey<psS||d.dataSortKey>peS)return false;
       if(IMP_F_EMPS.length&&IMP_F_EMPS.indexOf(d.empresa)<0)return false;
       if(IMP_F_SAPS.length&&IMP_F_SAPS.indexOf(d.sap)<0)return false;
-      var sq2=impGetSquad(d.sap).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq2)<0)return false;
+      var sq2=impGetSquad(d.sap,d.fiscal).squad;if(IMP_F_SQUADS.length&&IMP_F_SQUADS.indexOf(sq2)<0)return false;
       return true;
     }).map(function(d){return _impDeriveRow(d,refMin2,impGetFimMin());});
-    prevFiltered.forEach(function(d){if(d.horasTrab===null)return;var sq=(impGetSquad(d.sap).squad)||'(sem squad)';if(!sqHrsPrev[sq])sqHrsPrev[sq]={t:0,n:0};sqHrsPrev[sq].t+=d.horasTrab;sqHrsPrev[sq].n++;});
+    prevFiltered.forEach(function(d){if(d.horasTrab===null)return;var sq=(impGetSquad(d.sap,d.fiscal).squad)||'(sem squad)';if(!sqHrsPrev[sq])sqHrsPrev[sq]={t:0,n:0};sqHrsPrev[sq].t+=d.horasTrab;sqHrsPrev[sq].n++;});
   }
   var sqHrsList=Object.entries(sqHrs).map(function(e){
     var avg=Math.round(e[1].t/e[1].n);
@@ -11541,7 +11547,7 @@ function rdoHtCalc(d){
 function rdoHtStr(m){ if(m===null||m===undefined||isNaN(m)) return '--'; var h=Math.floor(m/60),mi=m%60; return h>0?h+'h'+(mi>0?String(mi).padStart(2,'0')+'m':''):mi+'m'; }
 function rdoHtCls(m){ return (m===null||isNaN(m))?'rdo-mono':m>=480?'rdo-ht-g':m>=360?'rdo-ht-m':'rdo-ht-r'; }
 function rdoPepNome(sap){ var r=REF_PEPS.find(function(x){return x[0]===sap;}); return r?r[1]:''; }
-function rdoTribo(sap){ var sq=impGetSquad(sap).squad||''; var s=sq.toLowerCase(); if(/usina|br\s|slb|cpf|filtragem|flotac/.test(s)) return 'usina'; if(/mina|geo|geotec|dique/.test(s)) return 'mina'; return 'outros'; }
+function rdoTribo(sap,fiscal){ var sq=impGetSquad(sap,fiscal).squad||''; var s=sq.toLowerCase(); if(/usina|br\s|slb|cpf|filtragem|flotac/.test(s)) return 'usina'; if(/mina|geo|geotec|dique/.test(s)) return 'mina'; return 'outros'; }
 function rdoTrLabel(t){ return t==='usina'?'TRIBO USINA':t==='mina'?'TRIBO MINA':'S/ VÍNCULO'; }
 
 // ── Agrega por SQUAD ──
@@ -11549,9 +11555,9 @@ function rdoImpGetSquadCards(){
   var map={};
   IMP_FILTERED.forEach(function(d){
     if(d.inicioMin===null&&d.terminoMin===null) return;
-    var sqObj=impGetSquad(d.sap);
+    var sqObj=impGetSquad(d.sap,d.fiscal);
     var sqName=sqObj.squad||'Sem vínculo';
-    var tb=rdoTribo(d.sap);
+    var tb=rdoTribo(d.sap,d.fiscal);
     if(!map[sqName]) map[sqName]={squad:sqName,tribo:tb,reg:0,perf:0,parc:0,nao:0,chegArr:[],iniArr:[]};
     var e=map[sqName]; e.reg++;
     var dm=d.delayMin; if(!dm||dm===0) e.perf++; else if(dm<=60) e.parc++; else e.nao++;
@@ -11573,10 +11579,10 @@ function rdoImpGetObraCards(squadName){
   var map={};
   IMP_FILTERED.forEach(function(d){
     if(d.inicioMin===null&&d.terminoMin===null) return;
-    var sqObj=impGetSquad(d.sap);
+    var sqObj=impGetSquad(d.sap,d.fiscal);
     if((sqObj.squad||'Sem vínculo')!==squadName) return;
     var sap=d.sap||'(sem SAP)';
-    if(!map[sap]) map[sap]={sap:sap,nome:impGetObraNome(sap),tribo:rdoTribo(d.sap),reg:0,perf:0,parc:0,nao:0,chegArr:[],iniArr:[],terArr:[],htArr:[]};
+    if(!map[sap]) map[sap]={sap:sap,nome:impGetObraNome(sap),tribo:rdoTribo(d.sap,d.fiscal),reg:0,perf:0,parc:0,nao:0,chegArr:[],iniArr:[],terArr:[],htArr:[]};
     var e=map[sap]; e.reg++;
     var dm=d.delayMin; if(!dm||dm===0) e.perf++; else if(dm<=60) e.parc++; else e.nao++;
     if(d.chegadaMin!==null) e.chegArr.push(d.chegadaMin);
@@ -11600,9 +11606,9 @@ function rdoImpGetSapAggr(squadFilter){
   var map={};
   IMP_FILTERED.forEach(function(d){
     if(d.inicioMin===null&&d.terminoMin===null) return;
-    if(squadFilter&&squadFilter.length){var sq=impGetSquad(d.sap);if(squadFilter.indexOf(sq.squad||'Sem vínculo')<0) return;}
+    if(squadFilter&&squadFilter.length){var sq=impGetSquad(d.sap,d.fiscal);if(squadFilter.indexOf(sq.squad||'Sem vínculo')<0) return;}
     var sap=d.sap||'(sem SAP)';
-    var tb=rdoTribo(d.sap);
+    var tb=rdoTribo(d.sap,d.fiscal);
     if(!map[sap]) map[sap]={id:sap,sap:sap,tribo:tb,reg:0,perf:0,parc:0,nao:0,inicios:[],terminos:[],hts:[]};
     var e=map[sap]; e.reg++;
     var dm=d.delayMin; if(dm===null||dm===0) e.perf++; else if(dm<=60) e.parc++; else e.nao++;
@@ -14544,7 +14550,7 @@ function _rev2BuildChegadaChart(){
   var baseData=IMP_FILTERED.filter(function(d){
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
-    var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
+    var sq=impGetSquad(d.sap,d.fiscal).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
     return d.chegadaMin!==null&&d.dataSortKey;
   });
   var byP={};
@@ -14614,7 +14620,7 @@ function _rev2BuildHorasChart(){
     if(impIsExcluido(d))return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
-    var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
+    var sq=impGetSquad(d.sap,d.fiscal).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
     return d.inicioMin!==null&&d.terminoMin!==null&&d.dataSortKey;
   });
   var byP={};
@@ -14675,7 +14681,7 @@ function _rev2BuildProdImpChart(){
     if(impIsExcluido(d))return false;
     if(IMP_CHART_F.empresa&&d.empresa!==IMP_CHART_F.empresa)return false;
     if(IMP_CHART_F.sap&&d.sap!==IMP_CHART_F.sap)return false;
-    var sq=impGetSquad(d.sap).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
+    var sq=impGetSquad(d.sap,d.fiscal).squad;if(IMP_CHART_F.squad&&sq!==IMP_CHART_F.squad)return false;
     return !!d.dataSortKey;
   });
   var candidatos=validForChart.filter(function(d){return d.inicioMin!==null&&d.terminoMin!==null;});
