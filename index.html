@@ -11609,14 +11609,22 @@ function rdoImpGetSapAggr(squadFilter){
     if(squadFilter&&squadFilter.length){var sq=impGetSquad(d.sap,d.fiscal);if(squadFilter.indexOf(sq.squad||'Sem vínculo')<0) return;}
     var sap=d.sap||'(sem SAP)';
     var tb=rdoTribo(d.sap,d.fiscal);
-    if(!map[sap]) map[sap]={id:sap,sap:sap,tribo:tb,reg:0,perf:0,parc:0,nao:0,inicios:[],terminos:[],hts:[]};
+    if(!map[sap]) map[sap]={id:sap,sap:sap,tribo:tb,_triboCont:{},reg:0,perf:0,parc:0,nao:0,inicios:[],terminos:[],hts:[]};
     var e=map[sap]; e.reg++;
+    e._triboCont[tb]=(e._triboCont[tb]||0)+1;
     var dm=d.delayMin; if(dm===null||dm===0) e.perf++; else if(dm<=60) e.parc++; else e.nao++;
     if(d.inicioMin!==null) e.inicios.push(d.inicioMin);
     if(d.terminoMin!==null) e.terminos.push(d.terminoMin);
     var ht=rdoHtCalc(d); if(ht!==null) e.hts.push(ht);
   });
   return Object.values(map).map(function(e){
+    // Tribo da obra = a mais frequente entre os registros dela (maioria), não a do primeiro
+    // registro processado — uma mesma obra/SAP pode ter registros de fiscais de squads
+    // diferentes; sem isso, 1 registro sem fiscal/squad podia puxar a obra inteira pra
+    // "S/ Vínculo" mesmo quando quase todos os outros já resolviam certinho.
+    var conts=e._triboCont;
+    e.tribo=Object.keys(conts).sort(function(a,b){return conts[b]-conts[a];})[0]||e.tribo;
+    delete e._triboCont;
     e.inicio=rdoM2HM(e.inicios.length?Math.min.apply(null,e.inicios):null);
     e.termino=rdoM2HM(e.terminos.length?Math.max.apply(null,e.terminos):null);
     e.ht=e.hts.length?Math.round(e.hts.reduce(function(a,b){return a+b;},0)/e.hts.length):null;
