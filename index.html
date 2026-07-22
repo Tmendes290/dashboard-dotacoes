@@ -13531,8 +13531,10 @@ async function iprodProcessar(){
     // HH + Praticabilidade = Referência + Horas não praticável, onde Horas não praticável =
     // Referência × (1 − Praticabilidade) — ou seja, Referência × (2 − Praticabilidade).
     // (conferido contra o modelo validado: Pedreiro 451,76 × 1,3333 = 602,35, não uma divisão)
-    var hhAjust=hhRef*(2-IPROD_PRAT);
-    var dif=hhCobrado-hhAjust;
+    // Sem HH de referência (índice 0), não tem base pra aplicar praticabilidade — aceita o que a
+    // contratada já está cobrando como válido (não gera divergência artificial).
+    var hhAjust=hhRef>0?hhRef*(2-IPROD_PRAT):hhCobrado;
+    var dif=hhRef>0?hhCobrado-hhAjust:0;
     var status='verde';
     if(dif>0) status=(dif/Math.max(hhCobrado,1))>0.15?'vermelho':'amarelo';
     var temEstimado=porFuncaoFinal[fRef].atividades.some(function(a){return a.estimado;});
@@ -13555,7 +13557,7 @@ async function iprodProcessar(){
   });
   semRefOrdem.forEach(function(base){
     var g=semRefAgrupado[base];
-    linhas.push({funcao:base,hhCobrado:g.hhCobrado,hhContingencia:g.hhContingencia,hhRef:0,hhAjust:0,dif:g.hhCobrado,status:'cinza',atividades:[],semReferencia:true});
+    linhas.push({funcao:base,hhCobrado:g.hhCobrado,hhContingencia:g.hhContingencia,hhRef:0,hhAjust:g.hhCobrado,dif:0,status:'cinza',atividades:[],semReferencia:true});
   });
   linhas.sort(function(a,b){return b.dif-a.dif;});
   // Tira as funções excluídas manualmente ANTES dos totais abaixo (todos via linhas.reduce) —
