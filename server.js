@@ -2,12 +2,14 @@ const express = require('express');
 const path = require('path');
 const compression = require('compression');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const relatorio = require('./relatorio');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const SUPA_URL = 'https://ehbiyqqpzqrluvuqrljp.supabase.co';
 const SUPA_SERVICE_KEY = process.env.SUPA_SERVICE_KEY;
+const RELATORIO_TOKEN = process.env.RELATORIO_TOKEN;
 
 // ── PROXY SUPABASE: contorna bloqueio de *.supabase.co em redes corporativas ──
 // (ex.: rede da Vale faz inspeção SSL e derruba conexões diretas ao domínio do Supabase)
@@ -544,6 +546,53 @@ app.get('/api/copper', async (req, res) => {
   } catch (e) {
     console.error('[copper] fetch error:', e.message);
     res.status(502).json({ error: e.message });
+  }
+});
+
+// ── RELATÓRIO DIÁRIO DE PRODUTIVIDADE (chamado pelo sync-supabase.gs às 05h) ──
+// Faz o cálculo pesado (aderência, evolução, composição do improdutivo) aqui em Node — o
+// Apps Script só busca este HTML pronto e dispara o e-mail via GmailApp.
+async function supaFetchAllPages(table, select) {
+  const rows = [];
+  const PAGE = 1000;
+  let from = 0;
+  while (true) {
+    const r = await fetch(`${SUPA_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}`, {
+      headers: {
+        'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
+        'apikey': SUPA_SERVICE_KEY,
+        'Range': `${from}-${from + PAGE - 1}`
+      }
+    });
+    if (!r.ok) throw new Error(`Supabase ${table} ${r.status}: ${await r.text()}`);
+    const page = await r.json();
+    rows.push(...page);
+    if (page.length < PAGE) break;
+    from += PAGE;
+  }
+  return rows;
+}
+
+app.get('/api/relatorio-diario', async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'SUPA_SERVICE_KEY não configurado no servidor.' });
+  if (!RELATORIO_TOKEN) return res.status(500).json({ error: 'RELATORIO_TOKEN não configurado no servidor.' });
+  if (req.query.token !== RELATORIO_TOKEN) return res.status(401).json({ error: 'Token inválido.' });
+
+  try {
+    const [rows, refSquads, refFiscais] = await Promise.all([
+      supaFetchAllPages('improdutividade', 'data_sort_key,empresa,sap,fiscal,chegada_min,pts_min,inicio_min,alm_ini_min,alm_fim_min,termino_min,acao'),
+      supaFetchAllPages('ref_squads', 'pep,squad'),
+      supaFetchAllPages('ref_fiscais', 'nome,squad')
+    ]);
+
+    const { html, dataFmt } = relatorio.montarRelatorioEmail(rows, refSquads, refFiscais);
+    if (!html) return res.status(404).json({ error: 'Sem registros na tabela improdutividade.' });
+
+    console.log(`[relatorio-diario] ${rows.length} registros, dataFmt=${dataFmt}`);
+    res.json({ html, dataFmt });
+  } catch (e) {
+    console.error('[relatorio-diario]', e);
+    res.status(500).json({ error: e.message });
   }
 });
 
