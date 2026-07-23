@@ -508,7 +508,15 @@ body.dark .cc-badge{background:var(--bg)}
         <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:#cbd5e1;display:inline-block"></span> N/A</span>
         <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:6px;border-radius:2px;background:#94a3b8;display:inline-block"></span> Linha do Tempo — LB (baseline)</span>
         <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:6px;border-radius:2px;background:var(--acc);display:inline-block"></span> Tendência (previsão atual)</span>
-        <span style="margin-left:auto"><input id="restr-search" type="text" placeholder="Buscar obra ou empresa..." oninput="renderRestricoes()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;min-width:220px"></span>
+        <span style="margin-left:auto;display:flex;gap:8px">
+          <select id="restr-status-filter" onchange="renderRestricoes()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);outline:none">
+            <option value="">Todos os status</option>
+            <option value="NÃO LIBERADO">Não liberado</option>
+            <option value="LIBERADO PARCIAL">Liberado parcial</option>
+            <option value="LIBERADO TOTAL">Liberado total</option>
+          </select>
+          <input id="restr-search" type="text" placeholder="Buscar obra ou empresa..." oninput="renderRestricoes()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;min-width:220px">
+        </span>
       </div>
       <div class="tbl-wrap max-h" style="padding:0 0 4px">
         <table id="restrTable"></table>
@@ -1028,9 +1036,11 @@ function renderRestricoes(){
   document.getElementById('restr-title').textContent=(RESTR_FRENTE==='civil'?'Frente Civil':'Frente Eletromecânica')+' — '+ds.rows.length+' obra(s) na planilha';
   const selSquads=new Set(msGetSelected('squad').map(s=>s.toUpperCase()));
   const q=(document.getElementById('restr-search').value||'').trim().toUpperCase();
+  const statusFilter=document.getElementById('restr-status-filter').value;
   const rows=ds.rows.map((r,i)=>({r,i})).filter(({r})=>{
     if(!selSquads.has((r.squad||'').toUpperCase()))return false;
     if(q&&!r.projeto.toUpperCase().includes(q)&&!(r.empresa||'').toUpperCase().includes(q))return false;
+    if(statusFilter&&(r.liberada||'')!==statusFilter)return false;
     return true;
   });
   const tbl=document.getElementById('restrTable');
