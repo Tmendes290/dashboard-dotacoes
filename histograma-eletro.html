@@ -1129,9 +1129,9 @@ function renderRestricoes(){
   }
   rows.forEach(({r,i})=>{
     tbody+='<tr>';
-    tbody+='<td class="r-fixed" style="min-width:130px;width:130px;white-space:nowrap;font-size:11px;font-weight:700;color:var(--text)">'+r.squad+'</td>';
+    tbody+='<td class="r-fixed" style="min-width:130px;width:130px;white-space:nowrap;font-size:11px;font-weight:700;color:var(--text);cursor:pointer" onclick="openCategoriaEditor(event,\'squad\',\''+(r.squad||'').replace(/'/g,'&#39;').replace(/"/g,'&quot;')+'\')" title="Clique pra renomear esse Squad em toda parte">'+r.squad+'</td>';
     tbody+='<td class="r-fixed r-proj" style="left:130px">'+r.projeto+'</td>';
-    tbody+='<td class="r-emp">'+(r.empresa||'—')+'</td>';
+    tbody+='<td class="r-emp" style="cursor:pointer" onclick="openCategoriaEditor(event,\'empresa\',\''+(r.empresa||'').replace(/'/g,'&#39;').replace(/"/g,'&quot;')+'\')" title="Clique pra renomear essa Empresa em toda parte">'+(r.empresa||'—')+'</td>';
     r.restricoes.forEach((v,ci)=>{ tbody+='<td class="r-dot"><span class="r-d r-d-'+v+'" onclick="openRestrDotEditor(event,\''+RESTR_FRENTE+'\','+i+','+ci+',\''+(ds.labels[ci]||'').replace(/'/g,'&#39;').replace(/"/g,'&quot;')+'\')" title="'+(ds.labels[ci]||'').replace(/"/g,'&quot;')+' — clique pra editar"></span></td>'; });
     tbody+='<td><span class="r-badge '+restrBadgeClass(r.liberada)+'" onclick="openRestrStatusEditor(event,\''+RESTR_FRENTE+'\','+i+')" title="Clique pra editar">'+(r.liberada||'—')+'</span></td>';
     tbody+='<td class="r-tl" onclick="openRestrDateEditor(event,\''+RESTR_FRENTE+'\','+i+')">'+restrTimelineHTML(r)+'</td>';
@@ -1296,6 +1296,98 @@ function closeRestrEditor(){
   const ed=document.getElementById('restr-editor');
   if(ed)ed.style.display='none';
 }
+// ── RENOMEAR SQUAD/EMPRESA (categoria compartilhada — reflete no Gantt, Efetivo e Restrições) ──
+function openCategoriaEditor(evt,tipo,valorAtual){
+  evt.stopPropagation();
+  _restrCtx={categoriaTipo:tipo,categoriaValor:valorAtual};
+  document.getElementById('restr-editor-title').textContent='Renomear '+(tipo==='squad'?'Squad':'Empresa');
+  document.getElementById('restr-editor-opts').innerHTML=
+    '<div style="font-size:10px;color:var(--muted);margin-bottom:4px;line-height:1.4">Atualiza em todas as obras do Gantt, Efetivo por Squad e Restrições que usam "'+(valorAtual||'').replace(/"/g,'&quot;')+'"</div>'
+    +'<input type="text" id="cat-rename-input" value="'+(valorAtual||'').replace(/"/g,'&quot;')+'" style="width:100%;padding:5px 6px;border:1px solid var(--bord);border-radius:4px;background:var(--bg);color:var(--text);font-size:12px;font-family:inherit;box-sizing:border-box">'
+    +'<div style="display:flex;gap:6px;margin-top:8px">'
+    +'<button onclick="confirmCategoriaRename()" class="btn btn-orange" style="flex:1;padding:6px;font-size:11px">Renomear</button>'
+    +'<button onclick="closeRestrEditor()" class="btn btn-outline" style="padding:6px;font-size:11px">✕</button>'
+    +'</div>';
+  _restrPositionEditor(evt,150);
+  setTimeout(()=>{const inp=document.getElementById('cat-rename-input');if(inp){inp.focus();inp.select();}},40);
+}
+function confirmCategoriaRename(){
+  if(!_restrCtx||!_restrCtx.categoriaTipo)return;
+  const{categoriaTipo,categoriaValor}=_restrCtx;
+  const inp=document.getElementById('cat-rename-input');
+  const novo=(inp&&inp.value||'').trim();
+  closeRestrEditor();
+  if(!novo||novo===categoriaValor)return;
+  renameCategoria(categoriaTipo,categoriaValor,novo);
+}
+function _renameLabelText(cb,novo){
+  if(!cb)return;
+  const lbl=cb.closest('label');
+  if(!lbl)return;
+  const last=lbl.childNodes[lbl.childNodes.length-1];
+  if(last)last.textContent=' '+novo;
+}
+function renameCategoria(tipo,de,para){
+  if(!de||!para||de===para)return;
+  if(tipo==='squad'){
+    PROJETOS.forEach(p=>{if(p.Squad===de)p.Squad=para;});
+    [RESTR_CIVIL,RESTR_ELETRO].forEach(ds=>ds.rows.forEach(r=>{if(r.squad===de)r.squad=para;}));
+    const idx=SQUADS.indexOf(de); if(idx>=0)SQUADS[idx]=para;
+    const cb=document.querySelector('.ms-squad-cb[value="'+CSS.escape(de)+'"]');
+    if(cb){ cb.value=para; _renameLabelText(cb,para); }
+  } else {
+    PROJETOS.forEach(p=>{if(p.Empresa===de)p.Empresa=para;});
+    [RESTR_CIVIL,RESTR_ELETRO].forEach(ds=>ds.rows.forEach(r=>{if(r.empresa===de)r.empresa=para;}));
+    const cb=document.querySelector('.ms-emp-cb[value="'+CSS.escape(de)+'"]');
+    if(cb){ cb.value=para; _renameLabelText(cb,para); }
+  }
+  saveCategoriaRename(tipo,de,para);
+  renderAll();
+  renderRestricoes();
+}
+const CAT_RENAMES_KEY='histo_cat_renames';
+async function saveCategoriaRename(tipo,de,para){
+  try{
+    const s=localStorage.getItem(CAT_RENAMES_KEY);
+    const arr=s?JSON.parse(s):[];
+    arr.push({tipo,de,para});
+    localStorage.setItem(CAT_RENAMES_KEY,JSON.stringify(arr));
+  }catch(e){}
+  if(!supa)return;
+  try{ await supa.from('histograma_categoria_renames').insert({tipo,de,para}); }catch(e){ console.warn('[Histograma] erro ao salvar rename:',e); }
+}
+async function loadCategoriaRenames(){
+  const aplicarLista=list=>{ list.forEach(r=>renameCategoriaSilencioso(r.tipo,r.de,r.para)); };
+  try{
+    const s=localStorage.getItem(CAT_RENAMES_KEY);
+    if(s)aplicarLista(JSON.parse(s));
+  }catch(e){}
+  if(!supa)return;
+  try{
+    const{data,error}=await supa.from('histograma_categoria_renames').select('tipo,de,para').order('criado_em',{ascending:true});
+    if(error||!data)return;
+    aplicarLista(data);
+    localStorage.setItem(CAT_RENAMES_KEY,JSON.stringify(data.map(r=>({tipo:r.tipo,de:r.de,para:r.para}))));
+    renderAll();
+    renderRestricoes();
+  }catch(e){}
+}
+// Igual a renameCategoria, mas sem persistir de novo (usado ao reaplicar o histórico já salvo)
+function renameCategoriaSilencioso(tipo,de,para){
+  if(!de||!para||de===para)return;
+  if(tipo==='squad'){
+    PROJETOS.forEach(p=>{if(p.Squad===de)p.Squad=para;});
+    [RESTR_CIVIL,RESTR_ELETRO].forEach(ds=>ds.rows.forEach(r=>{if(r.squad===de)r.squad=para;}));
+    const idx=SQUADS.indexOf(de); if(idx>=0)SQUADS[idx]=para;
+    const cb=document.querySelector('.ms-squad-cb[value="'+CSS.escape(de)+'"]');
+    if(cb){ cb.value=para; _renameLabelText(cb,para); }
+  } else {
+    PROJETOS.forEach(p=>{if(p.Empresa===de)p.Empresa=para;});
+    [RESTR_CIVIL,RESTR_ELETRO].forEach(ds=>ds.rows.forEach(r=>{if(r.empresa===de)r.empresa=para;}));
+    const cb=document.querySelector('.ms-emp-cb[value="'+CSS.escape(de)+'"]');
+    if(cb){ cb.value=para; _renameLabelText(cb,para); }
+  }
+}
 document.addEventListener('click',function(e){
   const ed=document.getElementById('restr-editor');
   if(ed&&ed.style.display!=='none'&&!ed.contains(e.target))closeRestrEditor();
@@ -1408,6 +1500,12 @@ function initRealtime(){
       const r=p.new;
       if(r)restrApplyOverride(r.frente,r.row_idx,r.col_idx,r.valor);
       _rtDelay(()=>renderRestricoes());
+    })
+    // Squad/Empresa renomeado por outro admin (afeta Gantt, Efetivo e Restrições)
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'histograma_categoria_renames'},p=>{
+      const r=p.new;
+      if(r)renameCategoriaSilencioso(r.tipo,r.de,r.para);
+      _rtDelay(()=>{renderAll();renderRestricoes();});
     })
     .subscribe();
 }
@@ -1818,6 +1916,7 @@ localStorage.removeItem('histo_virt_entries');
 initEqOrigSums();
 loadEmpresaOverrides();
 loadEquipeOverrides();
+loadCategoriaRenames();
 loadRestrOverrides();
 loadVirtualEntries();
 initRealtime(); // escuta mudanças em tempo real de todos os admins
