@@ -549,7 +549,13 @@ body.dark .cc-badge{background:var(--bg)}
         <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:#cbd5e1;display:inline-block"></span> N/A</span>
         <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:6px;border-radius:2px;background:#94a3b8;display:inline-block"></span> Linha do Tempo — LB (baseline)</span>
         <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:6px;border-radius:2px;background:var(--acc);display:inline-block"></span> Tendência (previsão atual)</span>
-        <span style="margin-left:auto;display:flex;gap:8px">
+        <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+          <select id="restr-squad-filter" onchange="renderRestricoes()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);outline:none">
+            <option value="">Todos os Squads</option>
+          </select>
+          <select id="restr-emp-filter" onchange="renderRestricoes()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);outline:none">
+            <option value="">Todas as Empresas</option>
+          </select>
           <select id="restr-status-filter" onchange="renderRestricoes()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);outline:none">
             <option value="">Todos os status</option>
             <option value="NÃO LIBERADO">Não liberado</option>
@@ -1107,18 +1113,34 @@ function restrBadgeClass(lib){
   if(lib==='NÃO LIBERADO')return'r-badge-nao';
   return'r-badge-none';
 }
+function restrRebuildFilterOptions(){
+  const ds=RESTR_FRENTE==='civil'?RESTR_CIVIL:RESTR_ELETRO;
+  const squads=[...new Set(ds.rows.map(r=>r.squad).filter(Boolean))].sort();
+  const emps=[...new Set(ds.rows.map(r=>r.empresa).filter(Boolean))].sort();
+  const selSq=document.getElementById('restr-squad-filter');
+  const selEmp=document.getElementById('restr-emp-filter');
+  const curSq=selSq.value,curEmp=selEmp.value;
+  selSq.innerHTML='<option value="">Todos os Squads</option>'+squads.map(s=>'<option value="'+s.replace(/"/g,'&quot;')+'">'+s+'</option>').join('');
+  selEmp.innerHTML='<option value="">Todas as Empresas</option>'+emps.map(e=>'<option value="'+e.replace(/"/g,'&quot;')+'">'+e+'</option>').join('');
+  selSq.value=squads.includes(curSq)?curSq:'';
+  selEmp.value=emps.includes(curEmp)?curEmp:'';
+}
 function renderRestricoes(){
   const ds=RESTR_FRENTE==='civil'?RESTR_CIVIL:RESTR_ELETRO;
-  document.getElementById('restr-title').textContent=(RESTR_FRENTE==='civil'?'Frente Civil':'Frente Eletromecânica')+' — '+ds.rows.length+' obra(s) na planilha';
-  const selSquads=new Set(msGetSelected('squad').map(s=>s.toUpperCase()));
+  restrRebuildFilterOptions();
+  const squadFilter=document.getElementById('restr-squad-filter').value;
+  const empFilter=document.getElementById('restr-emp-filter').value;
   const q=(document.getElementById('restr-search').value||'').trim().toUpperCase();
   const statusFilter=document.getElementById('restr-status-filter').value;
   const rows=ds.rows.map((r,i)=>({r,i})).filter(({r})=>{
-    if(!selSquads.has((r.squad||'').toUpperCase()))return false;
+    if(squadFilter&&r.squad!==squadFilter)return false;
+    if(empFilter&&r.empresa!==empFilter)return false;
     if(q&&!r.projeto.toUpperCase().includes(q)&&!(r.empresa||'').toUpperCase().includes(q))return false;
     if(statusFilter&&(r.liberada||'')!==statusFilter)return false;
     return true;
   });
+  const filtrado=squadFilter||empFilter||statusFilter||q;
+  document.getElementById('restr-title').textContent=(RESTR_FRENTE==='civil'?'Frente Civil':'Frente Eletromecânica')+' — '+(filtrado?(rows.length+' de '+ds.rows.length+' obra(s) filtradas'):(ds.rows.length+' obra(s) na planilha'));
   const tbl=document.getElementById('restrTable');
   let thead='<thead><tr><th class="r-fixed" style="min-width:130px;width:130px;white-space:nowrap">Squad</th><th class="r-fixed" style="left:130px;min-width:260px">Obra</th><th>Empresa</th>';
   ds.labels.forEach(l=>{ thead+='<th class="r-th" title="'+l.replace(/"/g,'&quot;')+'">'+l+'</th>'; });
