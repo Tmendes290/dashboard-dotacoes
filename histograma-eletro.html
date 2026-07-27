@@ -550,18 +550,36 @@ body.dark .cc-badge{background:var(--bg)}
         <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:6px;border-radius:2px;background:#94a3b8;display:inline-block"></span> Linha do Tempo — LB (baseline)</span>
         <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:6px;border-radius:2px;background:var(--acc);display:inline-block"></span> Tendência (previsão atual)</span>
         <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
-          <select id="restr-squad-filter" onchange="renderRestricoes()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);outline:none">
-            <option value="">Todos os Squads</option>
-          </select>
-          <select id="restr-emp-filter" onchange="renderRestricoes()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);outline:none">
-            <option value="">Todas as Empresas</option>
-          </select>
-          <select id="restr-status-filter" onchange="renderRestricoes()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);outline:none">
-            <option value="">Todos os status</option>
-            <option value="NÃO LIBERADO">Não liberado</option>
-            <option value="LIBERADO PARCIAL">Liberado parcial</option>
-            <option value="LIBERADO TOTAL">Liberado total</option>
-          </select>
+          <div class="ms-wrap" id="ms-restr-squad">
+            <button class="ms-btn" id="ms-restr-squad-btn" type="button" onclick="toggleMs('ms-restr-squad')">
+              <span class="ms-btn-lbl" id="ms-restr-squad-lbl">Todos os Squads</span>
+              <span class="ms-arrow">▼</span>
+            </button>
+            <div class="ms-drop" id="ms-restr-squad-drop">
+              <label class="ms-opt ms-all"><input type="checkbox" id="ms-restr-squad-all" checked onchange="msToggleAll('restr-squad')"> Todos os Squads</label>
+            </div>
+          </div>
+          <div class="ms-wrap" id="ms-restr-emp">
+            <button class="ms-btn" id="ms-restr-emp-btn" type="button" onclick="toggleMs('ms-restr-emp')">
+              <span class="ms-btn-lbl" id="ms-restr-emp-lbl">Todas as Empresas</span>
+              <span class="ms-arrow">▼</span>
+            </button>
+            <div class="ms-drop" id="ms-restr-emp-drop">
+              <label class="ms-opt ms-all"><input type="checkbox" id="ms-restr-emp-all" checked onchange="msToggleAll('restr-emp')"> Todas as Empresas</label>
+            </div>
+          </div>
+          <div class="ms-wrap" id="ms-restr-status">
+            <button class="ms-btn" id="ms-restr-status-btn" type="button" onclick="toggleMs('ms-restr-status')">
+              <span class="ms-btn-lbl" id="ms-restr-status-lbl">Todos os status</span>
+              <span class="ms-arrow">▼</span>
+            </button>
+            <div class="ms-drop" id="ms-restr-status-drop">
+              <label class="ms-opt ms-all"><input type="checkbox" id="ms-restr-status-all" checked onchange="msToggleAll('restr-status')"> Todos os status</label>
+              <label class="ms-opt"><input type="checkbox" class="ms-restr-status-cb" value="NÃO LIBERADO" checked onchange="msChange('restr-status')"> Não liberado</label>
+              <label class="ms-opt"><input type="checkbox" class="ms-restr-status-cb" value="LIBERADO PARCIAL" checked onchange="msChange('restr-status')"> Liberado parcial</label>
+              <label class="ms-opt"><input type="checkbox" class="ms-restr-status-cb" value="LIBERADO TOTAL" checked onchange="msChange('restr-status')"> Liberado total</label>
+            </div>
+          </div>
           <input id="restr-search" type="text" placeholder="Buscar obra ou empresa..." oninput="renderRestricoes()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;min-width:220px">
         </span>
       </div>
@@ -629,7 +647,8 @@ function msUpdateLabel(type){
   const countEl=btn.querySelector('.ms-cnt');
   if(countEl)countEl.remove();
   if(checked.length===cbs.length){
-    lbl.textContent=type==='squad'?'Todos os Squads':type==='emp'?'Todas as Empresas':type==='mes'?'Todos os Meses':'Todas as Disciplinas';
+    const defaults={squad:'Todos os Squads',emp:'Todas as Empresas',mes:'Todos os Meses',disc:'Todas as Disciplinas','restr-squad':'Todos os Squads','restr-emp':'Todas as Empresas','restr-status':'Todos os status'};
+    lbl.textContent=defaults[type]||'Todos';
   } else if(checked.length===0){
     lbl.textContent='Nenhum selecionado';
   } else if(checked.length===1){
@@ -1113,33 +1132,44 @@ function restrBadgeClass(lib){
   if(lib==='NÃO LIBERADO')return'r-badge-nao';
   return'r-badge-none';
 }
+let _restrOptsBuiltForFrente=null;
 function restrRebuildFilterOptions(){
+  if(_restrOptsBuiltForFrente===RESTR_FRENTE)return;
+  _restrOptsBuiltForFrente=RESTR_FRENTE;
   const ds=RESTR_FRENTE==='civil'?RESTR_CIVIL:RESTR_ELETRO;
   const squads=[...new Set(ds.rows.map(r=>r.squad).filter(Boolean))].sort();
   const emps=[...new Set(ds.rows.map(r=>r.empresa).filter(Boolean))].sort();
-  const selSq=document.getElementById('restr-squad-filter');
-  const selEmp=document.getElementById('restr-emp-filter');
-  const curSq=selSq.value,curEmp=selEmp.value;
-  selSq.innerHTML='<option value="">Todos os Squads</option>'+squads.map(s=>'<option value="'+s.replace(/"/g,'&quot;')+'">'+s+'</option>').join('');
-  selEmp.innerHTML='<option value="">Todas as Empresas</option>'+emps.map(e=>'<option value="'+e.replace(/"/g,'&quot;')+'">'+e+'</option>').join('');
-  selSq.value=squads.includes(curSq)?curSq:'';
-  selEmp.value=emps.includes(curEmp)?curEmp:'';
+  const dropSq=document.getElementById('ms-restr-squad-drop');
+  const dropEmp=document.getElementById('ms-restr-emp-drop');
+  dropSq.innerHTML='<label class="ms-opt ms-all"><input type="checkbox" id="ms-restr-squad-all" checked onchange="msToggleAll(\'restr-squad\')"> Todos os Squads</label>'
+    +squads.map(s=>'<label class="ms-opt"><input type="checkbox" class="ms-restr-squad-cb" value="'+s.replace(/"/g,'&quot;')+'" checked onchange="msChange(\'restr-squad\')"> '+s+'</label>').join('');
+  dropEmp.innerHTML='<label class="ms-opt ms-all"><input type="checkbox" id="ms-restr-emp-all" checked onchange="msToggleAll(\'restr-emp\')"> Todas as Empresas</label>'
+    +emps.map(e=>'<label class="ms-opt"><input type="checkbox" class="ms-restr-emp-cb" value="'+e.replace(/"/g,'&quot;')+'" checked onchange="msChange(\'restr-emp\')"> '+e+'</label>').join('');
+  msUpdateLabel('restr-squad');
+  msUpdateLabel('restr-emp');
+}
+// true quando TODAS as opções desse multi-select estão marcadas (equivale a "sem filtro"),
+// inclusive pra linhas com valor fora da lista conhecida (ex.: status em branco) não sumirem
+// só porque a lista de checkboxes não previa esse valor.
+function restrMultiAllSelected(type){
+  const total=document.querySelectorAll('.ms-'+type+'-cb').length;
+  return msGetSelected(type).length>=total;
 }
 function renderRestricoes(){
   const ds=RESTR_FRENTE==='civil'?RESTR_CIVIL:RESTR_ELETRO;
   restrRebuildFilterOptions();
-  const squadFilter=document.getElementById('restr-squad-filter').value;
-  const empFilter=document.getElementById('restr-emp-filter').value;
+  const squadAll=restrMultiAllSelected('restr-squad'), selSquads=new Set(msGetSelected('restr-squad'));
+  const empAll=restrMultiAllSelected('restr-emp'), selEmps=new Set(msGetSelected('restr-emp'));
+  const statusAll=restrMultiAllSelected('restr-status'), selStatus=new Set(msGetSelected('restr-status'));
   const q=(document.getElementById('restr-search').value||'').trim().toUpperCase();
-  const statusFilter=document.getElementById('restr-status-filter').value;
   const rows=ds.rows.map((r,i)=>({r,i})).filter(({r})=>{
-    if(squadFilter&&r.squad!==squadFilter)return false;
-    if(empFilter&&r.empresa!==empFilter)return false;
+    if(!squadAll&&!selSquads.has(r.squad))return false;
+    if(!empAll&&!selEmps.has(r.empresa))return false;
     if(q&&!r.projeto.toUpperCase().includes(q)&&!(r.empresa||'').toUpperCase().includes(q))return false;
-    if(statusFilter&&(r.liberada||'')!==statusFilter)return false;
+    if(!statusAll&&!selStatus.has(r.liberada||''))return false;
     return true;
   });
-  const filtrado=squadFilter||empFilter||statusFilter||q;
+  const filtrado=!squadAll||!empAll||!statusAll||q;
   document.getElementById('restr-title').textContent=(RESTR_FRENTE==='civil'?'Frente Civil':'Frente Eletromecânica')+' — '+(filtrado?(rows.length+' de '+ds.rows.length+' obra(s) filtradas'):(ds.rows.length+' obra(s) na planilha'));
   const tbl=document.getElementById('restrTable');
   let thead='<thead><tr><th class="r-fixed" style="min-width:130px;width:130px;white-space:nowrap">Squad</th><th class="r-fixed" style="left:130px;min-width:260px">Obra</th><th>Empresa</th>';
@@ -1351,6 +1381,7 @@ function _renameLabelText(cb,novo){
 }
 function renameCategoria(tipo,de,para){
   if(!de||!para||de===para)return;
+  _restrOptsBuiltForFrente=null; // força reconstruir os checkboxes de Squad/Empresa da tabela de Restrições
   if(tipo==='squad'){
     PROJETOS.forEach(p=>{if(p.Squad===de)p.Squad=para;});
     [RESTR_CIVIL,RESTR_ELETRO].forEach(ds=>ds.rows.forEach(r=>{if(r.squad===de)r.squad=para;}));
@@ -1397,6 +1428,7 @@ async function loadCategoriaRenames(){
 // Igual a renameCategoria, mas sem persistir de novo (usado ao reaplicar o histórico já salvo)
 function renameCategoriaSilencioso(tipo,de,para){
   if(!de||!para||de===para)return;
+  _restrOptsBuiltForFrente=null;
   if(tipo==='squad'){
     PROJETOS.forEach(p=>{if(p.Squad===de)p.Squad=para;});
     [RESTR_CIVIL,RESTR_ELETRO].forEach(ds=>ds.rows.forEach(r=>{if(r.squad===de)r.squad=para;}));
