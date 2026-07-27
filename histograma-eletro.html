@@ -132,6 +132,12 @@ td.hoje-col{border-left:1px solid rgba(0,156,222,.3)!important;border-right:1px 
 /* TABLE */
 .tbl-wrap{overflow-x:auto;overflow-y:auto}
 .tbl-wrap.max-h{max-height:480px}
+/* PAINEL EXPANDIDO (Gantt / Restrições) */
+.panel-expand-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:none}
+.panel-expand-overlay.show{display:block}
+.cc.panel-expanded{position:fixed;top:24px;left:24px;right:24px;bottom:24px;z-index:9999;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.4);display:flex;flex-direction:column}
+.cc.panel-expanded .tbl-wrap.max-h{max-height:none;flex:1}
+.panel-expand-btn{padding:5px 12px;font-size:11px;white-space:nowrap}
 table{width:100%;border-collapse:collapse;font-size:12px}
 thead th{position:sticky;top:0;background:var(--bg);border-bottom:2px solid var(--bord);padding:7px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);font-weight:700;white-space:nowrap;z-index:2}
 thead th.center{text-align:center}
@@ -478,11 +484,12 @@ body.dark .cc-badge{background:var(--bg)}
         <button class="btn btn-dark" onclick="openAddObraModal()" style="gap:5px">+ Adicionar Obra</button>
         <button class="btn btn-outline" onclick="document.getElementById('xlsx-input').click()" title="Importar planilha Excel atualizada" style="gap:5px">📥 Importar Planilha</button>
         <button class="btn btn-outline" onclick="msReset()">Limpar filtros</button>
+        <button class="btn btn-outline panel-expand-btn" onclick="togglePanelExpand('gantt-panel',this)" title="Expandir pra ver a tabela inteira">⛶ Expandir</button>
       </div>
     </div>
 
     <!-- GANTT TABLE -->
-    <div class="cc" style="padding:0">
+    <div class="cc" id="gantt-panel" style="padding:0">
       <div class="tbl-wrap max-h">
         <table id="ganttTable">
           <thead>
@@ -527,12 +534,13 @@ body.dark .cc-badge{background:var(--bg)}
 
     <!-- SECAO RESTRIÇÕES POR FRENTE -->
     <div class="sec" style="margin-top:6px">Restrições por Frente de Trabalho</div>
-    <div class="cc" style="padding:0">
+    <div class="cc" id="restr-panel" style="padding:0">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:16px 18px 0">
         <div class="cc-title" id="restr-title">Frente Civil</div>
         <div style="display:flex;gap:6px">
           <button id="restr-btn-civil" class="btn" onclick="setRestrFrente('civil')" style="padding:6px 14px;font-size:11px">Civil</button>
           <button id="restr-btn-eletro" class="btn btn-outline" onclick="setRestrFrente('eletro')" style="padding:6px 14px;font-size:11px">Eletromecânica</button>
+          <button class="btn btn-outline panel-expand-btn" onclick="togglePanelExpand('restr-panel',this)" title="Expandir pra ver a tabela inteira">⛶ Expandir</button>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--muted);padding:10px 18px 4px">
@@ -625,6 +633,23 @@ function msUpdateLabel(type){
     const cnt=document.createElement('span');cnt.className='ms-cnt';cnt.textContent=checked.length;
     btn.insertBefore(cnt,btn.querySelector('.ms-arrow'));
   }
+}
+function togglePanelExpand(id,btn){
+  const el=document.getElementById(id);
+  if(!el)return;
+  const overlay=document.getElementById('panel-expand-overlay');
+  const expanding=!el.classList.contains('panel-expanded');
+  // Só um painel expandido por vez — colapsa qualquer outro antes de abrir este.
+  document.querySelectorAll('.cc.panel-expanded').forEach(p=>{if(p!==el)p.classList.remove('panel-expanded');});
+  document.querySelectorAll('.panel-expand-btn').forEach(b=>{if(b!==btn)b.textContent='⛶ Expandir';});
+  el.classList.toggle('panel-expanded',expanding);
+  overlay.classList.toggle('show',expanding);
+  if(btn)btn.textContent=expanding?'✕ Fechar':'⛶ Expandir';
+}
+function collapseExpandedPanel(){
+  document.querySelectorAll('.cc.panel-expanded').forEach(p=>p.classList.remove('panel-expanded'));
+  document.querySelectorAll('.panel-expand-btn').forEach(b=>b.textContent='⛶ Expandir');
+  document.getElementById('panel-expand-overlay').classList.remove('show');
 }
 function msReset(){
   ['squad','disc','emp','mes'].forEach(t=>{
@@ -1276,7 +1301,7 @@ document.addEventListener('click',function(e){
   if(ed&&ed.style.display!=='none'&&!ed.contains(e.target))closeRestrEditor();
 });
 document.addEventListener('keydown',function(e){
-  if(e.key==='Escape')closeRestrEditor();
+  if(e.key==='Escape'){closeRestrEditor();collapseExpandedPanel();}
 });
 function restrApplyOverride(frente,rowIdx,colIdx,val){
   const ds=frente==='civil'?RESTR_CIVIL:RESTR_ELETRO;
@@ -1922,5 +1947,7 @@ fixGanttHojeHeader();
   </div>
   <div style="font-size:9px;color:var(--muted);margin-top:6px;text-align:center">Enter confirma · Esc cancela</div>
 </div>
+
+<div class="panel-expand-overlay" id="panel-expand-overlay" onclick="collapseExpandedPanel()"></div>
 </body>
 </html>
