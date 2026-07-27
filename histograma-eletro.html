@@ -469,6 +469,10 @@ body.dark .cc-badge{background:var(--bg)}
           </div>
         </div>
       </div>
+      <div class="fg">
+        <label>Buscar obra</label>
+        <input id="gantt-search" type="text" placeholder="Nome ou código da obra..." oninput="renderGantt()" style="border:1px solid var(--bord);border-radius:5px;padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;min-width:220px">
+      </div>
       <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
         <span id="ganttCount" style="font-size:11px;color:var(--muted)"></span>
         <button class="btn btn-dark" onclick="openAddObraModal()" style="gap:5px">+ Adicionar Obra</button>
@@ -628,6 +632,7 @@ function msReset(){
     document.getElementById('ms-'+t+'-all').checked=true;
     msUpdateLabel(t);
   });
+  const ganttSearch=document.getElementById('gantt-search'); if(ganttSearch)ganttSearch.value='';
   renderAll();
 }
 function msGetSelected(type){
@@ -860,7 +865,17 @@ function renderGantt(){
   const selSquads=new Set(msGetSelected('squad'));
   const selDiscs=new Set(msGetSelected('disc'));
   const selEmps=new Set(msGetSelected('emp'));
-  const filtered=PROJETOS.filter(p=>selSquads.has(p.Squad)&&selDiscs.has(p.Disciplina)&&selEmps.has(p.Empresa));
+  const selMeses=new Set(msGetSelected('mes'));
+  const selMesIdx=GANTT_MESES.map((m,i)=>selMeses.has(m)?i:-1).filter(i=>i>=0);
+  const q=(document.getElementById('gantt-search').value||'').trim().toUpperCase();
+  const filtered=PROJETOS.filter(p=>{
+    if(!selSquads.has(p.Squad)||!selDiscs.has(p.Disciplina)||!selEmps.has(p.Empresa))return false;
+    if(q&&!p.Projeto.toUpperCase().includes(q))return false;
+    // Com meses filtrados, some só as obras que não têm equipe preenchida em NENHUM dos meses
+    // selecionados — evita listar linhas em branco quando o usuário já estreitou pra 1-2 meses.
+    if(selMesIdx.length&&p.Eq&&!selMesIdx.some(mi=>(p.Eq[mi]||0)>0))return false;
+    return true;
+  });
   document.getElementById('ganttCount').textContent=filtered.length+' obras';
 
   const bySquad={};
