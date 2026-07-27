@@ -440,6 +440,35 @@ body.dark .cc-badge{background:var(--bg)}
           </div>
         </div>
       </div>
+      <div class="fg">
+        <label>Mês</label>
+        <div class="ms-wrap" id="ms-mes">
+          <button class="ms-btn" id="ms-mes-btn" type="button" onclick="toggleMs('ms-mes')">
+            <span class="ms-btn-lbl" id="ms-mes-lbl">Todos os Meses</span>
+            <span class="ms-arrow">▼</span>
+          </button>
+          <div class="ms-drop" id="ms-mes-drop">
+            <label class="ms-opt ms-all"><input type="checkbox" id="ms-mes-all" checked onchange="msToggleAll('mes')"> Todos os Meses</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="jun/26" checked onchange="msChange('mes')"> jun/26</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="jul/26" checked onchange="msChange('mes')"> jul/26</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="ago/26" checked onchange="msChange('mes')"> ago/26</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="set/26" checked onchange="msChange('mes')"> set/26</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="out/26" checked onchange="msChange('mes')"> out/26</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="nov/26" checked onchange="msChange('mes')"> nov/26</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="dez/26" checked onchange="msChange('mes')"> dez/26</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="jan/27" checked onchange="msChange('mes')"> jan/27</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="fev/27" checked onchange="msChange('mes')"> fev/27</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="mar/27" checked onchange="msChange('mes')"> mar/27</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="abr/27" checked onchange="msChange('mes')"> abr/27</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="mai/27" checked onchange="msChange('mes')"> mai/27</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="jun/27" checked onchange="msChange('mes')"> jun/27</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="jul/27" checked onchange="msChange('mes')"> jul/27</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="ago/27" checked onchange="msChange('mes')"> ago/27</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="set/27" checked onchange="msChange('mes')"> set/27</label>
+            <label class="ms-opt"><input type="checkbox" class="ms-mes-cb" value="out/27" checked onchange="msChange('mes')"> out/27</label>
+          </div>
+        </div>
+      </div>
       <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
         <span id="ganttCount" style="font-size:11px;color:var(--muted)"></span>
         <button class="btn btn-dark" onclick="openAddObraModal()" style="gap:5px">+ Adicionar Obra</button>
@@ -457,23 +486,23 @@ body.dark .cc-badge{background:var(--bg)}
               <th class="g-proj">Obra / Projeto</th>
               <th class="g-emp center">Empresa</th>
               <th class="g-disc center">Disc.</th>
-              <th class="g-month center hoje-th">jun/26</th>
-              <th class="g-month center">jul/26</th>
-              <th class="g-month center">ago/26</th>
-              <th class="g-month center">set/26</th>
-              <th class="g-month center">out/26</th>
-              <th class="g-month center" style="background:#fef9c3;color:#92400e">nov/26 ▲</th>
-              <th class="g-month center">dez/26</th>
-              <th class="g-month center">jan/27</th>
-              <th class="g-month center" style="background:#eff6ff">fev/27</th>
-              <th class="g-month center">mar/27</th>
-              <th class="g-month center">abr/27</th>
-              <th class="g-month center">mai/27</th>
-              <th class="g-month center">jun/27</th>
-              <th class="g-month center">jul/27</th>
-              <th class="g-month center">ago/27</th>
-              <th class="g-month center">set/27</th>
-              <th class="g-month center">out/27</th>
+              <th class="g-month center hoje-th" data-mes="jun/26">jun/26</th>
+              <th class="g-month center" data-mes="jul/26">jul/26</th>
+              <th class="g-month center" data-mes="ago/26">ago/26</th>
+              <th class="g-month center" data-mes="set/26">set/26</th>
+              <th class="g-month center" data-mes="out/26">out/26</th>
+              <th class="g-month center" data-mes="nov/26" style="background:#fef9c3;color:#92400e">nov/26 ▲</th>
+              <th class="g-month center" data-mes="dez/26">dez/26</th>
+              <th class="g-month center" data-mes="jan/27">jan/27</th>
+              <th class="g-month center" data-mes="fev/27" style="background:#eff6ff">fev/27</th>
+              <th class="g-month center" data-mes="mar/27">mar/27</th>
+              <th class="g-month center" data-mes="abr/27">abr/27</th>
+              <th class="g-month center" data-mes="mai/27">mai/27</th>
+              <th class="g-month center" data-mes="jun/27">jun/27</th>
+              <th class="g-month center" data-mes="jul/27">jul/27</th>
+              <th class="g-month center" data-mes="ago/27">ago/27</th>
+              <th class="g-month center" data-mes="set/27">set/27</th>
+              <th class="g-month center" data-mes="out/27">out/27</th>
             </tr>
           </thead>
           <tbody id="ganttBody"></tbody>
@@ -582,7 +611,7 @@ function msUpdateLabel(type){
   const countEl=btn.querySelector('.ms-cnt');
   if(countEl)countEl.remove();
   if(checked.length===cbs.length){
-    lbl.textContent=type==='squad'?'Todos os Squads':type==='emp'?'Todas as Empresas':'Todas as Disciplinas';
+    lbl.textContent=type==='squad'?'Todos os Squads':type==='emp'?'Todas as Empresas':type==='mes'?'Todos os Meses':'Todas as Disciplinas';
   } else if(checked.length===0){
     lbl.textContent='Nenhum selecionado';
   } else if(checked.length===1){
@@ -594,7 +623,7 @@ function msUpdateLabel(type){
   }
 }
 function msReset(){
-  ['squad','disc','emp'].forEach(t=>{
+  ['squad','disc','emp','mes'].forEach(t=>{
     document.querySelectorAll('.ms-'+t+'-cb').forEach(cb=>cb.checked=true);
     document.getElementById('ms-'+t+'-all').checked=true;
     msUpdateLabel(t);
@@ -847,7 +876,7 @@ function renderGantt(){
     const projs=bySquad[squad];
     const htr=document.createElement('tr');
     htr.className='gantt-squad-hdr';
-    htr.innerHTML=`<td class="g-proj g-squad-hdr">${squad} <span style="font-size:9px;font-weight:400;color:var(--muted)">(${projs.length} obras)</span></td><td class="g-emp"></td><td class="g-disc center"></td>${GANTT_MESES.map(m=>`<td class="g-month${m===HOJE_MES?' hoje-col':''}"></td>`).join('')}`;
+    htr.innerHTML=`<td class="g-proj g-squad-hdr">${squad} <span style="font-size:9px;font-weight:400;color:var(--muted)">(${projs.length} obras)</span></td><td class="g-emp"></td><td class="g-disc center"></td>${GANTT_MESES.map(m=>`<td class="g-month${m===HOJE_MES?' hoje-col':''}" data-mes="${m}"></td>`).join('')}`;
     tbody.appendChild(htr);
 
     projs.forEach(p=>{
@@ -859,13 +888,20 @@ function renderGantt(){
       const cells=GANTT_MESES.map((m,mi)=>{
         const hj=m===HOJE_MES?' hoje-col':'';
         const eq=p.Eq?p.Eq[mi]:0;
-        if(!eq||eq===0)return`<td class="g-month${hj}"><span class="g-cell-empty" onclick="editEquipe(event,${pidx},${mi})" title="Sem equipe · Clique para adicionar" style="display:block;width:100%;height:18px;cursor:pointer;border-radius:3px;opacity:0"></span></td>`;
+        if(!eq||eq===0)return`<td class="g-month${hj}" data-mes="${m}"><span class="g-cell-empty" onclick="editEquipe(event,${pidx},${mi})" title="Sem equipe · Clique para adicionar" style="display:block;width:100%;height:18px;cursor:pointer;border-radius:3px;opacity:0"></span></td>`;
         const num=Number.isInteger(eq)?eq:(eq%1===0?eq:eq.toFixed(1));
-        return`<td class="g-month${hj}"><span class="g-cell ${cls} g-eq eq-editable" onclick="editEquipe(event,${pidx},${mi})" title="${p.Empresa?p.Empresa+' · ':''}${p.Projeto} · ${eq} equipe${eq!==1?'s':''} · Clique para editar">${num}</span></td>`;
+        return`<td class="g-month${hj}" data-mes="${m}"><span class="g-cell ${cls} g-eq eq-editable" onclick="editEquipe(event,${pidx},${mi})" title="${p.Empresa?p.Empresa+' · ':''}${p.Projeto} · ${eq} equipe${eq!==1?'s':''} · Clique para editar">${num}</span></td>`;
       }).join('');
       tr.innerHTML=`<td class="g-proj" title="${p.Projeto}">${p.Projeto}</td><td class="g-emp center">${empPill}</td><td class="g-disc center">${pills}</td>${cells}`;
       tbody.appendChild(tr);
     });
+  });
+  applyMesFilter();
+}
+function applyMesFilter(){
+  const selMeses=new Set(msGetSelected('mes'));
+  document.querySelectorAll('#ganttTable [data-mes]').forEach(el=>{
+    el.style.display=selMeses.has(el.dataset.mes)?'':'none';
   });
 }
 // ── TABELA SQUAD x MÊS (dinâmica) ────────────────────────────────────────
