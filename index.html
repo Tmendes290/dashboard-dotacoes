@@ -1728,6 +1728,7 @@ function startRealtime(){
           if(matCfg&&matCfg.data){
             STATE_MATERIAIS=matCfg.data;
             try{localStorage.setItem('mat_data',JSON.stringify(matCfg.data));}catch(e){}
+            try{localStorage.setItem('mat_import',JSON.stringify({file:matCfg.import_file||'',date:matCfg.import_date||''}));}catch(e){}
             var nbMat=document.getElementById('nb-mat');
             if(nbMat&&STATE_MATERIAIS.length){nbMat.textContent=STATE_MATERIAIS.length;nbMat.style.display='inline-flex';}
             var vMat=document.getElementById('v-materiais');
@@ -7865,7 +7866,7 @@ function handleCji3Upload(file){
 function handleMateriaisUpload(file){
   if(!file) return;
   var reader = new FileReader();
-  reader.onload = function(e){
+  reader.onload = async function(e){
     try{
       // Sem cellDates: a coluna VALOR TOTAL desta planilha vem com formatação de data
       // aplicada por engano (célula numérica exibida como data), e cellDates:true
@@ -8051,13 +8052,21 @@ function handleMateriaisUpload(file){
         localStorage.setItem('mat_import', JSON.stringify(matImportInfo));
         console.warn('[Materiais] localStorage cheio, usando apenas Supabase.');
       }
-      // Salva no Supabase para todos os usuários verem
-      if(supa){
-        supa.from('mat_config').upsert({id:1, data:merged2, import_file:file.name, import_date:matImportInfo.date, updated_at:new Date().toISOString()})
-          .then(function(r){ if(r.error) console.error('Erro ao salvar materiais no Supabase:', r.error); });
-      }
+      // Salva no Supabase para todos os usuários verem. Precisa aguardar a
+      // gravação terminar antes de avisar os outros usuários (broadcast) —
+      // senão o aviso chega antes do dado estar disponível e quem recebe
+      // busca a versão antiga, ficando preso nela até o próximo login.
       var nb = document.getElementById('nb-mat');
       if(nb){ nb.textContent = merged2.length; nb.style.display = 'inline-flex'; }
+      if(supa){
+        var _matSaveRes = await supa.from('mat_config').upsert({id:1, data:merged2, import_file:file.name, import_date:matImportInfo.date, updated_at:new Date().toISOString()});
+        if(_matSaveRes.error){
+          console.error('Erro ao salvar materiais no Supabase:', _matSaveRes.error);
+          toast('⚠ Materiais importados localmente, mas NÃO sincronizados com o servidor. Outros usuários não verão essa atualização!', 'red');
+          renderMateriais();
+          return;
+        }
+      }
       toast('✔ ' + _novosCount + ' novos, ' + _atualizadosCount + ' atualizados (' + merged2.length + ' itens no total)', 'green');
       if(_medidoSyncChannel&&CURRENT_USER){
         _medidoSyncChannel.send({type:'broadcast',event:'mat-updated',payload:{uploadedBy:CURRENT_USER.email}}).catch(function(e){console.warn('[Broadcast] mat:',e);});
