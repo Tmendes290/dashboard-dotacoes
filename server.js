@@ -526,31 +526,58 @@ app.get('/api/cji3', requireAuth, async (req, res) => {
   }
 });
 
-// ── SAVE MATERIAIS (server-side, service role — evita o statement_timeout
-// curto do papel "authenticated" ao gravar o blob inteiro de materiais,
-// que só cresce a cada importação e eventualmente estoura esse limite) ──
+// ── SAVE MATERIAIS (server-side, service role) ──────────────────────────────
+// Um registro por item na tabela "materiais" (não mais um blob único em
+// mat_config): grava sempre em lotes pequenos, então cada gravação é rápida
+// independente de quanto o histórico total já cresceu. Guardar tudo como um
+// JSON gigante numa linha só se tornou lento demais pro Postgres reescrever
+// (estourava statement_timeout mesmo com a chave de serviço, porque o limite
+// é da conexão física do "authenticator", não do papel usado depois).
 app.post('/api/save-materiais', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
   const { data, import_file, import_date } = req.body;
   if (!data || !Array.isArray(data)) return res.status(400).json({ error: 'payload inválido — esperado { data: [...] }' });
+
+  const headers = {
+    'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
+    'apikey': SUPA_SERVICE_KEY,
+    'Content-Type': 'application/json',
+    'Prefer': 'resolution=merge-duplicates,return=minimal'
+  };
+
   try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/mat_config`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
-        'apikey': SUPA_SERVICE_KEY,
-        'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates'
-      },
-      body: JSON.stringify([{ id: 1, data, import_file: import_file || '', import_date: import_date || '', updated_at: new Date().toISOString() }])
-    });
-    if (!r.ok) {
-      const err = await r.text();
-      console.error('[save-materiais] falhou:', err);
-      return res.status(500).json({ error: 'Supabase: ' + err });
+    const batchSize = 500;
+    let saved = 0;
+    for (let i = 0; i < data.length; i += batchSize) {
+      const batch = data.slice(i, i + batchSize).map(function (item) {
+        return { chave: String(item._key || (item.pedido || '') + '|' + (item.rc || '') + '|' + i), item, updated_at: new Date().toISOString() };
+      });
+      const r = await fetch(`${SUPA_URL}/rest/v1/materiais?on_conflict=chave`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(batch)
+      });
+      if (!r.ok) {
+        const err = await r.text();
+        console.error(`[save-materiais] lote a partir do item ${i} falhou:`, err);
+        return res.status(500).json({ error: `Erro no lote a partir do item ${i}: ` + err, saved });
+      }
+      saved += batch.length;
     }
-    console.log(`[save-materiais] ${data.length} itens salvos`);
-    res.json({ ok: true, count: data.length });
+
+    const metaRes = await fetch(`${SUPA_URL}/rest/v1/mat_meta?on_conflict=id`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify([{ id: 1, import_file: import_file || '', import_date: import_date || '', updated_at: new Date().toISOString() }])
+    });
+    if (!metaRes.ok) {
+      const err = await metaRes.text();
+      console.error('[save-materiais] mat_meta falhou:', err);
+      return res.status(500).json({ error: 'Itens salvos mas metadados (data/arquivo) falharam: ' + err, saved });
+    }
+
+    console.log(`[save-materiais] ${saved} itens salvos`);
+    res.json({ ok: true, count: saved });
   } catch (e) {
     console.error('[save-materiais]', e);
     res.status(500).json({ error: e.message });

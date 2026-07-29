@@ -1595,18 +1595,29 @@ async function loadFromSupabase(){
       } catch(eCji3){console.warn('[Sync] cji3:',eCji3);}
     })(),
 
-    // Materiais
+    // Materiais (paginado, um registro por item — evita reler/regravar um
+    // blob único gigante, mesmo problema que tornava a importação lenta)
     (async function(){
       try {
-        const {data:matCfg,error:e7}=await supa.from('mat_config').select('*').eq('id',1).maybeSingle();
-        if(!e7&&matCfg&&matCfg.data){
-          STATE_MATERIAIS=matCfg.data;
-          _lsSet('mat_data',JSON.stringify(matCfg.data));
-          _lsSet('mat_import',JSON.stringify({file:matCfg.import_file||'',date:matCfg.import_date||''}));
+        var matArr=[],matOffset=0,matBatch=1000,matPages=0,matSyncOk=false;
+        while(matPages<300){
+          var matRes=await supa.from('materiais').select('item').range(matOffset,matOffset+matBatch-1);
+          if(matRes.error||!matRes.data) break;
+          matSyncOk=true;
+          if(matRes.data.length===0) break;
+          matArr=matArr.concat(matRes.data.map(function(r){return r.item;}));
+          if(matRes.data.length<matBatch) break;
+          matOffset+=matBatch; matPages++;
+        }
+        if(matSyncOk){
+          STATE_MATERIAIS=matArr;
+          _lsSet('mat_data',JSON.stringify(matArr));
+          var {data:matMeta}=await supa.from('mat_meta').select('*').eq('id',1).maybeSingle();
+          if(matMeta) _lsSet('mat_import',JSON.stringify({file:matMeta.import_file||'',date:matMeta.import_date||''}));
           var nbMat=document.getElementById('nb-mat');
           if(nbMat&&STATE_MATERIAIS.length){nbMat.textContent=STATE_MATERIAIS.length;nbMat.style.display='inline-flex';}
         }
-      } catch(e7){console.warn('[Sync] mat_config:',e7);}
+      } catch(e7){console.warn('[Sync] materiais:',e7);}
     })()
   ]);
 
@@ -1724,11 +1735,21 @@ function startRealtime(){
     .on('broadcast', {event: 'mat-updated'}, function(payload){
       (async function(){
         try{
-          var {data:matCfg}=await supa.from('mat_config').select('*').eq('id',1).maybeSingle();
-          if(matCfg&&matCfg.data){
-            STATE_MATERIAIS=matCfg.data;
-            try{localStorage.setItem('mat_data',JSON.stringify(matCfg.data));}catch(e){}
-            try{localStorage.setItem('mat_import',JSON.stringify({file:matCfg.import_file||'',date:matCfg.import_date||''}));}catch(e){}
+          var matArr=[],matOffset=0,matBatch=1000,matPages=0,matSyncOk=false;
+          while(matPages<300){
+            var matRes=await supa.from('materiais').select('item').range(matOffset,matOffset+matBatch-1);
+            if(matRes.error||!matRes.data) break;
+            matSyncOk=true;
+            if(matRes.data.length===0) break;
+            matArr=matArr.concat(matRes.data.map(function(r){return r.item;}));
+            if(matRes.data.length<matBatch) break;
+            matOffset+=matBatch; matPages++;
+          }
+          if(matSyncOk){
+            STATE_MATERIAIS=matArr;
+            try{localStorage.setItem('mat_data',JSON.stringify(matArr));}catch(e){}
+            var {data:matMeta}=await supa.from('mat_meta').select('*').eq('id',1).maybeSingle();
+            if(matMeta){ try{localStorage.setItem('mat_import',JSON.stringify({file:matMeta.import_file||'',date:matMeta.import_date||''}));}catch(e){} }
             var nbMat=document.getElementById('nb-mat');
             if(nbMat&&STATE_MATERIAIS.length){nbMat.textContent=STATE_MATERIAIS.length;nbMat.style.display='inline-flex';}
             var vMat=document.getElementById('v-materiais');
