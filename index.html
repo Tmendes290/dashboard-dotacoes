@@ -1601,7 +1601,7 @@ async function loadFromSupabase(){
       try {
         var matArr=[],matOffset=0,matBatch=1000,matPages=0,matSyncOk=false;
         while(matPages<300){
-          var matRes=await supa.from('materiais').select('item').range(matOffset,matOffset+matBatch-1);
+          var matRes=await supa.from('materiais').select('item').order('chave').range(matOffset,matOffset+matBatch-1);
           if(matRes.error||!matRes.data) break;
           matSyncOk=true;
           if(matRes.data.length===0) break;
@@ -1737,7 +1737,7 @@ function startRealtime(){
         try{
           var matArr=[],matOffset=0,matBatch=1000,matPages=0,matSyncOk=false;
           while(matPages<300){
-            var matRes=await supa.from('materiais').select('item').range(matOffset,matOffset+matBatch-1);
+            var matRes=await supa.from('materiais').select('item').order('chave').range(matOffset,matOffset+matBatch-1);
             if(matRes.error||!matRes.data) break;
             matSyncOk=true;
             if(matRes.data.length===0) break;
