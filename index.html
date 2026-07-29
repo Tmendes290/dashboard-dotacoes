@@ -7895,11 +7895,12 @@ function handleCji3Upload(file){
           if(proj) ctxProj=proj;
           if(pname) ctxPName=pname;
           if(wbs) ctxWbs=wbs;
-          // Só processa linhas de fornecedor (último nível, tem forn)
-          if(!forn) continue;
           if(!ctxProj||!ctxWbs) continue;
-          var key=ctxProj+'|'+ctxWbs+'|'+forn;
-          if(!map[key]) map[key]={proj:ctxProj,pname:ctxPName,wbs:ctxWbs,forn,ger:'',site:'',wname:'',v:{}};
+          // Lançamentos sem fornecedor associado (rateios, postagens internas etc.)
+          // são reais e têm valor — não pode descartar, só não tem nome de empresa.
+          var fornKey=forn||'(Sem fornecedor)';
+          var key=ctxProj+'|'+ctxWbs+'|'+fornKey;
+          if(!map[key]) map[key]={proj:ctxProj,pname:ctxPName,wbs:ctxWbs,forn:fornKey,ger:'',site:'',wname:'',v:{}};
           // Soma valores mensais
           Object.keys(colToMk).forEach(function(c){
             var v=parseFloat(r[c])||0;
