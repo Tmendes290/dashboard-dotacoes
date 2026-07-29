@@ -74,6 +74,50 @@ function showGlobalRefreshBanner(fileName, dateStr){
   if(saved){try{const d=JSON.parse(saved);showGlobalRefreshBanner(d.file,d.date);}catch(e){}}
 })();
 
+// ─── AVISO DE NOVA VERSÃO DO SITE ──────────────────────────────
+// O servidor expõe um hash do index.html em /api/version, que muda a cada
+// deploy. Compara periodicamente com a versão carregada nesta aba — se
+// mudou, é porque alguém publicou uma atualização enquanto a aba estava
+// aberta, e o navegador só vai rodar o código novo depois de recarregar.
+var _APP_VERSION_LOADED = null;
+async function _fetchAppVersion(){
+  try{
+    const r = await fetch('/api/version', {cache:'no-store'});
+    if(!r.ok) return null;
+    const d = await r.json();
+    return d.version || null;
+  }catch(e){ return null; }
+}
+function showAppUpdateBanner(){
+  if(document.getElementById('app-update-banner')) return;
+  var b = document.createElement('div');
+  b.id = 'app-update-banner';
+  b.style.cssText = [
+    'position:fixed','top:0','left:0','right:0','z-index:1000',
+    'background:#002F6C','color:#fff',
+    'display:flex','align-items:center','justify-content:center','gap:14px','flex-wrap:wrap',
+    'padding:10px 20px',
+    'box-shadow:0 4px 20px rgba(0,0,0,.25)',
+    'font-family:Inter,sans-serif','font-size:13px','font-weight:600',
+  ].join(';');
+  b.innerHTML = '🔄 Uma nova versão do site está disponível — atualize pra pegar as últimas correções.'
+    + '<button onclick="location.reload()" style="padding:6px 16px;border:none;border-radius:5px;background:#009CDE;color:#fff;font-weight:700;cursor:pointer;font-family:inherit;font-size:12px">Atualizar agora</button>';
+  document.body.appendChild(b);
+}
+async function _checkAppVersion(){
+  var v = await _fetchAppVersion();
+  if(!v) return;
+  if(_APP_VERSION_LOADED===null){ _APP_VERSION_LOADED=v; return; }
+  if(v!==_APP_VERSION_LOADED) showAppUpdateBanner();
+}
+(function(){
+  _fetchAppVersion().then(function(v){ _APP_VERSION_LOADED=v; });
+  setInterval(_checkAppVersion, 5*60*1000); // verifica a cada 5 min
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden) _checkAppVersion();
+  });
+})();
+
 // ─── MOBILE SIDEBAR TOGGLE ────────────────────────────────────
 function toggleSidebar(forceCollapse){
   const sb = document.getElementById('sidebar');

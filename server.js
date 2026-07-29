@@ -1,5 +1,7 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 const compression = require('compression');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const relatorio = require('./relatorio');
@@ -10,6 +12,20 @@ const PORT = process.env.PORT || 3000;
 const SUPA_URL = 'https://ehbiyqqpzqrluvuqrljp.supabase.co';
 const SUPA_SERVICE_KEY = process.env.SUPA_SERVICE_KEY;
 const RELATORIO_TOKEN = (process.env.RELATORIO_TOKEN || '').trim();
+
+// ── VERSÃO DO APP: hash do index.html calculado quando o servidor sobe ──────
+// Muda a cada deploy (o Railway reinicia o processo e o arquivo vem
+// atualizado do git). O cliente compara com isso periodicamente pra saber
+// se tem uma versão nova no ar e avisar o usuário a atualizar a página.
+function computeAppVersion() {
+  try {
+    const content = fs.readFileSync(path.join(__dirname, 'index.html'));
+    return crypto.createHash('sha256').update(content).digest('hex').slice(0, 12);
+  } catch (e) {
+    return String(Date.now());
+  }
+}
+const APP_VERSION = computeAppVersion();
 
 // ── PROXY SUPABASE: contorna bloqueio de *.supabase.co em redes corporativas ──
 // (ex.: rede da Vale faz inspeção SSL e derruba conexões diretas ao domínio do Supabase)
@@ -605,6 +621,11 @@ app.get('/api/copper', async (req, res) => {
     console.error('[copper] fetch error:', e.message);
     res.status(502).json({ error: e.message });
   }
+});
+
+// ── VERSÃO DO APP: cliente usa isso pra saber se tem deploy novo no ar ──────
+app.get('/api/version', (req, res) => {
+  res.json({ version: APP_VERSION });
 });
 
 // ── RELATÓRIO DIÁRIO DE PRODUTIVIDADE (chamado pelo sync-supabase.gs às 05h) ──
