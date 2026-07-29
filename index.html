@@ -1646,7 +1646,8 @@ async function loadFromSupabase(){
         var matArr=[],matOffset=0,matBatch=1000,matPages=0,matSyncOk=false;
         while(matPages<300){
           var matRes=await supa.from('materiais').select('item').order('chave').range(matOffset,matOffset+matBatch-1);
-          if(matRes.error||!matRes.data) break;
+          if(matRes.error){ console.error('[Sync] materiais select falhou:',matRes.error); break; }
+          if(!matRes.data) break;
           matSyncOk=true;
           if(matRes.data.length===0) break;
           matArr=matArr.concat(matRes.data.map(function(r){return r.item;}));
@@ -1656,7 +1657,8 @@ async function loadFromSupabase(){
         if(matSyncOk){
           STATE_MATERIAIS=matArr;
           _lsSet('mat_data',JSON.stringify(matArr));
-          var {data:matMeta}=await supa.from('mat_meta').select('*').eq('id',1).maybeSingle();
+          var {data:matMeta,error:matMetaErr}=await supa.from('mat_meta').select('*').eq('id',1).maybeSingle();
+          if(matMetaErr) console.error('[Sync] mat_meta select falhou:',matMetaErr);
           if(matMeta) _lsSet('mat_import',JSON.stringify({file:matMeta.import_file||'',date:matMeta.import_date||''}));
           var nbMat=document.getElementById('nb-mat');
           if(nbMat&&STATE_MATERIAIS.length){nbMat.textContent=STATE_MATERIAIS.length;nbMat.style.display='inline-flex';}
