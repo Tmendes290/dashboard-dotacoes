@@ -8059,10 +8059,18 @@ function handleMateriaisUpload(file){
       var nb = document.getElementById('nb-mat');
       if(nb){ nb.textContent = merged2.length; nb.style.display = 'inline-flex'; }
       if(supa){
-        var _matSaveRes = await supa.from('mat_config').upsert({id:1, data:merged2, import_file:file.name, import_date:matImportInfo.date, updated_at:new Date().toISOString()});
-        if(_matSaveRes.error){
-          console.error('Erro ao salvar materiais no Supabase:', _matSaveRes.error);
-          toast('⚠ Materiais importados localmente, mas NÃO sincronizados com o servidor. Outros usuários não verão essa atualização!', 'red');
+        var _matSaveErr = null;
+        try{
+          var _matSaveRes = await supa.from('mat_config').upsert({id:1, data:merged2, import_file:file.name, import_date:matImportInfo.date, updated_at:new Date().toISOString()});
+          if(_matSaveRes.error) _matSaveErr = _matSaveRes.error;
+        }catch(eNet){
+          _matSaveErr = eNet;
+        }
+        if(_matSaveErr){
+          console.error('Erro ao salvar materiais no Supabase:', _matSaveErr);
+          var _matErrMsg = _matSaveErr.message||String(_matSaveErr);
+          if(_matSaveErr.code) _matErrMsg += ' (code: '+_matSaveErr.code+')';
+          toast('⚠ NÃO sincronizado com o servidor: '+_matErrMsg, 'red');
           renderMateriais();
           return;
         }
