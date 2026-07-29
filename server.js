@@ -526,6 +526,37 @@ app.get('/api/cji3', requireAuth, async (req, res) => {
   }
 });
 
+// ── SAVE MATERIAIS (server-side, service role — evita o statement_timeout
+// curto do papel "authenticated" ao gravar o blob inteiro de materiais,
+// que só cresce a cada importação e eventualmente estoura esse limite) ──
+app.post('/api/save-materiais', requireAuth, async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  const { data, import_file, import_date } = req.body;
+  if (!data || !Array.isArray(data)) return res.status(400).json({ error: 'payload inválido — esperado { data: [...] }' });
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/mat_config`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
+        'apikey': SUPA_SERVICE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify([{ id: 1, data, import_file: import_file || '', import_date: import_date || '', updated_at: new Date().toISOString() }])
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      console.error('[save-materiais] falhou:', err);
+      return res.status(500).json({ error: 'Supabase: ' + err });
+    }
+    console.log(`[save-materiais] ${data.length} itens salvos`);
+    res.json({ ok: true, count: data.length });
+  } catch (e) {
+    console.error('[save-materiais]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── COPPER PRICE PROXY ─────────────────────────────────────────
 // Busca cotação do cobre (HG=F) server-side para evitar CORS do browser
 app.get('/api/copper', async (req, res) => {

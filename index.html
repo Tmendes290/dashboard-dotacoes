@@ -8052,8 +8052,12 @@ function handleMateriaisUpload(file){
         localStorage.setItem('mat_import', JSON.stringify(matImportInfo));
         console.warn('[Materiais] localStorage cheio, usando apenas Supabase.');
       }
-      // Salva no Supabase para todos os usuários verem. Precisa aguardar a
-      // gravação terminar antes de avisar os outros usuários (broadcast) —
+      // Salva via rota do servidor (chave de serviço) em vez de direto do
+      // navegador: o papel "authenticated" usado pelo cliente tem um
+      // statement_timeout curto no Supabase, e o blob de materiais só cresce
+      // a cada importação (histórico nunca é apagado) — mais cedo ou mais
+      // tarde a gravação direta do navegador estoura esse limite (erro 57014).
+      // Precisa aguardar terminar antes de avisar os outros usuários (broadcast) —
       // senão o aviso chega antes do dado estar disponível e quem recebe
       // busca a versão antiga, ficando preso nela até o próximo login.
       var nb = document.getElementById('nb-mat');
@@ -8061,8 +8065,18 @@ function handleMateriaisUpload(file){
       if(supa){
         var _matSaveErr = null;
         try{
-          var _matSaveRes = await supa.from('mat_config').upsert({id:1, data:merged2, import_file:file.name, import_date:matImportInfo.date, updated_at:new Date().toISOString()});
-          if(_matSaveRes.error) _matSaveErr = _matSaveRes.error;
+          var _matSessionRes = await supa.auth.getSession();
+          var _matToken = _matSessionRes.data&&_matSessionRes.data.session?_matSessionRes.data.session.access_token:null;
+          if(!_matToken){ _matSaveErr = {message:'Sessão inválida. Faça login novamente.'}; }
+          else {
+            var _matResp = await fetch('/api/save-materiais',{
+              method:'POST',
+              headers:{'Content-Type':'application/json','Authorization':'Bearer '+_matToken},
+              body:JSON.stringify({data:merged2, import_file:file.name, import_date:matImportInfo.date})
+            });
+            var _matResult = await _matResp.json();
+            if(!_matResp.ok||_matResult.error) _matSaveErr = {message:_matResult.error||'falha desconhecida'};
+          }
         }catch(eNet){
           _matSaveErr = eNet;
         }
