@@ -1495,7 +1495,7 @@ var STATE_CJI3 = { months: [], rows: [] };
 var REF_FISCAIS = {}; // fiscal nome -> squad (carregado do Supabase)
 var _cji3F = { years: [], months: [], gers: [], sites: [], projs: [], forns: [] }; // empty array = todos
 var _cji3Open = {}; // proj|wbs -> expanded bool
-var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:String(new Date().getFullYear()), mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
+var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:String(new Date().getFullYear()), mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[], statusEntrega:[]};
 var MAT_MESES_NOMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
@@ -4768,6 +4768,7 @@ function updateMsLabel(id, selected){
     'ms-mat-fornecedor': 'Todos os Fornecedores...',
     'ms-mat-squad': 'Todos os Squads',
     'ms-mat-situacao': 'Todas as Situações',
+    'ms-mat-statusEntrega': 'Todos os Status',
     'ms-sp-pep': 'Todos os PEPs...',
     'ms-imp-emp': 'Todas',
     'ms-imp-sap': 'Todas',
@@ -7529,7 +7530,7 @@ function toggleMatValores(){
 }
 
 function clearMatFilters(){
-  MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[]};
+  MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[], statusEntrega:[]};
   MAT_PAGE = 1;
   renderMateriais();
 }
@@ -7575,6 +7576,7 @@ function _matRowPasses(r, skip){
   if(skip!=='fornecedor'&& MAT_FILTERS.fornecedor.length&& MAT_FILTERS.fornecedor.indexOf(r.fornecedor) < 0) return false;
   if(skip!=='squad'     && MAT_FILTERS.squad.length     && MAT_FILTERS.squad.indexOf(r.squad) < 0) return false;
   if(skip!=='situacao'  && MAT_FILTERS.situacao.length  && MAT_FILTERS.situacao.indexOf(r.situacao) < 0) return false;
+  if(skip!=='statusEntrega' && MAT_FILTERS.statusEntrega.length && MAT_FILTERS.statusEntrega.indexOf(r.statusEntrega) < 0) return false;
   return true;
 }
 function applyMatFilters(){ return STATE_MATERIAIS.filter(function(r){ return _matRowPasses(r, null); }); }
@@ -8211,6 +8213,7 @@ function renderMateriais(){
   var fornecedores = [...new Set(matSubset('fornecedor').map(function(r){return r.fornecedor;}).filter(Boolean))].sort();
   var squads       = [...new Set(matSubset('squad').map(function(r){return r.squad;}).filter(Boolean))].sort();
   var situacoes    = [...new Set(matSubset('situacao').map(function(r){return r.situacao;}).filter(Boolean))].sort();
+  var statusEntregas = [...new Set(matSubset('statusEntrega').map(function(r){return r.statusEntrega;}).filter(Boolean))].sort();
   var anos         = [...new Set(matSubset('ano').map(function(r){
     var d = r.prevEntrega||''; return d.length >= 10 ? d.substring(6,10) : '';
   }).filter(Boolean))].sort();
@@ -8219,7 +8222,7 @@ function renderMateriais(){
     || MAT_FILTERS.ano || MAT_FILTERS.mes.length
     || MAT_FILTERS.projeto.length || MAT_FILTERS.projetoSearch
     || MAT_FILTERS.fornecedor.length
-    || MAT_FILTERS.squad.length || MAT_FILTERS.situacao.length;
+    || MAT_FILTERS.squad.length || MAT_FILTERS.situacao.length || MAT_FILTERS.statusEntrega.length;
 
   var inpSt = 'padding:7px 10px;border:1px solid var(--bord);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#fff;';
 
@@ -8253,6 +8256,7 @@ function renderMateriais(){
     + msWrap('ms-mat-fornecedor','Fornecedor',200)
     + msWrap('ms-mat-squad','Squad',150)
     + msWrap('ms-mat-situacao','Situação',160)
+    + msWrap('ms-mat-statusEntrega','Status Entrega',160)
     + (hasFilters ? '<button class="btn btn-outline" onclick="clearMatFilters()" style="margin-top:18px">↺ Limpar</button>' : '')
     + '<div style="margin-left:auto;margin-top:18px;display:flex;align-items:center;gap:10px">'
     +   '<button onclick="toggleMatValores()" title="'+(MAT_VALORES_VISIVEIS?'Ocultar valores':'Exibir valores')+'" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:15px;line-height:1;color:#64748b;display:flex;align-items:center">'
@@ -8297,6 +8301,7 @@ function renderMateriais(){
   buildMsDrop('ms-mat-fornecedor', fornecedores, MAT_FILTERS.fornecedor, null);
   buildMsDrop('ms-mat-squad', squads, MAT_FILTERS.squad, null);
   buildMsDrop('ms-mat-situacao', situacoes, MAT_FILTERS.situacao, null);
+  buildMsDrop('ms-mat-statusEntrega', statusEntregas, MAT_FILTERS.statusEntrega, null);
 
   updateMsLabel('ms-mat-mes', MAT_FILTERS.mes);
   updateMsLabel('ms-mat-pedido', MAT_FILTERS.pedido);
@@ -8306,6 +8311,7 @@ function renderMateriais(){
   updateMsLabel('ms-mat-fornecedor', MAT_FILTERS.fornecedor);
   updateMsLabel('ms-mat-squad', MAT_FILTERS.squad);
   updateMsLabel('ms-mat-situacao', MAT_FILTERS.situacao);
+  updateMsLabel('ms-mat-statusEntrega', MAT_FILTERS.statusEntrega);
 
   if(MAT_TAB === 'dashboard') setTimeout(function(){ buildMatCharts(data); }, 50);
   else if(MAT_TAB === 'tabela') setTimeout(_matInitTopScroll, 50);
