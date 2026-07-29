@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const compression = require('compression');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const relatorio = require('./relatorio');
+const milplanRoutes = require('./milplan/routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -674,6 +675,9 @@ app.get('/api/relatorio-diario', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// ── MILPLAN FLOW WORK: rotas de SS (numeração, PDF, e-mail, Drive) ──────────
+app.use('/api/milplan', milplanRoutes);
 
 // Serve index.html from root (no subfolder needed)
 app.use(express.static(__dirname));

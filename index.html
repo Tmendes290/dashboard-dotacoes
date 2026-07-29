@@ -1032,6 +1032,9 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div class="sb-nav-sec">Fiscalização</div>
     <div class="sb-item" data-view="improdutividade" data-label="Improdutividade"><span class="ico">⏱</span><span class="sb-label">Produtividade</span></div>
     <div class="sb-item" data-view="indice-produtividade" data-label="Índice de Produtividade"><span class="ico">📐</span><span class="sb-label">Índice de Produtividade</span></div>
+    <!-- MILPLAN FLOW WORK -->
+    <div class="sb-nav-sec">Contratos</div>
+    <div class="sb-item" data-view="milplan" data-label="SS Milplan"><span class="ico">📝</span><span class="sb-label">SS Milplan<span class="sb-badge" id="nb-milplan" style="display:none;background:#ef4444"></span></span></div>
     <!-- PLANEJAMENTO (admin only) -->
     <div class="sb-nav-sec">Planejamento</div>
     <div class="sb-item" data-view="histograma" data-label="Histograma CTT"><span class="ico">📈</span><span class="sb-label">Histograma CTT</span></div>
@@ -1338,6 +1341,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="v-usuarios" class="hidden"></div>
     <div id="v-upload" class="hidden"></div>
     <div id="v-materiais" class="hidden"></div>
+    <div id="v-milplan" class="hidden"></div>
     <div id="v-improdutividade" class="hidden"></div>
     <div id="v-indice-produtividade" class="hidden"></div>
     <div id="v-produtividade-rev2" class="hidden"></div>
@@ -1363,6 +1367,12 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
       <button class="btn" style="background:var(--danger);color:#fff" onclick="confirmDelete()">Excluir</button>
     </div>
+  </div>
+</div>
+<!-- MODAL SS MILPLAN (criação e detalhe) -->
+<div class="modal-overlay hidden" id="modal-milplan">
+  <div class="modal" style="max-width:720px;width:95vw;max-height:88vh;overflow:auto">
+    <div id="modal-milplan-body"></div>
   </div>
 </div>
 
@@ -2305,7 +2315,8 @@ const VIEW_META={
   improdutividade:{title:'Produtividade Projetos Salobo',sub:'Registro de chegada e atraso das equipes'},
   'indice-produtividade':{title:'Índice de Produtividade',sub:'Comparativo de HH cobrado pela contratada vs índice de produtividade do projeto'},
   'produtividade-rev2':{title:'Produtividade REV 02',sub:'Visual em teste (admin) — mesmo dado, novo design'},
-  usuarios:{title:'Usuários',sub:'Gestão de acesso e permissões da equipe'}
+  usuarios:{title:'Usuários',sub:'Gestão de acesso e permissões da equipe'},
+  milplan:{title:'SS Milplan',sub:'Solicitações de Serviço enviadas à Milplan Engenharia'}
 };
 function pdfAction(){
   if(currentView==='velocidade'){
@@ -2333,14 +2344,14 @@ function _syncBnav(id){
 function setView(id){
   currentView=id;
   _syncBnav(id);
-  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma'].forEach(v=>document.getElementById(v).classList.add('hidden'));
+  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma','v-milplan'].forEach(v=>document.getElementById(v).classList.add('hidden'));
   document.getElementById('v-'+id).classList.remove('hidden');
   // Lazy-load histograma iframe on first visit
   if(id==='histograma'){
     const fr=document.getElementById('histograma-frame');
     if(!fr.src||fr.src==='about:blank')fr.src='/histograma-eletro.html?embed=1';
   }
-  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios'].includes(id));
+  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios','milplan'].includes(id));
   if(id==='produtividade-rev2'){
     var _mRev2=VIEW_META['produtividade-rev2'];
     var _ptRev2=document.getElementById('page-title');if(_ptRev2)_ptRev2.textContent=_mRev2.title;
@@ -2406,6 +2417,7 @@ function _renderNow(){
   if(currentView==='nova') renderFormNova();
   if(currentView==='upload') renderUpload();
   if(currentView==='materiais') renderMateriais();
+  if(currentView==='milplan') renderMilplan();
   if(currentView==='cji3') renderCji3();
 }
 
@@ -4396,7 +4408,7 @@ function updateUserBadge(){
   document.body.classList.toggle("is-lider", isLider);
   var _perms = (CURRENT_PERFIL.permissoes && CURRENT_PERFIL.permissoes.length) ? CURRENT_PERFIL.permissoes : ['overview'];
   if(!isAdmin){
-    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','velocidade','cji3','improdutividade','indice-produtividade','histograma'];
+    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','velocidade','cji3','improdutividade','indice-produtividade','histograma','milplan'];
     document.querySelectorAll('.sb-nav .sb-item').forEach(function(item){
       if(item.classList.contains('admin-only')) return;
       var v=item.dataset.view; if(!v||_permViews.indexOf(v)<0) return;
@@ -6378,7 +6390,8 @@ function renderUsuariosHTML(el, usuarios, bloqueados){
         {v:'alertas',l:'Capex Projetos'},{v:'nova',l:'Nova Dotação'},{v:'regularizar',l:'Regularizar Saldo'},
         {v:'analytics',l:'Dashboard'},{v:'saude-pep',l:'Saúde do PEP'},{v:'materiais',l:'Materiais'},
         {v:'improdutividade',l:'Produtividade'},{v:'indice-produtividade',l:'Índice de Produtividade'},
-        {v:'velocidade',l:'Telemetria'},{v:'cji3',l:'CJI3 Tabela'},{v:'histograma',l:'Histograma CTT'}
+        {v:'velocidade',l:'Telemetria'},{v:'cji3',l:'CJI3 Tabela'},{v:'histograma',l:'Histograma CTT'},
+        {v:'milplan',l:'SS Milplan'}
       ];
       var _uPerms = u.permissoes || ['overview'];
       html += '<div style="margin-top:10px;border-top:1px solid #f1f5f9;padding-top:10px">';
@@ -14946,6 +14959,377 @@ clearMs = function(id, cb){
 };
 // ══════════════════════════════════════════════════════════════════
 // FIM IMPRODUTIVIDADE
+// ══════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════
+// MILPLAN FLOW WORK — Solicitações de Serviço (SS) enviadas à Milplan
+// ══════════════════════════════════════════════════════════════════
+var STATE_MILPLAN = null; // null = ainda não carregado
+var MILPLAN_REVISOES = {}; // ss_id -> [revisões]
+var MILPLAN_ANEXOS = {};   // ss_id -> [anexos]
+var MILPLAN_FILTERS = { status: '', atrasado: false, busca: '' };
+
+var MILPLAN_STATUS_META = {
+  rascunho:               { label: 'Rascunho',               color: '#64748b' },
+  enviado:                { label: 'Enviado',                color: '#009CDE' },
+  aguardando_retorno:     { label: 'Aguardando Retorno',      color: '#d97706' },
+  recebido_com_ressalvas: { label: 'Recebido c/ Ressalvas',   color: '#ea580c' },
+  em_analise:             { label: 'Em Análise',              color: '#7c3aed' },
+  aprovado:               { label: 'Aprovado',                color: '#007E7A' },
+  reprovado:              { label: 'Reprovado',               color: '#ef4444' },
+  concluido:              { label: 'Concluído',               color: '#334155' },
+};
+
+async function _milplanAuthToken(){
+  if(!supa) return null;
+  var r = await supa.auth.getSession();
+  return (r.data && r.data.session) ? r.data.session.access_token : null;
+}
+
+async function _milplanFetch(path, options){
+  var token = await _milplanAuthToken();
+  if(!token){ toast('Sessão inválida. Faça login novamente.','red'); throw new Error('sem sessão'); }
+  options = options || {};
+  var headers = Object.assign({ 'Authorization': 'Bearer ' + token }, options.headers || {});
+  if(!(options.body instanceof FormData) && options.body && !headers['Content-Type']){
+    headers['Content-Type'] = 'application/json';
+  }
+  var resp = await fetch(path, Object.assign({}, options, { headers: headers }));
+  var result = null;
+  try { result = await resp.json(); } catch(e){ /* download binário etc. */ }
+  if(!resp.ok){ throw new Error((result && result.error) || ('Falha na requisição: ' + resp.status)); }
+  return result;
+}
+
+async function loadMilplanData(force){
+  if(!supa) return;
+  if(STATE_MILPLAN !== null && !force) return;
+  var { data, error } = await supa.from('milplan_ss').select('*').order('ss_numero', { ascending: false });
+  if(error){ toast('Erro ao carregar SS Milplan: ' + error.message, 'red'); STATE_MILPLAN = []; return; }
+  STATE_MILPLAN = data || [];
+}
+
+async function loadMilplanDetalhe(ssId){
+  var [revRes, anexoRes] = await Promise.all([
+    supa.from('milplan_ss_revisoes').select('*').eq('ss_id', ssId).order('numero_revisao', { ascending: true }),
+    supa.from('milplan_ss_anexos').select('*').eq('ss_id', ssId).order('criado_em', { ascending: true }),
+  ]);
+  MILPLAN_REVISOES[ssId] = revRes.data || [];
+  MILPLAN_ANEXOS[ssId] = anexoRes.data || [];
+}
+
+function milplanFmtData(d){
+  if(!d) return '';
+  var parts = String(d).slice(0,10).split('-');
+  return parts.length === 3 ? (parts[2] + '/' + parts[1] + '/' + parts[0]) : d;
+}
+function milplanHoje(){
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function milplanEstaAtrasado(r){
+  return r.status === 'aguardando_retorno' && r.prazo_plano && r.prazo_plano < milplanHoje();
+}
+function milplanStatusBadge(status){
+  var meta = MILPLAN_STATUS_META[status] || { label: status, color: '#64748b' };
+  return '<span style="display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:'+meta.color+'">'+meta.label+'</span>';
+}
+
+async function renderMilplan(){
+  var el = document.getElementById('v-milplan');
+  if(!el) return;
+
+  if(STATE_MILPLAN === null){
+    el.innerHTML = '<div style="padding:60px;text-align:center;color:#64748b">Carregando…</div>';
+    await loadMilplanData();
+    if(currentView !== 'milplan') return; // usuário trocou de aba enquanto carregava
+  }
+
+  if(STATE_MILPLAN.length === 0){
+    el.innerHTML = '<div style="padding:32px 24px"><div style="max-width:480px;margin:60px auto;text-align:center">'
+      + '<div style="font-size:48px;margin-bottom:16px">📝</div>'
+      + '<div style="font-size:18px;font-weight:700;color:#1e293b;margin-bottom:8px">Nenhuma SS cadastrada ainda</div>'
+      + '<div style="font-size:13px;color:#64748b;margin-bottom:24px">Crie a primeira Solicitação de Serviço para a Milplan Engenharia.</div>'
+      + '<button class="btn" style="background:#009CDE;color:#fff" onclick="openMilplanNovaModal()">+ Nova SS</button>'
+      + '</div></div>';
+    return;
+  }
+
+  var rows = STATE_MILPLAN.filter(function(r){
+    if(MILPLAN_FILTERS.status && r.status !== MILPLAN_FILTERS.status) return false;
+    if(MILPLAN_FILTERS.atrasado && !milplanEstaAtrasado(r)) return false;
+    if(MILPLAN_FILTERS.busca){
+      var q = MILPLAN_FILTERS.busca.toLowerCase();
+      var hay = (r.pep+' '+r.nome_projeto_carteira+' '+r.ss_numero).toLowerCase();
+      if(hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+
+  var nAguardando = STATE_MILPLAN.filter(function(r){ return r.status==='em_analise'; }).length;
+  var nAtrasados = STATE_MILPLAN.filter(milplanEstaAtrasado).length;
+  var badge = document.getElementById('nb-milplan');
+  if(badge){
+    if(nAtrasados > 0){ badge.style.display='inline-block'; badge.textContent = nAtrasados; }
+    else { badge.style.display='none'; }
+  }
+
+  var statusOpts = '<option value="">Todos os status</option>' + Object.keys(MILPLAN_STATUS_META).map(function(s){
+    return '<option value="'+s+'"'+(MILPLAN_FILTERS.status===s?' selected':'')+'>'+MILPLAN_STATUS_META[s].label+'</option>';
+  }).join('');
+
+  var html = '<div style="padding:20px 24px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px">';
+  html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">';
+  html += '<select onchange="MILPLAN_FILTERS.status=this.value;renderMilplan()" style="padding:7px 10px;border:1px solid var(--bord);border-radius:6px;font-size:12px">'+statusOpts+'</select>';
+  html += '<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;cursor:pointer">'
+        + '<input type="checkbox" '+(MILPLAN_FILTERS.atrasado?'checked':'')+' onchange="MILPLAN_FILTERS.atrasado=this.checked;renderMilplan()"> Só atrasados ('+nAtrasados+')</label>';
+  html += '<input type="text" placeholder="🔍 Buscar PEP, projeto, nº SS…" value="'+(MILPLAN_FILTERS.busca||'').replace(/"/g,'&quot;')+'" '
+        + 'oninput="MILPLAN_FILTERS.busca=this.value;renderMilplan()" style="padding:7px 10px;border:1px solid var(--bord);border-radius:6px;font-size:12px;min-width:220px">';
+  html += (nAguardando>0 ? '<span style="font-size:12px;color:#7c3aed;font-weight:700">'+nAguardando+' em análise</span>' : '');
+  html += '</div>';
+  html += '<button class="btn" style="background:#009CDE;color:#fff" onclick="openMilplanNovaModal()">+ Nova SS</button>';
+  html += '</div>';
+
+  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
+  html += '<thead><tr style="text-align:left;border-bottom:2px solid var(--bord);color:#64748b;font-size:11px;text-transform:uppercase">'
+        + '<th style="padding:8px">SS N°</th><th style="padding:8px">Projeto</th><th style="padding:8px">Escopo</th>'
+        + '<th style="padding:8px">Status</th><th style="padding:8px">Prazo do Plano</th><th style="padding:8px">Rev.</th><th style="padding:8px"></th></tr></thead><tbody>';
+
+  rows.forEach(function(r){
+    var atrasado = milplanEstaAtrasado(r);
+    var escopoResumo = (r.escopo||'').slice(0,60) + ((r.escopo||'').length>60?'…':'');
+    html += '<tr style="border-bottom:1px solid #f1f5f9'+(atrasado?';background:#fef2f2':'')+'">';
+    html += '<td style="padding:8px;font-family:JetBrains Mono,monospace;font-weight:700">SS-Milplan-'+String(r.ss_numero).padStart(3,'0')+'</td>';
+    html += '<td style="padding:8px">'+(r.pep||'')+'<div style="font-size:11px;color:#64748b">'+(r.nome_projeto_carteira||'')+'</div></td>';
+    html += '<td style="padding:8px;color:#475569">'+escopoResumo+'</td>';
+    html += '<td style="padding:8px">'+milplanStatusBadge(r.status)+'</td>';
+    html += '<td style="padding:8px'+(atrasado?';color:#ef4444;font-weight:700':'')+'">'+milplanFmtData(r.prazo_plano)+(atrasado?' ⚠':'')+'</td>';
+    html += '<td style="padding:8px;text-align:center">'+r.revisao_atual+'</td>';
+    html += '<td style="padding:8px;text-align:right"><button class="btn btn-outline" style="padding:5px 10px;font-size:12px" onclick="openMilplanDetalheModal(\''+r.id+'\')">Ver</button></td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  if(rows.length === 0){ html += '<div style="text-align:center;padding:40px;color:#64748b">Nenhuma SS encontrada com esses filtros.</div>'; }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function closeMilplanModal(){
+  var ov = document.getElementById('modal-milplan');
+  if(ov) ov.classList.add('hidden');
+}
+
+// ── Modal: Nova SS ──────────────────────────────────────────────────
+function openMilplanNovaModal(){
+  var ov = document.getElementById('modal-milplan');
+  var body = document.getElementById('modal-milplan-body');
+  var _pepMap = new Map();
+  REF_PEPS.forEach(function(r){ if(r[0]) _pepMap.set(r[0], r[1]||''); });
+  var pepItems = [..._pepMap.entries()].sort(function(a,b){return a[0].localeCompare(b[0]);}).map(function(e){ return {value:e[0],label:e[1]||e[0],sub:e[0]}; });
+
+  body.innerHTML = ''
+    + '<h3 style="margin-bottom:14px">📝 Nova Solicitação de Serviço</h3>'
+    + '<div class="form-field" style="margin-bottom:12px"><label>PEP *</label><div id="ss-nova-pep"></div></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
+    + '  <div class="form-field"><label>Squad</label><input id="ss-nova-squad" class="input"></div>'
+    + '  <div class="form-field"><label>Líder do Projeto</label><input id="ss-nova-lider" class="input"></div>'
+    + '  <div class="form-field"><label>Planejador</label><input id="ss-nova-planejador" class="input"></div>'
+    + '</div>'
+    + '<div class="form-field" style="margin-bottom:12px"><label>Nome do Projeto na Carteira</label><input id="ss-nova-projeto" class="input"></div>'
+    + '<div class="form-field" style="margin-bottom:12px"><label>Escopo *</label><textarea id="ss-nova-escopo" class="input" rows="5" placeholder="Descreva o escopo do serviço solicitado…"></textarea></div>'
+    + '<div class="modal-actions">'
+    + '  <button class="btn btn-outline" onclick="closeMilplanModal()">Cancelar</button>'
+    + '  <button class="btn" style="background:#009CDE;color:#fff" onclick="submitMilplanNova()">Criar SS</button>'
+    + '</div>';
+
+  initCombo('ss-nova-pep', pepItems, 'Selecione ou busque um PEP…', function(val){
+    var info = getSquadInfo(val);
+    document.getElementById('ss-nova-squad').value = info.squad || '';
+    document.getElementById('ss-nova-lider').value = info.lider || '';
+    document.getElementById('ss-nova-planejador').value = info.planejador || '';
+    document.getElementById('ss-nova-projeto').value = getPepName(val) || getSubPepName(val) || '';
+  }, function(item){ return '<div class="cmb-opt-code">'+item.value+'</div><div class="cmb-opt-name">'+item.label+'</div>'; },
+     function(items,q){ return items.filter(function(x){ return (x.value+' '+x.label).toLowerCase().indexOf(q)>=0; }); });
+
+  ov.classList.remove('hidden');
+}
+
+async function submitMilplanNova(){
+  var pep = getCmbVal('ss-nova-pep');
+  var escopo = document.getElementById('ss-nova-escopo').value.trim();
+  if(!pep){ toast('Selecione um PEP.','red'); return; }
+  if(!escopo){ toast('Descreva o escopo.','red'); return; }
+
+  var payload = {
+    pep: pep,
+    nome_projeto_carteira: document.getElementById('ss-nova-projeto').value,
+    lider_squad: document.getElementById('ss-nova-squad').value,
+    lider_nome: document.getElementById('ss-nova-lider').value,
+    planejador_nome: document.getElementById('ss-nova-planejador').value,
+    escopo: escopo,
+  };
+
+  try{
+    toast('Criando SS…','blue');
+    var result = await _milplanFetch('/api/milplan/ss', { method:'POST', body: JSON.stringify(payload) });
+    toast('SS-Milplan-'+String(result.ss.ss_numero).padStart(3,'0')+' criada!','green');
+    closeMilplanModal();
+    await loadMilplanData(true);
+    renderMilplan();
+    openMilplanDetalheModal(result.ss.id);
+  }catch(e){
+    toast('Erro ao criar SS: '+e.message,'red');
+  }
+}
+
+// ── Modal: Detalhe da SS ───────────────────────────────────────────
+async function openMilplanDetalheModal(ssId){
+  var ov = document.getElementById('modal-milplan');
+  var body = document.getElementById('modal-milplan-body');
+  body.innerHTML = '<div style="padding:40px;text-align:center;color:#64748b">Carregando…</div>';
+  ov.classList.remove('hidden');
+
+  await loadMilplanDetalhe(ssId);
+  var ss = STATE_MILPLAN.find(function(r){ return r.id === ssId; });
+  if(!ss){ body.innerHTML = '<div style="padding:20px">SS não encontrada.</div>'; return; }
+
+  var revisoes = MILPLAN_REVISOES[ssId] || [];
+  var anexos = MILPLAN_ANEXOS[ssId] || [];
+  var atrasado = milplanEstaAtrasado(ss);
+
+  var html = '';
+  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">';
+  html += '<h3>SS-Milplan-'+String(ss.ss_numero).padStart(3,'0')+' '+milplanStatusBadge(ss.status)+'</h3>';
+  html += '<span style="font-size:20px;cursor:pointer;color:#94a3b8" onclick="closeMilplanModal()">&times;</span>';
+  html += '</div>';
+
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px">';
+  html += '<div><strong>PEP:</strong> '+(ss.pep||'')+'</div>';
+  html += '<div><strong>Projeto:</strong> '+(ss.nome_projeto_carteira||'')+'</div>';
+  html += '<div><strong>Squad:</strong> '+(ss.lider_squad||'')+'</div>';
+  html += '<div><strong>Líder:</strong> '+(ss.lider_nome||'')+'</div>';
+  html += '<div><strong>Planejador:</strong> '+(ss.planejador_nome||'')+'</div>';
+  html += '<div><strong>Data de Emissão:</strong> '+milplanFmtData(ss.data_emissao)+'</div>';
+  html += '<div'+(atrasado?' style="color:#ef4444;font-weight:700"':'')+'><strong>Prazo do Plano:</strong> '+milplanFmtData(ss.prazo_plano)+(atrasado?' ⚠ Atrasado':'')+'</div>';
+  html += '<div><strong>Revisão atual:</strong> '+ss.revisao_atual+'</div>';
+  html += '</div>';
+
+  html += '<div style="margin-bottom:14px"><strong style="font-size:12px;color:#64748b;text-transform:uppercase">Escopo</strong>'
+        + '<div style="font-size:13px;white-space:pre-wrap;margin-top:4px">'+(ss.escopo||'')+'</div></div>';
+
+  // Histórico de revisões
+  html += '<div style="margin-bottom:14px"><strong style="font-size:12px;color:#64748b;text-transform:uppercase">Histórico de Revisões</strong>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px">';
+  revisoes.forEach(function(rv){
+    html += '<tr><td style="padding:4px;color:#64748b">'+(rv.numero_revisao===0?'Revisão':'Revisão '+rv.numero_revisao)+'</td>'
+          + '<td style="padding:4px">'+(rv.motivo||'')+'</td><td style="padding:4px;color:#64748b">'+(rv.responsavel_nome||'')+'</td></tr>';
+  });
+  html += '</table></div>';
+
+  // Anexos
+  html += '<div style="margin-bottom:14px"><strong style="font-size:12px;color:#64748b;text-transform:uppercase">Anexos</strong>';
+  if(anexos.length === 0){
+    html += '<div style="font-size:12px;color:#94a3b8;margin-top:4px">Nenhum anexo ainda.</div>';
+  } else {
+    html += '<div style="margin-top:6px">';
+    anexos.forEach(function(a){
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:12px">'
+            + '<span>'+(a.tipo==='ss_gerada'?'📄':'📎')+' '+a.nome_arquivo+' <span style="color:#94a3b8">('+a.origem+')</span></span>'
+            + '<a href="/api/milplan/anexo/'+a.id+'/download" target="_blank" class="btn btn-outline" style="padding:3px 8px;font-size:11px">Baixar</a>'
+            + '</div>';
+    });
+    html += '</div>';
+  }
+  html += '<label style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;font-size:12px;color:#009CDE">'
+        + '<input type="file" style="display:none" onchange="uploadMilplanAnexo(\''+ssId+'\',this.files[0])">📂 Anexar retorno da Milplan</label>';
+  html += '</div>';
+
+  // Ações por status
+  html += '<div class="modal-actions" style="flex-wrap:wrap;justify-content:flex-start">';
+  if(ss.status === 'rascunho'){
+    html += '<button class="btn" style="background:#009CDE;color:#fff" onclick="milplanGerarPdf(\''+ssId+'\')">Gerar PDF</button>';
+    if(ss.pdf_atual_drive_file_id) html += '<button class="btn" style="background:#007E7A;color:#fff" onclick="milplanEnviar(\''+ssId+'\')">Enviar para Milplan</button>';
+  }
+  if(ss.status === 'aguardando_retorno'){
+    html += '<button class="btn" style="background:#ea580c;color:#fff" onclick="milplanRessalvas(\''+ssId+'\')">Registrar Ressalvas</button>';
+    html += '<button class="btn" style="background:#7c3aed;color:#fff" onclick="milplanStatus(\''+ssId+'\',\'em_analise\')">Marcar Em Análise</button>';
+  }
+  if(ss.status === 'em_analise'){
+    html += '<button class="btn" style="background:#007E7A;color:#fff" onclick="milplanStatus(\''+ssId+'\',\'aprovado\')">Aprovar</button>';
+    html += '<button class="btn" style="background:#ef4444;color:#fff" onclick="milplanStatus(\''+ssId+'\',\'reprovado\')">Reprovar</button>';
+  }
+  if(ss.status === 'aprovado'){
+    html += '<button class="btn" style="background:#334155;color:#fff" onclick="milplanStatus(\''+ssId+'\',\'concluido\')">Concluir</button>';
+  }
+  if(ss.pdf_atual_drive_file_id){
+    html += '<a href="/api/milplan/anexo/'+(anexos.filter(function(a){return a.drive_file_id===ss.pdf_atual_drive_file_id;})[0]||{id:''}).id+'/download" target="_blank" class="btn btn-outline">Baixar PDF Atual</a>';
+  }
+  html += '<button class="btn btn-outline" onclick="closeMilplanModal()">Fechar</button>';
+  html += '</div>';
+
+  body.innerHTML = html;
+}
+
+async function milplanGerarPdf(ssId){
+  try{
+    toast('Gerando PDF…','blue');
+    await _milplanFetch('/api/milplan/ss/'+ssId+'/gerar-pdf', { method:'POST' });
+    toast('PDF gerado!','green');
+    await loadMilplanData(true);
+    openMilplanDetalheModal(ssId);
+  }catch(e){ toast('Erro ao gerar PDF: '+e.message,'red'); }
+}
+
+async function milplanEnviar(ssId){
+  if(!confirm('Enviar esta SS por e-mail para a Milplan Engenharia?')) return;
+  try{
+    toast('Enviando…','blue');
+    await _milplanFetch('/api/milplan/ss/'+ssId+'/enviar', { method:'POST' });
+    toast('SS enviada!','green');
+    await loadMilplanData(true);
+    renderMilplan();
+    openMilplanDetalheModal(ssId);
+  }catch(e){ toast('Erro ao enviar: '+e.message,'red'); }
+}
+
+async function milplanRessalvas(ssId){
+  var motivo = prompt('Descreva o motivo da ressalva (ex: cronograma incompleto, falta PEP):');
+  if(motivo === null) return;
+  try{
+    toast('Registrando ressalva e reenviando…','blue');
+    await _milplanFetch('/api/milplan/ss/'+ssId+'/ressalvas', { method:'POST', body: JSON.stringify({motivo:motivo}) });
+    toast('Nova revisão gerada e reenviada!','green');
+    await loadMilplanData(true);
+    renderMilplan();
+    openMilplanDetalheModal(ssId);
+  }catch(e){ toast('Erro: '+e.message,'red'); }
+}
+
+async function milplanStatus(ssId, status){
+  try{
+    await _milplanFetch('/api/milplan/ss/'+ssId+'/status', { method:'PATCH', body: JSON.stringify({status:status}) });
+    toast('Status atualizado!','green');
+    await loadMilplanData(true);
+    renderMilplan();
+    openMilplanDetalheModal(ssId);
+  }catch(e){ toast('Erro ao atualizar status: '+e.message,'red'); }
+}
+
+async function uploadMilplanAnexo(ssId, file){
+  if(!file) return;
+  try{
+    toast('Enviando anexo…','blue');
+    var fd = new FormData();
+    fd.append('arquivo', file);
+    await _milplanFetch('/api/milplan/ss/'+ssId+'/anexos', { method:'POST', body: fd });
+    toast('Anexo enviado!','green');
+    openMilplanDetalheModal(ssId);
+  }catch(e){ toast('Erro ao enviar anexo: '+e.message,'red'); }
+}
+// ══════════════════════════════════════════════════════════════════
+// FIM MILPLAN FLOW WORK
 // ══════════════════════════════════════════════════════════════════
 
 </script>
