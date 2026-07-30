@@ -261,4 +261,17 @@ router.get('/anexo/:anexoId/download', requireAuth, async (req, res) => {
   }
 });
 
+// ── Excluir uma SS (cascata apaga revisões e anexos, ver migration.sql) ───
+router.delete('/ss/:id', requireAuth, async (req, res) => {
+  try {
+    const ss = await supa.selectOne('milplan_ss', { id: req.params.id });
+    if (!ss) return res.status(404).json({ error: 'SS não encontrada' });
+    await supa.remove('milplan_ss', { id: req.params.id });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[milplan/ss delete]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

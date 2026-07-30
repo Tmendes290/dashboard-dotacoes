@@ -47,6 +47,14 @@ async function update(table, filters, patch) {
   if (!r.ok) throw new Error(`Update em ${table} falhou: ${await r.text()}`);
 }
 
+async function remove(table, filters) {
+  const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${qs(filters)}`, {
+    method: 'DELETE',
+    headers: headers('return=minimal'),
+  });
+  if (!r.ok) throw new Error(`Delete em ${table} falhou: ${await r.text()}`);
+}
+
 async function selectOne(table, filters, select) {
   const sel = select ? `&select=${select}` : '';
   const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${qs(filters)}${sel}`, { headers: headers() });
@@ -63,4 +71,4 @@ async function selectMany(table, filters, select, order) {
   return r.json();
 }
 
-module.exports = { SUPA_URL, SUPA_SERVICE_KEY, rpc, insert, update, selectOne, selectMany };
+module.exports = { SUPA_URL, SUPA_SERVICE_KEY, rpc, insert, update, remove, selectOne, selectMany };

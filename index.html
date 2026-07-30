@@ -14979,7 +14979,7 @@ clearMs = function(id, cb){
 var STATE_MILPLAN = null; // null = ainda não carregado
 var MILPLAN_REVISOES = {}; // ss_id -> [revisões]
 var MILPLAN_ANEXOS = {};   // ss_id -> [anexos]
-var MILPLAN_FILTERS = { status: '', atrasado: false, busca: '' };
+var MILPLAN_FILTERS = { status: '', atrasado: false, busca: '', squad: '', lider: '' };
 
 var MILPLAN_STATUS_META = {
   rascunho:               { label: 'Rascunho',               color: '#64748b' },
@@ -15070,6 +15070,8 @@ async function renderMilplan(){
   var rows = STATE_MILPLAN.filter(function(r){
     if(MILPLAN_FILTERS.status && r.status !== MILPLAN_FILTERS.status) return false;
     if(MILPLAN_FILTERS.atrasado && !milplanEstaAtrasado(r)) return false;
+    if(MILPLAN_FILTERS.squad && r.lider_squad !== MILPLAN_FILTERS.squad) return false;
+    if(MILPLAN_FILTERS.lider && r.lider_nome !== MILPLAN_FILTERS.lider) return false;
     if(MILPLAN_FILTERS.busca){
       var q = MILPLAN_FILTERS.busca.toLowerCase();
       var hay = (r.pep+' '+r.nome_projeto_carteira+' '+r.ss_numero).toLowerCase();
@@ -15077,6 +15079,9 @@ async function renderMilplan(){
     }
     return true;
   });
+
+  var squadsUnicos = [...new Set(STATE_MILPLAN.map(function(r){return r.lider_squad;}).filter(Boolean))].sort();
+  var lideresUnicos = [...new Set(STATE_MILPLAN.map(function(r){return r.lider_nome;}).filter(Boolean))].sort();
 
   var nAguardando = STATE_MILPLAN.filter(function(r){ return r.status==='em_analise'; }).length;
   var nAtrasados = STATE_MILPLAN.filter(milplanEstaAtrasado).length;
@@ -15105,6 +15110,10 @@ async function renderMilplan(){
   html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px">';
   html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">';
   html += '<select onchange="MILPLAN_FILTERS.status=this.value;renderMilplan()" style="padding:7px 10px;border:1px solid var(--bord);border-radius:6px;font-size:12px">'+statusOpts+'</select>';
+  html += '<select onchange="MILPLAN_FILTERS.squad=this.value;renderMilplan()" style="padding:7px 10px;border:1px solid var(--bord);border-radius:6px;font-size:12px">'
+        + '<option value="">Todos os squads</option>' + squadsUnicos.map(function(s){ return '<option value="'+s+'"'+(MILPLAN_FILTERS.squad===s?' selected':'')+'>'+s+'</option>'; }).join('') + '</select>';
+  html += '<select onchange="MILPLAN_FILTERS.lider=this.value;renderMilplan()" style="padding:7px 10px;border:1px solid var(--bord);border-radius:6px;font-size:12px">'
+        + '<option value="">Todos os líderes</option>' + lideresUnicos.map(function(s){ return '<option value="'+s+'"'+(MILPLAN_FILTERS.lider===s?' selected':'')+'>'+s+'</option>'; }).join('') + '</select>';
   html += '<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;cursor:pointer">'
         + '<input type="checkbox" '+(MILPLAN_FILTERS.atrasado?'checked':'')+' onchange="MILPLAN_FILTERS.atrasado=this.checked;renderMilplan()"> Só atrasados ('+nAtrasados+')</label>';
   html += '<input type="text" placeholder="🔍 Buscar PEP, projeto, nº SS…" value="'+(MILPLAN_FILTERS.busca||'').replace(/"/g,'&quot;')+'" '
@@ -15403,6 +15412,7 @@ async function openMilplanDetalheModal(ssId){
     }
   }
   html += '<button class="btn btn-outline" onclick="closeMilplanModal()">Fechar</button>';
+  html += '<button class="btn" style="background:#ef4444;color:#fff;margin-left:auto" onclick="milplanExcluir(\''+ssId+'\','+ss.ss_numero+')">🗑 Excluir</button>';
   html += '</div>';
 
   body.innerHTML = html;
@@ -15504,6 +15514,18 @@ async function milplanUpdateCampo(ssId, campo, valor){
     toast('Atualizado!','green');
     await loadMilplanData(true);
   }catch(e){ toast('Erro ao atualizar: '+e.message,'red'); }
+}
+
+async function milplanExcluir(ssId, ssNumero){
+  var label = 'SS-Milplan-'+String(ssNumero).padStart(3,'0');
+  if(!confirm('Excluir definitivamente a '+label+'? Essa ação não pode ser desfeita (o histórico de revisões e anexos também será apagado).')) return;
+  try{
+    await _milplanFetch('/api/milplan/ss/'+ssId, { method:'DELETE' });
+    toast(label+' excluída.','green');
+    closeMilplanModal();
+    await loadMilplanData(true);
+    renderMilplan();
+  }catch(e){ toast('Erro ao excluir: '+e.message,'red'); }
 }
 
 async function uploadMilplanAnexo(ssId, file){
