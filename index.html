@@ -15128,14 +15128,27 @@ function openMilplanNovaModal(){
   REF_PEPS.forEach(function(r){ if(r[0]) _pepMap.set(r[0], r[1]||''); });
   var pepItems = [..._pepMap.entries()].sort(function(a,b){return a[0].localeCompare(b[0]);}).map(function(e){ return {value:e[0],label:e[1]||e[0],sub:e[0]}; });
 
+  var _squadSet={}, _liderSet={}, _planSet={};
+  Object.keys(REF_SQUADS||{}).forEach(function(pep){
+    var info = REF_SQUADS[pep] || {};
+    if(info.squad) _squadSet[info.squad]=1;
+    if(info.lider) _liderSet[info.lider]=1;
+    if(info.planejador) _planSet[info.planejador]=1;
+  });
+  function _mkDatalist(id, values){
+    return '<datalist id="'+id+'">' + Object.keys(values).sort(function(a,b){return a.localeCompare(b);})
+      .map(function(v){ return '<option value="'+v.replace(/"/g,'&quot;')+'">'; }).join('') + '</datalist>';
+  }
+
   body.innerHTML = ''
     + '<h3 style="margin-bottom:14px">📝 Nova Solicitação de Serviço</h3>'
     + '<div class="form-field" style="margin-bottom:12px"><label>PEP *</label><div id="ss-nova-pep"></div></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
-    + '  <div class="form-field"><label>Squad</label><input id="ss-nova-squad" class="input"></div>'
-    + '  <div class="form-field"><label>Líder do Projeto</label><input id="ss-nova-lider" class="input"></div>'
-    + '  <div class="form-field"><label>Planejador</label><input id="ss-nova-planejador" class="input"></div>'
+    + '  <div class="form-field"><label>Squad</label><input id="ss-nova-squad" class="input" list="ss-squad-dl" placeholder="Selecione ou digite um novo…" autocomplete="off"></div>'
+    + '  <div class="form-field"><label>Líder do Projeto</label><input id="ss-nova-lider" class="input" list="ss-lider-dl" placeholder="Selecione ou digite um novo…" autocomplete="off"></div>'
+    + '  <div class="form-field"><label>Planejador</label><input id="ss-nova-planejador" class="input" list="ss-plan-dl" placeholder="Selecione ou digite um novo…" autocomplete="off"></div>'
     + '</div>'
+    + _mkDatalist('ss-squad-dl', _squadSet) + _mkDatalist('ss-lider-dl', _liderSet) + _mkDatalist('ss-plan-dl', _planSet)
     + '<div class="form-field" style="margin-bottom:12px"><label>Nome do Projeto na Carteira</label><input id="ss-nova-projeto" class="input"></div>'
     + '<div class="form-field" style="margin-bottom:12px"><label>Escopo *</label><textarea id="ss-nova-escopo" class="input" rows="5" placeholder="Descreva o escopo do serviço solicitado…"></textarea></div>'
     + '<div class="modal-actions">'
