@@ -24,8 +24,15 @@ async function streamToBuffer(stream) {
   return Buffer.concat(chunks);
 }
 
+function driveConfigurado() {
+  return !!(process.env.GOOGLE_SERVICE_ACCOUNT_JSON && process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID);
+}
+
 // Gera o PDF da revisão atual da SS, sobe pro Drive e registra o anexo.
 // Reaproveitado tanto por /gerar-pdf quanto pelo ciclo de /ressalvas.
+// Enquanto o Google Drive não estiver configurado (env vars ausentes), devolve o PDF
+// só para visualização — sem persistir nada — pra não travar o teste do layout do PDF
+// atrás de uma configuração externa que ainda não foi feita.
 async function gerarEArmazenarPdf(ssId, callerNome) {
   const ss = await supa.selectOne('milplan_ss', { id: ssId });
   if (!ss) throw new Error('SS não encontrada');
@@ -33,6 +40,10 @@ async function gerarEArmazenarPdf(ssId, callerNome) {
 
   const pdfBuffer = await gerarPdfSS(ss, revisoes);
   const filename = ssFileBaseName(ss.ss_numero, ss.revisao_atual) + '.pdf';
+
+  if (!driveConfigurado()) {
+    return { persisted: false, filename, pdfBuffer, ss };
+  }
 
   let folderId = ss.drive_folder_id;
   if (!folderId) {
@@ -53,7 +64,7 @@ async function gerarEArmazenarPdf(ssId, callerNome) {
     await supa.update('milplan_ss_revisoes', { id: revisaoAtual.id }, { pdf_drive_file_id: driveFileId });
   }
 
-  return { driveFileId, anexoId: anexoRow.id, filename, pdfBuffer, ss };
+  return { persisted: true, driveFileId, anexoId: anexoRow.id, filename, pdfBuffer, ss };
 }
 
 async function enviarPdfAtual(ssId) {
@@ -122,7 +133,14 @@ router.post('/ss/:id/gerar-pdf', requireAuth, async (req, res) => {
   try {
     const callerNome = await getCallerNome(req.callerUser);
     const result = await gerarEArmazenarPdf(req.params.id, callerNome);
-    res.json({ ok: true, drive_file_id: result.driveFileId, anexo_id: result.anexoId, nome_arquivo: result.filename });
+    if (!result.persisted) {
+      return res.json({
+        ok: true, persisted: false, nome_arquivo: result.filename,
+        pdf_base64: result.pdfBuffer.toString('base64'),
+        aviso: 'Google Drive não configurado ainda — PDF gerado só para visualização, não foi salvo.',
+      });
+    }
+    res.json({ ok: true, persisted: true, drive_file_id: result.driveFileId, anexo_id: result.anexoId, nome_arquivo: result.filename });
   } catch (e) {
     console.error('[milplan/gerar-pdf]', e);
     res.status(500).json({ error: e.message });

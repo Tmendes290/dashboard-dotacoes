@@ -15412,11 +15412,31 @@ async function milplanGerarPdf(ssId){
   try{
     toast('Gerando PDF…','blue');
     var result = await _milplanFetch('/api/milplan/ss/'+ssId+'/gerar-pdf', { method:'POST' });
+    if(result.persisted === false){
+      toast(result.aviso || 'PDF gerado (não salvo — configure o Google Drive)','red');
+      milplanPreviewPdfBase64(result.pdf_base64, result.nome_arquivo);
+      return;
+    }
     toast('PDF gerado!','green');
     await loadMilplanData(true);
     openMilplanDetalheModal(ssId);
     milplanPreviewPdf(result.anexo_id, result.nome_arquivo);
   }catch(e){ toast('Erro ao gerar PDF: '+e.message,'red'); }
+}
+
+// Enquanto o Google Drive não estiver configurado, o backend devolve o PDF em base64
+// direto (sem salvar nada) — só pra visualização imediata do layout.
+function milplanPreviewPdfBase64(base64, filename){
+  var byteChars = atob(base64);
+  var bytes = new Uint8Array(byteChars.length);
+  for(var i=0;i<byteChars.length;i++) bytes[i]=byteChars.charCodeAt(i);
+  var blob = new Blob([bytes], {type:'application/pdf'});
+  var url = URL.createObjectURL(blob);
+  document.getElementById('milplan-pdf-title').textContent = (filename||'PDF') + ' (não salvo)';
+  var link = document.getElementById('milplan-pdf-download');
+  link.href = url; link.download = filename || 'documento.pdf';
+  document.getElementById('milplan-pdf-frame').src = url;
+  document.getElementById('modal-milplan-pdf').classList.remove('hidden');
 }
 
 // Baixa o PDF autenticado (a rota exige Bearer token — um <a href> comum não envia
