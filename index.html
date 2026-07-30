@@ -15067,6 +15067,8 @@ async function renderMilplan(){
 
   var nAguardando = STATE_MILPLAN.filter(function(r){ return r.status==='em_analise'; }).length;
   var nAtrasados = STATE_MILPLAN.filter(milplanEstaAtrasado).length;
+  var nAguardOrc = STATE_MILPLAN.filter(function(r){ return r.status==='aguardando_retorno'; }).length;
+  var nConcluido = STATE_MILPLAN.filter(function(r){ return r.status==='concluido'; }).length;
   var badge = document.getElementById('nb-milplan');
   if(badge){
     if(nAtrasados > 0){ badge.style.display='inline-block'; badge.textContent = nAtrasados; }
@@ -15078,6 +15080,15 @@ async function renderMilplan(){
   }).join('');
 
   var html = '<div style="padding:20px 24px">';
+
+  html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px">';
+  html += '<div class="kpi" style="flex:1;min-width:130px"><div class="kpi-lbl">Total de SS</div><div class="kpi-val">'+STATE_MILPLAN.length+'</div><div class="kpi-sub">cadastradas</div></div>';
+  html += '<div class="kpi" style="flex:1;min-width:130px;border-left:3px solid #d97706"><div class="kpi-lbl">Aguardando Orçamento</div><div class="kpi-val" style="color:#d97706">'+nAguardOrc+'</div><div class="kpi-sub">na Milplan</div></div>';
+  html += '<div class="kpi" style="flex:1;min-width:130px;border-left:3px solid #7c3aed"><div class="kpi-lbl">Em Análise</div><div class="kpi-val" style="color:#7c3aed">'+nAguardando+'</div><div class="kpi-sub">time interno</div></div>';
+  html += '<div class="kpi" style="flex:1;min-width:130px;border-left:3px solid #ef4444"><div class="kpi-lbl">Atrasadas</div><div class="kpi-val" style="color:#ef4444">'+nAtrasados+'</div><div class="kpi-sub">prazo vencido</div></div>';
+  html += '<div class="kpi" style="flex:1;min-width:130px;border-left:3px solid #007E7A"><div class="kpi-lbl">Concluídas</div><div class="kpi-val" style="color:#007E7A">'+nConcluido+'</div><div class="kpi-sub">finalizadas</div></div>';
+  html += '</div>';
+
   html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px">';
   html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">';
   html += '<select onchange="MILPLAN_FILTERS.status=this.value;renderMilplan()" style="padding:7px 10px;border:1px solid var(--bord);border-radius:6px;font-size:12px">'+statusOpts+'</select>';
@@ -15127,6 +15138,7 @@ function openMilplanNovaModal(){
   var _pepMap = new Map();
   REF_PEPS.forEach(function(r){ if(r[0]) _pepMap.set(r[0], r[1]||''); });
   var pepItems = [..._pepMap.entries()].sort(function(a,b){return a[0].localeCompare(b[0]);}).map(function(e){ return {value:e[0],label:e[1]||e[0],sub:e[0]}; });
+  pepItems.push({value:'__novo__',label:'+ Adicionar novo PEP…',sub:''});
 
   var _squadSet={}, _liderSet={}, _planSet={};
   Object.keys(REF_SQUADS||{}).forEach(function(pep){
@@ -15147,7 +15159,8 @@ function openMilplanNovaModal(){
 
   body.innerHTML = ''
     + '<h3 style="margin-bottom:14px">📝 Nova Solicitação de Serviço</h3>'
-    + '<div class="form-field" style="margin-bottom:12px"><label>PEP *</label><div class="cmb-wrap" id="ss-nova-pep"></div></div>'
+    + '<div class="form-field" style="margin-bottom:12px"><label>PEP *</label><div class="cmb-wrap" id="ss-nova-pep"></div>'
+    + '<input id="ss-nova-pep-novo" class="input" style="display:none;margin-top:6px" placeholder="Digite o novo código PEP…"></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
     + '  <div class="form-field"><label>Squad</label>' + _mkCombo('ss-nova-squad','ss-nova-squad-novo') + '</div>'
     + '  <div class="form-field"><label>Líder do Projeto</label>' + _mkCombo('ss-nova-lider','ss-nova-lider-novo') + '</div>'
@@ -15174,6 +15187,16 @@ function openMilplanNovaModal(){
   initCombo('ss-nova-planejador', _comboItems(_planSet), 'Selecione ou busque um planejador…', function(val){ milplanComboOnSelect('ss-nova-planejador','ss-nova-planejador-novo',val); }, _comboRender, _comboFilter);
 
   initCombo('ss-nova-pep', pepItems, 'Selecione ou busque um PEP…', function(val){
+    var pepNovoInp = document.getElementById('ss-nova-pep-novo');
+    if(val === '__novo__'){
+      pepNovoInp.style.display='block'; pepNovoInp.value=''; pepNovoInp.focus();
+      milplanSetComboVal('ss-nova-squad','ss-nova-squad-novo', '');
+      milplanSetComboVal('ss-nova-lider','ss-nova-lider-novo', '');
+      milplanSetComboVal('ss-nova-planejador','ss-nova-planejador-novo', '');
+      document.getElementById('ss-nova-projeto').value = '';
+      return;
+    }
+    pepNovoInp.style.display='none'; pepNovoInp.value='';
     var info = getSquadInfo(val);
     milplanSetComboVal('ss-nova-squad','ss-nova-squad-novo', info.squad);
     milplanSetComboVal('ss-nova-lider','ss-nova-lider-novo', info.lider);
@@ -15215,6 +15238,8 @@ function milplanGetComboVal(comboId, novoId){
 
 function milplanLimparForm(){
   clearCmb('ss-nova-pep');
+  var pepNovoInp = document.getElementById('ss-nova-pep-novo');
+  if(pepNovoInp){ pepNovoInp.style.display='none'; pepNovoInp.value=''; }
   milplanSetComboVal('ss-nova-squad','ss-nova-squad-novo','');
   milplanSetComboVal('ss-nova-lider','ss-nova-lider-novo','');
   milplanSetComboVal('ss-nova-planejador','ss-nova-planejador-novo','');
@@ -15226,7 +15251,7 @@ function milplanLimparForm(){
 }
 
 async function submitMilplanNova(){
-  var pep = getCmbVal('ss-nova-pep');
+  var pep = milplanGetComboVal('ss-nova-pep','ss-nova-pep-novo');
   var escopo = document.getElementById('ss-nova-escopo').value.trim();
   if(!pep){ toast('Selecione um PEP.','red'); return; }
   if(!escopo){ toast('Descreva o escopo.','red'); return; }
