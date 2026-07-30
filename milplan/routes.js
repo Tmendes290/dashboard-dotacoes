@@ -90,6 +90,10 @@ router.post('/ss', requireAuth, async (req, res) => {
       planejador_nome: b.planejador_nome || '',
       escopo: b.escopo,
       criado_por: req.callerUser.id,
+      criado_por_nome: callerNome,
+      inicio_previsto: b.inicio_previsto || null,
+      codigo_sap: b.codigo_sap || '',
+      visita: b.visita === 'Sim' ? 'Sim' : 'Não',
     };
     if (b.contrato) row.contrato = b.contrato;
     if (b.objeto_contrato) row.objeto_contrato = b.objeto_contrato;
@@ -174,6 +178,23 @@ router.patch('/ss/:id/status', requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('[milplan/status]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Edição de campos complementares (Início previsto, Código SAP, Visita) ──
+router.patch('/ss/:id/campos', requireAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const patch = {};
+    if ('inicio_previsto' in b) patch.inicio_previsto = b.inicio_previsto || null;
+    if ('codigo_sap' in b) patch.codigo_sap = b.codigo_sap || '';
+    if ('visita' in b) patch.visita = b.visita === 'Sim' ? 'Sim' : 'Não';
+    if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'nada para atualizar' });
+    await supa.update('milplan_ss', { id: req.params.id }, patch);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[milplan/campos]', e);
     res.status(500).json({ error: e.message });
   }
 });

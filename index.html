@@ -14971,7 +14971,7 @@ var MILPLAN_FILTERS = { status: '', atrasado: false, busca: '' };
 var MILPLAN_STATUS_META = {
   rascunho:               { label: 'Rascunho',               color: '#64748b' },
   enviado:                { label: 'Enviado',                color: '#009CDE' },
-  aguardando_retorno:     { label: 'Aguardando Retorno',      color: '#d97706' },
+  aguardando_retorno:     { label: 'Aguardando Orçamento',    color: '#d97706' },
   recebido_com_ressalvas: { label: 'Recebido c/ Ressalvas',   color: '#ea580c' },
   em_analise:             { label: 'Em Análise',              color: '#7c3aed' },
   aprovado:               { label: 'Aprovado',                color: '#007E7A' },
@@ -15152,6 +15152,11 @@ function openMilplanNovaModal(){
     + '  <div class="form-field"><label>Planejador</label>' + _mkSelect('ss-nova-planejador','ss-nova-planejador-novo',_planSet) + '</div>'
     + '</div>'
     + '<div class="form-field" style="margin-bottom:12px"><label>Nome do Projeto na Carteira</label><input id="ss-nova-projeto" class="input"></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
+    + '  <div class="form-field"><label>Início previsto</label><input type="date" id="ss-nova-inicio" class="input"></div>'
+    + '  <div class="form-field"><label>Código SAP</label><input id="ss-nova-sap" class="input" placeholder="Ex: MONTAGEM DE... SE-8011SA"></div>'
+    + '  <div class="form-field"><label>Visita</label><select id="ss-nova-visita"><option value="Não">Não</option><option value="Sim">Sim</option></select></div>'
+    + '</div>'
     + '<div class="form-field" style="margin-bottom:12px"><label>Escopo *</label><textarea id="ss-nova-escopo" class="input" rows="5" placeholder="Descreva o escopo do serviço solicitado…"></textarea></div>'
     + '<div class="modal-actions">'
     + '  <button class="btn btn-outline" onclick="closeMilplanModal()">Cancelar</button>'
@@ -15209,6 +15214,9 @@ async function submitMilplanNova(){
     lider_squad: milplanGetSelVal('ss-nova-squad','ss-nova-squad-novo'),
     lider_nome: milplanGetSelVal('ss-nova-lider','ss-nova-lider-novo'),
     planejador_nome: milplanGetSelVal('ss-nova-planejador','ss-nova-planejador-novo'),
+    inicio_previsto: document.getElementById('ss-nova-inicio').value || null,
+    codigo_sap: document.getElementById('ss-nova-sap').value,
+    visita: document.getElementById('ss-nova-visita').value,
     escopo: escopo,
   };
 
@@ -15240,25 +15248,66 @@ async function openMilplanDetalheModal(ssId){
   var anexos = MILPLAN_ANEXOS[ssId] || [];
   var atrasado = milplanEstaAtrasado(ss);
 
+  var driveLink = ss.drive_folder_id ? ('https://drive.google.com/drive/folders/'+ss.drive_folder_id) : '';
+
+  function campo(label, valueHtml){
+    return '<div><div style="font-size:11px;font-weight:700;color:#1e293b;margin-bottom:5px">'+label+'</div>'+valueHtml+'</div>';
+  }
+  function campoBox(label, value){
+    return campo(label, '<div style="background:#f8fafc;border-radius:5px;padding:8px 10px;font-size:13px;color:#334155">'+(value||'—')+'</div>');
+  }
+  function campoPlain(label, value){
+    return campo(label, '<div style="font-size:13px;color:#1e293b">'+(value||'—')+'</div>');
+  }
+  function campoAccent(label, value){
+    return campo(label, '<div style="font-size:13px;color:#c2410c;font-weight:600">'+(value||'—')+'</div>');
+  }
+
   var html = '';
   html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">';
   html += '<h3>SS-Milplan-'+String(ss.ss_numero).padStart(3,'0')+' '+milplanStatusBadge(ss.status)+'</h3>';
   html += '<span style="font-size:20px;cursor:pointer;color:#94a3b8" onclick="closeMilplanModal()">&times;</span>';
   html += '</div>';
 
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px">';
-  html += '<div><strong>PEP:</strong> '+(ss.pep||'')+'</div>';
-  html += '<div><strong>Projeto:</strong> '+(ss.nome_projeto_carteira||'')+'</div>';
-  html += '<div><strong>Squad:</strong> '+(ss.lider_squad||'')+'</div>';
-  html += '<div><strong>Líder:</strong> '+(ss.lider_nome||'')+'</div>';
-  html += '<div><strong>Planejador:</strong> '+(ss.planejador_nome||'')+'</div>';
-  html += '<div><strong>Data de Emissão:</strong> '+milplanFmtData(ss.data_emissao)+'</div>';
-  html += '<div'+(atrasado?' style="color:#ef4444;font-weight:700"':'')+'><strong>Prazo do Plano:</strong> '+milplanFmtData(ss.prazo_plano)+(atrasado?' ⚠ Atrasado':'')+'</div>';
-  html += '<div><strong>Revisão atual:</strong> '+ss.revisao_atual+'</div>';
-  html += '</div>';
+  html += '<div style="border:1px solid var(--bord);border-radius:8px;overflow:hidden;margin-bottom:14px">';
+  html += '<div style="padding:12px 16px;font-weight:700;border-bottom:1px solid var(--bord);background:#fafafa">'+(ss.preposto_area||'Milplan Engenharia')+'</div>';
+  html += '<div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px 24px">';
 
-  html += '<div style="margin-bottom:14px"><strong style="font-size:12px;color:#64748b;text-transform:uppercase">Escopo</strong>'
-        + '<div style="font-size:13px;white-space:pre-wrap;margin-top:4px">'+(ss.escopo||'')+'</div></div>';
+  html += campoPlain('Montadora', ss.preposto_area);
+  html += campoBox('Data', milplanFmtData(ss.data_emissao));
+
+  html += campoAccent('Squad', ss.lider_squad);
+  html += '<div></div>';
+
+  html += campoBox('Início previsto', milplanFmtData(ss.inicio_previsto));
+  html += campoPlain('Código SAP', ss.codigo_sap);
+
+  html += campo('Escopo detalhado', '<div style="font-size:13px;white-space:pre-wrap;color:#1e293b">'+(ss.escopo||'')+'</div>');
+  html += campoPlain('Responsavel', ss.criado_por_nome);
+
+  html += campoAccent('Líder do Squad', ss.lider_nome);
+  html += campoAccent('Preposto', ss.preposto_nome);
+
+  html += campoBox('Prazo do Plano'+(atrasado?' ⚠':''), milplanFmtData(ss.prazo_plano));
+  html += campo('Visita', '<select onchange="milplanUpdateCampo(\''+ssId+'\',\'visita\',this.value)" style="color:#c2410c;font-weight:600;border:1px solid var(--bord);border-radius:4px;padding:4px 6px">'
+        + '<option value="Não"'+(ss.visita!=='Sim'?' selected':'')+'>Não</option><option value="Sim"'+(ss.visita==='Sim'?' selected':'')+'>Sim</option></select>');
+
+  html += campo('Anexos', anexos.length===0
+    ? '<div style="background:#f8fafc;border-radius:5px;padding:8px 10px;font-size:12px;color:#94a3b8">Nenhum anexo ainda.</div>'
+    : '<div style="background:#f8fafc;border-radius:5px;padding:8px 10px">' + anexos.map(function(a){
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:12px">'
+          + '<span>'+(a.tipo==='ss_gerada'?'📄':'📎')+' '+a.nome_arquivo+'</span>'
+          + '<a href="/api/milplan/anexo/'+a.id+'/download" target="_blank" style="color:#009CDE">Baixar</a></div>';
+      }).join('') + '</div>');
+  html += campo('&nbsp;', '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#009CDE">'
+        + '<input type="file" style="display:none" onchange="uploadMilplanAnexo(\''+ssId+'\',this.files[0])">📂 Anexar retorno da Milplan</label>');
+
+  html += campoBox('Status', MILPLAN_STATUS_META[ss.status] ? MILPLAN_STATUS_META[ss.status].label : ss.status);
+  html += campo('Link dos Projetos', driveLink
+    ? '<a href="'+driveLink+'" target="_blank" style="font-size:13px;color:#009CDE;text-decoration:underline;word-break:break-all">'+driveLink+'</a>'
+    : '<div style="font-size:12px;color:#94a3b8">Gere o PDF para criar a pasta no Drive.</div>');
+
+  html += '</div></div>';
 
   // Histórico de revisões
   html += '<div style="margin-bottom:14px"><strong style="font-size:12px;color:#64748b;text-transform:uppercase">Histórico de Revisões</strong>';
@@ -15268,24 +15317,6 @@ async function openMilplanDetalheModal(ssId){
           + '<td style="padding:4px">'+(rv.motivo||'')+'</td><td style="padding:4px;color:#64748b">'+(rv.responsavel_nome||'')+'</td></tr>';
   });
   html += '</table></div>';
-
-  // Anexos
-  html += '<div style="margin-bottom:14px"><strong style="font-size:12px;color:#64748b;text-transform:uppercase">Anexos</strong>';
-  if(anexos.length === 0){
-    html += '<div style="font-size:12px;color:#94a3b8;margin-top:4px">Nenhum anexo ainda.</div>';
-  } else {
-    html += '<div style="margin-top:6px">';
-    anexos.forEach(function(a){
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:12px">'
-            + '<span>'+(a.tipo==='ss_gerada'?'📄':'📎')+' '+a.nome_arquivo+' <span style="color:#94a3b8">('+a.origem+')</span></span>'
-            + '<a href="/api/milplan/anexo/'+a.id+'/download" target="_blank" class="btn btn-outline" style="padding:3px 8px;font-size:11px">Baixar</a>'
-            + '</div>';
-    });
-    html += '</div>';
-  }
-  html += '<label style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;font-size:12px;color:#009CDE">'
-        + '<input type="file" style="display:none" onchange="uploadMilplanAnexo(\''+ssId+'\',this.files[0])">📂 Anexar retorno da Milplan</label>';
-  html += '</div>';
 
   // Ações por status
   html += '<div class="modal-actions" style="flex-wrap:wrap;justify-content:flex-start">';
@@ -15356,6 +15387,15 @@ async function milplanStatus(ssId, status){
     renderMilplan();
     openMilplanDetalheModal(ssId);
   }catch(e){ toast('Erro ao atualizar status: '+e.message,'red'); }
+}
+
+async function milplanUpdateCampo(ssId, campo, valor){
+  try{
+    var body={}; body[campo]=valor;
+    await _milplanFetch('/api/milplan/ss/'+ssId+'/campos', { method:'PATCH', body: JSON.stringify(body) });
+    toast('Atualizado!','green');
+    await loadMilplanData(true);
+  }catch(e){ toast('Erro ao atualizar: '+e.message,'red'); }
 }
 
 async function uploadMilplanAnexo(ssId, file){
