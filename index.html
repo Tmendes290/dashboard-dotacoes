@@ -15135,11 +15135,13 @@ function openMilplanNovaModal(){
     if(info.lider) _liderSet[info.lider]=1;
     if(info.planejador) _planSet[info.planejador]=1;
   });
-  function _mkSelect(selId, novoId, values){
-    var opts = Object.keys(values).sort(function(a,b){return a.localeCompare(b);})
-      .map(function(v){ return '<option value="'+v.replace(/"/g,'&quot;')+'">'+v+'</option>'; }).join('');
-    return '<select id="'+selId+'" onchange="milplanSelChange(\''+selId+'\',\''+novoId+'\')">'
-      + '<option value="">Selecione…</option>' + opts + '<option value="__novo__">+ Adicionar novo…</option></select>'
+  function _comboItems(values){
+    var items = Object.keys(values).sort(function(a,b){return a.localeCompare(b);}).map(function(v){ return {value:v,label:v,sub:''}; });
+    items.push({value:'__novo__',label:'+ Adicionar novo…',sub:''});
+    return items;
+  }
+  function _mkCombo(comboId, novoId){
+    return '<div class="cmb-wrap" id="'+comboId+'"></div>'
       + '<input id="'+novoId+'" class="input" style="display:none;margin-top:6px" placeholder="Digite o novo valor…">';
   }
 
@@ -15147,9 +15149,9 @@ function openMilplanNovaModal(){
     + '<h3 style="margin-bottom:14px">📝 Nova Solicitação de Serviço</h3>'
     + '<div class="form-field" style="margin-bottom:12px"><label>PEP *</label><div class="cmb-wrap" id="ss-nova-pep"></div></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
-    + '  <div class="form-field"><label>Squad</label>' + _mkSelect('ss-nova-squad','ss-nova-squad-novo',_squadSet) + '</div>'
-    + '  <div class="form-field"><label>Líder do Projeto</label>' + _mkSelect('ss-nova-lider','ss-nova-lider-novo',_liderSet) + '</div>'
-    + '  <div class="form-field"><label>Planejador</label>' + _mkSelect('ss-nova-planejador','ss-nova-planejador-novo',_planSet) + '</div>'
+    + '  <div class="form-field"><label>Squad</label>' + _mkCombo('ss-nova-squad','ss-nova-squad-novo') + '</div>'
+    + '  <div class="form-field"><label>Líder do Projeto</label>' + _mkCombo('ss-nova-lider','ss-nova-lider-novo') + '</div>'
+    + '  <div class="form-field"><label>Planejador</label>' + _mkCombo('ss-nova-planejador','ss-nova-planejador-novo') + '</div>'
     + '</div>'
     + '<div class="form-field" style="margin-bottom:12px"><label>Nome do Projeto na Carteira</label><input id="ss-nova-projeto" class="input"></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
@@ -15159,15 +15161,23 @@ function openMilplanNovaModal(){
     + '</div>'
     + '<div class="form-field" style="margin-bottom:12px"><label>Escopo *</label><textarea id="ss-nova-escopo" class="input" rows="5" placeholder="Descreva o escopo do serviço solicitado…"></textarea></div>'
     + '<div class="modal-actions">'
+    + '  <button class="btn btn-outline" onclick="milplanLimparForm()">Limpar</button>'
     + '  <button class="btn btn-outline" onclick="closeMilplanModal()">Cancelar</button>'
     + '  <button class="btn" style="background:#009CDE;color:#fff" onclick="submitMilplanNova()">Criar SS</button>'
     + '</div>';
 
+  function _comboRender(item){ return '<div class="cmb-opt-name">'+item.label+'</div>'; }
+  function _comboFilter(items,q){ return items.filter(function(x){ return x.label.toLowerCase().indexOf(q)>=0; }); }
+
+  initCombo('ss-nova-squad', _comboItems(_squadSet), 'Selecione ou busque um squad…', function(val){ milplanComboOnSelect('ss-nova-squad','ss-nova-squad-novo',val); }, _comboRender, _comboFilter);
+  initCombo('ss-nova-lider', _comboItems(_liderSet), 'Selecione ou busque um líder…', function(val){ milplanComboOnSelect('ss-nova-lider','ss-nova-lider-novo',val); }, _comboRender, _comboFilter);
+  initCombo('ss-nova-planejador', _comboItems(_planSet), 'Selecione ou busque um planejador…', function(val){ milplanComboOnSelect('ss-nova-planejador','ss-nova-planejador-novo',val); }, _comboRender, _comboFilter);
+
   initCombo('ss-nova-pep', pepItems, 'Selecione ou busque um PEP…', function(val){
     var info = getSquadInfo(val);
-    milplanSetSelectOrNovo('ss-nova-squad','ss-nova-squad-novo', info.squad);
-    milplanSetSelectOrNovo('ss-nova-lider','ss-nova-lider-novo', info.lider);
-    milplanSetSelectOrNovo('ss-nova-planejador','ss-nova-planejador-novo', info.planejador);
+    milplanSetComboVal('ss-nova-squad','ss-nova-squad-novo', info.squad);
+    milplanSetComboVal('ss-nova-lider','ss-nova-lider-novo', info.lider);
+    milplanSetComboVal('ss-nova-planejador','ss-nova-planejador-novo', info.planejador);
     document.getElementById('ss-nova-projeto').value = getPepName(val) || getSubPepName(val) || '';
   }, function(item){ return '<div class="cmb-opt-code">'+item.value+'</div><div class="cmb-opt-name">'+item.label+'</div>'; },
      function(items,q){ return items.filter(function(x){ return (x.value+' '+x.label).toLowerCase().indexOf(q)>=0; }); });
@@ -15175,31 +15185,44 @@ function openMilplanNovaModal(){
   ov.classList.remove('hidden');
 }
 
-function milplanSelChange(selId, novoId){
-  var sel = document.getElementById(selId);
+// Chamado quando o usuário escolhe um item na combobox de Squad/Líder/Planejador.
+// Se escolher "+ Adicionar novo…", revela o campo de texto livre em vez de fechar com esse valor.
+function milplanComboOnSelect(comboId, novoId, val){
   var novoInp = document.getElementById(novoId);
-  if(!sel || !novoInp) return;
-  if(sel.value === '__novo__'){ novoInp.style.display='block'; novoInp.focus(); }
+  if(!novoInp) return;
+  if(val === '__novo__'){ novoInp.style.display='block'; novoInp.value=''; novoInp.focus(); }
   else { novoInp.style.display='none'; novoInp.value=''; }
 }
 
-// Preenche o <select> se o valor já existir como opção; senão cai no modo "+ Adicionar novo…"
-// com o valor pré-digitado no campo de texto (ex: squad/líder ainda não cadastrado no ref_squads).
-function milplanSetSelectOrNovo(selId, novoId, value){
-  var sel = document.getElementById(selId);
+// Preenche a combobox com um valor (ex: vindo do auto-preenchimento por PEP), sem exigir
+// clique na lista — mesmo padrão usado nos filtros globais (ver f-pep-cmb-inp).
+function milplanSetComboVal(comboId, novoId, value){
+  var inp = document.getElementById(comboId+'-inp');
   var novoInp = document.getElementById(novoId);
-  if(!sel || !novoInp) return;
-  if(!value){ sel.value=''; novoInp.style.display='none'; novoInp.value=''; return; }
-  var found = Array.prototype.some.call(sel.options, function(o){ return o.value === value; });
-  if(found){ sel.value = value; novoInp.style.display='none'; novoInp.value=''; }
-  else { sel.value = '__novo__'; novoInp.style.display='block'; novoInp.value = value; }
+  if(inp){
+    inp.value = value || '';
+    inp.dataset.val = value || '';
+    inp.dataset.lbl = value || '';
+  }
+  if(novoInp){ novoInp.style.display='none'; novoInp.value=''; }
 }
 
-function milplanGetSelVal(selId, novoId){
-  var sel = document.getElementById(selId);
-  if(!sel) return '';
-  if(sel.value === '__novo__'){ var n=document.getElementById(novoId); return n ? n.value.trim() : ''; }
-  return sel.value || '';
+function milplanGetComboVal(comboId, novoId){
+  var v = getCmbVal(comboId);
+  if(v === '__novo__'){ var n=document.getElementById(novoId); return n ? n.value.trim() : ''; }
+  return v || '';
+}
+
+function milplanLimparForm(){
+  clearCmb('ss-nova-pep');
+  milplanSetComboVal('ss-nova-squad','ss-nova-squad-novo','');
+  milplanSetComboVal('ss-nova-lider','ss-nova-lider-novo','');
+  milplanSetComboVal('ss-nova-planejador','ss-nova-planejador-novo','');
+  document.getElementById('ss-nova-projeto').value='';
+  document.getElementById('ss-nova-inicio').value='';
+  document.getElementById('ss-nova-sap').value='';
+  document.getElementById('ss-nova-visita').value='Não';
+  document.getElementById('ss-nova-escopo').value='';
 }
 
 async function submitMilplanNova(){
@@ -15211,9 +15234,9 @@ async function submitMilplanNova(){
   var payload = {
     pep: pep,
     nome_projeto_carteira: document.getElementById('ss-nova-projeto').value,
-    lider_squad: milplanGetSelVal('ss-nova-squad','ss-nova-squad-novo'),
-    lider_nome: milplanGetSelVal('ss-nova-lider','ss-nova-lider-novo'),
-    planejador_nome: milplanGetSelVal('ss-nova-planejador','ss-nova-planejador-novo'),
+    lider_squad: milplanGetComboVal('ss-nova-squad','ss-nova-squad-novo'),
+    lider_nome: milplanGetComboVal('ss-nova-lider','ss-nova-lider-novo'),
+    planejador_nome: milplanGetComboVal('ss-nova-planejador','ss-nova-planejador-novo'),
     inicio_previsto: document.getElementById('ss-nova-inicio').value || null,
     codigo_sap: document.getElementById('ss-nova-sap').value,
     visita: document.getElementById('ss-nova-visita').value,
