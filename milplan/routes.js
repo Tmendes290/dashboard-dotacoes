@@ -63,7 +63,7 @@ async function enviarPdfAtual(ssId) {
   const filename = ssFileBaseName(ss.ss_numero, ss.revisao_atual) + '.pdf';
   const stream = await downloadFileStream(ss.pdf_atual_drive_file_id);
   const buffer = await streamToBuffer(stream);
-  await enviarSS({ ssNumero: ss.ss_numero, pdfBuffer: buffer, filename });
+  await enviarSS({ ssData: ss, pdfBuffer: buffer, filename });
 }
 
 // ── Criar SS ─────────────────────────────────────────────────────────────
