@@ -1374,6 +1374,19 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="modal-milplan-body"></div>
   </div>
 </div>
+<!-- MODAL PREVIEW DE PDF (Milplan) -->
+<div class="modal-overlay hidden" id="modal-milplan-pdf" style="z-index:1100">
+  <div class="modal" style="max-width:920px;width:95vw;height:92vh;padding:14px;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-shrink:0">
+      <strong id="milplan-pdf-title">PDF</strong>
+      <div style="display:flex;gap:8px;align-items:center">
+        <a id="milplan-pdf-download" class="btn btn-outline" download style="text-decoration:none">⬇ Baixar</a>
+        <span style="font-size:20px;cursor:pointer;color:#94a3b8" onclick="closeMilplanPdfPreview()">&times;</span>
+      </div>
+    </div>
+    <iframe id="milplan-pdf-frame" title="Pré-visualização do PDF" style="flex:1;border:1px solid var(--bord);border-radius:6px;width:100%;background:#525659"></iframe>
+  </div>
+</div>
 
 <script>
 // ─────────────────────────────────────────────────────────────────
@@ -15345,7 +15358,7 @@ async function openMilplanDetalheModal(ssId){
     : '<div style="background:#f8fafc;border-radius:5px;padding:8px 10px">' + anexos.map(function(a){
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:12px">'
           + '<span>'+(a.tipo==='ss_gerada'?'📄':'📎')+' '+a.nome_arquivo+'</span>'
-          + '<a href="/api/milplan/anexo/'+a.id+'/download" target="_blank" style="color:#009CDE">Baixar</a></div>';
+          + '<a href="#" onclick="event.preventDefault();milplanPreviewPdf(\''+a.id+'\',\''+a.nome_arquivo.replace(/'/g,"\\'")+'\')" style="color:#009CDE">Baixar</a></div>';
       }).join('') + '</div>');
   html += campo('&nbsp;', '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#009CDE">'
         + '<input type="file" style="display:none" onchange="uploadMilplanAnexo(\''+ssId+'\',this.files[0])">📂 Anexar retorno da Milplan</label>');
@@ -15384,7 +15397,10 @@ async function openMilplanDetalheModal(ssId){
     html += '<button class="btn" style="background:#334155;color:#fff" onclick="milplanStatus(\''+ssId+'\',\'concluido\')">Concluir</button>';
   }
   if(ss.pdf_atual_drive_file_id){
-    html += '<a href="/api/milplan/anexo/'+(anexos.filter(function(a){return a.drive_file_id===ss.pdf_atual_drive_file_id;})[0]||{id:''}).id+'/download" target="_blank" class="btn btn-outline">Baixar PDF Atual</a>';
+    var _pdfAtualAnexo = anexos.filter(function(a){return a.drive_file_id===ss.pdf_atual_drive_file_id;})[0];
+    if(_pdfAtualAnexo){
+      html += '<button class="btn btn-outline" onclick="milplanPreviewPdf(\''+_pdfAtualAnexo.id+'\',\''+_pdfAtualAnexo.nome_arquivo.replace(/\'/g,"\\\\'")+'\')">Ver PDF Atual</button>';
+    }
   }
   html += '<button class="btn btn-outline" onclick="closeMilplanModal()">Fechar</button>';
   html += '</div>';
@@ -15395,11 +15411,35 @@ async function openMilplanDetalheModal(ssId){
 async function milplanGerarPdf(ssId){
   try{
     toast('Gerando PDF…','blue');
-    await _milplanFetch('/api/milplan/ss/'+ssId+'/gerar-pdf', { method:'POST' });
+    var result = await _milplanFetch('/api/milplan/ss/'+ssId+'/gerar-pdf', { method:'POST' });
     toast('PDF gerado!','green');
     await loadMilplanData(true);
     openMilplanDetalheModal(ssId);
+    milplanPreviewPdf(result.anexo_id, result.nome_arquivo);
   }catch(e){ toast('Erro ao gerar PDF: '+e.message,'red'); }
+}
+
+// Baixa o PDF autenticado (a rota exige Bearer token — um <a href> comum não envia
+// esse cabeçalho) e mostra num iframe embutido, com um link de download pelo blob.
+async function milplanPreviewPdf(anexoId, filename){
+  if(!anexoId){ toast('Anexo não encontrado.','red'); return; }
+  try{
+    toast('Carregando PDF…','blue');
+    var token = await _milplanAuthToken();
+    var resp = await fetch('/api/milplan/anexo/'+anexoId+'/download', { headers: { 'Authorization': 'Bearer '+token } });
+    if(!resp.ok){ var err=null; try{err=await resp.json();}catch(e){} throw new Error((err&&err.error)||('Falha ao baixar: '+resp.status)); }
+    var blob = await resp.blob();
+    var url = URL.createObjectURL(blob);
+    document.getElementById('milplan-pdf-title').textContent = filename || 'PDF';
+    var link = document.getElementById('milplan-pdf-download');
+    link.href = url; link.download = filename || 'documento.pdf';
+    document.getElementById('milplan-pdf-frame').src = url;
+    document.getElementById('modal-milplan-pdf').classList.remove('hidden');
+  }catch(e){ toast('Erro ao carregar PDF: '+e.message,'red'); }
+}
+function closeMilplanPdfPreview(){
+  document.getElementById('modal-milplan-pdf').classList.add('hidden');
+  document.getElementById('milplan-pdf-frame').src = 'about:blank';
 }
 
 async function milplanEnviar(ssId){

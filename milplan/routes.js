@@ -42,10 +42,10 @@ async function gerarEArmazenarPdf(ssId, callerNome) {
 
   const driveFileId = await uploadBuffer({ folderId, filename, mimeType: 'application/pdf', buffer: pdfBuffer });
 
-  await supa.insert('milplan_ss_anexos', [{
+  const [anexoRow] = await supa.insert('milplan_ss_anexos', [{
     ss_id: ssId, tipo: 'ss_gerada', nome_arquivo: filename, drive_file_id: driveFileId,
     origem: 'gerado_sistema', enviado_por: null,
-  }]);
+  }], { returning: true });
   await supa.update('milplan_ss', { id: ssId }, { pdf_atual_drive_file_id: driveFileId });
 
   const revisaoAtual = revisoes.find((r) => r.numero_revisao === ss.revisao_atual);
@@ -53,7 +53,7 @@ async function gerarEArmazenarPdf(ssId, callerNome) {
     await supa.update('milplan_ss_revisoes', { id: revisaoAtual.id }, { pdf_drive_file_id: driveFileId });
   }
 
-  return { driveFileId, filename, pdfBuffer, ss };
+  return { driveFileId, anexoId: anexoRow.id, filename, pdfBuffer, ss };
 }
 
 async function enviarPdfAtual(ssId) {
@@ -122,7 +122,7 @@ router.post('/ss/:id/gerar-pdf', requireAuth, async (req, res) => {
   try {
     const callerNome = await getCallerNome(req.callerUser);
     const result = await gerarEArmazenarPdf(req.params.id, callerNome);
-    res.json({ ok: true, drive_file_id: result.driveFileId, nome_arquivo: result.filename });
+    res.json({ ok: true, drive_file_id: result.driveFileId, anexo_id: result.anexoId, nome_arquivo: result.filename });
   } catch (e) {
     console.error('[milplan/gerar-pdf]', e);
     res.status(500).json({ error: e.message });
