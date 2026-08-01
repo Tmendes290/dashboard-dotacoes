@@ -405,6 +405,34 @@
 
   var hojeSelectedDate = null; // yyyy-MM-dd escolhido na linha do tempo da PGU (persiste entre re-renders)
   var lastEffs = [];
+  // fiscalObra -> turno predominante desse fiscal (maioria das atividades dele), recalculado a
+  // cada renderAll(). Usado só pra sinalizar quando uma atividade tem turno (calculado pela hora)
+  // diferente do turno habitual do fiscal responsável -- possível erro no cronograma.
+  var FISCAL_TURNO_PREDOMINANTE = {};
+  function computeFiscalTurnoPredominante(effs) {
+    var tally = {};
+    effs.forEach(function (e) {
+      if (!e.fiscalObra || !e.turno) return;
+      if (!tally[e.fiscalObra]) tally[e.fiscalObra] = {};
+      tally[e.fiscalObra][e.turno] = (tally[e.fiscalObra][e.turno] || 0) + 1;
+    });
+    var result = {};
+    Object.keys(tally).forEach(function (fiscal) {
+      var counts = tally[fiscal], best = null, bestCount = 0, total = 0;
+      Object.keys(counts).forEach(function (turno) {
+        total += counts[turno];
+        if (counts[turno] > bestCount) { bestCount = counts[turno]; best = turno; }
+      });
+      // só marca "turno habitual" com uma amostra minima, senão um fiscal com 1 atividade
+      // sempre "bate" trivialmente com ele mesmo e o aviso perde o sentido.
+      if (total >= 3 && best) result[fiscal] = best;
+    });
+    return result;
+  }
+  function turnoDivergente(e) {
+    var esperado = FISCAL_TURNO_PREDOMINANTE[e.fiscalObra];
+    return !!(esperado && e.turno && e.turno !== esperado);
+  }
   // Quais grupos (TR/componente/disciplina) estao abertos na arvore -- guardado por chave estavel
   // pra sobreviver a um re-render (ex.: quando o encarregado preenche o avanco de uma atividade),
   // em vez de recolher tudo de volta toda vez que a tela atualiza.
@@ -453,6 +481,9 @@
       (e.isTendenciaBaseline ? ' title="Ainda igual à linha de base — preencha pra confirmar a tendência real"' : "");
     var inicioTendInput = '<input type="datetime-local" class="pgu-tend-input pgu-inline-field' + tendAutoCls + '"' + tendAutoTitle + ' data-uid="' + A.esc(e.uid) + '" data-field="inicioTendencia" value="' + A.esc(e.inicioTendencia) + '">';
     var terminoTendInput = '<input type="datetime-local" class="pgu-tend-input pgu-inline-field' + tendAutoCls + '"' + tendAutoTitle + ' data-uid="' + A.esc(e.uid) + '" data-field="terminoTendencia" value="' + A.esc(e.terminoTendencia) + '">';
+    var turnoAvisoHtml = turnoDivergente(e)
+      ? ' <span class="badge farol-atrasado" title="Turno diferente do habitual do fiscal ' + A.esc(e.fiscalObra) + ' (normalmente ' + A.esc(FISCAL_TURNO_PREDOMINANTE[e.fiscalObra]) + ')">⚠ turno atípico</span>'
+      : "";
 
     return '<div class="activity-row" data-uid="' + A.esc(e.uid) + '">' +
       '<div class="activity-row__farol">' + farolEmoji(farolDe(e)) + "</div>" +
@@ -460,7 +491,7 @@
       '<div class="activity-row__main">' +
         '<span class="activity-row__nome pgu-open" data-uid="' + A.esc(e.uid) + '">' + A.esc(e.nome) + "</span>" +
         '<div class="activity-row__meta">' + A.esc(e.area || "—") +
-          (e.turno ? " · " + A.esc(e.turno) : "") + "</div>" +
+          (e.turno ? " · " + A.esc(e.turno) : "") + turnoAvisoHtml + "</div>" +
       "</div>" +
       '<div class="activity-row__empresa" title="' + A.esc(e.executante || "") + '">' + (e.executante ? A.esc(e.executante) : "—") + "</div>" +
       '<div class="activity-row__inicio">' + fmtDataHora(e.inicioDataHora) + "</div>" +
@@ -772,6 +803,7 @@
     var hojeStr = toISODate(new Date());
     var todayIdx = null;
     dias.forEach(function (d, i) { if (d <= hojeStr) todayIdx = i; });
+    var turnoAtipico = effs.filter(turnoDivergente).length;
 
     container.innerHTML =
       '<div class="kpi-grid">' +
@@ -781,6 +813,7 @@
         kpiCard("⏱️", "Atrasadas", A.fmtNum(atrasadas), atrasadas ? "bad" : "") +
         kpiCard("⬜", "Não iniciadas", A.fmtNum(naoIniciadas)) +
         kpiCard("📊", "% geral da PGU", pctGeral + "%", "blue") +
+        kpiCard("⚠️", "Turno atípico p/ fiscal", A.fmtNum(turnoAtipico), turnoAtipico ? "warn" : "", "Turno da tarefa diferente do habitual do fiscal responsável") +
       "</div>" +
       '<div class="grid-2">' +
         '<div class="panel"><h3 class="panel__title">Status das atividades</h3><div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">' +
@@ -857,7 +890,10 @@
           var ttl = r.isTendenciaAuto ? "Reprogramado automaticamente por atraso em predecessora" : (r.isTendenciaBaseline ? "Ainda igual à linha de base" : "");
           return '<input type="datetime-local" class="pgu-tend-input' + cls + '" data-uid="' + A.esc(r.uid) + '" data-field="terminoTendencia" value="' + A.esc(r.terminoTendencia) + '"' + (ttl ? ' title="' + ttl + '"' : "") + '>';
         } },
-      { key: "turno", label: "Turno", render: function (r) { return r.turno ? A.esc(r.turno) : "—"; } }
+      { key: "turno", label: "Turno", render: function (r) {
+          if (!r.turno) return "—";
+          return A.esc(r.turno) + (turnoDivergente(r) ? ' <span class="badge farol-atrasado" title="Diferente do turno habitual do fiscal ' + A.esc(r.fiscalObra) + '">⚠</span>' : "");
+        } }
     ], {
       limit: 300,
       searchPlaceholder: "Buscar atividade...",
@@ -939,6 +975,7 @@
     recomputeCascade();
     var overrides = loadOverrides();
     var effs = atividades.map(function (a) { return effective(a, overrides[a.uid]); });
+    FISCAL_TURNO_PREDOMINANTE = computeFiscalTurnoPredominante(effs);
 
     renderHoje(effs);
     renderDashboard(effs);
