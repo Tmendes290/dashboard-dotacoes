@@ -1030,6 +1030,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <!-- MATERIAIS -->
     <div class="sb-nav-sec">Materiais</div>
     <div class="sb-item" data-view="materiais" data-label="Materiais"><span class="ico">📦</span><span class="sb-label">Materiais<span class="sb-badge" id="nb-mat" style="display:none;background:#7c3aed"></span></span></div>
+    <div class="sb-item" data-view="pipe" data-label="Pipeline de Materiais"><span class="ico">🚦</span><span class="sb-label">Pipeline de Materiais<span class="sb-badge" id="nb-pipe" style="display:none;background:#dc2626"></span></span></div>
     <!-- IMPRODUTIVIDADE -->
     <div class="sb-nav-sec">Fiscalização</div>
     <div class="sb-item" data-view="improdutividade" data-label="Improdutividade"><span class="ico">⏱</span><span class="sb-label">Produtividade</span></div>
@@ -1343,6 +1344,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="v-upload" class="hidden"></div>
     <div id="v-materiais" class="hidden"></div>
     <div id="v-milplan" class="hidden"></div>
+    <div id="v-pipe" class="hidden"></div>
     <div id="v-improdutividade" class="hidden"></div>
     <div id="v-indice-produtividade" class="hidden"></div>
     <div id="v-produtividade-rev2" class="hidden"></div>
@@ -1368,6 +1370,18 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
       <button class="btn" style="background:var(--danger);color:#fff" onclick="confirmDelete()">Excluir</button>
     </div>
+  </div>
+</div>
+<!-- MODAL PIPELINE DE MATERIAIS (novo/editar item) -->
+<div class="modal-overlay hidden" id="modal-pipe">
+  <div class="modal" style="max-width:640px;width:95vw;max-height:88vh;overflow:auto">
+    <div id="modal-pipe-body"></div>
+  </div>
+</div>
+<!-- MODAL PIPELINE DE MATERIAIS (configurar prazos) -->
+<div class="modal-overlay hidden" id="modal-pipe-config">
+  <div class="modal" style="max-width:640px;width:95vw;max-height:88vh;overflow:auto">
+    <div id="modal-pipe-config-body"></div>
   </div>
 </div>
 <!-- MODAL SS MILPLAN (criação e detalhe) -->
@@ -1517,6 +1531,7 @@ function loadState(){
 var STATE_MATERIAIS = JSON.parse(localStorage.getItem('mat_data') || '[]');
 var STATE_CJI3 = { months: [], rows: [] };
 var REF_FISCAIS = {}; // fiscal nome -> squad (carregado do Supabase)
+var REF_WBS_NEC = {}; // wbs -> data_necessidade 'YYYY-MM-DD' (carregado do Supabase)
 var _cji3F = { years: [], months: [], gers: [], sites: [], projs: [], forns: [] }; // empty array = todos
 var _cji3Open = {}; // proj|wbs -> expanded bool
 var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:String(new Date().getFullYear()), mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[], statusEntrega:[]};
@@ -1637,7 +1652,11 @@ async function loadFromSupabase(){
     (async function(){
       try {
         const {data:rwbs,error:e5}=await supa.from('ref_wbs').select('*');
-        if(!e5&&rwbs&&rwbs.length>0) REF_PEPS=rwbs.map(function(r){return[r.wbs,r.descricao||'',r.projeto||''];});
+        if(!e5&&rwbs&&rwbs.length>0){
+          REF_PEPS=rwbs.map(function(r){return[r.wbs,r.descricao||'',r.projeto||''];});
+          REF_WBS_NEC={};
+          rwbs.forEach(function(r){ if(r.data_necessidade) REF_WBS_NEC[r.wbs]=r.data_necessidade; });
+        }
       } catch(e5){console.warn('[Sync] ref_wbs:',e5);}
     })(),
 
@@ -1783,7 +1802,11 @@ function startRealtime(){
       (async function(){
         try{
           var {data:rwbs}=await supa.from('ref_wbs').select('*');
-          if(rwbs&&rwbs.length>0) REF_PEPS=rwbs.map(function(r){return[r.wbs,r.descricao||'',r.projeto||''];});
+          if(rwbs&&rwbs.length>0){
+            REF_PEPS=rwbs.map(function(r){return[r.wbs,r.descricao||'',r.projeto||''];});
+            REF_WBS_NEC={};
+            rwbs.forEach(function(r){ if(r.data_necessidade) REF_WBS_NEC[r.wbs]=r.data_necessidade; });
+          }
           var {data:rsq}=await supa.from('ref_squads').select('*');
           if(rsq&&rsq.length>0){REF_SQUADS={};rsq.forEach(function(r){REF_SQUADS[r.pep]={squad:r.squad||'',lider:r.lider||'',planejador:r.planejador||''};});}
           populateFilters(); render();
@@ -2330,7 +2353,8 @@ const VIEW_META={
   'indice-produtividade':{title:'Índice de Produtividade',sub:'Comparativo de HH cobrado pela contratada vs índice de produtividade do projeto'},
   'produtividade-rev2':{title:'Produtividade REV 02',sub:'Visual em teste (admin) — mesmo dado, novo design'},
   usuarios:{title:'Usuários',sub:'Gestão de acesso e permissões da equipe'},
-  milplan:{title:'SS Milplan',sub:'Solicitações de Serviço enviadas à Milplan Engenharia'}
+  milplan:{title:'SS Milplan',sub:'Solicitações de Serviço enviadas à Milplan Engenharia'},
+  pipe:{title:'Pipeline de Materiais',sub:'Engenharia → Cotação → RC → Aprovação → Pedido'}
 };
 function pdfAction(){
   if(currentView==='velocidade'){
@@ -2358,14 +2382,14 @@ function _syncBnav(id){
 function setView(id){
   currentView=id;
   _syncBnav(id);
-  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma','v-milplan'].forEach(v=>document.getElementById(v).classList.add('hidden'));
+  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma','v-milplan','v-pipe'].forEach(v=>document.getElementById(v).classList.add('hidden'));
   document.getElementById('v-'+id).classList.remove('hidden');
   // Lazy-load histograma iframe on first visit
   if(id==='histograma'){
     const fr=document.getElementById('histograma-frame');
     if(!fr.src||fr.src==='about:blank')fr.src='/histograma-eletro.html?embed=1';
   }
-  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios','milplan'].includes(id));
+  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios','milplan','pipe'].includes(id));
   if(id==='produtividade-rev2'){
     var _mRev2=VIEW_META['produtividade-rev2'];
     var _ptRev2=document.getElementById('page-title');if(_ptRev2)_ptRev2.textContent=_mRev2.title;
@@ -2432,6 +2456,7 @@ function _renderNow(){
   if(currentView==='upload') renderUpload();
   if(currentView==='materiais') renderMateriais();
   if(currentView==='milplan') renderMilplan();
+  if(currentView==='pipe') renderPipe();
   if(currentView==='cji3') renderCji3();
 }
 
@@ -4422,7 +4447,7 @@ function updateUserBadge(){
   document.body.classList.toggle("is-lider", isLider);
   var _perms = (CURRENT_PERFIL.permissoes && CURRENT_PERFIL.permissoes.length) ? CURRENT_PERFIL.permissoes : ['overview'];
   if(!isAdmin){
-    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','velocidade','cji3','improdutividade','indice-produtividade','histograma','milplan'];
+    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','velocidade','cji3','improdutividade','indice-produtividade','histograma','milplan','pipe'];
     document.querySelectorAll('.sb-nav .sb-item').forEach(function(item){
       if(item.classList.contains('admin-only')) return;
       var v=item.dataset.view; if(!v||_permViews.indexOf(v)<0) return;
@@ -5715,6 +5740,21 @@ async function handlePepSquadUpload(file){
 }
 
 // ── PLANILHA 1: WBS + SQUAD + LÍDERES + PLANEJADOR ───────────────
+// Converte serial Excel (numérico) ou string DD/MM/AAAA em 'YYYY-MM-DD'; retorna null se não parsear
+function _parseDataNecessidade(val){
+  if(val===null||val===undefined||val==='') return null;
+  if(typeof val==='number'){
+    var d=new Date(Math.round((val-25569)*86400*1000));
+    return isNaN(d.getTime())?null:d.toISOString().slice(0,10);
+  }
+  var s=String(val).trim();
+  var m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  var m2=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m2) return m2[0];
+  return null;
+}
+
 async function handleWbsSquadUpload(file){
   if(!file) return;
   if(!file.name.match(/\.xlsx?$/i)){toast('Formato inválido. Use .xlsx','red');return;}
@@ -5753,6 +5793,7 @@ async function handleWbsSquadUpload(file){
       var iLiderProjeto = hdr.findIndex(function(h){return (h.includes('LIDER')||h.includes('LÍDER'))&&!h.includes('PLANE');});
       // Planejador: match exato ou coluna com PLANEJA que não seja LIDER
       var iPlan    = hdr.findIndex(function(h){return h==='PLANEJADOR'||(h.includes('PLANEJA')&&!h.includes('LIDER')&&!h.includes('LÍDER'));});
+      var iDataNec = hdr.findIndex(function(h){return h.includes('NECESSID');});
 
       if(iWbs<0){toast('Colunas encontradas: '+hdr.filter(function(h){return h;}).join(', '),'red');return;}
 
@@ -5762,7 +5803,8 @@ async function handleWbsSquadUpload(file){
         if(!wbs) return;
         var projeto=iProjeto>=0?String(row[iProjeto]||'').trim():'';
         var desc=iDesc>=0?String(row[iDesc]||'').trim():'';
-        wbsRows.push({wbs:wbs,projeto:projeto,descricao:desc});
+        var dataNec=iDataNec>=0?_parseDataNecessidade(row[iDataNec]):null;
+        wbsRows.push({wbs:wbs,projeto:projeto,descricao:desc,data_necessidade:dataNec});
         wbsCount++;
 
         var squad=iSquad>=0?String(row[iSquad]||'').trim():'';
@@ -5798,7 +5840,11 @@ async function handleWbsSquadUpload(file){
 
       // Recarrega ambos do Supabase
       var {data:rwbs}=await supa.from('ref_wbs').select('*');
-      if(rwbs&&rwbs.length>0) REF_PEPS=rwbs.map(function(r){return [r.wbs,r.descricao||'',r.projeto||''];});
+      if(rwbs&&rwbs.length>0){
+        REF_PEPS=rwbs.map(function(r){return [r.wbs,r.descricao||'',r.projeto||''];});
+        REF_WBS_NEC={};
+        rwbs.forEach(function(r){ if(r.data_necessidade) REF_WBS_NEC[r.wbs]=r.data_necessidade; });
+      }
       var {data:rsq}=await supa.from('ref_squads').select('*');
       if(rsq&&rsq.length>0){
         REF_SQUADS={};
@@ -5842,6 +5888,7 @@ async function handleWbsUpload(file){
       var iProjeto=hdr.findIndex(function(h){return h==='PROJETO'||h==='PEP'||h.includes('PROJETO');});
       var iWbs=hdr.findIndex(function(h){return h==='WBS_ELEMENT'||h==='WBS'||h.includes('WBS');});
       var iDesc=hdr.findIndex(function(h){return h.includes('DESCRI');});
+      var iDataNec=hdr.findIndex(function(h){return h.includes('NECESSID');});
       if(iWbs<0){toast('Coluna WBS_ELEMENT não encontrada. Verifique o cabeçalho.','red');return;}
       var rows=[];
       data.slice(1).forEach(function(row){
@@ -5849,7 +5896,8 @@ async function handleWbsUpload(file){
         if(!wbs) return;
         var projeto=iProjeto>=0?String(row[iProjeto]||'').trim():'';
         var desc=iDesc>=0?String(row[iDesc]||'').trim():'';
-        rows.push({wbs:wbs,projeto:projeto,descricao:desc});
+        var dataNec=iDataNec>=0?_parseDataNecessidade(row[iDataNec]):null;
+        rows.push({wbs:wbs,projeto:projeto,descricao:desc,data_necessidade:dataNec});
       });
       if(!rows.length){toast('Nenhuma linha válida encontrada','red');return;}
       // Deduplicar por wbs (manter última ocorrência para evitar conflito no mesmo lote)
@@ -5866,6 +5914,8 @@ async function handleWbsUpload(file){
       var {data:rwbs}=await supa.from('ref_wbs').select('*');
       if(rwbs&&rwbs.length>0){
         REF_PEPS=rwbs.map(function(r){return [r.wbs,r.descricao||'',r.projeto||''];});
+        REF_WBS_NEC={};
+        rwbs.forEach(function(r){ if(r.data_necessidade) REF_WBS_NEC[r.wbs]=r.data_necessidade; });
       }
       populateFilters(); render();
       toast('✔ '+rows.length+' WBS importados com sucesso!','green');
@@ -6405,7 +6455,7 @@ function renderUsuariosHTML(el, usuarios, bloqueados){
         {v:'analytics',l:'Dashboard'},{v:'saude-pep',l:'Saúde do PEP'},{v:'materiais',l:'Materiais'},
         {v:'improdutividade',l:'Produtividade'},{v:'indice-produtividade',l:'Índice de Produtividade'},
         {v:'velocidade',l:'Telemetria'},{v:'cji3',l:'CJI3 Tabela'},{v:'histograma',l:'Histograma CTT'},
-        {v:'milplan',l:'SS Milplan'}
+        {v:'milplan',l:'SS Milplan'},{v:'pipe',l:'Pipeline de Materiais'}
       ];
       var _uPerms = u.permissoes || ['overview'];
       html += '<div style="margin-top:10px;border-top:1px solid #f1f5f9;padding-top:10px">';
@@ -7609,6 +7659,439 @@ function _matRowPasses(r, skip){
 function applyMatFilters(){ return STATE_MATERIAIS.filter(function(r){ return _matRowPasses(r, null); }); }
 function matSubset(skip)  { return STATE_MATERIAIS.filter(function(r){ return _matRowPasses(r, skip); }); }
 
+// ═════════════════════════════════════════════════════════════════
+// PIPELINE DE MATERIAIS — Engenharia → Cotação → RC → Aprovação → Pedido
+// ═════════════════════════════════════════════════════════════════
+var STATE_PIPE = null;   // null = ainda não carregado
+var PIPE_CONFIG = null;  // payload de pipeline_config, cacheado
+var PIPE_FILTERS = { disciplina:'', etapa:'', risco:null, busca:'' };
+
+var PIPE_STAGES = [
+  {id:'engenharia',    label:'Engenharia',       configKey:'engenharia'},
+  {id:'cotacao',       label:'Cotação',          configKey:'cotacao'},
+  {id:'rc',            label:'RC Emitida',       configKey:'rc'},
+  {id:'aprovacao',     label:'Aprovação',        configKey:'aprovacao'},
+  {id:'pedido_gerado', label:'Pedido Gerado',    configKey:'pedido'}
+];
+var PIPE_DISCIPLINAS = [
+  {v:'eletrica',       l:'Elétrica'},
+  {v:'eletromecanica', l:'Eletromecânica'},
+  {v:'mecanica',       l:'Mecânica'}
+];
+var PIPE_CONFIG_DEFAULT = {
+  disciplinas: {
+    eletrica:       {engenharia:{min:60,max:90},cotacao:{min:5,max:10},rc:{min:10,max:20},aprovacao:{min:5,max:15},pedido:{min:3,max:10}},
+    eletromecanica: {engenharia:{min:60,max:90},cotacao:{min:5,max:10},rc:{min:10,max:20},aprovacao:{min:5,max:15},pedido:{min:3,max:10}},
+    mecanica:       {engenharia:{min:60,max:90},cotacao:{min:5,max:10},rc:{min:10,max:20},aprovacao:{min:5,max:15},pedido:{min:3,max:10}}
+  },
+  margem_seguranca_dias: 0
+};
+
+async function loadPipeData(force){
+  if(STATE_PIPE!==null && !force) return;
+  try{
+    var {data,error} = await supa.from('material_pipeline').select('*').eq('arquivado', false).order('data_entrada_etapa');
+    if(error) throw error;
+    STATE_PIPE = data||[];
+  }catch(e){ console.warn('[Pipe] load:',e); STATE_PIPE = STATE_PIPE||[]; }
+}
+async function loadPipeConfig(force){
+  if(PIPE_CONFIG!==null && !force) return;
+  try{
+    var {data,error} = await supa.from('pipeline_config').select('payload').eq('chave','main').maybeSingle();
+    if(!error && data && data.payload) PIPE_CONFIG = data.payload;
+    else PIPE_CONFIG = JSON.parse(JSON.stringify(PIPE_CONFIG_DEFAULT));
+  }catch(e){ console.warn('[Pipe] config load:',e); PIPE_CONFIG = JSON.parse(JSON.stringify(PIPE_CONFIG_DEFAULT)); }
+}
+
+// ── Datas em dias úteis (sem calendário de feriados) ──────────────
+function _pipeToday(){ var d=new Date(); d.setHours(0,0,0,0); return d; }
+function _pipeParseISO(s){
+  if(!s) return null;
+  var p=String(s).slice(0,10).split('-');
+  if(p.length<3) return null;
+  var d=new Date(parseInt(p[0],10),parseInt(p[1],10)-1,parseInt(p[2],10));
+  d.setHours(0,0,0,0);
+  return isNaN(d.getTime())?null:d;
+}
+function _pipeFmtDate(d){ if(!d) return '—'; return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); }
+function addBusinessDays(date, n){
+  var d=new Date(date.getTime());
+  var dir = n>=0?1:-1;
+  var remaining = Math.abs(Math.round(n));
+  while(remaining>0){
+    d.setDate(d.getDate()+dir);
+    var dow=d.getDay();
+    if(dow!==0 && dow!==6) remaining--;
+  }
+  return d;
+}
+function businessDaysBetween(a,b){
+  if(!a||!b) return 0;
+  var d=new Date(a.getTime()), count=0;
+  while(d<b){
+    d.setDate(d.getDate()+1);
+    var dow=d.getDay();
+    if(dow!==0 && dow!==6) count++;
+  }
+  return count;
+}
+
+// ── Cálculo de risco por item ──────────────────────────────────────
+function calcPipeRisco(item){
+  var hoje=_pipeToday();
+  var stageIdx = PIPE_STAGES.findIndex(function(s){return s.id===item.etapa_atual;});
+  if(stageIdx<0) stageIdx=0;
+  var stage = PIPE_STAGES[stageIdx];
+  var entrada = _pipeParseISO(item.data_entrada_etapa) || hoje;
+  var diasNaEtapa = businessDaysBetween(entrada, hoje);
+
+  if(item.etapa_atual==='pedido_gerado'){
+    return {diasNaEtapa:diasNaEtapa, ritmo:'concluido', color:'#64748b', bg:'#f1f5f9', label:'Concluído', bucket:'concluido', projMin:null, projMax:null};
+  }
+
+  var cfgDisc = (PIPE_CONFIG&&PIPE_CONFIG.disciplinas&&PIPE_CONFIG.disciplinas[item.disciplina])
+    || PIPE_CONFIG_DEFAULT.disciplinas[item.disciplina] || PIPE_CONFIG_DEFAULT.disciplinas.eletrica;
+  var stageCfg = cfgDisc[stage.configKey] || {min:0,max:0};
+  var ritmoBucket = diasNaEtapa<=stageCfg.min ? 'ideal' : (diasNaEtapa<=stageCfg.max ? 'faixa' : 'estourada');
+
+  var remainingMin = Math.max(0, stageCfg.min-diasNaEtapa);
+  var remainingMax = Math.max(0, stageCfg.max-diasNaEtapa);
+  for(var i=stageIdx+1;i<PIPE_STAGES.length;i++){
+    var c2 = cfgDisc[PIPE_STAGES[i].configKey] || {min:0,max:0};
+    remainingMin += c2.min; remainingMax += c2.max;
+  }
+  var projMin = addBusinessDays(hoje, remainingMin);
+  var projMax = addBusinessDays(hoje, remainingMax);
+
+  var necStr = REF_WBS_NEC[item.wbs];
+  if(!necStr){
+    return {diasNaEtapa:diasNaEtapa, ritmo:ritmoBucket, color:'#94a3b8', bg:'#f1f5f9', label:'Sem data de necessidade', bucket:'cinza', projMin:projMin, projMax:projMax};
+  }
+  var dataNec = _pipeParseISO(necStr);
+  var margem = (PIPE_CONFIG&&PIPE_CONFIG.margem_seguranca_dias)||0;
+  var efetiva = new Date(dataNec.getTime()); efetiva.setDate(efetiva.getDate()-margem);
+
+  var bucket,color,bg,label;
+  if(ritmoBucket==='estourada' || efetiva<hoje || efetiva<projMin){
+    bucket='vermelho'; color='#dc2626'; bg='#fef2f2'; label='Em risco';
+  } else if(efetiva<projMax){
+    bucket='amarelo'; color='#d97706'; bg='#fef3c7'; label='Atenção';
+  } else {
+    bucket='verde'; color='#16a34a'; bg='#eaf7ea'; label='No prazo';
+  }
+  return {diasNaEtapa:diasNaEtapa, ritmo:ritmoBucket, color:color, bg:bg, label:label, bucket:bucket, projMin:projMin, projMax:projMax, dataNecessidade:dataNec};
+}
+
+function _pipeHasFilters(){ return !!(PIPE_FILTERS.disciplina||PIPE_FILTERS.etapa||PIPE_FILTERS.risco||PIPE_FILTERS.busca); }
+function setPipeFiltro(k,v){ PIPE_FILTERS[k]=v; renderPipe(); }
+function setPipeBusca(v){ PIPE_FILTERS.busca=v; renderPipe(); }
+function setPipeRiscoFilter(b){ PIPE_FILTERS.risco = (PIPE_FILTERS.risco===b?null:b); renderPipe(); }
+function clearPipeFilters(){ PIPE_FILTERS={disciplina:'',etapa:'',risco:null,busca:''}; renderPipe(); }
+
+async function renderPipe(){
+  var el=document.getElementById('v-pipe');
+  if(!el) return;
+
+  if(STATE_PIPE===null || PIPE_CONFIG===null){
+    el.innerHTML='<div style="padding:60px;text-align:center;color:#64748b">Carregando…</div>';
+    await Promise.all([loadPipeData(), loadPipeConfig()]);
+    if(currentView!=='pipe') return;
+  }
+
+  var isAdmin = CURRENT_PERFIL && CURRENT_PERFIL.role==='admin';
+
+  if(STATE_PIPE.length===0 && !_pipeHasFilters()){
+    el.innerHTML='<div style="padding:32px 24px"><div style="max-width:480px;margin:60px auto;text-align:center">'
+      +'<div style="font-size:48px;margin-bottom:16px">🚦</div>'
+      +'<div style="font-size:18px;font-weight:700;color:#1e293b;margin-bottom:8px">Nenhum item no pipeline ainda</div>'
+      +'<div style="font-size:13px;color:#64748b;margin-bottom:24px">Cadastre o primeiro material em acompanhamento (Engenharia → Cotação → RC → Aprovação → Pedido).</div>'
+      +'<button class="btn" style="background:#009CDE;color:#fff" onclick="openPipeItemModal()">+ Novo Item</button>'
+      +'</div></div>';
+    var nb0=document.getElementById('nb-pipe'); if(nb0) nb0.style.display='none';
+    return;
+  }
+
+  var allRisco = STATE_PIPE.map(function(item){ return {item:item, risco:calcPipeRisco(item)}; });
+  var counts={vermelho:0,amarelo:0,verde:0,cinza:0,concluido:0};
+  allRisco.forEach(function(r){ counts[r.risco.bucket]=(counts[r.risco.bucket]||0)+1; });
+  var nb=document.getElementById('nb-pipe');
+  if(nb){ if(counts.vermelho>0){nb.textContent=counts.vermelho;nb.style.display='inline-flex';} else nb.style.display='none'; }
+
+  var rows = allRisco.filter(function(r){
+    var item=r.item, risco=r.risco;
+    if(PIPE_FILTERS.disciplina && item.disciplina!==PIPE_FILTERS.disciplina) return false;
+    if(PIPE_FILTERS.etapa && item.etapa_atual!==PIPE_FILTERS.etapa) return false;
+    if(PIPE_FILTERS.risco && risco.bucket!==PIPE_FILTERS.risco) return false;
+    if(PIPE_FILTERS.busca){
+      var q=PIPE_FILTERS.busca.toLowerCase();
+      var hay=(item.wbs+' '+item.descricao_material+' '+(item.rc_numero||'')).toLowerCase();
+      if(hay.indexOf(q)<0) return false;
+    }
+    return true;
+  });
+
+  function kpiCard(label,val,color,bucket){
+    var active = PIPE_FILTERS.risco===bucket;
+    return '<div onclick="setPipeRiscoFilter('+(bucket?"'"+bucket+"'":'null')+')" style="cursor:pointer;background:#fff;border:1px solid '+(active?color:'#e2e8f0')+';border-radius:12px;padding:12px 14px;flex:1;min-width:120px'+(active?';box-shadow:0 0 0 2px '+color+'22':'')+'">'
+      +'<div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b">'+label+'</div>'
+      +'<div style="font-size:22px;font-weight:900;color:'+color+'">'+val+'</div>'
+      +'</div>';
+  }
+  var kpiHtml = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+    +kpiCard('Total ativos', STATE_PIPE.length, '#1e293b', null)
+    +kpiCard('🔴 Em risco', counts.vermelho||0, '#dc2626', 'vermelho')
+    +kpiCard('🟡 Atenção', counts.amarelo||0, '#d97706', 'amarelo')
+    +kpiCard('🟢 No prazo', counts.verde||0, '#16a34a', 'verde')
+    +kpiCard('⚪ Sem data', counts.cinza||0, '#94a3b8', 'cinza')
+    +'</div>';
+
+  var discOpts = PIPE_DISCIPLINAS.map(function(d){return '<option value="'+d.v+'"'+(PIPE_FILTERS.disciplina===d.v?' selected':'')+'>'+d.l+'</option>';}).join('');
+  var etapaOpts = PIPE_STAGES.map(function(s){return '<option value="'+s.id+'"'+(PIPE_FILTERS.etapa===s.id?' selected':'')+'>'+s.label+'</option>';}).join('');
+  var filtrosHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
+    +'<input class="input" style="max-width:220px" placeholder="Buscar WBS, descrição, RC…" value="'+(PIPE_FILTERS.busca||'').replace(/"/g,'&quot;')+'" oninput="setPipeBusca(this.value)">'
+    +'<select onchange="setPipeFiltro(\'disciplina\',this.value)" style="padding:8px;border-radius:8px;border:1px solid #e2e8f0"><option value="">Disciplina (todas)</option>'+discOpts+'</select>'
+    +'<select onchange="setPipeFiltro(\'etapa\',this.value)" style="padding:8px;border-radius:8px;border:1px solid #e2e8f0"><option value="">Etapa (todas)</option>'+etapaOpts+'</select>'
+    +(_pipeHasFilters()?'<button class="btn btn-outline" onclick="clearPipeFilters()">↺ Limpar</button>':'')
+    +'<div style="margin-left:auto;display:flex;gap:8px">'
+    +'<button class="btn" style="background:#009CDE;color:#fff" onclick="openPipeItemModal()">+ Novo Item</button>'
+    +(isAdmin?'<button class="btn btn-outline" onclick="openPipeConfigModal()">⚙ Configurar Prazos</button>':'')
+    +'</div>'
+    +'</div>';
+
+  var tableRows = rows.map(function(r){
+    var item=r.item, risco=r.risco;
+    var stage = PIPE_STAGES.find(function(s){return s.id===item.etapa_atual;}) || PIPE_STAGES[0];
+    var necTxt = REF_WBS_NEC[item.wbs] ? _pipeFmtDate(_pipeParseISO(REF_WBS_NEC[item.wbs])) : '—';
+    var projTxt = (risco.projMin&&risco.projMax) ? (_pipeFmtDate(risco.projMin)+' – '+_pipeFmtDate(risco.projMax)) : '—';
+    var isLast = item.etapa_atual==='pedido_gerado';
+    var pepRow = REF_PEPS.find(function(p){return p[0]===item.wbs;});
+    var projeto = pepRow ? pepRow[2] : '';
+    var discLbl = (PIPE_DISCIPLINAS.find(function(d){return d.v===item.disciplina;})||{l:item.disciplina}).l;
+    var ritmoColor = risco.ritmo==='estourada'?'#dc2626':(risco.ritmo==='faixa'?'#d97706':'#16a34a');
+    return '<tr>'
+      +'<td style="padding:8px 10px;font-family:\'Share Tech Mono\',monospace;font-size:11px">'+item.wbs+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:#64748b">'+(projeto||'—')+'</td>'
+      +'<td style="padding:8px 10px;font-size:12px">'+(item.descricao_material||'')+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px">'+discLbl+'</td>'
+      +'<td style="padding:8px 10px"><span style="display:inline-block;padding:3px 9px;border-radius:20px;font-size:10.5px;font-weight:700;color:#fff;background:#2563eb">'+stage.label+'</span></td>'
+      +'<td style="padding:8px 10px;text-align:center;font-size:11px;font-weight:700;color:'+ritmoColor+'">'+(isLast?'—':risco.diasNaEtapa+'d')+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px">'+necTxt+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px">'+(isLast?'—':projTxt)+'</td>'
+      +'<td style="padding:8px 10px"><span style="display:inline-block;padding:3px 9px;border-radius:20px;font-size:10.5px;font-weight:700;color:'+risco.color+';background:'+risco.bg+'">'+risco.label+'</span></td>'
+      +'<td style="padding:8px 10px;font-size:11px">'+(item.rc_numero||'—')+'</td>'
+      +'<td style="padding:8px 10px;white-space:nowrap">'
+        +(isLast
+          ?'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="pipeArquivar(\''+item.id+'\')">Arquivar</button>'
+          :'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="pipeAvancarEtapa(\''+item.id+'\')">Avançar →</button>')
+        +' <button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="openPipeItemModal(\''+item.id+'\')">✎</button>'
+        +' <button class="btn btn-outline" style="font-size:10px;padding:3px 8px;color:#dc2626" onclick="pipeExcluirItem(\''+item.id+'\',\''+(item.descricao_material||'').replace(/'/g,"\\'")+'\')">🗑</button>'
+      +'</td>'
+      +'</tr>';
+  }).join('');
+
+  var tableHtml = rows.length
+    ? '<div style="overflow-x:auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px">'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
+      +'<thead><tr style="background:#f8fafc;text-align:left;border-bottom:1px solid #e2e8f0">'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">WBS</th>'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Projeto</th>'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Descrição</th>'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Disciplina</th>'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Etapa Atual</th>'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b;text-align:center">Dias na Etapa</th>'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Data Necessidade</th>'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Projeção Conclusão</th>'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Risco</th>'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">RC nº</th>'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Ações</th>'
+      +'</tr></thead><tbody>'+tableRows+'</tbody></table></div>'
+    : '<div style="padding:40px;text-align:center;color:#64748b">Nenhum item encontrado com os filtros atuais.</div>';
+
+  el.innerHTML = '<div style="padding:20px 24px">'+kpiHtml+filtrosHtml+tableHtml+'</div>';
+}
+
+// ── Modal: novo/editar item ────────────────────────────────────────
+function openPipeItemModal(id){
+  var ov=document.getElementById('modal-pipe');
+  var body=document.getElementById('modal-pipe-body');
+  var editing = id ? STATE_PIPE.find(function(i){return i.id===id;}) : null;
+
+  var pepItems = REF_PEPS.map(function(r){ return {value:r[0], label:r[1]||r[0], sub:r[0]}; }).sort(function(a,b){return a.label.localeCompare(b.label);});
+  var discOpts = PIPE_DISCIPLINAS.map(function(d){return '<option value="'+d.v+'"'+(editing&&editing.disciplina===d.v?' selected':'')+'>'+d.l+'</option>';}).join('');
+  var etapaOpts = PIPE_STAGES.map(function(s){return '<option value="'+s.id+'"'+((editing&&editing.etapa_atual===s.id)||(!editing&&s.id==='engenharia')?' selected':'')+'>'+s.label+'</option>';}).join('');
+
+  body.innerHTML = ''
+    +'<h3 style="margin-bottom:14px">'+(editing?'✎ Editar Item':'🚦 Novo Item do Pipeline')+'</h3>'
+    +'<div class="form-field" style="margin-bottom:6px"><label>WBS *</label><div class="cmb-wrap" id="pipe-item-wbs"></div></div>'
+    +'<div id="pipe-item-nec-chip" style="font-size:11px;color:#64748b;margin:0 0 12px 2px"></div>'
+    +'<div class="form-field" style="margin-bottom:12px"><label>Descrição do Material *</label><input id="pipe-item-desc" class="input" value="'+(editing?(editing.descricao_material||'').replace(/"/g,'&quot;'):'')+'"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+      +'<div class="form-field"><label>Disciplina *</label><select id="pipe-item-disciplina">'+discOpts+'</select></div>'
+      +'<div class="form-field"><label>Etapa Atual *</label><select id="pipe-item-etapa">'+etapaOpts+'</select></div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+      +'<div class="form-field"><label>Data de Entrada na Etapa *</label><input type="date" id="pipe-item-data-entrada" class="input" value="'+(editing?editing.data_entrada_etapa:new Date().toISOString().slice(0,10))+'"></div>'
+      +'<div class="form-field"><label>RC nº</label><input id="pipe-item-rc" class="input" value="'+(editing&&editing.rc_numero?String(editing.rc_numero).replace(/"/g,'&quot;'):'')+'"></div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+      +'<div class="form-field"><label>Valor Estimado (R$)</label><input type="number" step="0.01" id="pipe-item-valor" class="input" value="'+(editing&&editing.valor_estimado!=null?editing.valor_estimado:'')+'"></div>'
+      +'<div class="form-field"><label>Responsável</label><input id="pipe-item-resp" class="input" value="'+(editing&&editing.responsavel?String(editing.responsavel).replace(/"/g,'&quot;'):'')+'"></div>'
+    +'</div>'
+    +'<div class="form-field" style="margin-bottom:12px"><label>Observações</label><textarea id="pipe-item-obs" class="input" rows="3">'+(editing&&editing.observacoes?editing.observacoes:'')+'</textarea></div>'
+    +'<div class="modal-actions">'
+      +'<button class="btn btn-outline" onclick="closePipeModal()">Cancelar</button>'
+      +'<button class="btn" style="background:#009CDE;color:#fff" onclick="savePipeItem('+(editing?"'"+editing.id+"'":'null')+')">'+(editing?'Salvar':'Criar')+'</button>'
+    +'</div>';
+
+  function updateNecChip(wbs){
+    var chip=document.getElementById('pipe-item-nec-chip');
+    if(!chip) return;
+    var nec = wbs?REF_WBS_NEC[wbs]:null;
+    chip.textContent = nec ? ('📅 Data de necessidade (WBS): '+_pipeFmtDate(_pipeParseISO(nec))) : (wbs?'⚠ WBS sem data de necessidade cadastrada':'');
+  }
+
+  initCombo('pipe-item-wbs', pepItems, 'Selecione ou busque um WBS…', function(val){
+    updateNecChip(val);
+  }, function(it){ return '<div class="cmb-opt-name">'+it.label+'</div><div class="cmb-opt-sub">'+it.sub+'</div>'; },
+     function(items,q){ return items.filter(function(x){ return x.label.toLowerCase().indexOf(q)>=0 || x.sub.toLowerCase().indexOf(q)>=0; }); });
+
+  if(editing){
+    var inp = document.getElementById('pipe-item-wbs-inp');
+    var found = pepItems.find(function(p){return p.value===editing.wbs;});
+    if(inp){
+      inp.value = editing.wbs+(found?(' — '+found.label):'');
+      inp.dataset.val = editing.wbs;
+      inp.dataset.lbl = found?found.label:editing.wbs;
+    }
+    updateNecChip(editing.wbs);
+  }
+
+  ov.classList.remove('hidden');
+}
+function closePipeModal(){ document.getElementById('modal-pipe').classList.add('hidden'); }
+
+async function savePipeItem(existingId){
+  var wbs = getCmbVal('pipe-item-wbs');
+  var desc = (document.getElementById('pipe-item-desc').value||'').trim();
+  var disciplina = document.getElementById('pipe-item-disciplina').value;
+  var etapa = document.getElementById('pipe-item-etapa').value;
+  var dataEntrada = document.getElementById('pipe-item-data-entrada').value;
+  if(!wbs){toast('Selecione o WBS','red');return;}
+  if(!desc){toast('Informe a descrição do material','red');return;}
+  if(!dataEntrada){toast('Informe a data de entrada na etapa','red');return;}
+
+  var row = {
+    wbs: wbs,
+    descricao_material: desc,
+    disciplina: disciplina,
+    etapa_atual: etapa,
+    data_entrada_etapa: dataEntrada,
+    rc_numero: (document.getElementById('pipe-item-rc').value||'').trim()||null,
+    valor_estimado: document.getElementById('pipe-item-valor').value ? parseFloat(document.getElementById('pipe-item-valor').value) : null,
+    responsavel: (document.getElementById('pipe-item-resp').value||'').trim()||null,
+    observacoes: (document.getElementById('pipe-item-obs').value||'').trim()||null
+  };
+  if(existingId) row.id = existingId;
+
+  try{
+    var {error} = await supa.from('material_pipeline').upsert(row);
+    if(error) throw error;
+    toast(existingId?'Item atualizado.':'Item criado.','green');
+    closePipeModal();
+    await loadPipeData(true);
+    renderPipe();
+  }catch(e){ toast('Erro ao salvar: '+e.message,'red'); }
+}
+
+// ── Ações de etapa ──────────────────────────────────────────────────
+async function pipeAvancarEtapa(id){
+  var item = STATE_PIPE.find(function(i){return i.id===id;});
+  if(!item) return;
+  var idx = PIPE_STAGES.findIndex(function(s){return s.id===item.etapa_atual;});
+  if(idx<0 || idx>=PIPE_STAGES.length-1) return;
+  var next = PIPE_STAGES[idx+1].id;
+  var hojeIso = new Date().toISOString().slice(0,10);
+  try{
+    var {error} = await supa.from('material_pipeline').update({etapa_atual:next, data_entrada_etapa:hojeIso}).eq('id',id);
+    if(error) throw error;
+    await supa.from('material_pipeline_historico').insert({pipeline_id:id, etapa_anterior:item.etapa_atual, etapa_nova:next, usuario:(CURRENT_USER&&CURRENT_USER.email)||''});
+    toast('Etapa avançada para '+PIPE_STAGES[idx+1].label,'green');
+    await loadPipeData(true);
+    renderPipe();
+  }catch(e){ toast('Erro ao avançar etapa: '+e.message,'red'); }
+}
+async function pipeArquivar(id){
+  if(!confirm('Arquivar este item? Ele sai da lista ativa do pipeline (o histórico é mantido).')) return;
+  try{
+    var {error} = await supa.from('material_pipeline').update({arquivado:true}).eq('id',id);
+    if(error) throw error;
+    toast('Item arquivado.','blue');
+    await loadPipeData(true);
+    renderPipe();
+  }catch(e){ toast('Erro ao arquivar: '+e.message,'red'); }
+}
+async function pipeExcluirItem(id, descricao){
+  if(!confirm('Excluir definitivamente o item "'+descricao+'" do pipeline? Essa ação não pode ser desfeita.')) return;
+  try{
+    var {error} = await supa.from('material_pipeline').delete().eq('id', id);
+    if(error) throw error;
+    toast('Item excluído.','red');
+    await loadPipeData(true);
+    renderPipe();
+  }catch(e){ toast('Erro ao excluir: '+e.message,'red'); }
+}
+
+// ── Modal: configuração de prazos (admin) ───────────────────────────
+function openPipeConfigModal(){
+  var ov=document.getElementById('modal-pipe-config');
+  var body=document.getElementById('modal-pipe-config-body');
+  var cfg = PIPE_CONFIG || PIPE_CONFIG_DEFAULT;
+  function inputPair(disc, stageKey){
+    var v = (cfg.disciplinas[disc]&&cfg.disciplinas[disc][stageKey]) || {min:0,max:0};
+    return '<input type="number" min="0" id="pipe-cfg-'+disc+'-'+stageKey+'-min" value="'+v.min+'" style="width:52px;padding:4px;border:1px solid #e2e8f0;border-radius:4px">'
+      +' – <input type="number" min="0" id="pipe-cfg-'+disc+'-'+stageKey+'-max" value="'+v.max+'" style="width:52px;padding:4px;border:1px solid #e2e8f0;border-radius:4px">';
+  }
+  var stageRows = PIPE_STAGES.map(function(s){
+    return '<tr><td style="padding:6px 8px;font-size:12px">'+s.label+'</td>'
+      + PIPE_DISCIPLINAS.map(function(d){ return '<td style="padding:6px 8px">'+inputPair(d.v, s.configKey)+'</td>'; }).join('')
+      + '</tr>';
+  }).join('');
+
+  body.innerHTML = '<h3 style="margin-bottom:6px">⚙ Configurar Prazos por Disciplina</h3>'
+    +'<div style="font-size:11px;color:#94a3b8;margin-bottom:14px">Dias úteis mínimo–máximo por etapa. Aprovação e Pedido são valores sugeridos — ajuste conforme sua realidade.</div>'
+    +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;margin-bottom:14px">'
+    +'<thead><tr><th style="text-align:left;padding:6px 8px;font-size:10px;color:#64748b">Etapa</th>'
+      + PIPE_DISCIPLINAS.map(function(d){return '<th style="text-align:left;padding:6px 8px;font-size:10px;color:#64748b">'+d.l+'</th>';}).join('')
+    +'</tr></thead><tbody>'+stageRows+'</tbody></table></div>'
+    +'<div class="form-field" style="margin-bottom:14px"><label>Margem de segurança (dias)</label><input type="number" min="0" id="pipe-cfg-margem" class="input" value="'+(cfg.margem_seguranca_dias||0)+'" style="max-width:120px"></div>'
+    +'<div class="modal-actions">'
+      +'<button class="btn btn-outline" onclick="closePipeConfigModal()">Cancelar</button>'
+      +'<button class="btn" style="background:#009CDE;color:#fff" onclick="savePipeConfig()">Salvar</button>'
+    +'</div>';
+  ov.classList.remove('hidden');
+}
+function closePipeConfigModal(){ document.getElementById('modal-pipe-config').classList.add('hidden'); }
+async function savePipeConfig(){
+  var payload = {disciplinas:{}, margem_seguranca_dias: parseInt(document.getElementById('pipe-cfg-margem').value,10)||0};
+  var stageKeys = ['engenharia','cotacao','rc','aprovacao','pedido'];
+  PIPE_DISCIPLINAS.forEach(function(d){
+    payload.disciplinas[d.v] = {};
+    stageKeys.forEach(function(sk){
+      var minEl=document.getElementById('pipe-cfg-'+d.v+'-'+sk+'-min');
+      var maxEl=document.getElementById('pipe-cfg-'+d.v+'-'+sk+'-max');
+      payload.disciplinas[d.v][sk] = {min: parseInt(minEl.value,10)||0, max: parseInt(maxEl.value,10)||0};
+    });
+  });
+  try{
+    var {error} = await supa.from('pipeline_config').upsert({chave:'main', payload:payload, atualizado_em:new Date().toISOString(), atualizado_por:(CURRENT_USER&&CURRENT_USER.email)||''});
+    if(error) throw error;
+    PIPE_CONFIG = payload;
+    toast('Prazos atualizados.','green');
+    closePipeConfigModal();
+    renderPipe();
+  }catch(e){ toast('Erro ao salvar configuração: '+e.message,'red'); }
+}
 
 // ── CJI3 TABELA ─────────────────────────────────────────────────
 function renderCji3(){
