@@ -405,32 +405,39 @@
 
   var hojeSelectedDate = null; // yyyy-MM-dd escolhido na linha do tempo da PGU (persiste entre re-renders)
   var lastEffs = [];
-  // fiscalObra -> turno predominante desse fiscal (maioria das atividades dele), recalculado a
-  // cada renderAll(). Usado só pra sinalizar quando uma atividade tem turno (calculado pela hora)
-  // diferente do turno habitual do fiscal responsável -- possível erro no cronograma.
+  // "fiscalObra|disciplina" -> turno predominante desse fiscal NAQUELA disciplina (maioria das
+  // atividades dele ali), recalculado a cada renderAll(). Separado por disciplina porque um mesmo
+  // fiscal pode atender mais de uma disciplina em turnos diferentes -- calcular só por fiscal
+  // misturaria isso e geraria falso positivo. Usado só pra sinalizar quando uma atividade tem
+  // turno (calculado pela hora) diferente do habitual do fiscal nessa disciplina.
   var FISCAL_TURNO_PREDOMINANTE = {};
+  function fiscalDisciplinaKey(fiscal, disciplina) { return fiscal + "|" + (disciplina || ""); }
   function computeFiscalTurnoPredominante(effs) {
     var tally = {};
     effs.forEach(function (e) {
       if (!e.fiscalObra || !e.turno) return;
-      if (!tally[e.fiscalObra]) tally[e.fiscalObra] = {};
-      tally[e.fiscalObra][e.turno] = (tally[e.fiscalObra][e.turno] || 0) + 1;
+      var k = fiscalDisciplinaKey(e.fiscalObra, e.disciplina);
+      if (!tally[k]) tally[k] = {};
+      tally[k][e.turno] = (tally[k][e.turno] || 0) + 1;
     });
     var result = {};
-    Object.keys(tally).forEach(function (fiscal) {
-      var counts = tally[fiscal], best = null, bestCount = 0, total = 0;
+    Object.keys(tally).forEach(function (k) {
+      var counts = tally[k], best = null, bestCount = 0, total = 0;
       Object.keys(counts).forEach(function (turno) {
         total += counts[turno];
         if (counts[turno] > bestCount) { bestCount = counts[turno]; best = turno; }
       });
-      // só marca "turno habitual" com uma amostra minima, senão um fiscal com 1 atividade
-      // sempre "bate" trivialmente com ele mesmo e o aviso perde o sentido.
-      if (total >= 3 && best) result[fiscal] = best;
+      // só marca "turno habitual" com uma amostra minima, senão uma combinação com 1 atividade
+      // sempre "bate" trivialmente com ela mesma e o aviso perde o sentido.
+      if (total >= 3 && best) result[k] = best;
     });
     return result;
   }
+  function turnoHabitualDe(e) {
+    return FISCAL_TURNO_PREDOMINANTE[fiscalDisciplinaKey(e.fiscalObra, e.disciplina)];
+  }
   function turnoDivergente(e) {
-    var esperado = FISCAL_TURNO_PREDOMINANTE[e.fiscalObra];
+    var esperado = turnoHabitualDe(e);
     return !!(esperado && e.turno && e.turno !== esperado);
   }
   // Quais grupos (TR/componente/disciplina) estao abertos na arvore -- guardado por chave estavel
@@ -482,7 +489,7 @@
     var inicioTendInput = '<input type="datetime-local" class="pgu-tend-input pgu-inline-field' + tendAutoCls + '"' + tendAutoTitle + ' data-uid="' + A.esc(e.uid) + '" data-field="inicioTendencia" value="' + A.esc(e.inicioTendencia) + '">';
     var terminoTendInput = '<input type="datetime-local" class="pgu-tend-input pgu-inline-field' + tendAutoCls + '"' + tendAutoTitle + ' data-uid="' + A.esc(e.uid) + '" data-field="terminoTendencia" value="' + A.esc(e.terminoTendencia) + '">';
     var turnoAvisoHtml = turnoDivergente(e)
-      ? ' <span class="badge farol-atrasado" title="Turno diferente do habitual do fiscal ' + A.esc(e.fiscalObra) + ' (normalmente ' + A.esc(FISCAL_TURNO_PREDOMINANTE[e.fiscalObra]) + ')">⚠ turno atípico</span>'
+      ? ' <span class="badge farol-atrasado" title="Turno diferente do habitual do fiscal ' + A.esc(e.fiscalObra) + ' em ' + A.esc(e.disciplina || "—") + ' (normalmente ' + A.esc(turnoHabitualDe(e)) + ')">⚠ turno atípico</span>'
       : "";
 
     return '<div class="activity-row" data-uid="' + A.esc(e.uid) + '">' +
@@ -892,7 +899,7 @@
         } },
       { key: "turno", label: "Turno", render: function (r) {
           if (!r.turno) return "—";
-          return A.esc(r.turno) + (turnoDivergente(r) ? ' <span class="badge farol-atrasado" title="Diferente do turno habitual do fiscal ' + A.esc(r.fiscalObra) + '">⚠</span>' : "");
+          return A.esc(r.turno) + (turnoDivergente(r) ? ' <span class="badge farol-atrasado" title="Diferente do turno habitual do fiscal ' + A.esc(r.fiscalObra) + ' em ' + A.esc(r.disciplina || "—") + '">⚠</span>' : "");
         } }
     ], {
       limit: 300,
