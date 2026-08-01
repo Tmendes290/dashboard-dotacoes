@@ -57,6 +57,201 @@
     });
   }
 
+  // ------------------------------------------------------------ baseline importada (cronograma XML)
+
+  // Carrega a baseline importada por alguém pelo site (se existir) e substitui window.PANEL_DATA.pgu
+  // por ela -- se ninguém nunca importou nada ainda, mantém o que já veio do pgu.data.js estático.
+  async function loadBaselineFromSupabase() {
+    try {
+      var res = await supa.from("pgu_baseline").select("dados").eq("chave", "main").maybeSingle();
+      if (res.error) throw res.error;
+      if (res.data && res.data.dados) {
+        window.PANEL_DATA = window.PANEL_DATA || {};
+        window.PANEL_DATA.pgu = res.data.dados;
+      }
+    } catch (e) {
+      console.warn("[PGU] erro ao carregar baseline importada (usando a estática):", e);
+    }
+  }
+  async function salvarBaselineImportada(dados) {
+    var res = await supa.from("pgu_baseline").upsert(
+      { chave: "main", dados: dados, atualizado_em: new Date().toISOString() },
+      { onConflict: "chave" }
+    );
+    if (res.error) throw res.error;
+  }
+
+  // Porta pra JS (DOMParser, no navegador) a mesma lógica do scripts/parse-pgu.ps1: lê o XML nativo
+  // do MS Project e devolve {geradoEm, projeto, totalAtividades, atividades}, no mesmo formato que
+  // window.PANEL_DATA.pgu já tem hoje. Ver o .ps1 pros comentários completos de cada regra.
+  function pIso8601Duration(s) {
+    if (!s) return 0;
+    var m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(s);
+    if (!m) return 0;
+    var h = m[1] ? parseFloat(m[1]) : 0, mi = m[2] ? parseFloat(m[2]) : 0, se = m[3] ? parseFloat(m[3]) : 0;
+    return Math.round((h + mi / 60 + se / 3600) * 10) / 10;
+  }
+  function pDateStr(v) {
+    if (!v) return null;
+    var d = new Date(v);
+    return isNaN(d.getTime()) ? null : (d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"));
+  }
+  function pDateHoraStr(v) {
+    if (!v) return null;
+    var d = new Date(v), ds = pDateStr(v);
+    return ds ? (ds + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0")) : null;
+  }
+  function pTurnoDaHora(v) {
+    if (!v) return null;
+    var d = new Date(v);
+    if (isNaN(d.getTime())) return null;
+    var h = d.getHours();
+    if (h >= 7 && h < 17) return "07h–17h";
+    if (h >= 17) return "17h–00h";
+    return "00h–07h";
+  }
+  function pTxt(el, tag) { var n = el.getElementsByTagName(tag)[0]; return n ? n.textContent : ""; }
+
+  function parsePguXml(xmlText) {
+    var doc = new DOMParser().parseFromString(xmlText, "text/xml");
+    if (doc.getElementsByTagName("parsererror").length) throw new Error("XML inválido ou corrompido.");
+
+    var extAttrsWrap = doc.getElementsByTagName("ExtendedAttributes")[0];
+    var fieldIdByAlias = {};
+    if (extAttrsWrap) {
+      Array.prototype.slice.call(extAttrsWrap.getElementsByTagName("ExtendedAttribute")).forEach(function (d) {
+        var alias = pTxt(d, "Alias"), fid = pTxt(d, "FieldID");
+        if (alias) fieldIdByAlias[alias] = fid;
+      });
+    }
+    var executanteFieldId = fieldIdByAlias["Executante"];
+    var encarregadoFieldId = fieldIdByAlias["Encarregado"];
+    var fiscalObraFieldId = fieldIdByAlias["Fiscal Obra"];
+    var fiscalSegurancaFieldId = fieldIdByAlias["Fiscal Segurança"];
+
+    function campoCustomizado(taskEl, fieldId) {
+      if (!fieldId) return null;
+      var attrs = taskEl.getElementsByTagName("ExtendedAttribute");
+      for (var i = 0; i < attrs.length; i++) {
+        if (pTxt(attrs[i], "FieldID") === fieldId) {
+          var v = pTxt(attrs[i], "Value").trim();
+          return v || null;
+        }
+      }
+      return null;
+    }
+
+    var tasksEl = doc.getElementsByTagName("Tasks")[0];
+    if (!tasksEl) throw new Error("Não encontrei a seção <Tasks> no arquivo — é mesmo um export do MS Project?");
+    var taskEls = Array.prototype.slice.call(tasksEl.getElementsByTagName("Task"));
+
+    var hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    var tasksByUid = {}, orderedUids = [];
+
+    taskEls.forEach(function (t) {
+      var uid = pTxt(t, "UID");
+      orderedUids.push(uid);
+      var nivel = parseInt(pTxt(t, "OutlineLevel"), 10) || 0;
+      var nome = pTxt(t, "Name").trim();
+      var milestone = pTxt(t, "Milestone") === "1";
+      var resumo = pTxt(t, "Summary") === "1";
+      var critico = pTxt(t, "Critical") === "1";
+      var pctComplete = parseFloat(pTxt(t, "PercentComplete")) || 0;
+      var pctFisicoRaw = pTxt(t, "PhysicalPercentComplete");
+      var pctFisico = pctFisicoRaw ? parseFloat(pctFisicoRaw) : pctComplete;
+      var startRaw = pTxt(t, "Start"), finishRaw = pTxt(t, "Finish");
+      var inicio = pDateStr(startRaw), termino = pDateStr(finishRaw);
+      var inicioReal = pDateStr(pTxt(t, "ActualStart")), terminoReal = pDateStr(pTxt(t, "ActualFinish"));
+      var inicioDataHora = pDateHoraStr(startRaw), terminoDataHora = pDateHoraStr(finishRaw);
+      var turno = pTurnoDaHora(startRaw);
+      var duracaoHoras = pIso8601Duration(pTxt(t, "Duration"));
+
+      var inicioBaseline = null, terminoBaseline = null, inicioBaselineDataHora = null, terminoBaselineDataHora = null;
+      var baselines = t.getElementsByTagName("Baseline");
+      for (var bi = 0; bi < baselines.length; bi++) {
+        if (pTxt(baselines[bi], "Number") === "0") {
+          var bStart = pTxt(baselines[bi], "Start"), bFinish = pTxt(baselines[bi], "Finish");
+          inicioBaseline = pDateStr(bStart); terminoBaseline = pDateStr(bFinish);
+          inicioBaselineDataHora = pDateHoraStr(bStart); terminoBaselineDataHora = pDateHoraStr(bFinish);
+          break;
+        }
+      }
+
+      var executante = executanteFieldId ? campoCustomizado(t, executanteFieldId) : null;
+      var encarregado = campoCustomizado(t, encarregadoFieldId);
+      var fiscalObra = campoCustomizado(t, fiscalObraFieldId);
+      var fiscalSeguranca = campoCustomizado(t, fiscalSegurancaFieldId);
+
+      var predecessores = [];
+      Array.prototype.slice.call(t.getElementsByTagName("PredecessorLink")).forEach(function (p) {
+        var lagRaw = pTxt(p, "LinkLag");
+        predecessores.push({ uid: pTxt(p, "PredecessorUID"), tipo: parseInt(pTxt(p, "Type"), 10) || 0, lagMin: lagRaw ? Math.round(parseFloat(lagRaw) / 10) : 0 });
+      });
+
+      var status = "Não iniciada", atrasoDias = 0;
+      if (milestone) {
+        status = pctComplete >= 100 ? "Concluída" : (termino && new Date(termino) < hoje ? "Atrasada" : "Não iniciada");
+      } else if (pctComplete >= 100) {
+        status = "Concluída";
+      } else if (pctComplete > 0 || inicioReal) {
+        status = "Em andamento";
+        if (termino && new Date(termino) < hoje) { status = "Atrasada"; atrasoDias = Math.round((hoje - new Date(termino)) / 86400000); }
+      } else if (inicio && new Date(inicio) < hoje) {
+        status = "Atrasada"; atrasoDias = Math.round((hoje - new Date(inicio)) / 86400000);
+      }
+
+      tasksByUid[uid] = {
+        uid: uid, nome: nome, nivel: nivel, milestone: milestone, resumo: resumo, critico: critico,
+        inicio: inicio, termino: termino, inicioDataHora: inicioDataHora, terminoDataHora: terminoDataHora,
+        turno: turno, inicioReal: inicioReal, terminoReal: terminoReal,
+        inicioBaseline: inicioBaseline, terminoBaseline: terminoBaseline,
+        inicioBaselineDataHora: inicioBaselineDataHora, terminoBaselineDataHora: terminoBaselineDataHora,
+        duracaoHoras: duracaoHoras, percentComplete: pctComplete, percentFisico: pctFisico,
+        executante: executante, encarregado: encarregado, fiscalObra: fiscalObra, fiscalSeguranca: fiscalSeguranca,
+        predecessores: predecessores, status: status, atrasoDias: atrasoDias, filhos: []
+      };
+    });
+
+    var root = null, stack = [];
+    orderedUids.forEach(function (uid) {
+      var node = tasksByUid[uid];
+      var nivel1idx = node.nivel + 1;
+      if (nivel1idx === 1) { root = node; stack = [node]; return; }
+      while (stack.length >= nivel1idx) stack.pop();
+      var parent = stack[stack.length - 1];
+      if (parent) parent.filhos.push(node);
+      stack.push(node);
+    });
+    var arvore = root ? root.filhos : [];
+
+    var DISCIPLINAS_CONHECIDAS = ["MECÂNICA", "ELÉTRICA", "CIVIL"];
+    function classificar(node, areaAtual, componenteAtual, disciplinaAtual) {
+      var area = node.nivel === 3 ? node.nome : areaAtual;
+      var componente = node.nivel === 4 ? node.nome : componenteAtual;
+      var disciplina = (node.nivel === 5 && DISCIPLINAS_CONHECIDAS.indexOf((node.nome || "").toUpperCase()) >= 0) ? node.nome : disciplinaAtual;
+      node.area = area; node.componente = componente; node.disciplina = disciplina;
+      node.filhos.forEach(function (f) { classificar(f, area, componente, disciplina); });
+    }
+    arvore.forEach(function (n) { classificar(n, null, null, null); });
+
+    var atividades = Object.keys(tasksByUid).map(function (k) { return tasksByUid[k]; })
+      .filter(function (a) { return !a.resumo && a.nivel >= 3; })
+      .sort(function (a, b) { return parseInt(a.uid, 10) - parseInt(b.uid, 10); });
+    atividades.forEach(function (a) { delete a.filhos; });
+
+    if (!atividades.length) throw new Error("Nenhuma atividade executável encontrada no arquivo.");
+
+    var projectEl = doc.getElementsByTagName("Project")[0];
+    var projeto = {
+      nome: projectEl ? pTxt(projectEl, "Title") : "",
+      inicio: pDateStr(projectEl ? pTxt(projectEl, "StartDate") : null),
+      termino: pDateStr(projectEl ? pTxt(projectEl, "FinishDate") : null),
+      statusData: pDateStr(projectEl ? pTxt(projectEl, "StatusDate") : null)
+    };
+
+    return { geradoEm: new Date().toLocaleString("pt-BR"), projeto: projeto, totalAtividades: atividades.length, atividades: atividades };
+  }
+
   function toISODate(d) {
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
@@ -956,6 +1151,15 @@
   function renderShell() {
     var content = A.$("content");
     content.innerHTML =
+      '<div class="panel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">' +
+        '<div style="flex:1;min-width:220px;">' +
+          '<div style="font-weight:700;font-size:13px;">📥 Importar cronograma (XML do MS Project)</div>' +
+          '<div style="font-size:11.5px;color:var(--vale-gray);">Substitui a base de atividades pra todo mundo. Atualizações de campo já feitas (status, %, observações) não se perdem.</div>' +
+        '</div>' +
+        '<input type="file" id="pguImportFile" accept=".xml" style="max-width:220px;">' +
+        '<button type="button" class="btn-neutral" id="pguImportBtn">Importar</button>' +
+        '<span id="pguImportStatus" style="font-size:12px;color:var(--vale-gray);"></span>' +
+      "</div>" +
       '<div id="pguTabs">' +
         '<div class="tabs">' +
           '<button type="button" class="tab active" data-tab="hoje">Hoje</button>' +
@@ -971,6 +1175,30 @@
       '<div class="footnote">Atualizações de campo (status, %, observações, encarregado, turno) ficam salvas no servidor e são compartilhadas entre todo mundo — atualiza sozinho a cada ~45s, ou aperte "Atualizar" a qualquer momento.</div>';
     A.wireTabs("pguTabs");
     wireHojeTab();
+
+    A.$("pguImportBtn").addEventListener("click", async function () {
+      var fileInput = A.$("pguImportFile");
+      var statusEl = A.$("pguImportStatus");
+      var file = fileInput.files[0];
+      if (!file) { statusEl.textContent = "Selecione um arquivo .xml primeiro."; return; }
+      statusEl.textContent = "Lendo arquivo…";
+      try {
+        var text = await file.text();
+        var novaBase = parsePguXml(text);
+        statusEl.textContent = "Salvando " + novaBase.totalAtividades + " atividades…";
+        await salvarBaselineImportada(novaBase);
+        window.PANEL_DATA = window.PANEL_DATA || {};
+        window.PANEL_DATA.pgu = novaBase;
+        statusEl.textContent = "✔ Importado: " + novaBase.totalAtividades + " atividades.";
+        fileInput.value = "";
+        A.toast("Cronograma importado e compartilhado com todo mundo.");
+        renderAll();
+      } catch (e) {
+        console.error(e);
+        statusEl.textContent = "Erro: " + e.message;
+        A.toast("Erro ao importar: " + e.message, "error");
+      }
+    });
   }
 
   function renderAll() {
@@ -998,12 +1226,12 @@
 
   renderShell();
   (async function boot() {
-    await loadOverridesFromSupabase();
+    await Promise.all([loadOverridesFromSupabase(), loadBaselineFromSupabase()]);
     renderAll();
   })();
   A.wireAtualizarButton(["pgu"], async function () {
     renderShell();
-    await loadOverridesFromSupabase();
+    await Promise.all([loadOverridesFromSupabase(), loadBaselineFromSupabase()]);
     renderAll();
   });
   // Atualizacao em segundo plano pra refletir o que outras pessoas foram preenchendo em campo,
