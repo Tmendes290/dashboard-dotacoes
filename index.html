@@ -7804,9 +7804,9 @@ async function renderPipe(){
   if(STATE_PIPE.length===0 && !_pipeHasFilters()){
     el.innerHTML='<div style="padding:32px 24px"><div style="max-width:480px;margin:60px auto;text-align:center">'
       +'<div style="font-size:48px;margin-bottom:16px">🚦</div>'
-      +'<div style="font-size:18px;font-weight:700;color:#1e293b;margin-bottom:8px">Nenhum item no pipeline ainda</div>'
-      +'<div style="font-size:13px;color:#64748b;margin-bottom:24px">Cadastre o primeiro material em acompanhamento (Engenharia → Cotação → RC → Aprovação → Pedido).</div>'
-      +'<button class="btn" style="background:#009CDE;color:#fff" onclick="openPipeItemModal()">+ Novo Item</button>'
+      +'<div style="font-size:18px;font-weight:700;color:#1e293b;margin-bottom:8px">Nenhuma LM no pipeline ainda</div>'
+      +'<div style="font-size:13px;color:#64748b;margin-bottom:24px">Cadastre a primeira LM em acompanhamento (Engenharia → Cotação → RC → Aprovação → Pedido).</div>'
+      +'<button class="btn" style="background:#009CDE;color:#fff" onclick="openPipeItemModal()">+ Nova LM</button>'
       +'</div></div>';
     var nb0=document.getElementById('nb-pipe'); if(nb0) nb0.style.display='none';
     return;
@@ -7825,7 +7825,7 @@ async function renderPipe(){
     if(PIPE_FILTERS.risco && risco.bucket!==PIPE_FILTERS.risco) return false;
     if(PIPE_FILTERS.busca){
       var q=PIPE_FILTERS.busca.toLowerCase();
-      var hay=(item.wbs+' '+item.descricao_material+' '+(item.rc_numero||'')).toLowerCase();
+      var hay=(item.wbs+' '+(item.numero_lm||'')+' '+item.descricao_lm+' '+(item.rc_numero||'')).toLowerCase();
       if(hay.indexOf(q)<0) return false;
     }
     return true;
@@ -7854,7 +7854,7 @@ async function renderPipe(){
     +'<select onchange="setPipeFiltro(\'etapa\',this.value)" style="padding:8px;border-radius:8px;border:1px solid #e2e8f0"><option value="">Etapa (todas)</option>'+etapaOpts+'</select>'
     +(_pipeHasFilters()?'<button class="btn btn-outline" onclick="clearPipeFilters()">↺ Limpar</button>':'')
     +'<div style="margin-left:auto;display:flex;gap:8px">'
-    +'<button class="btn" style="background:#009CDE;color:#fff" onclick="openPipeItemModal()">+ Novo Item</button>'
+    +'<button class="btn" style="background:#009CDE;color:#fff" onclick="openPipeItemModal()">+ Nova LM</button>'
     +(isAdmin?'<button class="btn btn-outline" onclick="openPipeConfigModal()">⚙ Configurar Prazos</button>':'')
     +'</div>'
     +'</div>';
@@ -7871,8 +7871,9 @@ async function renderPipe(){
     var ritmoColor = risco.ritmo==='estourada'?'#dc2626':(risco.ritmo==='faixa'?'#d97706':'#16a34a');
     return '<tr>'
       +'<td style="padding:8px 10px;font-family:\'Share Tech Mono\',monospace;font-size:11px">'+item.wbs+'</td>'
+      +'<td style="padding:8px 10px;font-family:\'Share Tech Mono\',monospace;font-size:11px">'+(item.numero_lm||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#64748b">'+(projeto||'—')+'</td>'
-      +'<td style="padding:8px 10px;font-size:12px">'+(item.descricao_material||'')+'</td>'
+      +'<td style="padding:8px 10px;font-size:12px">'+(item.descricao_lm||'')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px">'+discLbl+'</td>'
       +'<td style="padding:8px 10px"><span style="display:inline-block;padding:3px 9px;border-radius:20px;font-size:10.5px;font-weight:700;color:#fff;background:#2563eb">'+stage.label+'</span></td>'
       +'<td style="padding:8px 10px;text-align:center;font-size:11px;font-weight:700;color:'+ritmoColor+'">'+(isLast?'—':risco.diasNaEtapa+'d')+'</td>'
@@ -7885,7 +7886,7 @@ async function renderPipe(){
           ?'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="pipeArquivar(\''+item.id+'\')">Arquivar</button>'
           :'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="pipeAvancarEtapa(\''+item.id+'\')">Avançar →</button>')
         +' <button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="openPipeItemModal(\''+item.id+'\')">✎</button>'
-        +' <button class="btn btn-outline" style="font-size:10px;padding:3px 8px;color:#dc2626" onclick="pipeExcluirItem(\''+item.id+'\',\''+(item.descricao_material||'').replace(/'/g,"\\'")+'\')">🗑</button>'
+        +' <button class="btn btn-outline" style="font-size:10px;padding:3px 8px;color:#dc2626" onclick="pipeExcluirItem(\''+item.id+'\',\''+(item.descricao_lm||'').replace(/'/g,"\\'")+'\')">🗑</button>'
       +'</td>'
       +'</tr>';
   }).join('');
@@ -7895,8 +7896,9 @@ async function renderPipe(){
       +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
       +'<thead><tr style="background:#f8fafc;text-align:left;border-bottom:1px solid #e2e8f0">'
         +'<th style="padding:8px 10px;font-size:10px;color:#64748b">WBS</th>'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">LM nº</th>'
         +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Projeto</th>'
-        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Descrição</th>'
+        +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Descrição / Escopo da LM</th>'
         +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Disciplina</th>'
         +'<th style="padding:8px 10px;font-size:10px;color:#64748b">Etapa Atual</th>'
         +'<th style="padding:8px 10px;font-size:10px;color:#64748b;text-align:center">Dias na Etapa</th>'
@@ -7922,22 +7924,23 @@ function openPipeItemModal(id){
   var etapaOpts = PIPE_STAGES.map(function(s){return '<option value="'+s.id+'"'+((editing&&editing.etapa_atual===s.id)||(!editing&&s.id==='engenharia')?' selected':'')+'>'+s.label+'</option>';}).join('');
 
   body.innerHTML = ''
-    +'<h3 style="margin-bottom:14px">'+(editing?'✎ Editar Item':'🚦 Novo Item do Pipeline')+'</h3>'
+    +'<h3 style="margin-bottom:14px">'+(editing?'✎ Editar LM':'🚦 Nova LM no Pipeline')+'</h3>'
     +'<div class="form-field" style="margin-bottom:6px"><label>WBS *</label><div class="cmb-wrap" id="pipe-item-wbs"></div></div>'
     +'<div id="pipe-item-nec-chip" style="font-size:11px;color:#64748b;margin:0 0 12px 2px"></div>'
-    +'<div class="form-field" style="margin-bottom:12px"><label>Descrição do Material *</label><input id="pipe-item-desc" class="input" value="'+(editing?(editing.descricao_material||'').replace(/"/g,'&quot;'):'')+'"></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+      +'<div class="form-field"><label>Número da LM</label><input id="pipe-item-numero-lm" class="input" placeholder="Ex: LM-014-ELE" value="'+(editing&&editing.numero_lm?String(editing.numero_lm).replace(/"/g,'&quot;'):'')+'"></div>'
       +'<div class="form-field"><label>Disciplina *</label><select id="pipe-item-disciplina">'+discOpts+'</select></div>'
-      +'<div class="form-field"><label>Etapa Atual *</label><select id="pipe-item-etapa">'+etapaOpts+'</select></div>'
     +'</div>'
+    +'<div class="form-field" style="margin-bottom:12px"><label>Descrição / Escopo da LM *</label><input id="pipe-item-desc" class="input" placeholder="O que essa LM cobre — pode ter vários materiais" value="'+(editing?(editing.descricao_lm||'').replace(/"/g,'&quot;'):'')+'"></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
-      +'<div class="form-field"><label>Data de Entrada na Etapa *</label><input type="date" id="pipe-item-data-entrada" class="input" value="'+(editing?editing.data_entrada_etapa:new Date().toISOString().slice(0,10))+'"></div>'
+      +'<div class="form-field"><label>Etapa Atual *</label><select id="pipe-item-etapa">'+etapaOpts+'</select></div>'
       +'<div class="form-field"><label>RC nº</label><input id="pipe-item-rc" class="input" value="'+(editing&&editing.rc_numero?String(editing.rc_numero).replace(/"/g,'&quot;'):'')+'"></div>'
     +'</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+      +'<div class="form-field"><label>Data de Entrada na Etapa *</label><input type="date" id="pipe-item-data-entrada" class="input" value="'+(editing?editing.data_entrada_etapa:new Date().toISOString().slice(0,10))+'"></div>'
       +'<div class="form-field"><label>Valor Estimado (R$)</label><input type="number" step="0.01" id="pipe-item-valor" class="input" value="'+(editing&&editing.valor_estimado!=null?editing.valor_estimado:'')+'"></div>'
-      +'<div class="form-field"><label>Responsável</label><input id="pipe-item-resp" class="input" value="'+(editing&&editing.responsavel?String(editing.responsavel).replace(/"/g,'&quot;'):'')+'"></div>'
     +'</div>'
+    +'<div class="form-field" style="margin-bottom:12px"><label>Responsável</label><input id="pipe-item-resp" class="input" value="'+(editing&&editing.responsavel?String(editing.responsavel).replace(/"/g,'&quot;'):'')+'"></div>'
     +'<div class="form-field" style="margin-bottom:12px"><label>Observações</label><textarea id="pipe-item-obs" class="input" rows="3">'+(editing&&editing.observacoes?editing.observacoes:'')+'</textarea></div>'
     +'<div class="modal-actions">'
       +'<button class="btn btn-outline" onclick="closePipeModal()">Cancelar</button>'
@@ -7974,16 +7977,18 @@ function closePipeModal(){ document.getElementById('modal-pipe').classList.add('
 async function savePipeItem(existingId){
   var wbs = getCmbVal('pipe-item-wbs');
   var desc = (document.getElementById('pipe-item-desc').value||'').trim();
+  var numeroLm = (document.getElementById('pipe-item-numero-lm').value||'').trim();
   var disciplina = document.getElementById('pipe-item-disciplina').value;
   var etapa = document.getElementById('pipe-item-etapa').value;
   var dataEntrada = document.getElementById('pipe-item-data-entrada').value;
   if(!wbs){toast('Selecione o WBS','red');return;}
-  if(!desc){toast('Informe a descrição do material','red');return;}
+  if(!desc){toast('Informe a descrição/escopo da LM','red');return;}
   if(!dataEntrada){toast('Informe a data de entrada na etapa','red');return;}
 
   var row = {
     wbs: wbs,
-    descricao_material: desc,
+    numero_lm: numeroLm||null,
+    descricao_lm: desc,
     disciplina: disciplina,
     etapa_atual: etapa,
     data_entrada_etapa: dataEntrada,
@@ -7997,7 +8002,7 @@ async function savePipeItem(existingId){
   try{
     var {error} = await supa.from('material_pipeline').upsert(row);
     if(error) throw error;
-    toast(existingId?'Item atualizado.':'Item criado.','green');
+    toast(existingId?'LM atualizada.':'LM criada.','green');
     closePipeModal();
     await loadPipeData(true);
     renderPipe();
@@ -8022,21 +8027,21 @@ async function pipeAvancarEtapa(id){
   }catch(e){ toast('Erro ao avançar etapa: '+e.message,'red'); }
 }
 async function pipeArquivar(id){
-  if(!confirm('Arquivar este item? Ele sai da lista ativa do pipeline (o histórico é mantido).')) return;
+  if(!confirm('Arquivar esta LM? Ela sai da lista ativa do pipeline (o histórico é mantido).')) return;
   try{
     var {error} = await supa.from('material_pipeline').update({arquivado:true}).eq('id',id);
     if(error) throw error;
-    toast('Item arquivado.','blue');
+    toast('LM arquivada.','blue');
     await loadPipeData(true);
     renderPipe();
   }catch(e){ toast('Erro ao arquivar: '+e.message,'red'); }
 }
 async function pipeExcluirItem(id, descricao){
-  if(!confirm('Excluir definitivamente o item "'+descricao+'" do pipeline? Essa ação não pode ser desfeita.')) return;
+  if(!confirm('Excluir definitivamente a LM "'+descricao+'" do pipeline? Essa ação não pode ser desfeita.')) return;
   try{
     var {error} = await supa.from('material_pipeline').delete().eq('id', id);
     if(error) throw error;
-    toast('Item excluído.','red');
+    toast('LM excluída.','red');
     await loadPipeData(true);
     renderPipe();
   }catch(e){ toast('Erro ao excluir: '+e.message,'red'); }
