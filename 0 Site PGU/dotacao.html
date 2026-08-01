@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dotação — Painel CPF Salobo III</title>
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar__brand">
+      <div class="sidebar__brand-mark"></div>
+      <div class="sidebar__brand-text"><strong>CPF Salobo III</strong><span>Painel do Projeto</span></div>
+    </div>
+    <nav class="sidebar__nav">
+      <div class="sidebar__section-label">Panorama</div>
+      <a class="nav-item" data-nav="visao-geral" href="index.html"><span class="dot"></span>Visão Geral</a>
+
+      <div class="sidebar__section-label">PGU</div>
+      <a class="nav-item" data-nav="pgu" href="pgu.html"><span class="dot"></span>PGU — Repotenciamento TCLD</a>
+
+      <div class="sidebar__section-label">Planejamento</div>
+      <a class="nav-item" data-nav="escopo" href="escopo.html"><span class="dot"></span>Escopo</a>
+      <a class="nav-item" data-nav="cronograma" href="cronograma.html"><span class="dot"></span>Cronograma</a>
+      <a class="nav-item" data-nav="engenharia" href="engenharia.html"><span class="dot"></span>Engenharia Detalhada</a>
+
+      <div class="sidebar__section-label">Suprimentos</div>
+      <a class="nav-item" data-nav="mas" href="mas.html"><span class="dot"></span>MAS — Suprimentos</a>
+
+      <div class="sidebar__section-label">Desempenho</div>
+      <a class="nav-item" data-nav="curva-s" href="curva-s.html"><span class="dot"></span>Curva S</a>
+
+      <div class="sidebar__section-label">Financeiro</div>
+      <a class="nav-item" data-nav="cash-cost" href="cash-cost.html"><span class="dot"></span>Cash and Cost Control<span class="nav-item__badge">em breve</span></a>
+      <a class="nav-item active" data-nav="dotacao" href="dotacao.html"><span class="dot"></span>Dotação<span class="nav-item__badge">em breve</span></a>
+    </nav>
+    <div class="sidebar__footer">
+      <div class="sidebar__footer-avatar">CPF</div>
+      <div>Dados gerados localmente a partir das planilhas de controle do projeto.</div>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="topbar">
+      <div style="display:flex;align-items:center;">
+        <button type="button" class="menu-toggle" id="menuToggle">☰</button>
+        <div>
+          <div class="topbar__title">Dotação</div>
+          <div class="topbar__subtitle">Controle orçamentário do projeto</div>
+        </div>
+      </div>
+      <div class="topbar__meta">
+        <div id="statusPills"></div>
+        <button type="button" class="btn-refresh" id="btnAtualizar" disabled>🔄 Atualizar</button>
+      </div>
+    </div>
+    <div class="content" id="content">
+      <div class="placeholder">
+        <div class="placeholder__icon">🚧</div>
+        <h3>Dotação em construção</h3>
+        <p>Ainda não há planilha de origem na pasta "7 Dotação". Assim que os dados forem disponibilizados, esta seção será preenchida com os indicadores de dotação orçamentária do projeto — com o mesmo botão "Atualizar" das demais páginas.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/common.js"></script>
+</body>
+</html>
