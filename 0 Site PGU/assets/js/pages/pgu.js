@@ -409,15 +409,16 @@
   // pra sobreviver a um re-render (ex.: quando o encarregado preenche o avanco de uma atividade),
   // em vez de recolher tudo de volta toda vez que a tela atualiza.
   var groupOpenState = {};
-  var hojeFilters = { turno: null, executante: null, encarregado: null, fiscalObra: null, fiscalSeguranca: null };
+  // Cada filtro agora é uma lista (caixa de seleção com checkbox) em vez de um valor único.
+  var hojeFilters = { turno: [], executante: [], encarregado: [], fiscalObra: [], fiscalSeguranca: [] };
 
   function applyHojeFilters(effs) {
     return effs.filter(function (e) {
-      if (hojeFilters.turno && e.turno !== hojeFilters.turno) return false;
-      if (hojeFilters.executante && e.executante !== hojeFilters.executante) return false;
-      if (hojeFilters.encarregado && e.encarregado !== hojeFilters.encarregado) return false;
-      if (hojeFilters.fiscalObra && e.fiscalObra !== hojeFilters.fiscalObra) return false;
-      if (hojeFilters.fiscalSeguranca && e.fiscalSeguranca !== hojeFilters.fiscalSeguranca) return false;
+      if (hojeFilters.turno.length && hojeFilters.turno.indexOf(e.turno) < 0) return false;
+      if (hojeFilters.executante.length && hojeFilters.executante.indexOf(e.executante) < 0) return false;
+      if (hojeFilters.encarregado.length && hojeFilters.encarregado.indexOf(e.encarregado) < 0) return false;
+      if (hojeFilters.fiscalObra.length && hojeFilters.fiscalObra.indexOf(e.fiscalObra) < 0) return false;
+      if (hojeFilters.fiscalSeguranca.length && hojeFilters.fiscalSeguranca.indexOf(e.fiscalSeguranca) < 0) return false;
       return true;
     });
   }
@@ -595,27 +596,20 @@
     }
 
     var execOptions = A.distinctValues(effsAll.filter(function (e) { return e.executante; }), "executante").map(function (o) { return o.value; });
-    var encarregadoOptions = A.distinctValues(effsAll.filter(function (e) { return e.encarregado; }), "encarregado");
-    var fiscalObraOptions = A.distinctValues(effsAll.filter(function (e) { return e.fiscalObra; }), "fiscalObra");
-    var fiscalSegurancaOptions = A.distinctValues(effsAll.filter(function (e) { return e.fiscalSeguranca; }), "fiscalSeguranca");
+    var encarregadoOptions = A.distinctValues(effsAll.filter(function (e) { return e.encarregado; }), "encarregado").map(function (o) { return o.value; });
+    var fiscalObraOptions = A.distinctValues(effsAll.filter(function (e) { return e.fiscalObra; }), "fiscalObra").map(function (o) { return o.value; });
+    var fiscalSegurancaOptions = A.distinctValues(effsAll.filter(function (e) { return e.fiscalSeguranca; }), "fiscalSeguranca").map(function (o) { return o.value; });
 
-    function selectFilterHtml(id, label, options, current) {
-      return '<div><label class="filter-toolbar__label">' + A.esc(label) + "</label>" +
-        '<select class="filter-toolbar__select" id="' + id + '" style="width:100%;max-width:220px;"><option value="">Todos</option>' +
-        options.map(function (o) { return '<option value="' + A.esc(o.value) + '"' + (current === o.value ? " selected" : "") + '>' + A.esc(o.label) + "</option>"; }).join("") +
-        "</select></div>";
-    }
-
-    var algumFiltroAtivo = hojeFilters.turno || hojeFilters.executante || hojeFilters.encarregado || hojeFilters.fiscalObra || hojeFilters.fiscalSeguranca;
+    var algumFiltroAtivo = hojeFilters.turno.length || hojeFilters.executante.length || hojeFilters.encarregado.length || hojeFilters.fiscalObra.length || hojeFilters.fiscalSeguranca.length;
     var filtrosHtml =
-      '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:20px;margin-bottom:18px;">' +
-        selectFilterHtml("pguHojeEncarregadoSelect", "Encarregado", encarregadoOptions, hojeFilters.encarregado) +
-        selectFilterHtml("pguHojeFiscalObraSelect", "Fiscal de Campo", fiscalObraOptions, hojeFilters.fiscalObra) +
-        selectFilterHtml("pguHojeFiscalSegurancaSelect", "Fiscal de Segurança", fiscalSegurancaOptions, hojeFilters.fiscalSeguranca) +
+      '<div style="display:flex;flex-wrap:wrap;gap:20px;margin-bottom:18px;">' +
+        '<div><label class="filter-toolbar__label">Encarregado</label>' + A.multiSelect("msHojeEncarregado", encarregadoOptions, hojeFilters.encarregado, "Todos") + "</div>" +
+        '<div><label class="filter-toolbar__label">Fiscal de Campo</label>' + A.multiSelect("msHojeFiscalObra", fiscalObraOptions, hojeFilters.fiscalObra, "Todos") + "</div>" +
+        '<div><label class="filter-toolbar__label">Fiscal de Segurança</label>' + A.multiSelect("msHojeFiscalSeguranca", fiscalSegurancaOptions, hojeFilters.fiscalSeguranca, "Todos") + "</div>" +
       "</div>" +
-      '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:20px;">' +
-        '<div><label class="filter-toolbar__label">Empresa</label>' + chipFilterHtml("data-executante-filter", execOptions, hojeFilters.executante, "Todas") + "</div>" +
-        '<div><label class="filter-toolbar__label">Turno</label>' + chipFilterHtml("data-turno-filter", TURNO_OPTIONS, hojeFilters.turno, "Todos") + "</div>" +
+      '<div style="display:flex;flex-wrap:wrap;gap:20px;">' +
+        '<div><label class="filter-toolbar__label">Empresa</label>' + A.multiSelect("msHojeEmpresa", execOptions, hojeFilters.executante, "Todas") + "</div>" +
+        '<div><label class="filter-toolbar__label">Turno</label>' + A.multiSelect("msHojeTurno", TURNO_OPTIONS, hojeFilters.turno, "Todos") + "</div>" +
       "</div>" +
       (algumFiltroAtivo ? '<button type="button" class="filter-toolbar__clear" id="pguHojeClearFiltros" style="margin-top:14px;">✕ Limpar filtros</button>' : "");
 
@@ -667,22 +661,15 @@
       });
     }
 
-    A.$("pguHojeEncarregadoSelect").addEventListener("change", function (e) {
-      hojeFilters.encarregado = e.target.value || null;
-      renderHoje(lastEffs);
-    });
-    A.$("pguHojeFiscalObraSelect").addEventListener("change", function (e) {
-      hojeFilters.fiscalObra = e.target.value || null;
-      renderHoje(lastEffs);
-    });
-    A.$("pguHojeFiscalSegurancaSelect").addEventListener("change", function (e) {
-      hojeFilters.fiscalSeguranca = e.target.value || null;
-      renderHoje(lastEffs);
-    });
+    A.wireMultiSelect("msHojeEncarregado", function (values) { hojeFilters.encarregado = values; renderHoje(lastEffs); });
+    A.wireMultiSelect("msHojeFiscalObra", function (values) { hojeFilters.fiscalObra = values; renderHoje(lastEffs); });
+    A.wireMultiSelect("msHojeFiscalSeguranca", function (values) { hojeFilters.fiscalSeguranca = values; renderHoje(lastEffs); });
+    A.wireMultiSelect("msHojeEmpresa", function (values) { hojeFilters.executante = values; renderHoje(lastEffs); });
+    A.wireMultiSelect("msHojeTurno", function (values) { hojeFilters.turno = values; renderHoje(lastEffs); });
     var clearBtn = A.$("pguHojeClearFiltros");
     if (clearBtn) {
       clearBtn.addEventListener("click", function () {
-        hojeFilters = { turno: null, executante: null, encarregado: null, fiscalObra: null, fiscalSeguranca: null };
+        hojeFilters = { turno: [], executante: [], encarregado: [], fiscalObra: [], fiscalSeguranca: [] };
         renderHoje(lastEffs);
       });
     }
@@ -714,14 +701,6 @@
     });
     A.onDelegated(container, "#pguVoltarHoje", function () {
       hojeSelectedDate = toISODate(new Date());
-      renderHoje(lastEffs);
-    });
-    A.onDelegated(container, "[data-executante-filter]", function (el) {
-      hojeFilters.executante = el.getAttribute("data-executante-filter") || null;
-      renderHoje(lastEffs);
-    });
-    A.onDelegated(container, "[data-turno-filter]", function (el) {
-      hojeFilters.turno = el.getAttribute("data-turno-filter") || null;
       renderHoje(lastEffs);
     });
     A.onDelegated(container, "#pguGroupExpandAll", function () {

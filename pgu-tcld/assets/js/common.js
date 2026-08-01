@@ -699,6 +699,75 @@
     };
   }
 
+  // ---------------------------------------------------------------- multiselect (caixas de seleção)
+
+  // options: array de strings. selected: array de strings marcadas. Uso: A.multiSelect(id, options,
+  // selected, label) pra montar o HTML, depois A.wireMultiSelect(id, function(values){...}) depois
+  // que o HTML já estiver no DOM (o innerHTML precisa ter sido atribuído antes de chamar).
+  function multiSelect(id, options, selected, label) {
+    var selSet = {};
+    (selected || []).forEach(function (v) { selSet[v] = true; });
+    var resumo = !selected || !selected.length ? (label || "Todos")
+      : (selected.length === 1 ? selected[0] : selected.length + " selecionados");
+    var optsHtml = (options || []).map(function (o) {
+      return '<label class="ms-opt"><input type="checkbox" value="' + esc(o) + '"' + (selSet[o] ? " checked" : "") + ">" + esc(o) + "</label>";
+    }).join("");
+    return '<div class="ms-wrap" id="' + id + '">' +
+      '<div class="ms-input" data-ms-toggle><span class="ms-label">' + esc(resumo) + '</span><span class="ms-arrow">▾</span></div>' +
+      '<div class="ms-drop" id="' + id + '-drop">' +
+        '<div class="ms-search"><input type="text" placeholder="Buscar…"></div>' +
+        '<div class="ms-list">' + (optsHtml || '<div class="ms-empty">Nenhuma opção.</div>') + "</div>" +
+        '<div class="ms-footer"><button type="button" class="ms-btn-all" data-ms-all>Todos</button><button type="button" class="ms-btn-all" data-ms-clear>Limpar</button></div>' +
+      "</div></div>";
+  }
+
+  // Liga os eventos de um multiSelect já renderizado no DOM. onChange(values) roda toda vez que a
+  // seleção muda, recebendo o array atualizado de valores marcados.
+  function wireMultiSelect(id, onChange) {
+    var wrap = $(id);
+    if (!wrap) return;
+    var drop = $(id + "-drop");
+    var input = wrap.querySelector("[data-ms-toggle]");
+    input.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var open = drop.classList.contains("ms-drop--open");
+      document.querySelectorAll(".ms-drop--open").forEach(function (d) { d.classList.remove("ms-drop--open"); });
+      if (!open) drop.classList.add("ms-drop--open");
+    });
+    function currentValues() {
+      return Array.prototype.slice.call(drop.querySelectorAll("input[type=checkbox]:checked")).map(function (c) { return c.value; });
+    }
+    drop.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+      cb.addEventListener("change", function () { onChange(currentValues()); });
+    });
+    var searchInput = drop.querySelector(".ms-search input");
+    if (searchInput) {
+      searchInput.addEventListener("click", function (e) { e.stopPropagation(); });
+      searchInput.addEventListener("input", function () {
+        var q = searchInput.value.toLowerCase();
+        drop.querySelectorAll(".ms-opt").forEach(function (opt) {
+          opt.style.display = opt.textContent.toLowerCase().indexOf(q) >= 0 ? "" : "none";
+        });
+      });
+    }
+    var allBtn = drop.querySelector("[data-ms-all]");
+    if (allBtn) allBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var boxes = drop.querySelectorAll("input[type=checkbox]");
+      boxes.forEach(function (c) { c.checked = true; });
+      onChange(currentValues());
+    });
+    var clearBtn = drop.querySelector("[data-ms-clear]");
+    if (clearBtn) clearBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      drop.querySelectorAll("input[type=checkbox]").forEach(function (c) { c.checked = false; });
+      onChange([]);
+    });
+  }
+  document.addEventListener("click", function () {
+    document.querySelectorAll(".ms-drop--open").forEach(function (d) { d.classList.remove("ms-drop--open"); });
+  });
+
   // ---------------------------------------------------------------- shell (menu, pills, atualizar)
 
   function initMenuToggle() {
@@ -795,6 +864,8 @@
     filterToolbar: filterToolbar,
     wireFilterToolbar: wireFilterToolbar,
     syncFilterToolbar: syncFilterToolbar,
+    multiSelect: multiSelect,
+    wireMultiSelect: wireMultiSelect,
     qs: qs,
     setQuery: setQuery,
     onDelegated: onDelegated,
