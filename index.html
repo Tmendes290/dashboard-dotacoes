@@ -4154,8 +4154,8 @@ function exportCSV(){
     fname='saude_pep';
   } else if(currentView==='materiais'){
     var mats=applyMatFilters();
-    h=['Pedido','RC','Projeto','PEP','Squad','Descricao','Qtde','Un. Medida','Fornecedor','Situacao','Prev. Entrega','Data Remessa','Data Faturamento','Valor Unit. (R$)','Valor Total (R$)','Observacao','Comentario'];
-    rows=mats.map(function(m){return[m.pedido||'',m.rc||'','"'+(m.projeto||'')+'"',m.pep||'',getSquad(m.pep||''),'"'+(m.descricao||'')+'"',m.qtde||'',m.unMedida||'','"'+(m.fornecedor||'')+'"',m.situacao||'',m.prevEntrega||'',m.dataRemessa||'',m.dataFaturamento||'',(parseFloat(m.valorUni)||0).toFixed(2),(parseFloat(m.valorTotal)||0).toFixed(2),'"'+(m.observacao||'')+'"','"'+(m.comentario||'')+'"'].join(';');});
+    h=['Pedido','RC','Projeto','PEP','Squad','Descricao','Qtde','Un. Medida','Fornecedor','Situacao','Prev. Entrega','Baseline Entrega','Data Remessa','Data Faturamento','Valor Unit. (R$)','Valor Total (R$)','Observacao','Comentario'];
+    rows=mats.map(function(m){return[m.pedido||'',m.rc||'','"'+(m.projeto||'')+'"',m.pep||'',getSquad(m.pep||''),'"'+(m.descricao||'')+'"',m.qtde||'',m.unMedida||'','"'+(m.fornecedor||'')+'"',m.situacao||'',m.prevEntrega||'',m.baselineEntrega||'',m.dataRemessa||'',m.dataFaturamento||'',(parseFloat(m.valorUni)||0).toFixed(2),(parseFloat(m.valorTotal)||0).toFixed(2),'"'+(m.observacao||'')+'"','"'+(m.comentario||'')+'"'].join(';');});
     fname='materiais';
   } else if(currentView==='improdutividade'){
     var impD=IMP_FILTERED.length?IMP_FILTERED:IMP_DATA;
@@ -6142,9 +6142,9 @@ function exportExcel(){
 
   } else if(currentView==='materiais'){
     var matsE=applyMatFilters();
-    addSheet('Materiais',['#','Pedido','RC','Projeto','PEP','Squad','Descricao','Qtde','Un. Medida','Fornecedor','Situacao','Prev. Entrega','Data Remessa','Data Faturamento','Valor Unit. (R$)','Valor Total (R$)','Observacao','Comentario'],
-      matsE.map(function(m,i){return[i+1,m.pedido||'',m.rc||'',m.projeto||'',m.pep||'',getSquad(m.pep||''),m.descricao||'',m.qtde||'',m.unMedida||'',m.fornecedor||'',m.situacao||'',m.prevEntrega||'',m.dataRemessa||'',m.dataFaturamento||'',parseFloat(m.valorUni)||0,parseFloat(m.valorTotal)||0,m.observacao||'',m.comentario||''];}),
-      [4,10,10,30,12,15,35,6,10,25,20,15,15,15,15,15,25,25]);
+    addSheet('Materiais',['#','Pedido','RC','Projeto','PEP','Squad','Descricao','Qtde','Un. Medida','Fornecedor','Situacao','Prev. Entrega','Baseline Entrega','Data Remessa','Data Faturamento','Valor Unit. (R$)','Valor Total (R$)','Observacao','Comentario'],
+      matsE.map(function(m,i){return[i+1,m.pedido||'',m.rc||'',m.projeto||'',m.pep||'',getSquad(m.pep||''),m.descricao||'',m.qtde||'',m.unMedida||'',m.fornecedor||'',m.situacao||'',m.prevEntrega||'',m.baselineEntrega||'',m.dataRemessa||'',m.dataFaturamento||'',parseFloat(m.valorUni)||0,parseFloat(m.valorTotal)||0,m.observacao||'',m.comentario||''];}),
+      [4,10,10,30,12,15,35,6,10,25,20,20,15,15,15,15,25,25]);
     exportFname='Materiais';
 
   } else if(currentView==='improdutividade'){
@@ -8652,7 +8652,11 @@ function handleMateriaisUpload(file){
           unMedida: String(r['UN MEDIDA']||'').trim(),
           fornecedor: String(r['FORNECEDOR']||'').trim(),
           situacao: String(r['SITUAÇÃO DO ITEM']||'').trim(),
-          prevEntrega: fmtMatDate(r['PREVISÃO DE ENTREGA']),
+          // "PREVISÃO DE ENTREGA" virou "PREVISÃO DE ENTREGA NO SITE" e "DATA DE ENTREGA REAL"
+          // virou "DATA DE RECEBIMENTO REAL" numa atualização da planilha BD_DILIG -- mantém o
+          // nome antigo como fallback pra não quebrar se algum dia importarem um arquivo velho.
+          prevEntrega: fmtMatDate(r['PREVISÃO DE ENTREGA NO SITE']||r['PREVISÃO DE ENTREGA']),
+          baselineEntrega: fmtMatDate(r['BASELINE DE ENTREGA']),
           dataRemessa: fmtMatDate(r['DATA DE REMESSA']),
           dataFaturamento: fmtMatDate(r['DATA DE FATURAMENTO']),
           valorUni: r['VALOR UNI.']||0,
@@ -8666,7 +8670,7 @@ function handleMateriaisUpload(file){
           planejador: sqInfo.planejador||'',
           idFerramenta: idFerr,
           statusEntrega: String(r['STATUS DA ENTREGA']||'').trim(),
-          dataEntregaReal: fmtMatDateUS(r['DATA DE ENTREGA REAL'])
+          dataEntregaReal: fmtMatDateUS(r['DATA DE RECEBIMENTO REAL']||r['DATA DE ENTREGA REAL'])
         });
       });
       // Diagnóstico: mostra colunas reais do BD_MATRIZ
@@ -8712,7 +8716,7 @@ function handleMateriaisUpload(file){
           pedido:pedido, rc:rc, projeto:projetoLabel, projetoRaw:projetoRawMx,
           descricao:escopoGeral, qtde:qtde, unMedida:unMedida,
           fornecedor:String(mx['Nome do fornecedor']||'').trim(), situacao:situacao,
-          prevEntrega:fmtMatDate(mx['Previsão Entrega']||mx['Data de remessa']), dataSolicitacao:fmtMatDate(mx['Data da solicitação (RC)']||mx['CriadoEm']),
+          prevEntrega:fmtMatDate(mx['Previsão Entrega']||mx['Data de remessa']), baselineEntrega:'', dataSolicitacao:fmtMatDate(mx['Data da solicitação (RC)']||mx['CriadoEm']),
           dataRemessa:pedido?fmtMatDate(mx['Data de remessa']):'', dataFaturamento:'',
           valorUni:valorUni, valorTotal:valorTotal, observacao:'', comentario:'',
           pep:pepCode, squad:sqInfo.squad||'', lider:sqInfo.lider||String(mx['Líder']||'').trim()||'',
@@ -9427,6 +9431,7 @@ function _matTabelaHtml(data){
       +'<td style="padding:8px 10px"><span style="font-size:10px;font-weight:700;color:'+sitColor+';background:'+sitColor+'18;padding:3px 8px;border-radius:20px;white-space:nowrap">'+escHtml(r.situacao||'—')+'</span></td>'
       + seCell
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;white-space:nowrap">'+escHtml(r.prevEntrega)+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:#475569;white-space:nowrap">'+escHtml(r.baselineEntrega||'—')+'</td>'
       + diasCell
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;white-space:nowrap">'+escHtml(r.dataRemessa)+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#475569;white-space:nowrap">'+escHtml(r.dataFaturamento)+'</td>'
@@ -9464,10 +9469,10 @@ function _matTabelaHtml(data){
     +'<thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0">'
     +_matTh('Pedido')+_matTh('RC')+_matTh('Projeto')+_matTh('Descrição')
     +_matTh('Qtde')+_matTh('Fornecedor')+_matTh('Situação')+_matTh('Status Entrega')
-    +_matTh('Prev. Entrega')+_matTh('Prazo')+_matTh('Dt. Remessa')+_matTh('Dt. Faturamento')+_matTh('Dt. Entrega Real')
+    +_matTh('Prev. Entrega')+_matTh('Baseline Entrega')+_matTh('Prazo')+_matTh('Dt. Remessa')+_matTh('Dt. Faturamento')+_matTh('Dt. Entrega Real')
     +_matTh('Vl. Unit.')+_matTh('Vl. Total')+_matTh('Squad')+_matTh('Líder')+_matTh('Resp. Item')+_matTh('Farol')+_matTh('Status Captura')+_matTh('Comentário')
     +'</tr></thead>'
-    +'<tbody>'+(rows||'<tr><td colspan="21" style="text-align:center;padding:32px;color:#94a3b8">Nenhum item encontrado com os filtros aplicados</td></tr>')+'</tbody>'
+    +'<tbody>'+(rows||'<tr><td colspan="22" style="text-align:center;padding:32px;color:#94a3b8">Nenhum item encontrado com os filtros aplicados</td></tr>')+'</tbody>'
     +'</table></div>'+more+'</div>'
     +(CURRENT_PERFIL && CURRENT_PERFIL.role === 'admin'
       ? '<div style="margin-top:12px;text-align:right"><label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#7c3aed;color:#fff;border-radius:7px;font-size:11px;font-weight:700"><input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleMateriaisUpload(this.files[0])">📂 Importar novo arquivo</label></div>'
