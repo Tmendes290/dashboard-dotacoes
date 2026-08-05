@@ -1568,4 +1568,94 @@ details.pgu-group-disciplina > summary .pgu-group__count { background: rgba(255,
 
 .countdown-banner__voltar:hover { background: rgba(255, 255, 255, 0.26); }
 
+/* ---------- Splash "Projeto CPF" (uma vez por sessão, ver common.js showSplashOnce) ---------- */
+
+#cpfSplash {
+  position: fixed; inset: 0; z-index: 5000;
+  display: flex; align-items: center; justify-content: center; flex-direction: column;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(60, 181, 229, .35), transparent 55%),
+    radial-gradient(circle at 75% 80%, rgba(0, 126, 122, .4), transparent 55%),
+    linear-gradient(160deg, #04302d 0%, #062a27 45%, #04201f 100%);
+}
+
+#cpfSplash.cpf-splash--leaving { animation: cpfSplashOut .7s ease-in both; }
+
+@keyframes cpfSplashOut {
+  0% { opacity: 1; visibility: visible; }
+  99% { opacity: 0; visibility: visible; }
+  100% { opacity: 0; visibility: hidden; pointer-events: none; }
+}
+
+.cpf-splash-ring { position: absolute; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .08); }
+.cpf-splash-ring--1 { width: 520px; height: 520px; animation: cpfSplashSpin 40s linear infinite; }
+.cpf-splash-ring--2 { width: 680px; height: 680px; animation: cpfSplashSpin 60s linear reverse infinite; border-style: dashed; }
+
+@keyframes cpfSplashSpin { to { transform: rotate(360deg); } }
+
+.cpf-splash-logo-wrap {
+  position: relative; width: 150px; height: 150px; margin-bottom: 26px;
+  opacity: 0; transform: scale(.72);
+  animation: cpfLogoIn .85s cubic-bezier(.2, .9, .25, 1.2) .15s forwards;
+}
+
+@keyframes cpfLogoIn { to { opacity: 1; transform: scale(1); } }
+
+.cpf-splash-logo-glow {
+  position: absolute; inset: -18px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(60, 181, 229, .55), transparent 70%);
+  filter: blur(6px); opacity: 0;
+  animation: cpfGlowPulse 2.6s ease-in-out .9s infinite;
+}
+
+@keyframes cpfGlowPulse {
+  0%, 100% { opacity: .35; transform: scale(.94); }
+  50% { opacity: .75; transform: scale(1.05); }
+}
+
+.cpf-splash-logo {
+  position: relative; width: 100%; height: 100%; object-fit: contain;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, .35));
+}
+
+.cpf-splash-name {
+  display: flex; gap: .09em; font-size: 34px; font-weight: 800; letter-spacing: .02em; color: #fff;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, .3);
+}
+
+.cpf-splash-name span {
+  display: inline-block; opacity: 0; transform: translateY(14px);
+  animation: cpfLetterIn .55s cubic-bezier(.2, .8, .2, 1) forwards;
+}
+
+@keyframes cpfLetterIn { to { opacity: 1; transform: translateY(0); } }
+
+.cpf-splash-tagline {
+  margin-top: 10px; font-size: 11px; letter-spacing: .32em; text-transform: uppercase;
+  color: rgba(255, 255, 255, .55); font-weight: 600;
+  opacity: 0; animation: cpfFadeUp .6s ease .95s forwards;
+}
+
+.cpf-splash-bar-track {
+  width: 180px; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, .14);
+  margin-top: 30px; overflow: hidden;
+  opacity: 0; animation: cpfFadeUp .5s ease 1.05s forwards;
+}
+
+.cpf-splash-bar-fill {
+  height: 100%; width: 0%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--vale-blue), #6be2c4);
+  animation: cpfBarFill 1.35s cubic-bezier(.3, .7, .3, 1) 1.15s forwards;
+}
+
+@keyframes cpfBarFill { to { width: 100%; } }
+@keyframes cpfFadeUp { to { opacity: 1; } }
+
+@media (max-width: 520px) {
+  .cpf-splash-ring--1 { width: 340px; height: 340px; }
+  .cpf-splash-ring--2 { width: 440px; height: 440px; }
+  .cpf-splash-logo-wrap { width: 110px; height: 110px; }
+  .cpf-splash-name { font-size: 24px; }
+}
+
 .wbs-node__body { padding-left: 13px; border-left: 2px solid var(--light-gray); margin-left: 6px; }

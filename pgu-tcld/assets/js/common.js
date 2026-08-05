@@ -844,6 +844,45 @@
     btn.title = hint || "Nenhuma planilha de origem encontrada ainda.";
   }
 
+  // ---------------------------------------------------------------- splash "Projeto CPF"
+  // Roda uma vez por aba/sessão (sessionStorage), na primeira página que a pessoa abrir --
+  // não repete a cada troca de aba dentro do painel.
+  function showSplashOnce() {
+    try { if (sessionStorage.getItem("cpfSplashShown")) return; } catch (e) {}
+    var overlay = document.createElement("div");
+    overlay.id = "cpfSplash";
+    overlay.innerHTML =
+      '<div class="cpf-splash-ring cpf-splash-ring--1"></div>' +
+      '<div class="cpf-splash-ring cpf-splash-ring--2"></div>' +
+      '<div class="cpf-splash-logo-wrap">' +
+        '<div class="cpf-splash-logo-glow"></div>' +
+        '<img class="cpf-splash-logo" src="assets/images/squad-cpf-logo.png" alt="Squad CPF">' +
+      "</div>" +
+      '<div class="cpf-splash-name" id="cpfSplashName"></div>' +
+      '<div class="cpf-splash-tagline">Coarse Particle Flotation</div>' +
+      '<div class="cpf-splash-bar-track"><div class="cpf-splash-bar-fill"></div></div>';
+    document.body.appendChild(overlay);
+
+    var text = "PROJETO CPF";
+    var nameEl = document.getElementById("cpfSplashName");
+    text.split("").forEach(function (ch, i) {
+      var s = document.createElement("span");
+      s.textContent = ch === " " ? " " : ch;
+      s.style.animationDelay = (0.45 + i * 0.045) + "s";
+      nameEl.appendChild(s);
+    });
+
+    var prevOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    setTimeout(function () {
+      overlay.classList.add("cpf-splash--leaving");
+      document.documentElement.style.overflow = prevOverflow;
+      setTimeout(function () { overlay.parentNode && overlay.parentNode.removeChild(overlay); }, 750);
+    }, 1650);
+
+    try { sessionStorage.setItem("cpfSplashShown", "1"); } catch (e) {}
+  }
+
   window.App = {
     COLORS: COLORS,
     FAROL_COLORS: FAROL_COLORS,
@@ -887,4 +926,5 @@
   };
 
   initMenuToggle();
+  showSplashOnce();
 })();
