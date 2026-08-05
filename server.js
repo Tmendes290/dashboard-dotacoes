@@ -550,6 +550,36 @@ app.get('/api/cji3', requireAuth, async (req, res) => {
 // JSON gigante numa linha só se tornou lento demais pro Postgres reescrever
 // (estourava statement_timeout mesmo com a chave de serviço, porque o limite
 // é da conexão física do "authenticator", não do papel usado depois).
+// ── LÊ MATERIAIS (via service role key) ────────────────────────────────
+// A leitura direto do navegador (papel "authenticated") usa até ~49 páginas
+// sequenciais e vem estourando o statement_timeout curto desse papel desde que
+// a tabela cresceu pros duplicados órfãos -- por isso a aba Materiais ficava
+// mostrando "Nenhum dado" mesmo com o dado intacto no banco (ver revisão de
+// 05/08/2026). A gravação já usava a service key por esse mesmo motivo; agora
+// a leitura também.
+app.get('/api/materiais', requireAuth, async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  const headers = { 'Authorization': `Bearer ${SUPA_SERVICE_KEY}`, 'apikey': SUPA_SERVICE_KEY };
+  try {
+    const batchSize = 1000;
+    let offset = 0, items = [];
+    while (offset < 300000) {
+      const r = await fetch(`${SUPA_URL}/rest/v1/materiais?select=item&order=chave&offset=${offset}&limit=${batchSize}`, { headers });
+      if (!r.ok) { const err = await r.text(); throw new Error(err); }
+      const rows = await r.json();
+      items = items.concat(rows.map(row => row.item));
+      if (rows.length < batchSize) break;
+      offset += batchSize;
+    }
+    const metaRes = await fetch(`${SUPA_URL}/rest/v1/mat_meta?id=eq.1&select=*`, { headers });
+    const metaRows = metaRes.ok ? await metaRes.json() : [];
+    res.json({ items, meta: metaRows[0] || null });
+  } catch (e) {
+    console.error('[GET /api/materiais]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/save-materiais', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
   const { data, import_file, import_date } = req.body;

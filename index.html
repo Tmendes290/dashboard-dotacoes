@@ -1683,47 +1683,41 @@ async function loadFromSupabase(){
       } catch(eCji3){console.warn('[Sync] cji3:',eCji3);}
     })(),
 
-    // Materiais (paginado, um registro por item — evita reler/regravar um
-    // blob único gigante, mesmo problema que tornava a importação lenta).
-    // ~28 mil itens = ~29 páginas sequenciais; numa rede instável (ex: rede
-    // corporativa que derruba conexão com o Supabase, ver comentário do proxy
-    // /db no server.js) uma falha no meio do caminho não pode apagar a tela
-    // inteira como se ninguém tivesse importado nada — só repete a página que
-    // falhou (com um pequeno atraso) e, se mesmo assim não der, MANTÉM o que
-    // já estava carregado e avisa que a sincronização falhou.
+    // Materiais — lido via rota do servidor (/api/materiais, chave de serviço),
+    // não mais direto do navegador com o papel "authenticated": a leitura paginada
+    // direta vinha estourando o statement_timeout curto desse papel desde que a
+    // tabela cresceu (duplicados órfãos), e isso fazia a aba mostrar "Nenhum dado"
+    // mesmo com o dado intacto no banco (ver revisão de 05/08/2026). Tenta de novo
+    // em caso de falha de rede e NUNCA zera STATE_MATERIAIS quando falha — mantém
+    // o que já tinha carregado e sinaliza erro pra tela avisar, não "vazio".
     (async function(){
-      async function fetchPageComRetry(offset, batch, tentativas){
+      async function fetchComRetry(tentativas){
         for(var t=1;t<=tentativas;t++){
-          var r=await supa.from('materiais').select('item').order('chave').range(offset,offset+batch-1);
-          if(!r.error) return r;
-          console.warn('[Sync] materiais página '+offset+' falhou (tentativa '+t+'/'+tentativas+'):',r.error);
+          try{
+            var _sessionRes = await supa.auth.getSession();
+            var _token = _sessionRes.data&&_sessionRes.data.session?_sessionRes.data.session.access_token:null;
+            if(!_token) return null;
+            var resp = await fetch('/api/materiais', { headers:{'Authorization':'Bearer '+_token} });
+            var body = await resp.json();
+            if(resp.ok && !body.error) return body;
+            console.warn('[Sync] materiais falhou (tentativa '+t+'/'+tentativas+'):', body.error||resp.status);
+          }catch(eFetch){
+            console.warn('[Sync] materiais falhou (tentativa '+t+'/'+tentativas+'):', eFetch);
+          }
           if(t<tentativas) await new Promise(function(res){ setTimeout(res, 700*t); });
         }
-        return null; // esgotou as tentativas
+        return null;
       }
       try {
-        var matArr=[],matOffset=0,matBatch=1000,matPages=0,matSyncOk=false,matFalhou=false;
-        while(matPages<300){
-          var matRes=await fetchPageComRetry(matOffset, matBatch, 3);
-          if(!matRes){ matFalhou=true; break; }
-          matSyncOk=true;
-          if(!matRes.data || matRes.data.length===0) break;
-          matArr=matArr.concat(matRes.data.map(function(r){return r.item;}));
-          if(matRes.data.length<matBatch) break;
-          matOffset+=matBatch; matPages++;
-        }
-        if(matFalhou){
-          // Não zera STATE_MATERIAIS — mantém o que já tinha (localStorage ou
-          // sync anterior) e sinaliza erro pra tela mostrar aviso, não "vazio".
+        var matBody = await fetchComRetry(3);
+        if(!matBody){
           MAT_LOAD_ERROR = true;
-          console.error('[Sync] materiais: sincronização incompleta após retries, mantendo dado anterior ('+STATE_MATERIAIS.length+' itens em cache).');
-        } else if(matSyncOk){
+          console.error('[Sync] materiais: sincronização falhou após retries, mantendo dado anterior ('+STATE_MATERIAIS.length+' itens em cache).');
+        } else {
           MAT_LOAD_ERROR = false;
-          STATE_MATERIAIS=matArr;
-          _lsSet('mat_data',JSON.stringify(matArr));
-          var {data:matMeta,error:matMetaErr}=await supa.from('mat_meta').select('*').eq('id',1).maybeSingle();
-          if(matMetaErr) console.error('[Sync] mat_meta select falhou:',matMetaErr);
-          if(matMeta) _lsSet('mat_import',JSON.stringify({file:matMeta.import_file||'',date:matMeta.import_date||''}));
+          STATE_MATERIAIS = matBody.items||[];
+          _lsSet('mat_data',JSON.stringify(STATE_MATERIAIS));
+          if(matBody.meta) _lsSet('mat_import',JSON.stringify({file:matBody.meta.import_file||'',date:matBody.meta.import_date||''}));
           var nbMat=document.getElementById('nb-mat');
           if(nbMat&&STATE_MATERIAIS.length){nbMat.textContent=STATE_MATERIAIS.length;nbMat.style.display='inline-flex';}
         }
