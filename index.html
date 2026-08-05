@@ -7874,19 +7874,85 @@ function pipeStageBreakdown(item, historico){
   return out;
 }
 
+// Campos editáveis a qualquer momento dentro da etapa (não só ao avançar) -- pra
+// cada responsável ir atualizando conforme o cronograma real anda, sem precisar
+// mudar a etapa atual da LM pra isso. Ver pipeEditarEtapaDados/pipeSalvarEtapaDados.
+var PIPE_STAGE_EDIT_FIELDS = {
+  engenharia: [
+    {key:'eng_empresa', label:'Empresa', type:'text'},
+    {key:'eng_data_inicio_baseline', label:'Início (linha de base)', type:'date'},
+    {key:'eng_data_termino_baseline', label:'Término (linha de base)', type:'date'},
+    {key:'eng_data_termino_tendencia', label:'Término (tendência)', type:'date'}
+  ],
+  cotacao: [
+    {key:'cot_data_inicio', label:'Início da cotação', type:'date'},
+    {key:'cot_prazo', label:'Prazo da cotação', type:'date'}
+  ]
+};
+
 function pipeStageExtraHtml(item, stageId){
-  // Dado específico daquela etapa (fornecedor/valor da cotação, nº da RC, nº do
-  // pedido) -- mostrado junto do prazo pra não precisar abrir a LM só pra ver isso.
+  // Dado específico daquela etapa -- mostrado junto do prazo pra não precisar
+  // abrir a LM só pra ver isso.
+  if(stageId==='engenharia'){
+    var partesE=[];
+    if(item.eng_empresa) partesE.push(escHtml(item.eng_empresa));
+    if(item.eng_data_inicio_baseline||item.eng_data_termino_baseline) partesE.push('Base: '+_pipeFmtDateStr(item.eng_data_inicio_baseline)+' – '+_pipeFmtDateStr(item.eng_data_termino_baseline));
+    if(item.eng_data_termino_tendencia) partesE.push('Tendência: '+_pipeFmtDateStr(item.eng_data_termino_tendencia));
+    return partesE.join(' · ');
+  }
   if(stageId==='cotacao'){
-    if(!item.fornecedor && item.valor_aprovado==null) return '';
     var partes=[];
     if(item.fornecedor) partes.push(escHtml(item.fornecedor));
     if(item.valor_aprovado!=null) partes.push('R$ '+Number(item.valor_aprovado).toLocaleString('pt-BR',{minimumFractionDigits:2}));
+    if(item.cot_data_inicio||item.cot_prazo) partes.push('Cotação: '+_pipeFmtDateStr(item.cot_data_inicio)+' – '+_pipeFmtDateStr(item.cot_prazo));
     return partes.join(' · ');
   }
   if(stageId==='rc') return item.rc_numero ? 'RC '+escHtml(item.rc_numero) : '';
   if(stageId==='pedido_gerado') return item.pedido_numero ? 'Pedido '+escHtml(item.pedido_numero) : '';
   return '';
+}
+function _pipeFmtDateStr(iso){ return iso ? _pipeFmtDate(_pipeParseISO(iso)) : '—'; }
+
+// ── Editar dados da etapa a qualquer momento (não precisa avançar) ─────────
+function pipeEditarEtapaDados(id, stageId){
+  var item = STATE_PIPE.find(function(i){return i.id===id;});
+  var campos = PIPE_STAGE_EDIT_FIELDS[stageId];
+  if(!item || !campos) return;
+  var stageLbl = (PIPE_STAGES.find(function(s){return s.id===stageId;})||{}).label||stageId;
+  var ov=document.getElementById('modal-pipe-advance');
+  var body=document.getElementById('modal-pipe-advance-body');
+  body.innerHTML = ''
+    +'<h3 style="margin-bottom:4px">✎ Dados de '+stageLbl+'</h3>'
+    +'<div style="font-size:12px;color:#64748b;margin-bottom:14px">'+(item.numero_lm||item.wbs)+' — atualize quando precisar, sem avançar de etapa.</div>'
+    + campos.map(function(c){
+        var val = item[c.key]!=null?item[c.key]:'';
+        return '<div class="form-field" style="margin-bottom:12px"><label>'+c.label+'</label><input type="'+c.type+'" id="pipe-adv-'+c.key+'" class="input" value="'+String(val).replace(/"/g,'&quot;')+'"></div>';
+      }).join('')
+    +'<div class="modal-actions">'
+      +'<button class="btn btn-outline" onclick="closePipeAdvanceModal()">Cancelar</button>'
+      +'<button class="btn" style="background:#009CDE;color:#fff" onclick="pipeSalvarEtapaDados(\''+id+'\',\''+campos.map(function(c){return c.key;}).join(',')+'\')">Salvar</button>'
+    +'</div>';
+  ov.classList.remove('hidden');
+}
+
+async function pipeSalvarEtapaDados(id, camposKeysStr){
+  if(PIPE_ACTION_IN_FLIGHT[id]) return;
+  var payload = {};
+  (camposKeysStr||'').split(',').filter(Boolean).forEach(function(k){
+    var el = document.getElementById('pipe-adv-'+k);
+    if(!el) return;
+    payload[k] = el.value ? el.value.trim() : null;
+  });
+  PIPE_ACTION_IN_FLIGHT[id] = true;
+  try{
+    var {error} = await supa.from('material_pipeline').update(payload).eq('id',id);
+    if(error) throw error;
+    closePipeAdvanceModal();
+    toast('Dados salvos.','green');
+    await loadPipeData(true);
+    renderPipe();
+  }catch(e){ toast('Erro ao salvar: '+e.message,'red'); }
+  finally{ delete PIPE_ACTION_IN_FLIGHT[id]; }
 }
 
 function _pipeStageColor(status){
@@ -7914,10 +7980,12 @@ function pipeTimelineRowHtml(item, breakdown){
       dateTxt = 'previsão: ' + _pipeFmtDate(row.start) + ' – ' + _pipeFmtDate(row.end);
     }
     var extra = pipeStageExtraHtml(item, row.stage.id);
+    var editavel = !!PIPE_STAGE_EDIT_FIELDS[row.stage.id];
     return '<div style="flex:1;min-width:112px;text-align:center">'
       +'<div style="font-size:10.5px;font-weight:700;color:'+color+'">'+row.stage.label+(row.status==='atual'?' 🟠':'')+'</div>'
       +'<div style="font-size:10px;color:#64748b;margin-top:2px;white-space:nowrap">'+dateTxt+'</div>'
       +(extra?'<div style="font-size:10px;color:#7c3aed;font-weight:600;margin-top:3px;white-space:nowrap">'+extra+'</div>':'')
+      +(editavel?'<div style="margin-top:4px"><a href="javascript:void(0)" style="font-size:9.5px;color:#009CDE;text-decoration:underline" onclick="pipeEditarEtapaDados(\''+item.id+'\',\''+row.stage.id+'\')">✎ '+(extra?'editar':'preencher')+'</a></div>':'')
       +'</div>';
   }).join('');
   return '<tr><td colspan="12" style="padding:14px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0">'
