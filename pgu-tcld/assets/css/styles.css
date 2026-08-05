@@ -703,6 +703,7 @@ details.eap-item[open] > summary::before { content: "－"; color: var(--vale-gre
 
 .table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 table.data-table {
@@ -1382,7 +1383,7 @@ details.pgu-group-disciplina > summary .pgu-group__count { background: rgba(255,
   text-align: center;
 }
 
-.activity-list-wrap { overflow-x: auto; }
+.activity-list-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 .activity-row {
   display: flex;
@@ -1567,6 +1568,105 @@ details.pgu-group-disciplina > summary .pgu-group__count { background: rgba(255,
 }
 
 .countdown-banner__voltar:hover { background: rgba(255, 255, 255, 0.26); }
+
+/* ---------- Responsivo: tablet e celular ---------- */
+/* pgu-tcld nao usa a sidebar (ver .main{margin-left:0} no index.html), entao o unico
+   breakpoint que importa aqui e o de empilhar o conteudo em telas estreitas. */
+
+@media (max-width: 900px) {
+  .content { padding: 14px 14px 50px; }
+
+  .topbar {
+    height: auto;
+    min-height: var(--header-height);
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .topbar__brand-mark { width: 30px; height: 30px; }
+  .topbar__title { font-size: 14.5px; }
+  .topbar__subtitle { display: none; } /* so cabe o essencial em tela de celular */
+  .topbar__meta { gap: 10px; }
+  #statusPills { display: none; } /* "Gerado em..." nao compete por espaco com o botao Atualizar */
+  .btn-refresh { padding: 7px 10px; font-size: 11.5px; }
+
+  .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .tab { white-space: nowrap; padding: 9px 12px; font-size: 12.5px; }
+
+  .countdown-banner { padding: 14px 16px; }
+  .countdown-banner__value { font-size: 22px; }
+  .countdown-banner__timeline { justify-content: flex-start; flex: 1 1 100%; }
+
+  .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+
+  .filter-toolbar__field { flex: 1 1 45%; min-width: 0; }
+  .filter-toolbar__select { min-width: 0; width: 100%; }
+  .ms-wrap { min-width: 0; flex: 1 1 45%; }
+  .ms-drop { max-width: calc(100vw - 60px); }
+
+  /* Linha de atividade: em vez de tabela larga com scroll horizontal, vira cartao
+     empilhado. A ordem dos campos e fixa no JS (activityRowHtml), entao cada um recebe
+     um data-mobile-label que o ::before usa como rotulo aqui. */
+  .activity-row-head { display: none; }
+  .activity-list-wrap { overflow-x: visible; }
+
+  .activity-row {
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    column-gap: 10px;
+    row-gap: 10px;
+    align-items: start;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--light-gray);
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+
+  .activity-row__farol { grid-column: 1; grid-row: 1; font-size: 16px; }
+  .activity-row__main { grid-column: 2; grid-row: 1; min-width: 0; width: auto; }
+
+  .activity-row__encarregado,
+  .activity-row__empresa,
+  .activity-row__inicio,
+  .activity-row__termino,
+  .activity-row__tend,
+  .activity-row__status,
+  .activity-row__pct {
+    grid-column: 1 / -1;
+    width: auto;
+    overflow: visible;
+    white-space: normal;
+  }
+
+  .activity-row [data-mobile-label]::before {
+    content: attr(data-mobile-label);
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--vale-gray);
+    margin-bottom: 3px;
+  }
+
+  .pgu-tend-input { width: 100%; box-sizing: border-box; }
+
+  .grid-2, .grid-3 { gap: 10px; }
+
+  /* Tabela generica (aba Atividades, com ~14 colunas) continua rolando na horizontal --
+     card empilhado so vale a pena pra aba Hoje, que e a mais usada em campo -- mas fica
+     mais compacta pra caber mais coluna por scroll. */
+  .data-table th, .data-table td { padding: 6px 8px; font-size: 11.5px; }
+}
+
+@media (max-width: 480px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .filter-toolbar__field, .ms-wrap { flex: 1 1 100%; }
+  .topbar__title { font-size: 13.5px; }
+  .chip-option { padding: 6px 10px; font-size: 12px; }
+}
 
 /* ---------- Splash "Projeto CPF" (uma vez por sessão, ver common.js showSplashOnce) ---------- */
 

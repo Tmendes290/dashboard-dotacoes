@@ -690,21 +690,23 @@
     var encarregadoInput = '<input type="text" class="pgu-inline-text pgu-inline-field" data-uid="' + A.esc(e.uid) + '" data-field="encarregado" value="' + A.esc(e.encarregado || "") + '" placeholder="—">';
     var empresaInput = '<input type="text" class="pgu-inline-text pgu-inline-field" data-uid="' + A.esc(e.uid) + '" data-field="executante" value="' + A.esc(e.executante || "") + '" placeholder="—">';
 
+    // data-mobile-label alimenta o ::before que rotula cada campo quando a linha
+    // vira cartao empilhado no layout mobile (ver @media max-width:900px no CSS).
     return '<div class="activity-row" data-uid="' + A.esc(e.uid) + '">' +
       '<div class="activity-row__farol">' + farolEmoji(farolDe(e)) + "</div>" +
-      '<div class="activity-row__encarregado">' + encarregadoInput + "</div>" +
+      '<div class="activity-row__encarregado" data-mobile-label="Encarregado">' + encarregadoInput + "</div>" +
       '<div class="activity-row__main">' +
         '<span class="activity-row__nome pgu-open" data-uid="' + A.esc(e.uid) + '">' + A.esc(e.nome) + "</span>" +
         '<div class="activity-row__meta">' + A.esc(e.area || "—") +
           (e.turno ? " · " + A.esc(e.turno) : "") + turnoAvisoHtml + "</div>" +
       "</div>" +
-      '<div class="activity-row__empresa">' + empresaInput + "</div>" +
-      '<div class="activity-row__inicio">' + fmtDataHora(e.inicioDataHora) + "</div>" +
-      '<div class="activity-row__termino">' + fmtDataHora(e.terminoDataHora) + "</div>" +
-      '<div class="activity-row__tend">' + inicioTendInput + "</div>" +
-      '<div class="activity-row__tend">' + terminoTendInput + "</div>" +
-      '<div class="activity-row__status">' + statusSelect + "</div>" +
-      '<div class="activity-row__pct">' + percentSelect + "</div></div>";
+      '<div class="activity-row__empresa" data-mobile-label="Empresa">' + empresaInput + "</div>" +
+      '<div class="activity-row__inicio" data-mobile-label="Início previsto">' + fmtDataHora(e.inicioDataHora) + "</div>" +
+      '<div class="activity-row__termino" data-mobile-label="Término previsto">' + fmtDataHora(e.terminoDataHora) + "</div>" +
+      '<div class="activity-row__tend" data-mobile-label="Início tendência">' + inicioTendInput + "</div>" +
+      '<div class="activity-row__tend" data-mobile-label="Término tendência">' + terminoTendInput + "</div>" +
+      '<div class="activity-row__status" data-mobile-label="Status">' + statusSelect + "</div>" +
+      '<div class="activity-row__pct" data-mobile-label="Avanço">' + percentSelect + "</div></div>";
   }
 
   var TODA_PGU = "ALL";
