@@ -4784,6 +4784,11 @@ function onMsChange(id){
     _cji3RenderT=setTimeout(renderCji3, 200);
     return;
   }
+  if(id === 'ms-pipe-projeto'){
+    PIPE_FILTERS.projeto = selected.map(function(lbl){ return lbl.split(' — ')[0]; });
+    renderPipe();
+    return;
+  }
   if(id === 'ms-pipe-disciplina'){
     PIPE_FILTERS.disciplina = selected.map(function(lbl){ var d=PIPE_DISCIPLINAS.find(function(x){return x.l===lbl;}); return d?d.v:lbl; });
     renderPipe();
@@ -4865,6 +4870,7 @@ function updateMsLabel(id, selected){
     'ms-cji3-forns': 'Todos',
     'ms-usr-nome': 'Todos os usuários...',
     'ms-usr-squad': 'Todos os squads',
+    'ms-pipe-projeto': 'Projeto (todos)',
     'ms-pipe-disciplina': 'Disciplina (todas)',
     'ms-pipe-etapa': 'Etapa (todas)'
   };
@@ -7697,7 +7703,7 @@ function matSubset(skip)  { return STATE_MATERIAIS.filter(function(r){ return _m
 // ═════════════════════════════════════════════════════════════════
 var STATE_PIPE = null;   // null = ainda não carregado
 var PIPE_CONFIG = null;  // payload de pipeline_config, cacheado
-var PIPE_FILTERS = { disciplina:[], etapa:[], risco:null, busca:'' };
+var PIPE_FILTERS = { disciplina:[], etapa:[], projeto:[], risco:null, busca:'' };
 var PIPE_TIMELINE_OPEN = {}; // id -> bool (linha de prazos por etapa expandida)
 var PIPE_HISTORICO_CACHE = {}; // id -> array de material_pipeline_historico
 
@@ -7914,6 +7920,10 @@ function pipeStageExtraHtml(item, stageId){
   return '';
 }
 function _pipeFmtDateStr(iso){ return iso ? _pipeFmtDate(_pipeParseISO(iso)) : '—'; }
+function _pipeProjetoLabel(wbs){
+  var pepRow = REF_PEPS.find(function(p){return p[0]===wbs;});
+  return wbs + (pepRow&&pepRow[1] ? ' — '+pepRow[1] : '');
+}
 
 // Pula da aba Pipeline direto pra aba Materiais, já filtrado pelo nº do pedido
 // gerado -- assim dá pra ver a chegada real do material sem precisar buscar.
@@ -8008,10 +8018,10 @@ function pipeTimelineRowHtml(item, breakdown){
     +'</td></tr>';
 }
 
-function _pipeHasFilters(){ return !!(PIPE_FILTERS.disciplina.length||PIPE_FILTERS.etapa.length||PIPE_FILTERS.risco||PIPE_FILTERS.busca); }
+function _pipeHasFilters(){ return !!(PIPE_FILTERS.disciplina.length||PIPE_FILTERS.etapa.length||PIPE_FILTERS.projeto.length||PIPE_FILTERS.risco||PIPE_FILTERS.busca); }
 function setPipeBusca(v){ PIPE_FILTERS.busca=v; renderPipe(); }
 function setPipeRiscoFilter(b){ PIPE_FILTERS.risco = (PIPE_FILTERS.risco===b?null:b); renderPipe(); }
-function clearPipeFilters(){ PIPE_FILTERS={disciplina:[],etapa:[],risco:null,busca:''}; renderPipe(); }
+function clearPipeFilters(){ PIPE_FILTERS={disciplina:[],etapa:[],projeto:[],risco:null,busca:''}; renderPipe(); }
 
 async function renderPipe(){
   var el=document.getElementById('v-pipe');
@@ -8046,6 +8056,7 @@ async function renderPipe(){
     var item=r.item, risco=r.risco;
     if(PIPE_FILTERS.disciplina.length && PIPE_FILTERS.disciplina.indexOf(item.disciplina)<0) return false;
     if(PIPE_FILTERS.etapa.length && PIPE_FILTERS.etapa.indexOf(item.etapa_atual)<0) return false;
+    if(PIPE_FILTERS.projeto.length && PIPE_FILTERS.projeto.indexOf(item.wbs)<0) return false;
     if(PIPE_FILTERS.risco && risco.bucket!==PIPE_FILTERS.risco) return false;
     if(PIPE_FILTERS.busca){
       var q=PIPE_FILTERS.busca.toLowerCase();
@@ -8081,6 +8092,7 @@ async function renderPipe(){
   }
   var filtrosHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
     +'<input class="input" style="max-width:220px" placeholder="Buscar WBS, descrição, RC…" value="'+(PIPE_FILTERS.busca||'').replace(/"/g,'&quot;')+'" oninput="setPipeBusca(this.value)">'
+    +pipeMsWrap('ms-pipe-projeto','Projeto (todos)')
     +pipeMsWrap('ms-pipe-disciplina','Disciplina (todas)')
     +pipeMsWrap('ms-pipe-etapa','Etapa (todas)')
     +(_pipeHasFilters()?'<button class="btn btn-outline" onclick="clearPipeFilters()">↺ Limpar</button>':'')
@@ -8172,12 +8184,17 @@ async function renderPipe(){
 
   el.innerHTML = '<div style="padding:20px 24px">'+kpiHtml+filtrosHtml+tableHtml+'</div>';
 
+  var projetoWbsList = STATE_PIPE.map(function(i){return i.wbs;}).filter(function(v,i,arr){return v&&arr.indexOf(v)===i;});
+  var projetoLabels = projetoWbsList.map(_pipeProjetoLabel).sort();
   var discLabels = PIPE_DISCIPLINAS.map(function(d){return d.l;});
   var etapaLabels = PIPE_STAGES.map(function(s){return s.label;});
+  var projetoSel = PIPE_FILTERS.projeto.map(_pipeProjetoLabel);
   var discSel = PIPE_FILTERS.disciplina.map(function(v){ var d=PIPE_DISCIPLINAS.find(function(x){return x.v===v;}); return d?d.l:v; });
   var etapaSel = PIPE_FILTERS.etapa.map(function(v){ var s=PIPE_STAGES.find(function(x){return x.id===v;}); return s?s.label:v; });
+  buildMsDrop('ms-pipe-projeto', projetoLabels, projetoSel, null);
   buildMsDrop('ms-pipe-disciplina', discLabels, discSel, null);
   buildMsDrop('ms-pipe-etapa', etapaLabels, etapaSel, null);
+  updateMsLabel('ms-pipe-projeto', projetoSel);
   updateMsLabel('ms-pipe-disciplina', discSel);
   updateMsLabel('ms-pipe-etapa', etapaSel);
 }
@@ -8201,14 +8218,12 @@ function openPipeItemModal(id){
       +'<div class="form-field"><label>Disciplina *</label><select id="pipe-item-disciplina">'+discOpts+'</select></div>'
     +'</div>'
     +'<div class="form-field" style="margin-bottom:12px"><label>Descrição / Escopo da LM *</label><input id="pipe-item-desc" class="input" placeholder="O que essa LM cobre — pode ter vários materiais" value="'+(editing?(editing.descricao_lm||'').replace(/"/g,'&quot;'):'')+'"></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
-      +'<div class="form-field"><label>Etapa Atual *</label><select id="pipe-item-etapa">'+etapaOpts+'</select></div>'
-      +'<div class="form-field"><label>RC nº</label><input id="pipe-item-rc" class="input" value="'+(editing&&editing.rc_numero?String(editing.rc_numero).replace(/"/g,'&quot;'):'')+'"></div>'
-    +'</div>'
-    +(editing&&(editing.fornecedor||editing.valor_aprovado!=null||editing.pedido_numero)
+    +'<div class="form-field" style="margin-bottom:12px"><label>Etapa Atual *</label><select id="pipe-item-etapa">'+etapaOpts+'</select></div>'
+    +(editing&&(editing.rc_numero||editing.fornecedor||editing.valor_aprovado!=null||editing.pedido_numero)
       ? '<div style="font-size:11px;color:#64748b;background:#f8fafc;border-radius:6px;padding:8px 10px;margin-bottom:12px">'
         + (editing.fornecedor?('Fornecedor: <strong>'+escHtml(editing.fornecedor)+'</strong>  '):'')
         + (editing.valor_aprovado!=null?('· Valor aprovado: <strong>R$ '+Number(editing.valor_aprovado).toLocaleString('pt-BR',{minimumFractionDigits:2})+'</strong>  '):'')
+        + (editing.rc_numero?('· RC: <strong>'+escHtml(editing.rc_numero)+'</strong>  '):'')
         + (editing.pedido_numero?('· Pedido: <strong>'+escHtml(editing.pedido_numero)+'</strong>'):'')
         + '<div style="color:#94a3b8;margin-top:2px">Esses dados são preenchidos ao clicar em "Avançar →" em cada etapa, não aqui.</div>'
         + '</div>'
@@ -8269,9 +8284,8 @@ async function savePipeItem(existingId){
     disciplina: disciplina,
     etapa_atual: etapa,
     data_entrada_etapa: dataEntrada,
-    rc_numero: (document.getElementById('pipe-item-rc').value||'').trim()||null,
-    // fornecedor/valor_aprovado/pedido_numero NÃO entram aqui de propósito --
-    // são preenchidos só no fluxo de "Avançar →" (ver pipeAvancarEtapaConfirmado),
+    // rc_numero/fornecedor/valor_aprovado/pedido_numero NÃO entram aqui de propósito
+    // -- são preenchidos só no fluxo de "Avançar →" (ver pipeAvancarEtapaConfirmado),
     // pra não sobrescrever com vazio quando alguém só edita outro campo da LM.
     valor_estimado: document.getElementById('pipe-item-valor').value ? parseFloat(document.getElementById('pipe-item-valor').value) : null,
     responsavel: (document.getElementById('pipe-item-resp').value||'').trim()||null,
