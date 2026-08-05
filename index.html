@@ -7908,10 +7908,23 @@ function pipeStageExtraHtml(item, stageId){
     return partes.join(' · ');
   }
   if(stageId==='rc') return item.rc_numero ? 'RC '+escHtml(item.rc_numero) : '';
-  if(stageId==='pedido_gerado') return item.pedido_numero ? 'Pedido '+escHtml(item.pedido_numero) : '';
+  if(stageId==='pedido_gerado') return item.pedido_numero
+    ? '<a href="javascript:void(0)" onclick="pipeVerPedidoEmMateriais(\''+escHtml(item.pedido_numero)+'\')" style="color:#7c3aed;text-decoration:underline;cursor:pointer" title="Ver este pedido na aba Materiais">🔗 Pedido '+escHtml(item.pedido_numero)+'</a>'
+    : '';
   return '';
 }
 function _pipeFmtDateStr(iso){ return iso ? _pipeFmtDate(_pipeParseISO(iso)) : '—'; }
+
+// Pula da aba Pipeline direto pra aba Materiais, já filtrado pelo nº do pedido
+// gerado -- assim dá pra ver a chegada real do material sem precisar buscar.
+function pipeVerPedidoEmMateriais(pedidoNumero){
+  if(!pedidoNumero) return;
+  MAT_FILTERS.pedido = [String(pedidoNumero)];
+  MAT_TAB = 'tabela';
+  MAT_PAGE = 1;
+  setView('materiais');
+  toast('Materiais filtrado pelo pedido '+pedidoNumero,'blue');
+}
 
 // ── Editar dados da etapa a qualquer momento (não precisa avançar) ─────────
 function pipeEditarEtapaDados(id, stageId){
@@ -8121,6 +8134,7 @@ async function renderPipe(){
       +'<td style="padding:8px 10px;font-size:11px">'+(item.rc_numero||'—')+'</td>'
       +'<td style="padding:8px 10px;white-space:nowrap">'
         +'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px'+(timelineOpen?';background:#e0f2fe;border-color:#0ea5e9':'')+'" onclick="togglePipeTimeline(\''+item.id+'\')">🕒 Prazos</button>'
+        +(item.pedido_numero?' <button class="btn btn-outline" style="font-size:10px;padding:3px 8px;color:#7c3aed;border-color:#7c3aed" onclick="pipeVerPedidoEmMateriais(\''+item.pedido_numero+'\')" title="Ver este pedido na aba Materiais">🔗 Pedido</button>':'')
         +' '+(stageIdxRow>0
           ?'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="pipeRetrocederEtapa(\''+item.id+'\')">← Voltar</button>'
           :'')
