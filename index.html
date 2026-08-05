@@ -8638,9 +8638,12 @@ function handleMateriaisUpload(file){
 
         var itemNum = String(r['ITEM REFERENCIA']||'').trim();
         // Pedido+Item nem sempre é único sozinho (remessas parciais do mesmo item
-        // repetem o número) — valor+data de entrega como desempate deixa a chave
-        // praticamente única, mantendo o histórico item a item entre importações.
-        var _key = 'P|'+pedido+'|'+itemNum+'|'+Math.round((parseFloat(r['VALOR TOTAL'])||0)*100)+'|'+String(r['PREVISÃO DE ENTREGA']||'');
+        // repetem o número) — valor como desempate deixa a chave praticamente única,
+        // mantendo o histórico item a item entre importações. NÃO inclui data de
+        // entrega/previsão na chave (chegou a incluir, mas previsão de entrega muda
+        // de uma importação pra outra pro mesmo item real, e cada mudança criava um
+        // registro órfão novo em vez de atualizar o existente — ver revisão de 05/08/2026).
+        var _key = 'P|'+pedido+'|'+itemNum+'|'+Math.round((parseFloat(r['VALOR TOTAL'])||0)*100);
         merged.push({
           _key: _key,
           pedido: pedido,
@@ -8707,9 +8710,9 @@ function handleMateriaisUpload(file){
         var valorUni  = pedido ? (mx['Preço líquido pedido']||mx['Preço avaliação (RC)']||0) : (mx['Preço avaliação (RC)']||0);
         var valorTotal= pedido ? (mx['Valor líquido pedido']||mx['Valor total (RC)']||0) : (mx['Valor total (RC)']||0);
         var itemNumMx = pedido ? String(mx['Item do pedido']||'').trim() : String(mx['Item ReqC']||'').trim();
-        // Valor+data como desempate (mesma razão da branch do BD_DILIG acima)
+        // Valor como desempate (mesma razão da branch do BD_DILIG acima — sem data na chave)
         var keyMx = (pedido ? ('P|'+pedido+'|'+itemNumMx) : ('R|'+rc+'|'+itemNumMx))
-          +'|'+Math.round((parseFloat(valorTotal)||0)*100)+'|'+String(mx['Previsão Entrega']||mx['Data de remessa']||'');
+          +'|'+Math.round((parseFloat(valorTotal)||0)*100);
 
         merged.push({
           _key: keyMx,
@@ -8802,6 +8805,90 @@ function handleMateriaisUpload(file){
     }
   };
   reader.readAsArrayBuffer(file);
+}
+
+// ── Mescla duplicados órfãos (chave antiga incluía data, que mudava entre
+// importações e gerava um registro novo em vez de atualizar o existente) ──
+// Agrupa pela chave estável (Pedido/RC + Item + Valor, sem data), mescla cada
+// grupo no registro mais completo, salva e remove as chaves órfãs do servidor.
+// Ver revisão da aba Materiais de 05/08/2026.
+async function matMesclarDuplicados(){
+  if(!CURRENT_PERFIL || CURRENT_PERFIL.role!=='admin') return;
+
+  function stableKey(k){ return String(k||'').split('|').slice(0,4).join('|'); }
+  var groups = {};
+  STATE_MATERIAIS.forEach(function(m){
+    var sk = stableKey(m._key);
+    (groups[sk] = groups[sk]||[]).push(m);
+  });
+  var dupGroups = Object.keys(groups).map(function(k){ return groups[k]; }).filter(function(g){ return g.length>1; });
+  if(!dupGroups.length){ toast('Nenhum duplicado encontrado.','blue'); return; }
+
+  var totalOrfaos = dupGroups.reduce(function(s,g){ return s+g.length-1; },0);
+  if(!confirm('Encontrados '+dupGroups.length+' itens com registros duplicados (chave antiga incluía data), totalizando '+totalOrfaos+' registros órfãos.\n\nCada grupo será mesclado no registro mais completo e os órfãos serão removidos do servidor. Essa ação altera dados salvos. Continuar?')) return;
+
+  function completude(m){
+    var n=0;
+    Object.keys(m).forEach(function(f){
+      if(f==='_key') return;
+      var v=m[f];
+      if(v!==undefined && v!==null && v!=='' && v!=='—') n++;
+    });
+    return n;
+  }
+
+  var mergedRows=[], chavesRemover=[];
+  dupGroups.forEach(function(g){
+    g.sort(function(a,b){ return completude(b)-completude(a); });
+    var out = Object.assign({}, g[0]);
+    for(var i=1;i<g.length;i++){
+      Object.keys(g[i]).forEach(function(f){
+        if(f==='_key') return;
+        var cur=out[f], v=g[i][f];
+        if((cur===undefined||cur===null||cur===''||cur==='—') && v!==undefined && v!==null && v!=='' && v!=='—') out[f]=v;
+      });
+    }
+    out._key = stableKey(g[0]._key);
+    mergedRows.push(out);
+    g.forEach(function(m){ if(m._key!==out._key) chavesRemover.push(m._key); });
+  });
+
+  var dupKeys={};
+  dupGroups.forEach(function(g){ g.forEach(function(m){ dupKeys[m._key]=true; }); });
+  var novoState = STATE_MATERIAIS.filter(function(m){ return !dupKeys[m._key]; }).concat(mergedRows);
+
+  toast('Mesclando '+dupGroups.length+' grupos…','blue');
+  try{
+    var _sessionRes = await supa.auth.getSession();
+    var _token = _sessionRes.data&&_sessionRes.data.session?_sessionRes.data.session.access_token:null;
+    if(!_token) throw new Error('Sessão inválida. Faça login novamente.');
+
+    var _saveResp = await fetch('/api/save-materiais',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},
+      body:JSON.stringify({data:mergedRows, import_file:'(mesclagem de duplicados)', import_date:new Date().toLocaleString('pt-BR')})
+    });
+    var _saveResult = await _saveResp.json();
+    if(!_saveResp.ok||_saveResult.error) throw new Error(_saveResult.error||'falha ao salvar itens mesclados');
+
+    if(chavesRemover.length){
+      var _delResp = await fetch('/api/materiais-remover-chaves',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},
+        body:JSON.stringify({chaves:chavesRemover})
+      });
+      var _delResult = await _delResp.json();
+      if(!_delResp.ok||_delResult.error) throw new Error(_delResult.error||'falha ao remover chaves órfãs');
+    }
+
+    STATE_MATERIAIS = novoState;
+    try{ localStorage.setItem('mat_data', JSON.stringify(novoState)); }catch(e){}
+    toast('✔ '+dupGroups.length+' duplicados mesclados, '+chavesRemover.length+' órfãos removidos.','green');
+    renderMateriais();
+  }catch(e){
+    console.error('[matMesclarDuplicados]', e);
+    toast('Erro ao mesclar: '+e.message,'red');
+  }
 }
 
 function renderMateriais(){
@@ -9475,7 +9562,10 @@ function _matTabelaHtml(data){
     +'<tbody>'+(rows||'<tr><td colspan="22" style="text-align:center;padding:32px;color:#94a3b8">Nenhum item encontrado com os filtros aplicados</td></tr>')+'</tbody>'
     +'</table></div>'+more+'</div>'
     +(CURRENT_PERFIL && CURRENT_PERFIL.role === 'admin'
-      ? '<div style="margin-top:12px;text-align:right"><label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#7c3aed;color:#fff;border-radius:7px;font-size:11px;font-weight:700"><input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleMateriaisUpload(this.files[0])">📂 Importar novo arquivo</label></div>'
+      ? '<div style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px">'
+        +'<button class="btn btn-outline" style="font-size:11px" onclick="matMesclarDuplicados()">🧹 Mesclar duplicados</button>'
+        +'<label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#7c3aed;color:#fff;border-radius:7px;font-size:11px;font-weight:700"><input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleMateriaisUpload(this.files[0])">📂 Importar novo arquivo</label>'
+        +'</div>'
       : '');
 }
 

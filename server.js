@@ -601,6 +601,45 @@ app.post('/api/save-materiais', requireAuth, async (req, res) => {
   }
 });
 
+// ── REMOVE CHAVES ÓRFÃS DE MATERIAIS (limpeza de duplicados) ──────────────
+// A chave de dedupe (_key) do import de materiais incluía a data de previsão de
+// entrega, que muda entre importações -- toda vez que ela mudava, o item antigo
+// ficava órfão em vez de ser atualizado (ver aba Materiais, revisão de 05/08/2026).
+// Rota separada com a service role key porque não existe policy de delete pública
+// pra "materiais" (só leitura) -- delete é sensível o bastante pra passar pelo
+// servidor em vez de abrir RLS direto pro cliente.
+app.post('/api/materiais-remover-chaves', requireAuth, async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  const { chaves } = req.body;
+  if (!chaves || !Array.isArray(chaves) || !chaves.length) return res.status(400).json({ error: 'payload inválido — esperado { chaves: [...] }' });
+
+  const headers = {
+    'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
+    'apikey': SUPA_SERVICE_KEY,
+    'Content-Type': 'application/json'
+  };
+  try {
+    const batchSize = 200;
+    let removed = 0;
+    for (let i = 0; i < chaves.length; i += batchSize) {
+      const batch = chaves.slice(i, i + batchSize);
+      const filter = batch.map(function (c) { return encodeURIComponent(c); }).join(',');
+      const r = await fetch(`${SUPA_URL}/rest/v1/materiais?chave=in.(${filter})`, { method: 'DELETE', headers });
+      if (!r.ok) {
+        const err = await r.text();
+        console.error(`[materiais-remover-chaves] lote a partir do item ${i} falhou:`, err);
+        return res.status(500).json({ error: `Erro no lote a partir do item ${i}: ` + err, removed });
+      }
+      removed += batch.length;
+    }
+    console.log(`[materiais-remover-chaves] ${removed} chaves removidas`);
+    res.json({ ok: true, removed });
+  } catch (e) {
+    console.error('[materiais-remover-chaves]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── COPPER PRICE PROXY ─────────────────────────────────────────
 // Busca cotação do cobre (HG=F) server-side para evitar CORS do browser
 app.get('/api/copper', async (req, res) => {
