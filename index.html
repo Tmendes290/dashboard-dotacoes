@@ -1384,6 +1384,12 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="modal-pipe-config-body"></div>
   </div>
 </div>
+<!-- MODAL PIPELINE DE MATERIAIS (dados da etapa ao avançar) -->
+<div class="modal-overlay hidden" id="modal-pipe-advance">
+  <div class="modal" style="max-width:420px;width:92vw">
+    <div id="modal-pipe-advance-body"></div>
+  </div>
+</div>
 <!-- MODAL SS MILPLAN (criação e detalhe) -->
 <div class="modal-overlay hidden" id="modal-milplan">
   <div class="modal" style="max-width:720px;width:95vw;max-height:88vh;overflow:auto">
@@ -7883,9 +7889,22 @@ function pipeStageExtraHtml(item, stageId){
   return '';
 }
 
+function _pipeStageColor(status){
+  return status==='concluida' ? '#16a34a' : (status==='atual' ? '#f59e0b' : '#cbd5e1');
+}
+
 function pipeTimelineRowHtml(item, breakdown){
-  var steps = breakdown.map(function(row){
-    var color = row.status==='concluida' ? '#16a34a' : (row.status==='atual' ? '#2563eb' : '#94a3b8');
+  var n = breakdown.length;
+  // Uma única barra contínua dividida em segmentos (em vez de barras soltas com
+  // seta entre elas) -- verde = concluída, laranja = em andamento, cinza = prevista.
+  var barra = breakdown.map(function(row,i){
+    var color = _pipeStageColor(row.status);
+    var raio = i===0 ? '4px 0 0 4px' : (i===n-1 ? '0 4px 4px 0' : '0');
+    return '<div style="flex:1;height:7px;background:'+color+';border-radius:'+raio+'"></div>';
+  }).join('<div style="width:2px;flex-shrink:0;background:#fff"></div>');
+
+  var legenda = breakdown.map(function(row){
+    var color = row.status==='concluida' ? '#16a34a' : (row.status==='atual' ? '#d97706' : '#94a3b8');
     var dateTxt;
     if(row.status==='atual'){
       dateTxt = (row.start?_pipeFmtDate(row.start):'—') + ' – em andamento';
@@ -7896,15 +7915,15 @@ function pipeTimelineRowHtml(item, breakdown){
     }
     var extra = pipeStageExtraHtml(item, row.stage.id);
     return '<div style="flex:1;min-width:112px;text-align:center">'
-      +'<div style="height:6px;border-radius:3px;background:'+color+';margin-bottom:6px"></div>'
-      +'<div style="font-size:10.5px;font-weight:700;color:'+color+'">'+row.stage.label+'</div>'
+      +'<div style="font-size:10.5px;font-weight:700;color:'+color+'">'+row.stage.label+(row.status==='atual'?' 🟠':'')+'</div>'
       +'<div style="font-size:10px;color:#64748b;margin-top:2px;white-space:nowrap">'+dateTxt+'</div>'
       +(extra?'<div style="font-size:10px;color:#7c3aed;font-weight:600;margin-top:3px;white-space:nowrap">'+extra+'</div>':'')
       +'</div>';
-  }).join('<div style="align-self:center;color:#cbd5e1;font-size:13px;padding:0 2px 16px">→</div>');
+  }).join('');
   return '<tr><td colspan="12" style="padding:14px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0">'
     +'<div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;margin-bottom:10px">🕒 Prazos por etapa — '+(item.numero_lm||item.wbs)+'</div>'
-    +'<div style="display:flex;align-items:flex-start;gap:4px;overflow-x:auto">'+steps+'</div>'
+    +'<div style="display:flex;gap:0;margin-bottom:8px">'+barra+'</div>'
+    +'<div style="display:flex;gap:0;overflow-x:auto">'+legenda+'</div>'
     +'</td></tr>';
 }
 
@@ -8098,13 +8117,16 @@ function openPipeItemModal(id){
     +'<div class="form-field" style="margin-bottom:12px"><label>Descrição / Escopo da LM *</label><input id="pipe-item-desc" class="input" placeholder="O que essa LM cobre — pode ter vários materiais" value="'+(editing?(editing.descricao_lm||'').replace(/"/g,'&quot;'):'')+'"></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
       +'<div class="form-field"><label>Etapa Atual *</label><select id="pipe-item-etapa">'+etapaOpts+'</select></div>'
-      +'<div class="form-field"><label>RC nº <span style="font-weight:400;color:#94a3b8">(RC Emitida)</span></label><input id="pipe-item-rc" class="input" value="'+(editing&&editing.rc_numero?String(editing.rc_numero).replace(/"/g,'&quot;'):'')+'"></div>'
+      +'<div class="form-field"><label>RC nº</label><input id="pipe-item-rc" class="input" value="'+(editing&&editing.rc_numero?String(editing.rc_numero).replace(/"/g,'&quot;'):'')+'"></div>'
     +'</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
-      +'<div class="form-field"><label>Fornecedor <span style="font-weight:400;color:#94a3b8">(Cotação)</span></label><input id="pipe-item-fornecedor" class="input" value="'+(editing&&editing.fornecedor?String(editing.fornecedor).replace(/"/g,'&quot;'):'')+'"></div>'
-      +'<div class="form-field"><label>Valor Aprovado (R$) <span style="font-weight:400;color:#94a3b8">(Cotação)</span></label><input type="number" step="0.01" id="pipe-item-valor-aprovado" class="input" value="'+(editing&&editing.valor_aprovado!=null?editing.valor_aprovado:'')+'"></div>'
-    +'</div>'
-    +'<div class="form-field" style="margin-bottom:12px"><label>Nº do Pedido <span style="font-weight:400;color:#94a3b8">(Pedido Gerado)</span></label><input id="pipe-item-pedido" class="input" value="'+(editing&&editing.pedido_numero?String(editing.pedido_numero).replace(/"/g,'&quot;'):'')+'"></div>'
+    +(editing&&(editing.fornecedor||editing.valor_aprovado!=null||editing.pedido_numero)
+      ? '<div style="font-size:11px;color:#64748b;background:#f8fafc;border-radius:6px;padding:8px 10px;margin-bottom:12px">'
+        + (editing.fornecedor?('Fornecedor: <strong>'+escHtml(editing.fornecedor)+'</strong>  '):'')
+        + (editing.valor_aprovado!=null?('· Valor aprovado: <strong>R$ '+Number(editing.valor_aprovado).toLocaleString('pt-BR',{minimumFractionDigits:2})+'</strong>  '):'')
+        + (editing.pedido_numero?('· Pedido: <strong>'+escHtml(editing.pedido_numero)+'</strong>'):'')
+        + '<div style="color:#94a3b8;margin-top:2px">Esses dados são preenchidos ao clicar em "Avançar →" em cada etapa, não aqui.</div>'
+        + '</div>'
+      : '')
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
       +'<div class="form-field"><label>Data de Entrada na Etapa *</label><input type="date" id="pipe-item-data-entrada" class="input" value="'+(editing?editing.data_entrada_etapa:new Date().toISOString().slice(0,10))+'"></div>'
       +'<div class="form-field"><label>Valor Estimado (R$)</label><input type="number" step="0.01" id="pipe-item-valor" class="input" value="'+(editing&&editing.valor_estimado!=null?editing.valor_estimado:'')+'"></div>'
@@ -8162,9 +8184,9 @@ async function savePipeItem(existingId){
     etapa_atual: etapa,
     data_entrada_etapa: dataEntrada,
     rc_numero: (document.getElementById('pipe-item-rc').value||'').trim()||null,
-    fornecedor: (document.getElementById('pipe-item-fornecedor').value||'').trim()||null,
-    valor_aprovado: document.getElementById('pipe-item-valor-aprovado').value ? parseFloat(document.getElementById('pipe-item-valor-aprovado').value) : null,
-    pedido_numero: (document.getElementById('pipe-item-pedido').value||'').trim()||null,
+    // fornecedor/valor_aprovado/pedido_numero NÃO entram aqui de propósito --
+    // são preenchidos só no fluxo de "Avançar →" (ver pipeAvancarEtapaConfirmado),
+    // pra não sobrescrever com vazio quando alguém só edita outro campo da LM.
     valor_estimado: document.getElementById('pipe-item-valor').value ? parseFloat(document.getElementById('pipe-item-valor').value) : null,
     responsavel: (document.getElementById('pipe-item-resp').value||'').trim()||null,
     observacoes: (document.getElementById('pipe-item-obs').value||'').trim()||null
@@ -8182,25 +8204,94 @@ async function savePipeItem(existingId){
 }
 
 // ── Ações de etapa ──────────────────────────────────────────────────
-async function pipeAvancarEtapa(id){
+// Trava por id -- evita que um clique num item durante a chamada assíncrona de
+// outro (rede lenta) acabe interferindo entre os dois (relatado em 05/08/2026:
+// avançar uma LM parecia avançar outra junto).
+var PIPE_ACTION_IN_FLIGHT = {};
+
+// Campos pedidos ao AVANÇAR (não na edição geral) -- pergunta o dado de fechamento
+// daquela etapa bem no momento em que ela é concluída. key bate com a coluna em
+// material_pipeline; prefill usa o valor já salvo, se houver (edição/correção).
+var PIPE_ADVANCE_FIELDS = {
+  cotacao: [
+    {key:'fornecedor', label:'Fornecedor', type:'text'},
+    {key:'valor_aprovado', label:'Valor Aprovado (R$)', type:'number'}
+  ],
+  rc: [
+    {key:'rc_numero', label:'Nº da RC', type:'text'},
+    {key:'valor_aprovado', label:'Valor da RC (R$)', type:'number'}
+  ],
+  aprovacao: [
+    {key:'pedido_numero', label:'Nº do Pedido', type:'text'}
+  ]
+};
+
+function pipeAvancarEtapa(id){
+  if(PIPE_ACTION_IN_FLIGHT[id]) return;
+  var item = STATE_PIPE.find(function(i){return i.id===id;});
+  if(!item) return;
+  var idx = PIPE_STAGES.findIndex(function(s){return s.id===item.etapa_atual;});
+  if(idx<0 || idx>=PIPE_STAGES.length-1) return;
+  var campos = PIPE_ADVANCE_FIELDS[item.etapa_atual];
+  if(campos && campos.length){ openPipeAdvanceModal(item, campos); return; }
+  pipeAvancarEtapaConfirmado(id, '');
+}
+
+function openPipeAdvanceModal(item, campos){
+  var ov=document.getElementById('modal-pipe-advance');
+  var body=document.getElementById('modal-pipe-advance-body');
+  var idx = PIPE_STAGES.findIndex(function(s){return s.id===item.etapa_atual;});
+  var atual = PIPE_STAGES[idx], next = PIPE_STAGES[idx+1];
+  body.innerHTML = ''
+    +'<h3 style="margin-bottom:4px">→ Avançar para '+next.label+'</h3>'
+    +'<div style="font-size:12px;color:#64748b;margin-bottom:14px">Confirme os dados de '+atual.label+' antes de avançar — '+(item.numero_lm||item.wbs)+'.</div>'
+    + campos.map(function(c){
+        var val = item[c.key]!=null ? item[c.key] : '';
+        return '<div class="form-field" style="margin-bottom:12px"><label>'+c.label+'</label><input type="'+c.type+'"'+(c.type==='number'?' step="0.01"':'')+' id="pipe-adv-'+c.key+'" class="input" value="'+String(val).replace(/"/g,'&quot;')+'"></div>';
+      }).join('')
+    +'<div class="modal-actions">'
+      +'<button class="btn btn-outline" onclick="closePipeAdvanceModal()">Cancelar</button>'
+      +'<button class="btn" style="background:#009CDE;color:#fff" onclick="pipeAvancarEtapaConfirmado(\''+item.id+'\',\''+campos.map(function(c){return c.key;}).join(',')+'\')">Avançar →</button>'
+    +'</div>';
+  ov.classList.remove('hidden');
+}
+function closePipeAdvanceModal(){ document.getElementById('modal-pipe-advance').classList.add('hidden'); }
+
+async function pipeAvancarEtapaConfirmado(id, camposKeysStr){
+  if(PIPE_ACTION_IN_FLIGHT[id]) return;
   var item = STATE_PIPE.find(function(i){return i.id===id;});
   if(!item) return;
   var idx = PIPE_STAGES.findIndex(function(s){return s.id===item.etapa_atual;});
   if(idx<0 || idx>=PIPE_STAGES.length-1) return;
   var next = PIPE_STAGES[idx+1].id;
   var hojeIso = new Date().toISOString().slice(0,10);
+
+  var extra = {};
+  (camposKeysStr||'').split(',').filter(Boolean).forEach(function(k){
+    var el = document.getElementById('pipe-adv-'+k);
+    if(!el) return;
+    var v = el.value;
+    extra[k] = (el.type==='number') ? (v?parseFloat(v):null) : ((v||'').trim()||null);
+  });
+
+  PIPE_ACTION_IN_FLIGHT[id] = true;
   try{
-    var {error} = await supa.from('material_pipeline').update({etapa_atual:next, data_entrada_etapa:hojeIso}).eq('id',id);
+    var payload = Object.assign({etapa_atual:next, data_entrada_etapa:hojeIso}, extra);
+    var {error} = await supa.from('material_pipeline').update(payload).eq('id',id);
     if(error) throw error;
     await supa.from('material_pipeline_historico').insert({pipeline_id:id, etapa_anterior:item.etapa_atual, etapa_nova:next, usuario:(CURRENT_USER&&CURRENT_USER.email)||''});
     delete PIPE_HISTORICO_CACHE[id];
+    closePipeAdvanceModal();
     toast('Etapa avançada para '+PIPE_STAGES[idx+1].label,'green');
     await loadPipeData(true);
     renderPipe();
   }catch(e){ toast('Erro ao avançar etapa: '+e.message,'red'); }
+  finally{ delete PIPE_ACTION_IN_FLIGHT[id]; }
 }
 async function pipeArquivar(id){
+  if(PIPE_ACTION_IN_FLIGHT[id]) return;
   if(!confirm('Arquivar esta LM? Ela sai da lista ativa do pipeline (o histórico é mantido).')) return;
+  PIPE_ACTION_IN_FLIGHT[id] = true;
   try{
     var {error} = await supa.from('material_pipeline').update({arquivado:true}).eq('id',id);
     if(error) throw error;
@@ -8208,9 +8299,12 @@ async function pipeArquivar(id){
     await loadPipeData(true);
     renderPipe();
   }catch(e){ toast('Erro ao arquivar: '+e.message,'red'); }
+  finally{ delete PIPE_ACTION_IN_FLIGHT[id]; }
 }
 async function pipeExcluirItem(id, descricao){
+  if(PIPE_ACTION_IN_FLIGHT[id]) return;
   if(!confirm('Excluir definitivamente a LM "'+descricao+'" do pipeline? Essa ação não pode ser desfeita.')) return;
+  PIPE_ACTION_IN_FLIGHT[id] = true;
   try{
     var {error} = await supa.from('material_pipeline').delete().eq('id', id);
     if(error) throw error;
@@ -8218,6 +8312,7 @@ async function pipeExcluirItem(id, descricao){
     await loadPipeData(true);
     renderPipe();
   }catch(e){ toast('Erro ao excluir: '+e.message,'red'); }
+  finally{ delete PIPE_ACTION_IN_FLIGHT[id]; }
 }
 
 // ── Modal: configuração de prazos (admin) ───────────────────────────
