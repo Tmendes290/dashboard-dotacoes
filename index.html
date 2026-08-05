@@ -7864,9 +7864,13 @@ function pipeStageBreakdown(item, historico){
       row.start = startOf[s.id] || (i===0?criado:null);
       row.end = endOf[s.id] || null;
     } else if(i === currentIdx){
-      row.status='atual';
+      // Pedido Gerado é a última etapa -- não tem "próxima" pra virar concluída
+      // ao avançar, então uma vez que o nº do pedido é preenchido, considera
+      // encerrada (verde) em vez de ficar "em andamento" (laranja) pra sempre.
+      var encerrada = s.id==='pedido_gerado' && !!item.pedido_numero;
+      row.status = encerrada ? 'concluida' : 'atual';
       row.start = startOf[s.id] || (i===0?criado:null) || _pipeParseISO(item.data_entrada_etapa);
-      row.end = null;
+      row.end = encerrada ? hoje : null;
     } else {
       row.status='projetada';
       var cfg = cfgDisc[s.configKey] || {min:0,max:0};
