@@ -8236,9 +8236,10 @@ function pipeAvancarEtapa(id){
   if(!item) return;
   var idx = PIPE_STAGES.findIndex(function(s){return s.id===item.etapa_atual;});
   if(idx<0 || idx>=PIPE_STAGES.length-1) return;
-  var campos = PIPE_ADVANCE_FIELDS[item.etapa_atual];
-  if(campos && campos.length){ openPipeAdvanceModal(item, campos); return; }
-  pipeAvancarEtapaConfirmado(id, '');
+  // Toda etapa passa por uma confirmação antes de avançar (mesmo as que não pedem
+  // dado extra, como Engenharia) -- fica explícito que alguém aprovou aquela etapa
+  // antes de seguir, em vez de avançar sozinho sem ninguém confirmar nada.
+  openPipeAdvanceModal(item, PIPE_ADVANCE_FIELDS[item.etapa_atual] || []);
 }
 
 function openPipeAdvanceModal(item, campos){
@@ -8247,8 +8248,8 @@ function openPipeAdvanceModal(item, campos){
   var idx = PIPE_STAGES.findIndex(function(s){return s.id===item.etapa_atual;});
   var atual = PIPE_STAGES[idx], next = PIPE_STAGES[idx+1];
   body.innerHTML = ''
-    +'<h3 style="margin-bottom:4px">→ Avançar para '+next.label+'</h3>'
-    +'<div style="font-size:12px;color:#64748b;margin-bottom:14px">Confirme os dados de '+atual.label+' antes de avançar — '+(item.numero_lm||item.wbs)+'.</div>'
+    +'<h3 style="margin-bottom:4px">✓ '+atual.label+' aprovada — avançar para '+next.label+'</h3>'
+    +'<div style="font-size:12px;color:#64748b;margin-bottom:14px">'+(campos.length?'Confirme os dados de '+atual.label+' antes de avançar':'Confirma que a etapa de '+atual.label+' está concluída')+' — '+(item.numero_lm||item.wbs)+'.</div>'
     + campos.map(function(c){
         var val = item[c.key]!=null ? item[c.key] : '';
         return '<div class="form-field" style="margin-bottom:12px"><label>'+c.label+'</label><input type="'+c.type+'"'+(c.type==='number'?' step="0.01"':'')+' id="pipe-adv-'+c.key+'" class="input" value="'+String(val).replace(/"/g,'&quot;')+'"></div>';
