@@ -1462,6 +1462,22 @@ details.pgu-group-disciplina > summary .pgu-group__count { background: rgba(255,
   width: 100%;
 }
 
+.pgu-inline-text {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 5px;
+  border: 1px solid var(--light-gray);
+  border-radius: 5px;
+  color: var(--dark-gray);
+  font-family: inherit;
+  background: var(--white);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.pgu-inline-text:hover,
+.pgu-inline-text:focus { border-color: var(--vale-green); outline: none; }
+
 .activity-row-head {
   display: flex;
   align-items: center;

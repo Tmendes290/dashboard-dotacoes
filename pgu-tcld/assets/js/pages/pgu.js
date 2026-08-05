@@ -260,7 +260,7 @@
   function effective(a, ov) {
     ov = ov || {};
     return {
-      uid: a.uid, nome: a.nome, area: a.area, executante: a.executante,
+      uid: a.uid, nome: a.nome, area: a.area, executante: ov.executante || a.executante,
       // area = TR/ativo (ex.: TCLD 0101SA-01); componente = sistema/parte do TR (ex.: ACIONAMENTO
       // M1); disciplina = Mecânica/Elétrica/Civil -- os 3 vem do nivel do cronograma (WBS).
       componente: a.componente || "", disciplina: a.disciplina || "",
@@ -687,15 +687,18 @@
       ? ' <span class="badge farol-atrasado" title="Turno diferente do habitual do fiscal ' + A.esc(e.fiscalObra) + ' em ' + A.esc(e.disciplina || "—") + ' (normalmente ' + A.esc(turnoHabitualDe(e)) + ')">⚠ turno atípico</span>'
       : "";
 
+    var encarregadoInput = '<input type="text" class="pgu-inline-text pgu-inline-field" data-uid="' + A.esc(e.uid) + '" data-field="encarregado" value="' + A.esc(e.encarregado || "") + '" placeholder="—">';
+    var empresaInput = '<input type="text" class="pgu-inline-text pgu-inline-field" data-uid="' + A.esc(e.uid) + '" data-field="executante" value="' + A.esc(e.executante || "") + '" placeholder="—">';
+
     return '<div class="activity-row" data-uid="' + A.esc(e.uid) + '">' +
       '<div class="activity-row__farol">' + farolEmoji(farolDe(e)) + "</div>" +
-      '<div class="activity-row__encarregado" title="' + A.esc(e.encarregado || "") + '">' + (e.encarregado ? A.esc(e.encarregado) : "—") + "</div>" +
+      '<div class="activity-row__encarregado">' + encarregadoInput + "</div>" +
       '<div class="activity-row__main">' +
         '<span class="activity-row__nome pgu-open" data-uid="' + A.esc(e.uid) + '">' + A.esc(e.nome) + "</span>" +
         '<div class="activity-row__meta">' + A.esc(e.area || "—") +
           (e.turno ? " · " + A.esc(e.turno) : "") + turnoAvisoHtml + "</div>" +
       "</div>" +
-      '<div class="activity-row__empresa" title="' + A.esc(e.executante || "") + '">' + (e.executante ? A.esc(e.executante) : "—") + "</div>" +
+      '<div class="activity-row__empresa">' + empresaInput + "</div>" +
       '<div class="activity-row__inicio">' + fmtDataHora(e.inicioDataHora) + "</div>" +
       '<div class="activity-row__termino">' + fmtDataHora(e.terminoDataHora) + "</div>" +
       '<div class="activity-row__tend">' + inicioTendInput + "</div>" +
@@ -920,7 +923,7 @@
     });
   }
 
-  var TENDENCIA_FIELD_LABELS = { status: "Status", percent: "Avanço", inicioTendencia: "Início tendência", terminoTendencia: "Término tendência" };
+  var TENDENCIA_FIELD_LABELS = { status: "Status", percent: "Avanço", inicioTendencia: "Início tendência", terminoTendencia: "Término tendência", encarregado: "Encarregado", executante: "Empresa" };
 
   function wireHojeTab() {
     var container = A.$("pguHojeContent");
