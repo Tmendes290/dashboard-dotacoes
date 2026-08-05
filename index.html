@@ -8031,7 +8031,8 @@ async function renderPipe(){
       +'</td></tr>';
     var linhas = grupo.map(function(r){
     var item=r.item, risco=r.risco;
-    var stage = PIPE_STAGES.find(function(s){return s.id===item.etapa_atual;}) || PIPE_STAGES[0];
+    var stageIdxRow = PIPE_STAGES.findIndex(function(s){return s.id===item.etapa_atual;});
+    var stage = stageIdxRow>=0 ? PIPE_STAGES[stageIdxRow] : PIPE_STAGES[0];
     var necTxt = REF_WBS_NEC[item.wbs] ? _pipeFmtDate(_pipeParseISO(REF_WBS_NEC[item.wbs])) : '—';
     var projTxt = (risco.projMin&&risco.projMax) ? (_pipeFmtDate(risco.projMin)+' – '+_pipeFmtDate(risco.projMax)) : '—';
     var isLast = item.etapa_atual==='pedido_gerado';
@@ -8052,6 +8053,9 @@ async function renderPipe(){
       +'<td style="padding:8px 10px;font-size:11px">'+(item.rc_numero||'—')+'</td>'
       +'<td style="padding:8px 10px;white-space:nowrap">'
         +'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px'+(timelineOpen?';background:#e0f2fe;border-color:#0ea5e9':'')+'" onclick="togglePipeTimeline(\''+item.id+'\')">🕒 Prazos</button>'
+        +' '+(stageIdxRow>0
+          ?'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="pipeRetrocederEtapa(\''+item.id+'\')">← Voltar</button>'
+          :'')
         +' '+(isLast
           ?'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="pipeArquivar(\''+item.id+'\')">Arquivar</button>'
           :'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="pipeAvancarEtapa(\''+item.id+'\')">Avançar →</button>')
@@ -8286,6 +8290,27 @@ async function pipeAvancarEtapaConfirmado(id, camposKeysStr){
     await loadPipeData(true);
     renderPipe();
   }catch(e){ toast('Erro ao avançar etapa: '+e.message,'red'); }
+  finally{ delete PIPE_ACTION_IN_FLIGHT[id]; }
+}
+async function pipeRetrocederEtapa(id){
+  if(PIPE_ACTION_IN_FLIGHT[id]) return;
+  var item = STATE_PIPE.find(function(i){return i.id===id;});
+  if(!item) return;
+  var idx = PIPE_STAGES.findIndex(function(s){return s.id===item.etapa_atual;});
+  if(idx<=0) return; // já está na primeira etapa (Engenharia)
+  var anterior = PIPE_STAGES[idx-1].id;
+  var hojeIso = new Date().toISOString().slice(0,10);
+  if(!confirm('Voltar "'+(item.numero_lm||item.wbs)+'" de '+PIPE_STAGES[idx].label+' para '+PIPE_STAGES[idx-1].label+'?')) return;
+  PIPE_ACTION_IN_FLIGHT[id] = true;
+  try{
+    var {error} = await supa.from('material_pipeline').update({etapa_atual:anterior, data_entrada_etapa:hojeIso}).eq('id',id);
+    if(error) throw error;
+    await supa.from('material_pipeline_historico').insert({pipeline_id:id, etapa_anterior:item.etapa_atual, etapa_nova:anterior, usuario:(CURRENT_USER&&CURRENT_USER.email)||''});
+    delete PIPE_HISTORICO_CACHE[id];
+    toast('Etapa retornada para '+PIPE_STAGES[idx-1].label,'blue');
+    await loadPipeData(true);
+    renderPipe();
+  }catch(e){ toast('Erro ao retroceder etapa: '+e.message,'red'); }
   finally{ delete PIPE_ACTION_IN_FLIGHT[id]; }
 }
 async function pipeArquivar(id){
