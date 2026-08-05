@@ -4763,6 +4763,16 @@ function onMsChange(id){
     _cji3RenderT=setTimeout(renderCji3, 200);
     return;
   }
+  if(id === 'ms-pipe-disciplina'){
+    PIPE_FILTERS.disciplina = selected.map(function(lbl){ var d=PIPE_DISCIPLINAS.find(function(x){return x.l===lbl;}); return d?d.v:lbl; });
+    renderPipe();
+    return;
+  }
+  if(id === 'ms-pipe-etapa'){
+    PIPE_FILTERS.etapa = selected.map(function(lbl){ var s=PIPE_STAGES.find(function(x){return x.label===lbl;}); return s?s.id:lbl; });
+    renderPipe();
+    return;
+  }
   if(id.startsWith('ms-mat-')){
     var matKey = id.replace('ms-mat-','');
     MAT_FILTERS[matKey] = selected;
@@ -4833,7 +4843,9 @@ function updateMsLabel(id, selected){
     'ms-cji3-projs': 'Todos',
     'ms-cji3-forns': 'Todos',
     'ms-usr-nome': 'Todos os usuários...',
-    'ms-usr-squad': 'Todos os squads'
+    'ms-usr-squad': 'Todos os squads',
+    'ms-pipe-disciplina': 'Disciplina (todas)',
+    'ms-pipe-etapa': 'Etapa (todas)'
   };
   if(selected.length === 0){
     label.textContent = defaults[id] || 'Todos';
@@ -7664,7 +7676,9 @@ function matSubset(skip)  { return STATE_MATERIAIS.filter(function(r){ return _m
 // ═════════════════════════════════════════════════════════════════
 var STATE_PIPE = null;   // null = ainda não carregado
 var PIPE_CONFIG = null;  // payload de pipeline_config, cacheado
-var PIPE_FILTERS = { disciplina:'', etapa:'', risco:null, busca:'' };
+var PIPE_FILTERS = { disciplina:[], etapa:[], risco:null, busca:'' };
+var PIPE_TIMELINE_OPEN = {}; // id -> bool (linha de prazos por etapa expandida)
+var PIPE_HISTORICO_CACHE = {}; // id -> array de material_pipeline_historico
 
 var PIPE_STAGES = [
   {id:'engenharia',    label:'Engenharia',       configKey:'engenharia'},
@@ -7783,11 +7797,89 @@ function calcPipeRisco(item){
   return {diasNaEtapa:diasNaEtapa, ritmo:ritmoBucket, color:color, bg:bg, label:label, bucket:bucket, projMin:projMin, projMax:projMax, dataNecessidade:dataNec};
 }
 
-function _pipeHasFilters(){ return !!(PIPE_FILTERS.disciplina||PIPE_FILTERS.etapa||PIPE_FILTERS.risco||PIPE_FILTERS.busca); }
-function setPipeFiltro(k,v){ PIPE_FILTERS[k]=v; renderPipe(); }
+// ── Prazo por etapa (Engenharia → Pedido Gerado) ────────────────────
+// Etapas já passadas/atual usam as datas reais registradas em material_pipeline_historico
+// (data_transicao); etapas futuras usam a mesma projeção em dias úteis do calcPipeRisco,
+// só que reportada estágio a estágio em vez de só o total acumulado.
+async function togglePipeTimeline(id){
+  PIPE_TIMELINE_OPEN[id] = !PIPE_TIMELINE_OPEN[id];
+  if(PIPE_TIMELINE_OPEN[id] && !PIPE_HISTORICO_CACHE[id]){
+    try{
+      var {data,error} = await supa.from('material_pipeline_historico').select('*').eq('pipeline_id',id).order('data_transicao');
+      if(error) throw error;
+      PIPE_HISTORICO_CACHE[id] = data||[];
+    }catch(e){ console.warn('[Pipe] historico:',e); PIPE_HISTORICO_CACHE[id] = []; }
+  }
+  renderPipe();
+}
+
+function pipeStageBreakdown(item, historico){
+  var hoje=_pipeToday();
+  var currentIdx = PIPE_STAGES.findIndex(function(s){return s.id===item.etapa_atual;});
+  if(currentIdx<0) currentIdx=0;
+  var cfgDisc = (PIPE_CONFIG&&PIPE_CONFIG.disciplinas&&PIPE_CONFIG.disciplinas[item.disciplina])
+    || PIPE_CONFIG_DEFAULT.disciplinas[item.disciplina] || PIPE_CONFIG_DEFAULT.disciplinas.eletrica;
+
+  var startOf={}, endOf={};
+  (historico||[]).slice().sort(function(a,b){ return new Date(a.data_transicao)-new Date(b.data_transicao); }).forEach(function(h){
+    startOf[h.etapa_nova] = new Date(h.data_transicao);
+    endOf[h.etapa_anterior] = new Date(h.data_transicao);
+  });
+  var criado = item.criado_em ? new Date(item.criado_em) : null;
+
+  var out=[];
+  var cursorMin=hoje, cursorMax=hoje;
+  for(var i=0;i<PIPE_STAGES.length;i++){
+    var s = PIPE_STAGES[i];
+    var row = {stage:s};
+    if(i < currentIdx){
+      row.status='concluida';
+      row.start = startOf[s.id] || (i===0?criado:null);
+      row.end = endOf[s.id] || null;
+    } else if(i === currentIdx){
+      row.status='atual';
+      row.start = startOf[s.id] || (i===0?criado:null) || _pipeParseISO(item.data_entrada_etapa);
+      row.end = null;
+    } else {
+      row.status='projetada';
+      var cfg = cfgDisc[s.configKey] || {min:0,max:0};
+      row.start = new Date(cursorMin.getTime());
+      cursorMin = addBusinessDays(cursorMin, cfg.min);
+      cursorMax = addBusinessDays(cursorMax, cfg.max);
+      row.end = new Date(cursorMax.getTime());
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+function pipeTimelineRowHtml(item, breakdown){
+  var steps = breakdown.map(function(row){
+    var color = row.status==='concluida' ? '#16a34a' : (row.status==='atual' ? '#2563eb' : '#94a3b8');
+    var dateTxt;
+    if(row.status==='atual'){
+      dateTxt = (row.start?_pipeFmtDate(row.start):'—') + ' – em andamento';
+    } else if(row.status==='concluida'){
+      dateTxt = (row.start?_pipeFmtDate(row.start):'—') + ' – ' + (row.end?_pipeFmtDate(row.end):'—');
+    } else {
+      dateTxt = 'previsão: ' + _pipeFmtDate(row.start) + ' – ' + _pipeFmtDate(row.end);
+    }
+    return '<div style="flex:1;min-width:112px;text-align:center">'
+      +'<div style="height:6px;border-radius:3px;background:'+color+';margin-bottom:6px"></div>'
+      +'<div style="font-size:10.5px;font-weight:700;color:'+color+'">'+row.stage.label+'</div>'
+      +'<div style="font-size:10px;color:#64748b;margin-top:2px;white-space:nowrap">'+dateTxt+'</div>'
+      +'</div>';
+  }).join('<div style="align-self:center;color:#cbd5e1;font-size:13px;padding:0 2px 16px">→</div>');
+  return '<tr><td colspan="12" style="padding:14px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0">'
+    +'<div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b;margin-bottom:10px">🕒 Prazos por etapa — '+(item.numero_lm||item.wbs)+'</div>'
+    +'<div style="display:flex;align-items:flex-start;gap:4px;overflow-x:auto">'+steps+'</div>'
+    +'</td></tr>';
+}
+
+function _pipeHasFilters(){ return !!(PIPE_FILTERS.disciplina.length||PIPE_FILTERS.etapa.length||PIPE_FILTERS.risco||PIPE_FILTERS.busca); }
 function setPipeBusca(v){ PIPE_FILTERS.busca=v; renderPipe(); }
 function setPipeRiscoFilter(b){ PIPE_FILTERS.risco = (PIPE_FILTERS.risco===b?null:b); renderPipe(); }
-function clearPipeFilters(){ PIPE_FILTERS={disciplina:'',etapa:'',risco:null,busca:''}; renderPipe(); }
+function clearPipeFilters(){ PIPE_FILTERS={disciplina:[],etapa:[],risco:null,busca:''}; renderPipe(); }
 
 async function renderPipe(){
   var el=document.getElementById('v-pipe');
@@ -7820,8 +7912,8 @@ async function renderPipe(){
 
   var rows = allRisco.filter(function(r){
     var item=r.item, risco=r.risco;
-    if(PIPE_FILTERS.disciplina && item.disciplina!==PIPE_FILTERS.disciplina) return false;
-    if(PIPE_FILTERS.etapa && item.etapa_atual!==PIPE_FILTERS.etapa) return false;
+    if(PIPE_FILTERS.disciplina.length && PIPE_FILTERS.disciplina.indexOf(item.disciplina)<0) return false;
+    if(PIPE_FILTERS.etapa.length && PIPE_FILTERS.etapa.indexOf(item.etapa_atual)<0) return false;
     if(PIPE_FILTERS.risco && risco.bucket!==PIPE_FILTERS.risco) return false;
     if(PIPE_FILTERS.busca){
       var q=PIPE_FILTERS.busca.toLowerCase();
@@ -7846,12 +7938,19 @@ async function renderPipe(){
     +kpiCard('⚪ Sem data', counts.cinza||0, '#94a3b8', 'cinza')
     +'</div>';
 
-  var discOpts = PIPE_DISCIPLINAS.map(function(d){return '<option value="'+d.v+'"'+(PIPE_FILTERS.disciplina===d.v?' selected':'')+'>'+d.l+'</option>';}).join('');
-  var etapaOpts = PIPE_STAGES.map(function(s){return '<option value="'+s.id+'"'+(PIPE_FILTERS.etapa===s.id?' selected':'')+'>'+s.label+'</option>';}).join('');
+  function pipeMsWrap(id, defaultLabel){
+    return '<div class="ms-wrap" id="'+id+'">'
+      +'<div class="ms-input" onclick="toggleMs(\''+id+'\')" style="padding:8px 10px">'
+      +'<span class="ms-label" id="'+id+'-label">'+defaultLabel+'</span>'
+      +'<span style="color:#94a3b8;font-size:10px">▾</span>'
+      +'</div>'
+      +'<div class="ms-drop" id="'+id+'-drop" style="display:none"></div>'
+      +'</div>';
+  }
   var filtrosHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
     +'<input class="input" style="max-width:220px" placeholder="Buscar WBS, descrição, RC…" value="'+(PIPE_FILTERS.busca||'').replace(/"/g,'&quot;')+'" oninput="setPipeBusca(this.value)">'
-    +'<select onchange="setPipeFiltro(\'disciplina\',this.value)" style="padding:8px;border-radius:8px;border:1px solid #e2e8f0"><option value="">Disciplina (todas)</option>'+discOpts+'</select>'
-    +'<select onchange="setPipeFiltro(\'etapa\',this.value)" style="padding:8px;border-radius:8px;border:1px solid #e2e8f0"><option value="">Etapa (todas)</option>'+etapaOpts+'</select>'
+    +pipeMsWrap('ms-pipe-disciplina','Disciplina (todas)')
+    +pipeMsWrap('ms-pipe-etapa','Etapa (todas)')
     +(_pipeHasFilters()?'<button class="btn btn-outline" onclick="clearPipeFilters()">↺ Limpar</button>':'')
     +'<div style="margin-left:auto;display:flex;gap:8px">'
     +'<button class="btn" style="background:#009CDE;color:#fff" onclick="openPipeItemModal()">+ Nova LM</button>'
@@ -7869,7 +7968,8 @@ async function renderPipe(){
     var projeto = pepRow ? pepRow[2] : '';
     var discLbl = (PIPE_DISCIPLINAS.find(function(d){return d.v===item.disciplina;})||{l:item.disciplina}).l;
     var ritmoColor = risco.ritmo==='estourada'?'#dc2626':(risco.ritmo==='faixa'?'#d97706':'#16a34a');
-    return '<tr>'
+    var timelineOpen = !!PIPE_TIMELINE_OPEN[item.id];
+    var mainRow = '<tr>'
       +'<td style="padding:8px 10px;font-family:\'Share Tech Mono\',monospace;font-size:11px">'+item.wbs+'</td>'
       +'<td style="padding:8px 10px;font-family:\'Share Tech Mono\',monospace;font-size:11px">'+(item.numero_lm||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:#64748b">'+(projeto||'—')+'</td>'
@@ -7882,13 +7982,16 @@ async function renderPipe(){
       +'<td style="padding:8px 10px"><span style="display:inline-block;padding:3px 9px;border-radius:20px;font-size:10.5px;font-weight:700;color:'+risco.color+';background:'+risco.bg+'">'+risco.label+'</span></td>'
       +'<td style="padding:8px 10px;font-size:11px">'+(item.rc_numero||'—')+'</td>'
       +'<td style="padding:8px 10px;white-space:nowrap">'
-        +(isLast
+        +'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px'+(timelineOpen?';background:#e0f2fe;border-color:#0ea5e9':'')+'" onclick="togglePipeTimeline(\''+item.id+'\')">🕒 Prazos</button>'
+        +' '+(isLast
           ?'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="pipeArquivar(\''+item.id+'\')">Arquivar</button>'
           :'<button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="pipeAvancarEtapa(\''+item.id+'\')">Avançar →</button>')
         +' <button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="openPipeItemModal(\''+item.id+'\')">✎</button>'
         +' <button class="btn btn-outline" style="font-size:10px;padding:3px 8px;color:#dc2626" onclick="pipeExcluirItem(\''+item.id+'\',\''+(item.descricao_lm||'').replace(/'/g,"\\'")+'\')">🗑</button>'
       +'</td>'
       +'</tr>';
+    var timelineRow = timelineOpen ? pipeTimelineRowHtml(item, pipeStageBreakdown(item, PIPE_HISTORICO_CACHE[item.id]||[])) : '';
+    return mainRow + timelineRow;
   }).join('');
 
   var tableHtml = rows.length
@@ -7911,6 +8014,15 @@ async function renderPipe(){
     : '<div style="padding:40px;text-align:center;color:#64748b">Nenhum item encontrado com os filtros atuais.</div>';
 
   el.innerHTML = '<div style="padding:20px 24px">'+kpiHtml+filtrosHtml+tableHtml+'</div>';
+
+  var discLabels = PIPE_DISCIPLINAS.map(function(d){return d.l;});
+  var etapaLabels = PIPE_STAGES.map(function(s){return s.label;});
+  var discSel = PIPE_FILTERS.disciplina.map(function(v){ var d=PIPE_DISCIPLINAS.find(function(x){return x.v===v;}); return d?d.l:v; });
+  var etapaSel = PIPE_FILTERS.etapa.map(function(v){ var s=PIPE_STAGES.find(function(x){return x.id===v;}); return s?s.label:v; });
+  buildMsDrop('ms-pipe-disciplina', discLabels, discSel, null);
+  buildMsDrop('ms-pipe-etapa', etapaLabels, etapaSel, null);
+  updateMsLabel('ms-pipe-disciplina', discSel);
+  updateMsLabel('ms-pipe-etapa', etapaSel);
 }
 
 // ── Modal: novo/editar item ────────────────────────────────────────
@@ -8021,6 +8133,7 @@ async function pipeAvancarEtapa(id){
     var {error} = await supa.from('material_pipeline').update({etapa_atual:next, data_entrada_etapa:hojeIso}).eq('id',id);
     if(error) throw error;
     await supa.from('material_pipeline_historico').insert({pipeline_id:id, etapa_anterior:item.etapa_atual, etapa_nova:next, usuario:(CURRENT_USER&&CURRENT_USER.email)||''});
+    delete PIPE_HISTORICO_CACHE[id];
     toast('Etapa avançada para '+PIPE_STAGES[idx+1].label,'green');
     await loadPipeData(true);
     renderPipe();
