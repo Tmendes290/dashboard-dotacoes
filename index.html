@@ -1529,6 +1529,7 @@ function loadState(){
 
 // ─── MATERIAIS STATE ─────────────────────────────────────────────
 var STATE_MATERIAIS = JSON.parse(localStorage.getItem('mat_data') || '[]');
+var MAT_LOAD_ERROR = false; // true quando a sincronização com o Supabase falhou (dado real existe, só não carregou agora)
 var STATE_CJI3 = { months: [], rows: [] };
 var REF_FISCAIS = {}; // fiscal nome -> squad (carregado do Supabase)
 var REF_WBS_NEC = {}; // wbs -> data_necessidade 'YYYY-MM-DD' (carregado do Supabase)
@@ -1683,21 +1684,41 @@ async function loadFromSupabase(){
     })(),
 
     // Materiais (paginado, um registro por item — evita reler/regravar um
-    // blob único gigante, mesmo problema que tornava a importação lenta)
+    // blob único gigante, mesmo problema que tornava a importação lenta).
+    // ~28 mil itens = ~29 páginas sequenciais; numa rede instável (ex: rede
+    // corporativa que derruba conexão com o Supabase, ver comentário do proxy
+    // /db no server.js) uma falha no meio do caminho não pode apagar a tela
+    // inteira como se ninguém tivesse importado nada — só repete a página que
+    // falhou (com um pequeno atraso) e, se mesmo assim não der, MANTÉM o que
+    // já estava carregado e avisa que a sincronização falhou.
     (async function(){
+      async function fetchPageComRetry(offset, batch, tentativas){
+        for(var t=1;t<=tentativas;t++){
+          var r=await supa.from('materiais').select('item').order('chave').range(offset,offset+batch-1);
+          if(!r.error) return r;
+          console.warn('[Sync] materiais página '+offset+' falhou (tentativa '+t+'/'+tentativas+'):',r.error);
+          if(t<tentativas) await new Promise(function(res){ setTimeout(res, 700*t); });
+        }
+        return null; // esgotou as tentativas
+      }
       try {
-        var matArr=[],matOffset=0,matBatch=1000,matPages=0,matSyncOk=false;
+        var matArr=[],matOffset=0,matBatch=1000,matPages=0,matSyncOk=false,matFalhou=false;
         while(matPages<300){
-          var matRes=await supa.from('materiais').select('item').order('chave').range(matOffset,matOffset+matBatch-1);
-          if(matRes.error){ console.error('[Sync] materiais select falhou:',matRes.error); break; }
-          if(!matRes.data) break;
+          var matRes=await fetchPageComRetry(matOffset, matBatch, 3);
+          if(!matRes){ matFalhou=true; break; }
           matSyncOk=true;
-          if(matRes.data.length===0) break;
+          if(!matRes.data || matRes.data.length===0) break;
           matArr=matArr.concat(matRes.data.map(function(r){return r.item;}));
           if(matRes.data.length<matBatch) break;
           matOffset+=matBatch; matPages++;
         }
-        if(matSyncOk){
+        if(matFalhou){
+          // Não zera STATE_MATERIAIS — mantém o que já tinha (localStorage ou
+          // sync anterior) e sinaliza erro pra tela mostrar aviso, não "vazio".
+          MAT_LOAD_ERROR = true;
+          console.error('[Sync] materiais: sincronização incompleta após retries, mantendo dado anterior ('+STATE_MATERIAIS.length+' itens em cache).');
+        } else if(matSyncOk){
+          MAT_LOAD_ERROR = false;
           STATE_MATERIAIS=matArr;
           _lsSet('mat_data',JSON.stringify(matArr));
           var {data:matMeta,error:matMetaErr}=await supa.from('mat_meta').select('*').eq('id',1).maybeSingle();
@@ -1706,7 +1727,7 @@ async function loadFromSupabase(){
           var nbMat=document.getElementById('nb-mat');
           if(nbMat&&STATE_MATERIAIS.length){nbMat.textContent=STATE_MATERIAIS.length;nbMat.style.display='inline-flex';}
         }
-      } catch(e7){console.warn('[Sync] materiais:',e7);}
+      } catch(e7){ MAT_LOAD_ERROR=true; console.warn('[Sync] materiais:',e7); }
     })()
   ]);
 
@@ -8899,6 +8920,18 @@ function renderMateriais(){
 
   if(!STATE_MATERIAIS || STATE_MATERIAIS.length === 0){
     var _isAdmEmpty = CURRENT_PERFIL && CURRENT_PERFIL.role === 'admin';
+    // MAT_LOAD_ERROR: a sincronização com o servidor falhou (ex: rede instável) --
+    // os dados continuam salvos no Supabase, só não carregaram agora. Não confundir
+    // com "nunca foi importado", senão a pessoa reimporta à toa achando que perdeu tudo.
+    if(MAT_LOAD_ERROR){
+      el.innerHTML = '<div style="padding:32px 24px"><div style="max-width:480px;margin:60px auto;text-align:center">'
+        + '<div style="font-size:48px;margin-bottom:16px">⚠️</div>'
+        + '<div style="font-size:18px;font-weight:700;color:#1e293b;margin-bottom:8px">Não deu pra carregar os materiais agora</div>'
+        + '<div style="font-size:13px;color:#64748b;margin-bottom:24px">Os dados continuam salvos no servidor -- foi só uma falha de conexão ao sincronizar. Não precisa reimportar.</div>'
+        + '<button class="btn" style="background:#7c3aed;color:#fff" onclick="loadFromSupabase()">🔄 Tentar novamente</button>'
+        + '</div></div>';
+      return;
+    }
     el.innerHTML = '<div style="padding:32px 24px"><div style="max-width:480px;margin:60px auto;text-align:center">'
       + '<div style="font-size:48px;margin-bottom:16px">📦</div>'
       + '<div style="font-size:18px;font-weight:700;color:#1e293b;margin-bottom:8px">Nenhum dado de materiais</div>'
