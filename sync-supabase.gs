@@ -7,10 +7,10 @@
 var SUPABASE_URL = 'https://ehbiyqqpzqrluvuqrljp.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoYml5cXFwenFybHV2dXFybGpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzMjM3MTcsImV4cCI6MjA5NDg5OTcxN30.lW_Jdc7SC7FKh9OJPBCYdfN-QMXFTYGjterU3eWOFTc';
 var SHEET_NAME   = 'REGISTROS';
-// URL pública do dashboard (Render) — o /api/relatorio-diario faz o cálculo pesado
+// URL pública do dashboard (Render, domínio próprio) — o /api/relatorio-diario faz o cálculo pesado
 // (aderência, evolução, composição do improdutivo) e devolve o HTML pronto do e-mail.
-var RELATORIO_URL   = 'https://projetossalobo.onrender.com';
-var RELATORIO_TOKEN = 'b11537b02bae4e1efcf64c05cac6eb0fe0ffa34af3e29c85'; // igual à env var RELATORIO_TOKEN no Railway/Render
+var RELATORIO_URL   = 'https://dashboardsalobo.com.br';
+var RELATORIO_TOKEN = 'b11537b02bae4e1efcf64c05cac6eb0fe0ffa34af3e29c85'; // igual à env var RELATORIO_TOKEN no Render
 var EMAILS_DESTINO  = 'tm0133929@gmail.com,davison.oliveira@vale.com,C0711210@vale.com';
 // ─────────────────────────────────────────────────────────────────
 

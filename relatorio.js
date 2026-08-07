@@ -525,7 +525,7 @@ function montarRelatorioEmail(rawRows, refSquads, refFiscais, opts) {
     + renderKpiRow(kpisAcc)
     + renderSquadCards(cardsAcc)
     + blocoAcumulado
-    + '<p style="margin:16px 0 0;font-size:10px;color:#94a3b8;text-align:center">Gerado automaticamente · Dashboard: projetossalobo.onrender.com</p>'
+    + '<p style="margin:16px 0 0;font-size:10px;color:#94a3b8;text-align:center">Gerado automaticamente · Dashboard: dashboardsalobo.com.br</p>'
     + '</div></div>';
 
   return { html: html, dataFmt: dataFmt };
