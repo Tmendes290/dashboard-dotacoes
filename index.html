@@ -1568,6 +1568,7 @@ var MAT_MESES_NOMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Ju
 var FPA_DATA = []; // linhas cruas da tabela fpa_dados (previsto/executado/forecast por pep/mes/ano)
 var FPA_FILTERS = {projeto:[], squad:[], lider:[], planejador:[]};
 var FPA_ANO = new Date().getFullYear();
+var FPA_PAGE = 1; // tabela paginada — cada projeto já é 4 linhas, renderizar tudo de uma vez travava o navegador
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
 var MAT_PAGE = 1;
@@ -4843,6 +4844,7 @@ function onMsChange(id){
   if(id.startsWith('ms-fpa-')){
     var fpaKey = id.replace('ms-fpa-','');
     FPA_FILTERS[fpaKey] = selected;
+    FPA_PAGE = 1;
     if(currentView === 'fpa') renderFpa();
     return;
   }
@@ -9331,6 +9333,7 @@ async function fpaHandleUpload(file){
         if(up.error){ toast('Erro ao salvar: '+up.error.message,'red'); return; }
       }
       FPA_DATA = await fpaLoadAll();
+      FPA_PAGE = 1;
       toast('✔ Planilha FP&A importada com sucesso!','green');
       renderFpa();
     }catch(err){
@@ -9355,6 +9358,7 @@ async function fpaEditarForecast(pep, titulo, ano, mes, input){
   toast('Forecast atualizado','green');
   renderFpa();
 }
+function fpaGoPage(p){ FPA_PAGE = p; renderFpa(); }
 function fpaBeginEditForecast(cellId, pep, titulo, ano, mes, rawVal){
   var td = document.getElementById(cellId);
   if(!td) return;
@@ -9440,7 +9444,7 @@ function renderFpa(){
   html += '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px">'
     + '<input type="file" id="fpa-upload-input" accept=".xlsm,.xlsx" style="display:none" onchange="fpaHandleUpload(this.files[0])">'
     + '<button onclick="document.getElementById(\'fpa-upload-input\').click()" style="padding:8px 14px;border-radius:7px;border:1px solid #cbd5e1;background:#fff;font-size:12px;font-weight:700;cursor:pointer">⬆ Importar planilha FP&A</button>'
-    + '<label style="font-size:11px;color:#64748b;display:flex;align-items:center;gap:6px">Ano<input type="number" value="'+FPA_ANO+'" onchange="FPA_ANO=parseInt(this.value)||FPA_ANO;renderFpa()" style="width:70px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:6px"></label>'
+    + '<label style="font-size:11px;color:#64748b;display:flex;align-items:center;gap:6px">Ano<input type="number" value="'+FPA_ANO+'" onchange="FPA_ANO=parseInt(this.value)||FPA_ANO;FPA_PAGE=1;renderFpa()" style="width:70px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:6px"></label>'
     + '</div>';
 
   html += '<div class="filters" style="margin-bottom:16px;flex-wrap:wrap;gap:8px;align-items:flex-end">'
@@ -9448,7 +9452,7 @@ function renderFpa(){
     + fpaMsWrap('ms-fpa-squad','Squad',150)
     + fpaMsWrap('ms-fpa-lider','Líder',150)
     + fpaMsWrap('ms-fpa-planejador','Planejador',150)
-    + '<button onclick="FPA_FILTERS={projeto:[],squad:[],lider:[],planejador:[]};renderFpa()" style="padding:7px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#fff;cursor:pointer;height:fit-content">↺ Limpar</button>'
+    + '<button onclick="FPA_FILTERS={projeto:[],squad:[],lider:[],planejador:[]};FPA_PAGE=1;renderFpa()" style="padding:7px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#fff;cursor:pointer;height:fit-content">↺ Limpar</button>'
     + '</div>';
 
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">'
@@ -9464,6 +9468,16 @@ function renderFpa(){
   html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;padding:16px 18px">';
   html += '<div style="font-size:10.5px;color:#94a3b8;margin-bottom:10px">Cada projeto tem 4 linhas — Orçamento, Executado, Projeção (editável — Enter pra salvar) e Variação (Projeção − Orçamento). Aderência = Executado / Orçamento. Saldo = Orçamento − Executado.</div>';
 
+  // Tabela paginada — cada projeto vira 4 linhas de DOM; renderizar os ~100+ projetos de uma vez
+  // travava o navegador a cada clique de filtro. Curva S e KPIs continuam somando TODOS os projetos
+  // filtrados (peps), só a listagem da tabela é que mostra uma página por vez.
+  var pepsOrdenados = peps.slice().sort(function(a,b){return (a.titulo||'').localeCompare(b.titulo||'');});
+  var FPA_PAGE_SIZE = 15;
+  var fpaTotalPages = Math.max(1, Math.ceil(pepsOrdenados.length/FPA_PAGE_SIZE));
+  if(FPA_PAGE>fpaTotalPages) FPA_PAGE=fpaTotalPages;
+  if(FPA_PAGE<1) FPA_PAGE=1;
+  var pagePeps = pepsOrdenados.slice((FPA_PAGE-1)*FPA_PAGE_SIZE, FPA_PAGE*FPA_PAGE_SIZE);
+
   html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">';
   html += '<thead><tr style="background:#1e3a5f;color:#fff">'
     + '<th style="padding:8px 10px;text-align:left">Projeto</th>'
@@ -9478,7 +9492,7 @@ function renderFpa(){
   if(!peps.length){
     html += '<tr><td colspan="19" style="padding:24px;text-align:center;color:#94a3b8">Nenhum projeto encontrado — importe a planilha ou ajuste os filtros.</td></tr>';
   } else {
-    peps.slice().sort(function(a,b){return (a.titulo||'').localeCompare(b.titulo||'');}).forEach(function(p,i){
+    pagePeps.forEach(function(p,i){
       var vPrev=[], vExec=[], vFcst=[], vVar=[];
       var tPrev=0, tExec=0, tFcst=0, tVar=0;
       for(var m=1;m<=12;m++){
@@ -9536,7 +9550,21 @@ function renderFpa(){
         + '</tr>';
     });
   }
-  html += '</tbody></table></div></div>';
+  html += '</tbody></table></div>';
+
+  if(pepsOrdenados.length > FPA_PAGE_SIZE){
+    var pgStart = (FPA_PAGE-1)*FPA_PAGE_SIZE+1, pgEnd = Math.min(FPA_PAGE*FPA_PAGE_SIZE, pepsOrdenados.length);
+    var btnBase='padding:6px 14px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#1e293b;';
+    var btnOff='padding:6px 14px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:600;cursor:default;background:#f8fafc;color:#94a3b8;';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;flex-wrap:wrap;gap:8px">'
+      + '<span style="font-size:12px;color:#64748b">Exibindo <strong>'+pgStart+'–'+pgEnd+'</strong> de <strong>'+pepsOrdenados.length+'</strong> projetos</span>'
+      + '<div style="display:flex;gap:8px;align-items:center">'
+      + (FPA_PAGE>1 ? '<button style="'+btnBase+'" onclick="fpaGoPage('+(FPA_PAGE-1)+')">← Anterior</button>' : '<button style="'+btnOff+'" disabled>← Anterior</button>')
+      + '<span style="font-size:12px;color:#475569;padding:0 4px">Página <strong>'+FPA_PAGE+'</strong> de <strong>'+fpaTotalPages+'</strong></span>'
+      + (FPA_PAGE<fpaTotalPages ? '<button style="'+btnBase+'" onclick="fpaGoPage('+(FPA_PAGE+1)+')">Próxima →</button>' : '<button style="'+btnOff+'" disabled>Próxima →</button>')
+      + '</div></div>';
+  }
+  html += '</div>';
 
   el.innerHTML = html;
 
@@ -9566,7 +9594,7 @@ function renderFpa(){
         {type:'line',label:'Forecast Acum.',data:cFcst,borderColor:'#f97316',backgroundColor:'rgba(249,115,22,.04)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#f97316',borderDash:[6,3],fill:false,tension:0.4,yAxisID:'yLine',order:2,
           datalabels:{display:'auto',align:'top',offset:4,color:'#f97316',font:{size:9,weight:'700'},formatter:dlFmt}}
       ]},
-      options:{responsive:true,maintainAspectRatio:false,
+      options:{responsive:true,maintainAspectRatio:false,animation:false,
         plugins:{legend:{display:false},datalabels:{display:false},
           tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+fpaFmtUsd(c.raw);}}}},
         scales:{
