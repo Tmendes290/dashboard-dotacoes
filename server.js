@@ -774,27 +774,50 @@ app.post('/api/pgu-alerta-turno', async (req, res) => {
     return res.status(401).json({ error: 'Token inválido.' });
   }
 
-  const { turno, dia, atrasadas, linkReport } = req.body;
-  if (!Array.isArray(atrasadas) || !atrasadas.length) {
-    return res.status(400).json({ error: 'Nenhuma atividade pendente informada.' });
+  const { turno, dia, produtividade, linkReport } = req.body;
+  const atrasadas = Array.isArray(req.body.atrasadas) ? req.body.atrasadas : [];
+  if (!produtividade && !atrasadas.length) {
+    return res.status(400).json({ error: 'Nada pra reportar (sem produtividade nem pendências).' });
   }
 
-  const linhas = atrasadas.slice(0, 30).map((a) => {
-    const motivo = (a.motivo || '').trim();
-    return `• ${a.nome || '—'}${a.area ? ' (' + a.area + ')' : ''}${motivo ? ' — ' + motivo : ''}`;
-  }).join('\n');
-  const extra = atrasadas.length > 30 ? `\n… e mais ${atrasadas.length - 30} atividade(s).` : '';
+  function fmtHoras(h) {
+    if (h === null || h === undefined) return '—';
+    return Number(h).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'h';
+  }
 
-  const texto = `⚠️ *Ponto de atenção — PGU Salobo III*\n` +
-    `Turno ${turno || '—'} encerrado${dia ? ' em ' + dia : ''} com atividade(s) não concluída(s):\n\n` +
-    linhas + extra +
-    `\n\nDá atenção nesses itens pra não virarem caminho crítico — vale montar um plano de ação.` +
-    (linkReport ? `\n\nReport completo: ${linkReport}` : '');
+  // Produtividade = horas concluídas / horas planejadas pro turno -- >=100% é bom ritmo (deu
+  // conta do previsto, ou mais), abaixo disso é sinal de questionar o motivo.
+  let textoTopo;
+  if (produtividade && produtividade.horasPlanejadas > 0) {
+    const pct = produtividade.pct;
+    const emoji = pct >= 100 ? '✅' : '⚠️';
+    textoTopo = `${emoji} *Turno ${turno || '—'} encerrado${dia ? ' em ' + dia : ''} — Produtividade ${pct}%*\n` +
+      `Planejado: ${produtividade.qtdPlanejada} atividade(s) / ${fmtHoras(produtividade.horasPlanejadas)}\n` +
+      `Concluído: ${produtividade.qtdConcluida} atividade(s) / ${fmtHoras(produtividade.horasConcluidas)}\n` +
+      (pct >= 100 ? 'Acima do planejado pro turno — bom ritmo. 👏' : 'Abaixo do planejado pro turno — vale entender o motivo da baixa produtividade.');
+  } else {
+    textoTopo = `📋 *Turno ${turno || '—'} encerrado${dia ? ' em ' + dia : ''}*`;
+  }
+
+  let textoPendencias;
+  if (atrasadas.length) {
+    const linhas = atrasadas.slice(0, 30).map((a) => {
+      const motivo = (a.motivo || '').trim();
+      return `• ${a.nome || '—'}${a.area ? ' (' + a.area + ')' : ''}${motivo ? ' — ' + motivo : ''}`;
+    }).join('\n');
+    const extra = atrasadas.length > 30 ? `\n… e mais ${atrasadas.length - 30} atividade(s).` : '';
+    textoPendencias = `\n\n⚠️ *Ponto de atenção* — atividade(s) não concluída(s):\n\n${linhas}${extra}` +
+      `\n\nDá atenção nesses itens pra não virarem caminho crítico — vale montar um plano de ação.`;
+  } else {
+    textoPendencias = '\n\n✅ Tudo concluído nesse turno.';
+  }
+
+  const texto = textoTopo + textoPendencias + (linkReport ? `\n\nReport completo: ${linkReport}` : '');
 
   try {
     const r = await fetch(`${WAME_SERVER}/${WAME_KEY}/message/text`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({ to: PGU_WHATSAPP_GRUPO, text: texto })
     });
     const bodyText = await r.text();
@@ -802,7 +825,7 @@ app.post('/api/pgu-alerta-turno', async (req, res) => {
       console.error('[pgu-alerta-turno] WAME-API respondeu', r.status, bodyText);
       return res.status(502).json({ error: `WAME-API recusou o envio (HTTP ${r.status}).` });
     }
-    console.log(`[pgu-alerta-turno] enviado — turno ${turno}, ${atrasadas.length} atividade(s)`);
+    console.log(`[pgu-alerta-turno] enviado — turno ${turno}, ${atrasadas.length} pendência(s)`);
     res.json({ ok: true });
   } catch (e) {
     console.error('[pgu-alerta-turno]', e);
