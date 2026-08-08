@@ -9222,15 +9222,18 @@ function fpaCatalog(){
   FPA_DATA.forEach(function(r){
     if(!byPep[r.pep]) byPep[r.pep] = {pep:r.pep, titulo:r.titulo};
   });
+  // REF_PEPS é array — indexar uma vez em objeto em vez de .find() por projeto (O(n) → O(1)).
+  var refIdx = {};
+  REF_PEPS.forEach(function(r){ if(!refIdx[r[0]]) refIdx[r[0]] = r; });
   return Object.keys(byPep).map(function(pep){
     var info = REF_SQUADS[pep] || {squad:'',lider:'',planejador:''};
-    var refPep = REF_PEPS.find(function(r){return r[0]===pep;});
+    var refPep = refIdx[pep];
     var titulo = byPep[pep].titulo || (refPep?refPep[1]:'') || '';
     return {pep:pep, titulo:titulo, squad:info.squad||'(sem squad)', lider:info.lider||'(sem líder)', planejador:info.planejador||'(sem planejador)'};
   });
 }
-function fpaFilteredPeps(){
-  return fpaCatalog().filter(function(p){
+function fpaFilteredPeps(catalog){
+  return (catalog||fpaCatalog()).filter(function(p){
     if(FPA_FILTERS.squad.length && FPA_FILTERS.squad.indexOf(p.squad)<0) return false;
     if(FPA_FILTERS.lider.length && FPA_FILTERS.lider.indexOf(p.lider)<0) return false;
     if(FPA_FILTERS.planejador.length && FPA_FILTERS.planejador.indexOf(p.planejador)<0) return false;
@@ -9238,9 +9241,19 @@ function fpaFilteredPeps(){
     return true;
   });
 }
+// Índice pep|mes|tipo -> valor, reconstruído uma vez por renderFpa() em vez de FPA_DATA.find()
+// dentro do loop de células (o find() repetido em ~3700 linhas × milhares de células travava o navegador).
+var _fpaValIdx = {};
+function fpaRebuildIdx(){
+  _fpaValIdx = {};
+  FPA_DATA.forEach(function(r){
+    if(r.ano!==FPA_ANO) return;
+    _fpaValIdx[r.pep+'|'+r.mes+'|'+r.tipo] = Number(r.valor)||0;
+  });
+}
 function fpaGetValor(pep,mes,tipo){
-  var row = FPA_DATA.find(function(r){return r.pep===pep && r.mes===mes && r.tipo===tipo && r.ano===FPA_ANO;});
-  return row ? (Number(row.valor)||0) : 0;
+  var v = _fpaValIdx[pep+'|'+mes+'|'+tipo];
+  return v===undefined ? 0 : v;
 }
 function fpaMonthly(peps,tipo){
   var arr = new Array(12).fill(0);
@@ -9385,7 +9398,9 @@ function renderFpa(){
           +'</div>';
   }
 
-  var peps = fpaFilteredPeps();
+  fpaRebuildIdx();
+  var allCat = fpaCatalog();
+  var peps = fpaFilteredPeps(allCat);
   var mPrev = fpaMonthly(peps,'previsto'), mExec = fpaMonthly(peps,'executado'), mFcst = fpaMonthly(peps,'forecast');
   var cPrev = fpaCumulative(mPrev), cExec = fpaCumulative(mExec), cFcst = fpaCumulative(mFcst);
   var totPrev = mPrev.reduce(function(a,b){return a+b;},0);
@@ -9395,7 +9410,6 @@ function renderFpa(){
   var desvioPct = totPrev>0 ? (desvio/totPrev*100) : 0;
   var desvioColor = desvioPct>=100?'#dc2626':(desvioPct>=80?'#d97706':'#16a34a');
 
-  var allCat = fpaCatalog();
   var squadOpts = Array.from(new Set(allCat.map(function(p){return p.squad;}))).sort();
   var liderOpts = Array.from(new Set(allCat.map(function(p){return p.lider;}))).sort();
   var planOpts = Array.from(new Set(allCat.map(function(p){return p.planejador;}))).sort();
