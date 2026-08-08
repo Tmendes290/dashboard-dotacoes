@@ -1689,8 +1689,7 @@ async function loadFromSupabase(){
     // FP&A
     (async function(){
       try {
-        const {data:fpa,error:e8}=await supa.from('fpa_dados').select('*');
-        if(!e8&&fpa) FPA_DATA=fpa;
+        FPA_DATA = await fpaLoadAll();
       } catch(e8){console.warn('[Sync] fpa_dados:',e8);}
     })(),
 
@@ -9197,6 +9196,20 @@ async function matMesclarDuplicados(){
 }
 
 // ═══════════════════════ FP&A — Orçamento x Executado x Forecast ═══════════════════════
+async function fpaLoadAll(){
+  // fpa_dados facilmente passa de 1000 linhas (projetos × 12 meses × 3 tipos) — sem paginação
+  // o Supabase corta em 1000 e os tipos inseridos por último (executado/forecast) somem. Ver [[feedback_supabase_1000_row_cap]].
+  var data=[], PAGE=1000, from=0;
+  while(true){
+    var page = await supa.from('fpa_dados').select('*').range(from, from+PAGE-1);
+    if(page.error){ console.warn('[fpaLoadAll]', page.error); break; }
+    if(!page.data || !page.data.length) break;
+    data = data.concat(page.data);
+    if(page.data.length < PAGE) break;
+    from += PAGE;
+  }
+  return data;
+}
 function fpaFmtUsd(v){
   if(!v||v===0) return 'US$ 0';
   var a=Math.abs(v), s=v<0?'-':'';
@@ -9286,8 +9299,7 @@ async function fpaHandleUpload(file){
         var up = await supa.from('fpa_dados').upsert(allRows.slice(bi,bi+500), {onConflict:'chave'});
         if(up.error){ toast('Erro ao salvar: '+up.error.message,'red'); return; }
       }
-      var reload = await supa.from('fpa_dados').select('*');
-      if(reload.data) FPA_DATA = reload.data;
+      FPA_DATA = await fpaLoadAll();
       toast('✔ Planilha FP&A importada com sucesso!','green');
       renderFpa();
     }catch(err){
