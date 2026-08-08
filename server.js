@@ -797,15 +797,28 @@ app.post('/api/pgu-alerta-turno', async (req, res) => {
 
   secoes.push(`📋 *REPORTE PGU — TURNO ${turnoBonito(turno)}*\n📅 *${dia || '—'}*`);
 
+  // Resumo primeiro (visão rápida antes de entrar no detalhe) -- calculado aqui em cima porque
+  // "encarregadosUnicos" também é usado no bloco final de baixo.
+  const encarregadosUnicos = new Set(porEncarregado.map((r) => r.encarregado || 'Sem encarregado')).size;
+  const resumoLinhas = [`✅ ${pad2(produtividade ? produtividade.qtdConcluida : 0)} atividades concluídas`];
+  resumoLinhas.push(`⚠️ ${pad2(atrasadas.length)} atividades pendentes`);
+  if (produtividade && produtividade.pct !== null && produtividade.pct !== undefined) resumoLinhas.push(`🎯 ${produtividade.pct}% de produtividade`);
+  resumoLinhas.push(`👷 ${pad2(encarregadosUnicos)} encarregado(s) reportado(s)`);
+  resumoLinhas.push(atrasadas.length ? `➡️ Continuidade das pendências no turno ${proximoTurno || '—'}` : '✅ Turno finalizado sem pendências.');
+  secoes.push(`📊 *RESUMO DO TURNO*\n\n${resumoLinhas.join('\n')}`);
+
   // Produtividade = horas concluídas / horas planejadas pro turno -- >=100% é bom ritmo (deu
-  // conta do previsto, ou mais), abaixo disso é sinal de questionar o motivo.
+  // conta do previsto, ou mais), abaixo disso é sinal de questionar o motivo. Mostra a duração
+  // MÉDIA por atividade (não a soma total) -- mais fácil de ler de cara que um total de horas.
   if (produtividade && produtividade.horasPlanejadas > 0) {
     const pct = produtividade.pct;
+    const mediaPlanejada = produtividade.qtdPlanejada > 0 ? produtividade.horasPlanejadas / produtividade.qtdPlanejada : 0;
+    const mediaConcluida = produtividade.qtdConcluida > 0 ? produtividade.horasConcluidas / produtividade.qtdConcluida : 0;
     secoes.push(
       `📊 *INDICADOR GERAL DO TURNO*\n\n` +
       `🎯 *Produtividade:* *${pct}%*\n` +
-      `📌 Planejado: *${produtividade.qtdPlanejada} atividades | ${fmtHoras(produtividade.horasPlanejadas)}*\n` +
-      `✅ Concluído: *${produtividade.qtdConcluida} atividades | ${fmtHoras(produtividade.horasConcluidas)}*\n` +
+      `📌 Planejado: *${produtividade.qtdPlanejada} atividades | méd. ${fmtHoras(mediaPlanejada)}/atividade*\n` +
+      `✅ Concluído: *${produtividade.qtdConcluida} atividades | méd. ${fmtHoras(mediaConcluida)}/atividade*\n` +
       (pct >= 100
         ? `✅ *Resultado dentro do planejado.*\n\n👏 Bom ritmo geral do turno — manter o padrão nos próximos turnos.`
         : `⚠️ *Resultado abaixo do planejado.*\n\n🔎 Necessário avaliar os desvios e atuar nas pendências para evitar impactos nos próximos turnos.`)
@@ -851,22 +864,7 @@ app.post('/api/pgu-alerta-turno', async (req, res) => {
     }).join('\n\n');
     const extra = atrasadas.length > 60 ? `\n\n… e mais ${atrasadas.length - 60} atividade(s).` : '';
     secoes.push(`⚠️ *PENDÊNCIAS / DESVIOS*\n\n${blocosEnc}${extra}`);
-
-    secoes.push(
-      `🚧 *PONTO DE ATENÇÃO*\n\n` +
-      `As pendências acima devem receber *tratativa imediata*, evitando que os desvios avancem para os próximos turnos e possam impactar o caminho crítico da programação.\n\n` +
-      `📌 *Solicita-se acompanhamento das ações no turno ${proximoTurno || '—'} e atualização do status das atividades pendentes.*`
-    );
   }
-
-  // Resumo final -- sempre fecha a mensagem, com ou sem pendência.
-  const encarregadosUnicos = new Set(porEncarregado.map((r) => r.encarregado || 'Sem encarregado')).size;
-  const resumoLinhas = [`✅ ${pad2(produtividade ? produtividade.qtdConcluida : 0)} atividades concluídas`];
-  resumoLinhas.push(`⚠️ ${pad2(atrasadas.length)} atividades pendentes`);
-  if (produtividade && produtividade.pct !== null && produtividade.pct !== undefined) resumoLinhas.push(`🎯 ${produtividade.pct}% de produtividade`);
-  resumoLinhas.push(`👷 ${pad2(encarregadosUnicos)} encarregado(s) reportado(s)`);
-  resumoLinhas.push(atrasadas.length ? `➡️ Continuidade das pendências no turno ${proximoTurno || '—'}` : '✅ Turno finalizado sem pendências.');
-  secoes.push(`📊 *RESUMO DO TURNO*\n\n${resumoLinhas.join('\n')}`);
 
   const texto = secoes.join(`\n\n${LINHA}\n\n`);
 
