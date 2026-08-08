@@ -1550,7 +1550,6 @@ var MAT_MESES_NOMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Ju
 var FPA_DATA = []; // linhas cruas da tabela fpa_dados (previsto/executado/forecast por pep/mes/ano)
 var FPA_FILTERS = {projeto:[], squad:[], lider:[], planejador:[]};
 var FPA_ANO = new Date().getFullYear();
-var FPA_TAB = 'forecast'; // 'previsto' | 'executado' | 'forecast' — aba ativa da tabela
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
 var MAT_PAGE = 1;
@@ -9385,47 +9384,74 @@ function renderFpa(){
 
   var mNames=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;padding:16px 18px">';
-  html += '<div style="display:flex;gap:8px;margin-bottom:12px">'
-    + ['previsto','executado','forecast'].map(function(t){
-        var lbl = t==='previsto'?'Orçamento':(t==='executado'?'Executado':'Forecast');
-        var active = FPA_TAB===t;
-        return '<button onclick="FPA_TAB=\''+t+'\';renderFpa()" style="padding:7px 14px;border-radius:20px;border:1px solid '+(active?'#009CDE':'#cbd5e1')+';background:'+(active?'#009CDE':'#fff')+';color:'+(active?'#fff':'#334155')+';font-size:11.5px;font-weight:700;cursor:pointer">'+lbl+'</button>';
-      }).join('')
-    + (FPA_TAB==='forecast'?'<span style="font-size:10.5px;color:#94a3b8;align-self:center;margin-left:6px">Edite uma célula e aperte Enter pra salvar</span>':'')
-    + '</div>';
+  html += '<div style="font-size:10.5px;color:#94a3b8;margin-bottom:10px">Cada projeto tem 4 linhas — Orçamento, Executado, Projeção (editável — Enter pra salvar) e Variação (Projeção − Orçamento). Aderência = Executado / Orçamento. Saldo = Orçamento − Executado.</div>';
 
-  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px">';
+  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">';
   html += '<thead><tr style="background:#1e3a5f;color:#fff">'
     + '<th style="padding:8px 10px;text-align:left">Projeto</th>'
     + '<th style="padding:8px 10px;text-align:left">Squad</th>'
-    + mNames.map(function(m){return '<th style="padding:8px 6px;text-align:right">'+m+'</th>';}).join('')
+    + '<th style="padding:8px 10px;text-align:left">KPI</th>'
+    + mNames.map(function(m){return '<th style="padding:8px 5px;text-align:right">'+m+'</th>';}).join('')
     + '<th style="padding:8px 10px;text-align:right">Total</th>'
+    + '<th style="padding:8px 10px;text-align:right">Aderência</th>'
+    + '<th style="padding:8px 10px;text-align:right">Saldo</th>'
     + '</tr></thead><tbody>';
 
   if(!peps.length){
-    html += '<tr><td colspan="15" style="padding:24px;text-align:center;color:#94a3b8">Nenhum projeto encontrado — importe a planilha ou ajuste os filtros.</td></tr>';
+    html += '<tr><td colspan="19" style="padding:24px;text-align:center;color:#94a3b8">Nenhum projeto encontrado — importe a planilha ou ajuste os filtros.</td></tr>';
   } else {
     peps.slice().sort(function(a,b){return (a.titulo||'').localeCompare(b.titulo||'');}).forEach(function(p,i){
-      var tot = 0;
-      var cellsHtml = '';
+      var vPrev=[], vExec=[], vFcst=[], vVar=[];
+      var tPrev=0, tExec=0, tFcst=0, tVar=0;
       for(var m=1;m<=12;m++){
-        var v = fpaGetValor(p.pep, m, FPA_TAB);
-        tot += v;
-        if(FPA_TAB==='forecast'){
-          cellsHtml += '<td style="padding:3px 4px;text-align:right">'
-            + '<input type="text" value="'+(v?v.toFixed(0):'0')+'" onclick="event.stopPropagation()" '
-            + 'onkeydown="if(event.key===\'Enter\'){fpaEditarForecast(\''+p.pep+'\',\''+escQ(p.titulo||'')+'\','+FPA_ANO+','+m+',this);this.blur();}" '
-            + 'style="width:72px;padding:4px 5px;border:1px solid #cbd5e1;border-radius:5px;text-align:right;font-size:11px">'
-            + '</td>';
-        } else {
-          cellsHtml += '<td style="padding:7px 6px;text-align:right;font-family:\'Share Tech Mono\',monospace">'+fpaFmtUsd(v)+'</td>';
-        }
+        var vp = fpaGetValor(p.pep,m,'previsto');
+        var ve = fpaGetValor(p.pep,m,'executado');
+        var vf = fpaGetValor(p.pep,m,'forecast');
+        var vv = vf - vp;
+        vPrev.push(vp); vExec.push(ve); vFcst.push(vf); vVar.push(vv);
+        tPrev+=vp; tExec+=ve; tFcst+=vf; tVar+=vv;
       }
-      html += '<tr style="background:'+(i%2?'#f8fafc':'#fff')+'">'
-        + '<td style="padding:7px 10px;font-weight:600;max-width:260px">'+p.pep+' — '+(p.titulo||'')+'</td>'
-        + '<td style="padding:7px 10px;color:#64748b">'+p.squad+'</td>'
-        + cellsHtml
-        + '<td style="padding:7px 10px;text-align:right;font-weight:700;font-family:\'Share Tech Mono\',monospace">'+fpaFmtUsd(tot)+'</td>'
+      var aderPct = tPrev>0 ? (tExec/tPrev*100) : 0;
+      var saldo = tPrev - tExec;
+      var bg = i%2?'#f8fafc':'#fff';
+      var rowspanCell = '<td rowspan="4" style="padding:7px 10px;font-weight:600;max-width:240px;border-top:2px solid #e2e8f0">'+p.pep+' — '+(p.titulo||'')+'</td>'
+        + '<td rowspan="4" style="padding:7px 10px;color:#64748b;border-top:2px solid #e2e8f0">'+p.squad+'</td>';
+      var aderColor = aderPct>=100?'#dc2626':(aderPct>=80?'#d97706':'#16a34a');
+      var saldoColor = saldo<0?'#dc2626':'#16a34a';
+      var rowspanEnd = '<td rowspan="4" style="padding:7px 10px;text-align:right;font-weight:700;border-top:2px solid #e2e8f0;color:'+aderColor+'">'+aderPct.toFixed(1)+'%</td>'
+        + '<td rowspan="4" style="padding:7px 10px;text-align:right;font-weight:700;border-top:2px solid #e2e8f0;color:'+saldoColor+'">'+fpaFmtUsd(saldo)+'</td>';
+
+      function fmtRow(vals, tot, boldTot){
+        return vals.map(function(v){return '<td style="padding:6px 5px;text-align:right;font-family:\'Share Tech Mono\',monospace">'+fpaFmtUsd(v)+'</td>';}).join('')
+          + '<td style="padding:6px 10px;text-align:right;font-family:\'Share Tech Mono\',monospace;font-weight:'+(boldTot?'700':'400')+'">'+fpaFmtUsd(tot)+'</td>';
+      }
+
+      html += '<tr style="background:'+bg+'">' + rowspanCell
+        + '<td style="padding:6px 10px;border-top:2px solid #e2e8f0;color:#009CDE;font-weight:700">Orçamento</td>'
+        + fmtRow(vPrev, tPrev, true) + rowspanEnd + '</tr>';
+
+      html += '<tr style="background:'+bg+'">'
+        + '<td style="padding:6px 10px;color:#16a34a;font-weight:700">Executado</td>'
+        + fmtRow(vExec, tExec, true) + '</tr>';
+
+      var fcstCells = '';
+      for(var m2=1;m2<=12;m2++){
+        fcstCells += '<td style="padding:2px 3px;text-align:right">'
+          + '<input type="text" value="'+(vFcst[m2-1]?vFcst[m2-1].toFixed(0):'0')+'" onclick="event.stopPropagation()" '
+          + 'onkeydown="if(event.key===\'Enter\'){fpaEditarForecast(\''+p.pep+'\',\''+escQ(p.titulo||'')+'\','+FPA_ANO+','+m2+',this);this.blur();}" '
+          + 'style="width:60px;padding:3px 4px;border:1px solid #cbd5e1;border-radius:5px;text-align:right;font-size:10.5px">'
+          + '</td>';
+      }
+      html += '<tr style="background:'+bg+'">'
+        + '<td style="padding:6px 10px;color:#f97316;font-weight:700">Projeção</td>'
+        + fcstCells
+        + '<td style="padding:6px 10px;text-align:right;font-family:\'Share Tech Mono\',monospace;font-weight:700">'+fpaFmtUsd(tFcst)+'</td>'
+        + '</tr>';
+
+      html += '<tr style="background:'+bg+'">'
+        + '<td style="padding:6px 10px 10px;color:#64748b;font-weight:700">Variação</td>'
+        + vVar.map(function(v){var c=v>0?'#dc2626':(v<0?'#16a34a':'#94a3b8');return '<td style="padding:6px 5px 10px;text-align:right;font-family:\'Share Tech Mono\',monospace;color:'+c+'">'+fpaFmtUsd(v)+'</td>';}).join('')
+        + '<td style="padding:6px 10px 10px;text-align:right;font-family:\'Share Tech Mono\',monospace;font-weight:700;color:'+(tVar>0?'#dc2626':(tVar<0?'#16a34a':'#94a3b8'))+'">'+fpaFmtUsd(tVar)+'</td>'
         + '</tr>';
     });
   }
