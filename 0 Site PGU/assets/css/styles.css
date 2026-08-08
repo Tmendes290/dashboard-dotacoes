@@ -1719,6 +1719,21 @@ details.pgu-group-disciplina > summary .pgu-group__count { background: rgba(255,
 }
 .pgu-btn-ghost--danger { background: rgba(217,48,37,.18); border-color: rgba(217,48,37,.45); }
 
+/* Barra de chips (dia / turno) do Modo Gestão -- painel claro, independente do banner de cima. */
+.pgu-gestao-daybar {
+  background: var(--white); border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--light-gray);
+  padding: 12px 14px; margin-bottom: 16px; display: flex; gap: 6px; flex-wrap: wrap;
+}
+.pgu-gestao-chip {
+  background: var(--light-gray); border: 1px solid var(--light-gray); color: var(--dark-gray);
+  border-radius: 8px; padding: 6px 11px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+  display: flex; align-items: center; gap: 4px;
+}
+.pgu-gestao-chip:hover { border-color: var(--vale-green); }
+.pgu-gestao-chip--hoje { border-color: var(--vale-blue); }
+.pgu-gestao-chip--sel { background: var(--vale-green); color: var(--white); border-color: var(--vale-green); }
+.pgu-gestao-chip__pin { font-size: 10px; }
+
 .pgu-inherit-note {
   background: rgba(123,97,255,.08); border: 1px solid rgba(123,97,255,.3); color: var(--dark-gray);
   border-radius: 10px; padding: 10px 14px; font-size: 12px; margin-bottom: 16px;
