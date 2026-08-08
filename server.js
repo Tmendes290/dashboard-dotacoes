@@ -774,7 +774,7 @@ app.post('/api/pgu-alerta-turno', async (req, res) => {
     return res.status(401).json({ error: 'Token inválido.' });
   }
 
-  const { turno, dia, produtividade } = req.body;
+  const { turno, dia, produtividade, proximoTurno } = req.body;
   const atrasadas = Array.isArray(req.body.atrasadas) ? req.body.atrasadas : [];
   const porEncarregado = Array.isArray(req.body.porEncarregado) ? req.body.porEncarregado : [];
   if (!produtividade && !atrasadas.length && !porEncarregado.length) {
@@ -785,41 +785,31 @@ app.post('/api/pgu-alerta-turno', async (req, res) => {
     if (h === null || h === undefined) return '—';
     return Number(h).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'h';
   }
-  function pad(str, len) {
-    str = String(str == null ? '' : str);
-    return str.length >= len ? str.slice(0, len) : str + ' '.repeat(len - str.length);
-  }
 
   // Produtividade = horas concluídas / horas planejadas pro turno -- >=100% é bom ritmo (deu
   // conta do previsto, ou mais), abaixo disso é sinal de questionar o motivo.
-  let textoTopo;
+  let textoTopo = `🕐 *Turno ${turno || '—'} encerrado* — ${dia || '—'}`;
   if (produtividade && produtividade.horasPlanejadas > 0) {
     const pct = produtividade.pct;
-    const emoji = pct >= 100 ? '✅' : '⚠️';
-    textoTopo = `${emoji} *Turno ${turno || '—'} encerrado${dia ? ' em ' + dia : ''} — Produtividade ${pct}%*\n` +
-      `Planejado: ${produtividade.qtdPlanejada} atividade(s) / ${fmtHoras(produtividade.horasPlanejadas)}\n` +
-      `Concluído: ${produtividade.qtdConcluida} atividade(s) / ${fmtHoras(produtividade.horasConcluidas)}\n` +
-      (pct >= 100 ? 'Acima do planejado pro turno — bom ritmo. 👏' : 'Abaixo do planejado pro turno — vale entender o motivo da baixa produtividade.');
-  } else {
-    textoTopo = `📋 *Turno ${turno || '—'} encerrado${dia ? ' em ' + dia : ''}*`;
+    textoTopo += `\n\n📊 *Produtividade geral: ${pct}%*\n` +
+      `Planejado: ${produtividade.qtdPlanejada} atividade(s) (${fmtHoras(produtividade.horasPlanejadas)}) · Concluído: ${produtividade.qtdConcluida} atividade(s) (${fmtHoras(produtividade.horasConcluidas)})\n` +
+      (pct >= 100 ? 'Acima do esperado — bom ritmo! 👏' : 'Abaixo do esperado — vale entender o motivo. 🔍');
   }
 
-  // Tabela por encarregado x TR/ativo -- monoespaçada (```) pra alinhar as colunas no WhatsApp.
-  // Ex.: "João  TCLD 0101SA-01  8/10".
-  let textoTabela = '';
+  // Uma linha por encarregado x TR/ativo (ex.: "João — TCLD 0101SA-01: 8 de 10 atividades"),
+  // com parabéns quando bateu ou passou da meta do turno.
+  let textoPorEncarregado = '';
   if (porEncarregado.length) {
-    const colEnc = Math.min(16, Math.max('Encarregado'.length, ...porEncarregado.map((r) => (r.encarregado || 'Sem encarregado').length)));
-    const colTr = Math.min(20, Math.max('TR'.length, ...porEncarregado.map((r) => (r.area || '—').length)));
-    const cabecalho = `${pad('Encarregado', colEnc)} ${pad('TR', colTr)} Executado`;
     const linhas = porEncarregado.map((r) => {
-      const feito = `${r.concluido}/${r.planejado}` + (r.concluido >= r.planejado ? ' ✅' : '');
-      return `${pad(r.encarregado || 'Sem encarregado', colEnc)} ${pad(r.area || '—', colTr)} ${feito}`;
+      const bateuMeta = r.planejado > 0 && r.concluido >= r.planejado;
+      return `• ${r.encarregado || 'Sem encarregado'} — ${r.area || '—'}: ✅ ${r.concluido} de ${r.planejado} atividade(s)` +
+        (bateuMeta ? ` — 🎉 Parabéns pelo empenho, ${r.encarregado}!` : '');
     }).join('\n');
-    textoTabela = '\n\n```' + cabecalho + '\n' + linhas + '```';
+    textoPorEncarregado = `\n\n👷 *Por encarregado*\n${linhas}`;
   }
 
-  // Pendências agrupadas por encarregado -- "João: CT5 (motivo), CT9 (motivo)" em vez de uma
-  // lista solta, pra ficar claro de quem é a responsabilidade de cada item parado.
+  // Pendências agrupadas por encarregado, cada item narrando pra onde a atividade vai e quem
+  // assume no próximo turno (se já tiver alguém escalado ali).
   let textoPendencias;
   if (atrasadas.length) {
     const porEnc = {}, ordem = [];
@@ -829,17 +819,22 @@ app.post('/api/pgu-alerta-turno', async (req, res) => {
       porEnc[enc].push(a);
     });
     const blocos = ordem.map((enc) => {
-      const itens = porEnc[enc].map((a) => `• ${a.nome || '—'}${a.area ? ' (' + a.area + ')' : ''}${(a.motivo || '').trim() ? ' — ' + a.motivo.trim() : ''}`).join('\n');
-      return `*${enc}*\n${itens}`;
+      const itens = porEnc[enc].map((a) => {
+        const linhaItem = `• ${a.nome || '—'}${(a.motivo || '').trim() ? ' — ' + a.motivo.trim() : ''}`;
+        const transferencia = `  ↳ Não concluída no turno ${turno || '—'}, vai pro turno ${proximoTurno || '—'}` +
+          (a.proximoEncarregado ? `, com *${a.proximoEncarregado}* assumindo.` : '.');
+        return linhaItem + '\n' + transferencia;
+      }).join('\n');
+      return `👷 *${enc}*\n${itens}`;
     }).join('\n\n');
     const extra = atrasadas.length > 60 ? `\n… e mais ${atrasadas.length - 60} atividade(s).` : '';
-    textoPendencias = `\n\n⚠️ *Pendências* — quem fica responsável de olhar isso no próximo turno:\n\n${blocos}${extra}` +
-      `\n\nDá atenção nesses itens pra não virarem caminho crítico — vale montar um plano de ação.`;
+    textoPendencias = `\n\n⚠️ *Pendências*\n\n${blocos}${extra}` +
+      `\n\nDá atenção nesses itens pra não virarem caminho crítico — vale montar um plano de ação. 🚧`;
   } else {
     textoPendencias = '\n\n✅ Tudo concluído nesse turno.';
   }
 
-  const texto = textoTopo + textoTabela + textoPendencias;
+  const texto = textoTopo + textoPorEncarregado + textoPendencias;
 
   try {
     const r = await fetch(`${WAME_SERVER}/${WAME_KEY}/message/text`, {
