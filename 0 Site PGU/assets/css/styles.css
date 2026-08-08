@@ -1659,3 +1659,121 @@ details.pgu-group-disciplina > summary .pgu-group__count { background: rgba(255,
 }
 
 .wbs-node__body { padding-left: 13px; border-left: 2px solid var(--light-gray); margin-left: 6px; }
+
+/* ============================================================
+   Modo Encarregado / Modo Gestão -- aba "Hoje" (turno, corrida da
+   PGU, cards de atividade). Substitui a antiga linha apertada de
+   tabela (activity-row). Ver pgu.js: renderHoje/renderModoEncarregado.
+   ============================================================ */
+
+.pgu-modeswitch {
+  display: flex; gap: 8px; background: var(--white); border-radius: 12px; padding: 5px;
+  box-shadow: var(--shadow); margin-bottom: 16px; border: 1px solid var(--light-gray);
+}
+.pgu-modeswitch button {
+  flex: 1; border: none; background: transparent; padding: 10px; border-radius: 9px;
+  font-size: 13px; font-weight: 700; color: var(--vale-gray); cursor: pointer; font-family: inherit;
+}
+.pgu-modeswitch button.active { background: var(--vale-green); color: var(--white); }
+
+/* ---------- Faixa "linha do tempo da PGU" com a corrida ---------- */
+.pgu-race { margin: 4px 0 4px; }
+.pgu-race__track { position: relative; height: 28px; margin: 0 34px 0 4px; }
+.pgu-race__track-bg { position: absolute; top: 50%; left: 0; right: 0; height: 10px; margin-top: -5px; background: rgba(255,255,255,.18); border-radius: 6px; }
+.pgu-race__fill { position: absolute; top: 50%; left: 0; height: 10px; margin-top: -5px; border-radius: 6px; background: linear-gradient(90deg, #6be2c4, #fff); transition: width .3s; }
+.pgu-race__meta { position: absolute; top: -4px; width: 2px; height: 18px; background: rgba(255,255,255,.7); }
+.pgu-race__meta-label { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 8.5px; white-space: nowrap; opacity: .8; }
+.pgu-race__runner { position: absolute; top: 50%; font-size: 20px; transform: translate(-50%, -50%); filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+.pgu-race__flag { position: absolute; top: 50%; right: -28px; transform: translateY(-50%); font-size: 18px; }
+.pgu-race__caption { font-size: 11px; opacity: .9; margin-top: 8px; }
+
+/* ---------- Passo 1: escolha de turno ---------- */
+.pgu-turno-picker { background: var(--white); border-radius: 16px; box-shadow: var(--shadow); padding: 28px 24px; text-align: center; margin-bottom: 16px; }
+.pgu-turno-picker h1 { font-size: 19px; margin: 0 0 4px; color: var(--dark-gray); }
+.pgu-turno-picker p { font-size: 13px; color: var(--vale-gray); margin: 0 0 20px; }
+.pgu-turnos { display: flex; flex-direction: column; gap: 10px; max-width: 340px; margin: 0 auto; }
+.pgu-turno-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  border: 2px solid var(--light-gray); background: var(--white); border-radius: 12px;
+  padding: 16px; font-size: 16px; font-weight: 700; color: var(--dark-gray); cursor: pointer; font-family: inherit;
+}
+.pgu-turno-btn:hover { border-color: var(--vale-green); }
+.pgu-turno-btn--sugerido { border-color: var(--vale-green); background: rgba(0,126,122,0.06); }
+.pgu-turno-btn__tag {
+  background: var(--vale-green); color: var(--white); font-size: 10.5px; font-weight: 700;
+  border-radius: 20px; padding: 3px 9px; text-transform: uppercase; letter-spacing: .02em;
+}
+
+/* ---------- Cabeçalho do turno (Modo Encarregado) ---------- */
+.pgu-turno-header {
+  background: linear-gradient(135deg, var(--vale-green), var(--dark-green));
+  color: var(--white); border-radius: 16px; padding: 20px 24px; margin-bottom: 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+}
+.pgu-turno-header__title { font-size: 18px; font-weight: 800; }
+.pgu-turno-header__sub { font-size: 12.5px; opacity: .88; margin-top: 3px; }
+.pgu-turno-header__actions { display: flex; gap: 8px; }
+.pgu-btn-ghost {
+  background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.35); color: var(--white);
+  border-radius: 20px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.pgu-btn-ghost--danger { background: rgba(217,48,37,.18); border-color: rgba(217,48,37,.45); }
+
+.pgu-inherit-note {
+  background: rgba(123,97,255,.08); border: 1px solid rgba(123,97,255,.3); color: var(--dark-gray);
+  border-radius: 10px; padding: 10px 14px; font-size: 12px; margin-bottom: 16px;
+}
+
+/* ---------- Card de atividade (substitui activity-row) ---------- */
+.pgu-card { display: flex; background: var(--white); border-radius: 14px; box-shadow: var(--shadow); border: 1px solid var(--light-gray); margin-bottom: 12px; overflow: hidden; }
+.pgu-card__stripe { width: 6px; flex-shrink: 0; }
+.pgu-card--vermelho .pgu-card__stripe { background: var(--farol-vermelho); }
+.pgu-card--amarelo .pgu-card__stripe { background: var(--farol-amarelo); }
+.pgu-card--verde .pgu-card__stripe { background: var(--farol-verde); }
+.pgu-card__body { flex: 1; padding: 14px 16px; cursor: pointer; }
+.pgu-card__top { display: flex; align-items: flex-start; gap: 12px; }
+.pgu-card__icon { width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+.pgu-card__info { flex: 1; min-width: 0; }
+.pgu-card__nome { font-size: 15px; font-weight: 700; color: var(--dark-gray); line-height: 1.3; }
+.pgu-card__nome:hover { color: var(--vale-green); }
+.pgu-card__breadcrumb { font-size: 11.5px; color: var(--vale-gray); margin-top: 3px; }
+.pgu-card__badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.pgu-card__horario { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 7px; font-size: 11px; color: var(--vale-gray); }
+
+.pgu-card__obs {
+  display: flex; gap: 6px; align-items: flex-start; margin-top: 10px; padding: 8px 10px;
+  background: rgba(217,48,37,.06); border-left: 3px solid var(--farol-vermelho); border-radius: 6px;
+  font-size: 11.5px; color: var(--dark-gray); line-height: 1.4;
+}
+
+/* barra de avanço arrastável (10 em 10) */
+.pgu-card__pct-wrap { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.pgu-card__pct-track { flex: 1; height: 28px; position: relative; touch-action: none; cursor: pointer; }
+.pgu-card__pct-track-bg { position: absolute; top: 50%; left: 0; right: 0; height: 10px; margin-top: -5px; background: var(--light-gray); border-radius: 6px; pointer-events: none; }
+.pgu-card__pct-fill { position: absolute; top: 50%; left: 0; height: 10px; margin-top: -5px; border-radius: 6px; pointer-events: none; }
+.pgu-card--verde .pgu-card__pct-fill { background: var(--vale-green); }
+.pgu-card--amarelo .pgu-card__pct-fill { background: var(--farol-amarelo); }
+.pgu-card--vermelho .pgu-card__pct-fill { background: var(--farol-vermelho); }
+.pgu-card__pct-thumb {
+  position: absolute; top: 50%; width: 22px; height: 22px; margin-top: -11px; margin-left: -11px;
+  background: var(--white); border: 3px solid var(--vale-green); border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0,0,0,.25); pointer-events: none; transition: box-shadow .1s;
+}
+.pgu-card--amarelo .pgu-card__pct-thumb { border-color: var(--farol-amarelo); }
+.pgu-card--vermelho .pgu-card__pct-thumb { border-color: var(--farol-vermelho); }
+.pgu-card__pct-track.pgu-dragging .pgu-card__pct-thumb { box-shadow: 0 0 0 7px rgba(0,126,122,.18); }
+.pgu-card__pct-num { font-size: 12.5px; font-weight: 800; color: var(--dark-gray); width: 36px; text-align: right; }
+
+.pgu-card__actions { display: flex; gap: 8px; padding: 0 16px 14px; }
+.pgu-card__actions button {
+  flex: 1; border: 1px solid var(--light-gray); background: var(--white); border-radius: 9px;
+  padding: 9px 6px; font-size: 12px; font-weight: 700; color: var(--dark-gray); cursor: pointer; font-family: inherit;
+}
+.pgu-card__actions button:hover { border-color: var(--vale-green); }
+.pgu-card__actions button.pgu-act--done { color: var(--vale-green); }
+.pgu-card__actions button.pgu-act--prob { color: var(--farol-vermelho); }
+
+@media (max-width: 560px) {
+  .pgu-turno-header { padding: 16px; }
+  .pgu-turno-header__title { font-size: 15px; }
+}
