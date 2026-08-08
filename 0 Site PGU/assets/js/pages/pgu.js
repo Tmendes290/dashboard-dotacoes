@@ -1491,20 +1491,8 @@
         '<button type="button" class="btn-neutral" id="pguImportBtn">Importar</button>' +
         '<span id="pguImportStatus" style="font-size:12px;color:var(--vale-gray);"></span>' +
       "</div>" +
-      '<div id="pguTabs">' +
-        '<div class="tabs">' +
-          '<button type="button" class="tab active" data-tab="hoje">Hoje</button>' +
-          '<button type="button" class="tab" data-tab="dashboard">Dashboard</button>' +
-          '<button type="button" class="tab" data-tab="atividades">Atividades</button>' +
-          '<button type="button" class="tab" data-tab="baseline">Linha de Base</button>' +
-        "</div>" +
-        '<div class="tab-panel active" data-tab-panel="hoje" id="pguHojeContent"></div>' +
-        '<div class="tab-panel" data-tab-panel="dashboard" id="pguDashContent"></div>' +
-        '<div class="tab-panel" data-tab-panel="atividades" id="pguAtividadesContent"></div>' +
-        '<div class="tab-panel" data-tab-panel="baseline" id="pguBaselineContent"></div>' +
-      "</div>" +
+      '<div id="pguHojeContent"></div>' +
       '<div class="footnote">Atualizações de campo (status, %, observações, encarregado, turno) ficam salvas no servidor e são compartilhadas entre todo mundo — atualiza sozinho a cada ~45s, ou aperte "Atualizar" a qualquer momento.</div>';
-    A.wireTabs("pguTabs");
     wireHojeTab();
 
     A.$("pguImportBtn").addEventListener("click", async function () {
@@ -1544,9 +1532,6 @@
     FISCAL_TURNO_PREDOMINANTE = computeFiscalTurnoPredominante(effs);
 
     renderHoje(effs);
-    renderDashboard(effs);
-    renderAtividades(effs);
-    renderBaseline(effs);
 
     A.setStatusPills([
       "PGU: " + ((PGU.projeto && PGU.projeto.nome) || "—"),
