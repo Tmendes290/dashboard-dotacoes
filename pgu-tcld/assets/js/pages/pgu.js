@@ -289,7 +289,12 @@
       fiscalObra: ov.fiscalObra || a.fiscalObra || "",
       fiscalSeguranca: ov.fiscalSeguranca || a.fiscalSeguranca || "",
       // Turno vem do cronograma (hora de inicio da tarefa); o encarregado pode sobrescrever na atualizacao.
+      // Tambem e reescrito quando o turno anterior fecha sem essa atividade terminar (ver "Encerrar turno").
       turno: ov.turno || a.turno || "",
+      // Setado pelo botao "Encerrar turno" quando a atividade nao termina dentro do turno dela (e
+      // nao era esperado que ultrapassasse) -- guarda de qual turno ela veio, pra mostrar o selo
+      // "Herdada de X" pra quem recebe o turno seguinte.
+      herancaDeTurno: ov.herancaDeTurno || null,
       atualizadoEm: ov.atualizadoEm || null
     };
   }
@@ -318,6 +323,26 @@
     pushHistory({
       uid: uid, nome: atividade ? atividade.nome : uid, quando: novo.atualizadoEm,
       campo: field, valorAntigo: anterior[field] || "", valorNovo: value || ""
+    });
+    recomputeCascade();
+  }
+
+  // Igual a saveOverrideField, mas grava varios campos de uma vez soh (uma escrita no Supabase em
+  // vez de uma por campo) -- usado pelas acoes rapidas (Problema) e pelo "Encerrar turno".
+  function saveOverrideFields(uid, fields) {
+    var overrides = loadOverrides();
+    var anterior = overrides[uid] || {};
+    var novo = {};
+    for (var k in anterior) { novo[k] = anterior[k]; }
+    for (var f in fields) { novo[f] = fields[f]; }
+    if (fields.percent !== undefined && fields.status === undefined) { novo.status = statusFromPercent(fields.percent); }
+    novo.atualizadoEm = new Date().toLocaleString("pt-BR");
+    overrides[uid] = novo;
+    saveOverrides(overrides);
+    var atividade = activitiesByUid[uid];
+    pushHistory({
+      uid: uid, nome: atividade ? atividade.nome : uid, quando: novo.atualizadoEm,
+      campo: Object.keys(fields).join(","), valorNovo: JSON.stringify(fields)
     });
     recomputeCascade();
   }
@@ -599,6 +624,8 @@
   // ------------------------------------------------------------ Tab: Hoje
 
   var hojeSelectedDate = null; // yyyy-MM-dd escolhido na linha do tempo da PGU (persiste entre re-renders)
+  var pguModo = "encarregado"; // "encarregado" | "gestao" -- persiste entre re-renders
+  var meuTurno = null; // turno escolhido no Modo Encarregado (07h–17h / 17h–00h / 00h–07h)
   var lastEffs = [];
   // "fiscalObra|disciplina" -> turno predominante desse fiscal NAQUELA disciplina (maioria das
   // atividades dele ali), recalculado a cada renderAll(). Separado por disciplina porque um mesmo
@@ -653,60 +680,75 @@
     });
   }
 
-  function activityRowHeadHtml() {
-    return '<div class="activity-row-head">' +
-      '<div class="activity-row-head__farol"></div>' +
-      '<div class="activity-row-head__encarregado">Encarregado</div>' +
-      '<div class="activity-row-head__main">Atividade</div>' +
-      '<div class="activity-row-head__empresa">Empresa</div>' +
-      '<div class="activity-row-head__inicio">Início previsto</div>' +
-      '<div class="activity-row-head__termino">Término previsto</div>' +
-      '<div class="activity-row-head__tend">Início tendência</div>' +
-      '<div class="activity-row-head__tend">Término tendência</div>' +
-      '<div class="activity-row-head__status">Status</div>' +
-      '<div class="activity-row-head__pct">Avanço</div>' +
-      "</div>";
+  // ---------------------------------------------------------- card de atividade (Modo Encarregado
+  // e Modo Gestão) -- substitui a antiga linha de tabela (activity-row). Clicar no corpo do card
+  // abre o painel completo (observações, impedimento, tendência etc.); a barra de avanço e os
+  // botões de ação rápida ficam por cima disso e nunca deixam o clique "vazar" pro abrir-painel.
+  var ICON_POR_DISCIPLINA = { "MECÂNICA": ["🔧", "mec"], "ELÉTRICA": ["⚡", "ele"], "CIVIL": ["🏗️", "civ"] };
+  function iconeDisciplina(disc) { return ICON_POR_DISCIPLINA[disc] || ["⚙️", "civ"]; }
+
+  // "yyyy-MM-dd HH:mm" -> só "HH:mm" (o dia já está implícito em qual turno/dia está sendo visto).
+  function horaSo(dh) {
+    if (!dh) return null;
+    var p = String(dh).split(" ");
+    return p[1] || null;
   }
 
-  // Campos editaveis direto na linha (status, %, inicio/termino tendencia) -- sem precisar abrir
-  // o painel lateral. Clicar no NOME da atividade continua abrindo o painel completo (observacoes,
-  // impedimento, encarregado etc.).
-  function activityRowHtml(e) {
-    var statusSelect = '<select class="pgu-inline-select pgu-inline-field" data-uid="' + A.esc(e.uid) + '" data-field="status">' +
-      STATUS_OPTIONS.map(function (s) { return '<option value="' + A.esc(s) + '"' + (e.status === s ? " selected" : "") + '>' + A.esc(s) + "</option>"; }).join("") +
-      "</select>";
-    var percentSelect = '<select class="pgu-inline-select pgu-inline-field" data-uid="' + A.esc(e.uid) + '" data-field="percent">' +
-      PERCENT_OPTIONS.map(function (p) { return '<option value="' + p + '"' + (Number(e.percent) === p ? " selected" : "") + '>' + p + "%</option>"; }).join("") +
-      "</select>";
-    var tendAutoCls = (e.isTendenciaAuto || e.isTendenciaBaseline) ? " pgu-tend-input--auto" : "";
-    var tendAutoTitle = e.isTendenciaAuto ? ' title="Reprogramado automaticamente por atraso em predecessora — ajuste se necessário"' :
-      (e.isTendenciaBaseline ? ' title="Ainda igual à linha de base — preencha pra confirmar a tendência real"' : "");
-    var inicioTendInput = '<input type="datetime-local" class="pgu-tend-input pgu-inline-field' + tendAutoCls + '"' + tendAutoTitle + ' data-uid="' + A.esc(e.uid) + '" data-field="inicioTendencia" value="' + A.esc(e.inicioTendencia) + '">';
-    var terminoTendInput = '<input type="datetime-local" class="pgu-tend-input pgu-inline-field' + tendAutoCls + '"' + tendAutoTitle + ' data-uid="' + A.esc(e.uid) + '" data-field="terminoTendencia" value="' + A.esc(e.terminoTendencia) + '">';
+  function activityCardHtml(e, showEncarregado) {
+    var farol = farolDe(e);
+    var ic = iconeDisciplina(e.disciplina);
+    var breadcrumb = A.esc(e.area || "—") + (e.componente ? " · " + A.esc(e.componente) : "");
+    if (showEncarregado && e.encarregado) breadcrumb += " · " + A.esc(e.encarregado);
+
+    var hi = horaSo(e.inicioDataHora), ht = horaSo(e.terminoDataHora);
+    var horarioHtml = (hi && ht) ? '<div class="pgu-card__horario"><span>🕐 Previsto ' + hi + '–' + ht + "</span></div>" : "";
+
     var turnoAvisoHtml = turnoDivergente(e)
-      ? ' <span class="badge farol-atrasado" title="Turno diferente do habitual do fiscal ' + A.esc(e.fiscalObra) + ' em ' + A.esc(e.disciplina || "—") + ' (normalmente ' + A.esc(turnoHabitualDe(e)) + ')">⚠ turno atípico</span>'
+      ? ' <span class="badge farol-atrasado" title="Turno diferente do habitual do fiscal ' + A.esc(e.fiscalObra) + ' em ' + A.esc(e.disciplina || "—") + ' (normalmente ' + A.esc(turnoHabitualDe(e)) + ')">⚠ atípico</span>'
       : "";
 
-    var encarregadoInput = '<input type="text" class="pgu-inline-text pgu-inline-field" data-uid="' + A.esc(e.uid) + '" data-field="encarregado" value="' + A.esc(e.encarregado || "") + '" placeholder="—">';
-    var empresaInput = '<input type="text" class="pgu-inline-text pgu-inline-field" data-uid="' + A.esc(e.uid) + '" data-field="executante" value="' + A.esc(e.executante || "") + '" placeholder="—">';
+    var obsHtml = e.observacoes ? '<div class="pgu-card__obs">💬 <span><strong>Motivo:</strong> ' + A.esc(e.observacoes) + "</span></div>" : "";
 
-    // data-mobile-label alimenta o ::before que rotula cada campo quando a linha
-    // vira cartao empilhado no layout mobile (ver @media max-width:900px no CSS).
-    return '<div class="activity-row" data-uid="' + A.esc(e.uid) + '">' +
-      '<div class="activity-row__farol">' + farolEmoji(farolDe(e)) + "</div>" +
-      '<div class="activity-row__encarregado" data-mobile-label="Encarregado">' + encarregadoInput + "</div>" +
-      '<div class="activity-row__main">' +
-        '<span class="activity-row__nome pgu-open" data-uid="' + A.esc(e.uid) + '">' + A.esc(e.nome) + "</span>" +
-        '<div class="activity-row__meta">' + A.esc(e.area || "—") +
-          (e.turno ? " · " + A.esc(e.turno) : "") + turnoAvisoHtml + "</div>" +
+    var pct = Math.round(e.percent || 0);
+    var acoesHtml = e.status !== "Concluída"
+      ? '<div class="pgu-card__actions">' +
+          '<button type="button" class="pgu-act--done" data-pgu-act="done" data-uid="' + A.esc(e.uid) + '">✅ Concluir</button>' +
+          '<button type="button" data-pgu-act="andamento" data-uid="' + A.esc(e.uid) + '">🔧 Em andamento</button>' +
+          '<button type="button" class="pgu-act--prob" data-pgu-act="problema" data-uid="' + A.esc(e.uid) + '">⚠️ Problema</button>' +
+        "</div>"
+      : "";
+
+    return '<div class="pgu-card pgu-card--' + farol + '">' +
+      '<div class="pgu-card__stripe"></div>' +
+      '<div style="flex:1;">' +
+        '<div class="pgu-card__body pgu-open" data-uid="' + A.esc(e.uid) + '">' +
+          '<div class="pgu-card__top">' +
+            '<div class="pgu-card__icon pgu-card__icon--' + ic[1] + '">' + ic[0] + "</div>" +
+            '<div class="pgu-card__info">' +
+              '<div class="pgu-card__nome">' + A.esc(e.nome) + "</div>" +
+              '<div class="pgu-card__breadcrumb">' + breadcrumb + "</div>" +
+              '<div class="pgu-card__badges">' +
+                '<span class="badge ' + statusBadgeClass(e.status) + '">' + A.esc(e.status) + "</span>" +
+                (e.turno ? '<span class="badge dim">🕐 ' + A.esc(e.turno) + "</span>" : "") +
+                turnoAvisoHtml +
+                (e.herancaDeTurno ? '<span class="badge" style="background:#7B61FF;" title="Não foi concluída no turno ' + A.esc(e.herancaDeTurno) + ' e foi passada pra cá">↪ Herdada de ' + A.esc(e.herancaDeTurno) + "</span>" : "") +
+              "</div>" +
+              horarioHtml +
+              '<div class="pgu-card__pct-wrap">' +
+                '<div class="pgu-card__pct-track" data-pct-track="' + A.esc(e.uid) + '">' +
+                  '<div class="pgu-card__pct-track-bg"></div>' +
+                  '<div class="pgu-card__pct-fill" style="width:' + pct + '%;"></div>' +
+                  '<div class="pgu-card__pct-thumb" style="left:' + pct + '%;"></div>' +
+                "</div>" +
+                '<div class="pgu-card__pct-num" data-pct-num="' + A.esc(e.uid) + '">' + pct + "%</div>" +
+              "</div>" +
+              obsHtml +
+            "</div>" +
+          "</div>" +
+        "</div>" +
+        acoesHtml +
       "</div>" +
-      '<div class="activity-row__empresa" data-mobile-label="Empresa">' + empresaInput + "</div>" +
-      '<div class="activity-row__inicio" data-mobile-label="Início previsto">' + fmtDataHora(e.inicioDataHora) + "</div>" +
-      '<div class="activity-row__termino" data-mobile-label="Término previsto">' + fmtDataHora(e.terminoDataHora) + "</div>" +
-      '<div class="activity-row__tend" data-mobile-label="Início tendência">' + inicioTendInput + "</div>" +
-      '<div class="activity-row__tend" data-mobile-label="Término tendência">' + terminoTendInput + "</div>" +
-      '<div class="activity-row__status" data-mobile-label="Status">' + statusSelect + "</div>" +
-      '<div class="activity-row__pct" data-mobile-label="Avanço">' + percentSelect + "</div></div>";
+    "</div>";
   }
 
   var TODA_PGU = "ALL";
@@ -764,7 +806,7 @@
       var compHtml = porComp.map(function (compGroup) {
         var porDisc = groupBy(compGroup.itens, function (e) { return e.disciplina; });
         var discHtml = porDisc.map(function (discGroup) {
-          var body = '<div class="pgu-group__body"><div class="activity-list-wrap">' + activityRowHeadHtml() + discGroup.itens.map(activityRowHtml).join("") + "</div></div>";
+          var body = '<div class="pgu-group__body">' + discGroup.itens.map(function (e) { return activityCardHtml(e, true); }).join("") + "</div>";
           if (discGroup.label === SEM_CLASSIFICACAO) return body;
           var key = "disc:" + trGroup.label + "|" + compGroup.label + "|" + discGroup.label;
           return '<details class="pgu-group-disciplina" data-gkey="' + A.esc(key) + '"' + (groupOpenState[key] ? " open" : "") + '><summary style="background:' + disciplinaColor(discGroup.label) + ';">' +
@@ -793,6 +835,152 @@
     return '<div id="pguGroupedTree">' + html + "</div>";
   }
 
+  // Agrupamento de 1 nível só (por TR/ativo) usado no Modo Encarregado -- mais simples que a
+  // árvore de 3 níveis do Modo Gestão, pra achar a atividade rápido sem abrir várias pastas.
+  function groupedByTrOnlyHtml(effs) {
+    if (!effs.length) return '<div class="table-caption">Nenhuma atividade encontrada.</div>';
+    var porTR = groupBy(effs, function (e) { return e.area; });
+    var html = porTR.map(function (trGroup) {
+      var body = '<div class="pgu-group__body">' + trGroup.itens.map(function (e) { return activityCardHtml(e, false); }).join("") + "</div>";
+      if (trGroup.label === SEM_CLASSIFICACAO) return body;
+      var key = "tr-enc:" + trGroup.label;
+      return '<details class="pgu-group-tr" data-gkey="' + A.esc(key) + '"' + (groupOpenState[key] ? " open" : "") + '><summary>' +
+        "🛠️ " + A.esc(trGroup.label) +
+        '<span class="pgu-group__count">' + trGroup.itens.length + " atividade" + (trGroup.itens.length === 1 ? "" : "s") + "</span>" +
+        "</summary>" +
+        body +
+        "</details>";
+    }).join("");
+    return '<div id="pguGroupedTree">' + html + "</div>";
+  }
+
+  // ---------------------------------------------------------- Modo Encarregado / Modo Gestão
+
+  function modeSwitchHtml() {
+    return '<div class="pgu-modeswitch">' +
+      '<button type="button" class="' + (pguModo === "encarregado" ? "active" : "") + '" data-pgu-modo="encarregado">👷 Modo Encarregado</button>' +
+      '<button type="button" class="' + (pguModo === "gestao" ? "active" : "") + '" data-pgu-modo="gestao">🖥️ Modo Gestão</button>' +
+    "</div>";
+  }
+
+  // Detecta o turno pela hora do aparelho (mesma regra do cronograma: 07h-17h / 17h-00h / 00h-07h)
+  // -- so pra JA SUGERIR o turno certo na tela de escolha; o encarregado sempre confirma antes.
+  function turnoAtualPorHora() {
+    var h = new Date().getHours();
+    if (h >= 7 && h < 17) return "07h–17h";
+    if (h >= 17) return "17h–00h";
+    return "00h–07h";
+  }
+
+  function nextTurno(t) {
+    var i = TURNO_OPTIONS.indexOf(t);
+    return TURNO_OPTIONS[(i + 1) % TURNO_OPTIONS.length];
+  }
+
+  // Fronteira (hora decimal, base 0-24) de cada turno -- "17h–00h" termina em 24 (meia-noite).
+  var TURNO_FIM_HORA = { "07h–17h": 17, "17h–00h": 24, "00h–07h": 7 };
+
+  // true = a atividade JA ESTAVA programada pra ultrapassar o turno dela (tarefa comprida, normal,
+  // não é atraso de ninguém). false = deveria ter terminado dentro do turno -- se não terminou,
+  // isso sim é atraso de verdade (ver "Encerrar turno").
+  function programadaParaUltrapassarTurno(e) {
+    if (!e.turno || !e.inicioDataHora || !e.terminoDataHora) return false;
+    var ini = parseDataHora(e.inicioDataHora), fim = parseDataHora(e.terminoDataHora);
+    if (!ini || !fim) return false;
+    var horaLimite = TURNO_FIM_HORA[e.turno];
+    if (horaLimite === undefined) return false;
+    var fimDoTurno = new Date(ini);
+    if (horaLimite === 24) { fimDoTurno.setDate(fimDoTurno.getDate() + 1); fimDoTurno.setHours(0, 0, 0, 0); }
+    else { fimDoTurno.setHours(horaLimite, 0, 0, 0); }
+    return fim > fimDoTurno;
+  }
+
+  // Se a atividade tem uma predecessora (ligação Término-Início) que também não foi concluída, o
+  // motivo dela não ter terminado já está explicado por isso -- evita perguntar de novo no
+  // "Encerrar turno". Recebe a atividade CRUA (com .predecessores), não o effective().
+  function predecessoraPendente(a) {
+    if (!a || !a.predecessores || !a.predecessores.length) return null;
+    var overrides = loadOverrides();
+    for (var i = 0; i < a.predecessores.length; i++) {
+      var p = a.predecessores[i];
+      if (p.tipo !== 1) continue;
+      var predAtividade = activitiesByUid[p.uid];
+      if (!predAtividade) continue;
+      var predEff = effective(predAtividade, overrides[p.uid]);
+      if (predEff.status !== "Concluída") return predEff;
+    }
+    return null;
+  }
+
+  function turnoPickerHtml() {
+    var sugerido = turnoAtualPorHora();
+    return '<div class="pgu-turno-picker">' +
+      "<h1>🕐 Qual o seu turno?</h1>" +
+      "<p>A gente já sugere o turno pela hora do seu aparelho — confirme ou troque se não bater.</p>" +
+      '<div class="pgu-turnos">' +
+      TURNO_OPTIONS.map(function (t) {
+        var isSugerido = t === sugerido;
+        return '<button type="button" class="pgu-turno-btn' + (isSugerido ? " pgu-turno-btn--sugerido" : "") + '" data-pick-turno="' + A.esc(t) + '">' +
+          "<div>" + A.esc(t) + "</div>" +
+          (isSugerido ? '<div class="pgu-turno-btn__tag">🕐 agora</div>' : "") +
+          "</button>";
+      }).join("") +
+      "</div>" +
+    "</div>";
+  }
+
+  // Faixa com a linha do tempo da PGU (existente) + a "corrida" (avanço real de HOJE x meta
+  // esperada pra hoje). A corrida não muda ao clicar em outro dia -- o site não guarda um
+  // histórico diário de %, então mostrar isso pra dias passados seria inventar dado. Os chips de
+  // dia continuam controlando só qual dia a lista de atividades abaixo mostra (como já era).
+  function raceBannerHtml(effsAll, pguInicio, pguFim, hojeStr, diaSelecionado) {
+    var diasParaInicio = pguInicio ? Math.round((new Date(pguInicio) - new Date(hojeStr)) / 86400000) : null;
+    var diasParaFim = pguFim ? Math.round((new Date(pguFim) - new Date(hojeStr)) / 86400000) : null;
+    var vendoHojeReal = diaSelecionado === hojeStr;
+
+    var bannerTexto, bannerValor;
+    if (diasParaInicio !== null && diasParaInicio > 0) {
+      bannerTexto = "A PGU começa em"; bannerValor = diasParaInicio + " dia" + (diasParaInicio === 1 ? "" : "s");
+    } else if (diasParaFim !== null && diasParaFim >= 0) {
+      bannerTexto = "Faltam pra terminar a PGU"; bannerValor = diasParaFim + " dia" + (diasParaFim === 1 ? "" : "s");
+    } else {
+      bannerTexto = "PGU"; bannerValor = pguFim ? "Concluída em " + A.fmtDate(pguFim) : "Sem datas";
+    }
+
+    var faroisCount = { verde: 0, amarelo: 0, vermelho: 0 };
+    effsAll.forEach(function (e) { faroisCount[farolDe(e)]++; });
+    var faroGeral = faroisCount.vermelho > 0 ? "vermelho" : (faroisCount.amarelo > 0 ? "amarelo" : "verde");
+
+    // A corrida só faz sentido depois que a PGU comecou (antes disso e sempre 0% x 0%).
+    var mostrarCorrida = pguInicio && pguFim && hojeStr >= pguInicio;
+    var corridaHtml = "";
+    if (mostrarCorrida) {
+      var pctGeral = effsAll.length ? Math.round(effsAll.reduce(function (s, e) { return s + (e.percent || 0); }, 0) / effsAll.length) : 0;
+      var totalDias = Math.round((new Date(pguFim) - new Date(pguInicio)) / 86400000) || 1;
+      var diasDecorridos = Math.max(0, Math.round((new Date(hojeStr) - new Date(pguInicio)) / 86400000));
+      var metaPct = Math.max(0, Math.min(100, Math.round((diasDecorridos / totalDias) * 100)));
+      var adiantado = pctGeral >= metaPct;
+      corridaHtml = '<div class="pgu-race" style="flex:1 1 260px;">' +
+        '<div class="pgu-race__track">' +
+          '<div class="pgu-race__track-bg"></div>' +
+          '<div class="pgu-race__fill" style="width:' + pctGeral + '%;"></div>' +
+          '<div class="pgu-race__meta" style="left:' + metaPct + '%;"><span class="pgu-race__meta-label">meta hoje</span></div>' +
+          '<div class="pgu-race__runner" style="left:' + pctGeral + '%;">👷</div>' +
+          '<div class="pgu-race__flag">🏁</div>' +
+        "</div>" +
+        '<div class="pgu-race__caption">' + (adiantado ? "🟢 Adiantado" : "🟠 Atrás") + ' do previsto pra hoje (' + pctGeral + '% feito · meta ' + metaPct + '%)</div>' +
+      "</div>";
+    }
+
+    return '<div class="countdown-banner">' +
+      '<div><div class="countdown-banner__title">' + A.esc(bannerTexto) + '</div><div class="countdown-banner__value">' + A.esc(bannerValor) + "</div></div>" +
+      corridaHtml +
+      '<div class="countdown-banner__timeline" title="Linha do tempo da PGU — 📍 = hoje">' + pguDayChipsHtml(pguInicio, pguFim, hojeStr, diaSelecionado) + "</div>" +
+      (vendoHojeReal ? "" : '<button type="button" class="countdown-banner__voltar" id="pguVoltarHoje">↩ Hoje (' + A.fmtDate(hojeStr) + ")</button>") +
+      '<div style="font-size:38px;" title="Farol geral da PGU">' + farolEmoji(faroGeral) + "</div>" +
+    "</div>";
+  }
+
   // Grupo de botoes (igual a linha do tempo) para um filtro de valor unico, com um botao "Todos"
   // pra limpar. options: array de strings.
   function chipFilterHtml(dataAttr, options, current, allLabel) {
@@ -803,35 +991,10 @@
     return '<div class="chip-grid">' + html + "</div>";
   }
 
-  function renderHoje(effsAll) {
-    lastEffs = effsAll;
-    var container = A.$("pguHojeContent");
-    var hojeReal = new Date(); hojeReal.setHours(0, 0, 0, 0);
-    var hojeStr = toISODate(hojeReal);
-
-    // Datas/contagem regressiva sempre baseadas no conjunto completo (o cronograma da PGU nao muda com o filtro)
-    var datas = [];
-    effsAll.forEach(function (e) { if (e.inicio) datas.push(e.inicio); if (e.termino) datas.push(e.termino); });
-    var pguInicio = datas.length ? datas.reduce(function (a, b) { return a < b ? a : b; }) : null;
-    var pguFim = datas.length ? datas.reduce(function (a, b) { return a > b ? a : b; }) : null;
-    var diasParaInicio = pguInicio ? Math.round((new Date(pguInicio) - hojeReal) / 86400000) : null;
-    var diasParaFim = pguFim ? Math.round((new Date(pguFim) - hojeReal) / 86400000) : null;
-
-    if (!hojeSelectedDate) {
-      hojeSelectedDate = (pguInicio && hojeStr < pguInicio) ? pguInicio : ((pguFim && hojeStr > pguFim) ? pguFim : hojeStr);
-    }
-    var diaStr = hojeSelectedDate;
+  // Corpo do Modo Gestão: os mesmos filtros/KPIs/árvore de sempre, só com card em vez de linha.
+  function renderModoGestaoBody(effsAll, diaStr, hojeStr) {
     var vendoTodaPgu = diaStr === TODA_PGU;
     var vendoHojeReal = diaStr === hojeStr;
-
-    var bannerTexto, bannerValor;
-    if (diasParaInicio !== null && diasParaInicio > 0) {
-      bannerTexto = "A PGU começa em"; bannerValor = diasParaInicio + " dia" + (diasParaInicio === 1 ? "" : "s");
-    } else if (diasParaFim !== null && diasParaFim >= 0) {
-      bannerTexto = "PGU em andamento"; bannerValor = "Término previsto " + A.fmtDate(pguFim);
-    } else {
-      bannerTexto = "PGU"; bannerValor = pguFim ? "Concluída em " + A.fmtDate(pguFim) : "Sem datas";
-    }
 
     var execOptions = A.distinctValues(effsAll.filter(function (e) { return e.executante; }), "executante").map(function (o) { return o.value; });
     var encarregadoOptions = A.distinctValues(effsAll.filter(function (e) { return e.encarregado; }), "encarregado").map(function (o) { return o.value; });
@@ -854,20 +1017,10 @@
     var effs = applyHojeFilters(effsAll);
     var doDia = vendoTodaPgu ? effs : effs.filter(function (e) { return e.inicio && e.termino && e.inicio <= diaStr && e.termino >= diaStr; });
     var atrasadas = effs.filter(function (e) { return e.status === "Atrasada"; });
-    var faroisCount = { verde: 0, amarelo: 0, vermelho: 0 };
-    effs.forEach(function (e) { faroisCount[farolDe(e)]++; });
-    var faroGeral = faroisCount.vermelho > 0 ? "vermelho" : (faroisCount.amarelo > 0 ? "amarelo" : "verde");
     var pctGeral = effs.length ? Math.round(effs.reduce(function (s, e) { return s + (e.percent || 0); }, 0) / effs.length) : 0;
     var tituloDia = vendoTodaPgu ? "Todas as atividades da PGU" : (vendoHojeReal ? "O que fazer hoje" : "Atividades de " + A.fmtDate(diaStr));
 
-    container.innerHTML =
-      '<div class="countdown-banner">' +
-        '<div><div class="countdown-banner__title">' + A.esc(bannerTexto) + '</div><div class="countdown-banner__value">' + A.esc(bannerValor) + "</div></div>" +
-        '<div class="countdown-banner__timeline" title="Linha do tempo da PGU — 📍 = hoje">' + pguDayChipsHtml(pguInicio, pguFim, hojeStr, diaStr) + "</div>" +
-        (vendoHojeReal ? "" : '<button type="button" class="countdown-banner__voltar" id="pguVoltarHoje">↩ Hoje (' + A.fmtDate(hojeStr) + ")</button>") +
-        '<div style="font-size:38px;" title="Farol geral da PGU">' + farolEmoji(faroGeral) + "</div>" +
-      "</div>" +
-      '<div class="panel" style="margin-bottom:16px;" id="pguHojeFilterPanel">' +
+    return '<div class="panel" style="margin-bottom:16px;" id="pguHojeFilterPanel">' +
         '<h3 class="panel__title" style="margin-bottom:2px;">Filtros</h3>' +
         '<p class="panel__subtitle" style="margin-bottom:8px;">Turno/encarregado vêm do preenchimento em campo</p>' +
         filtrosHtml +
@@ -884,52 +1037,110 @@
           '<button type="button" class="btn-neutral" id="pguGroupExpandAll">⊞ Expandir tudo</button>' +
           '<button type="button" class="btn-neutral" id="pguGroupCollapseAll">⊟ Recolher tudo</button>' +
         "</div>" +
-        '<p class="panel__subtitle">Agrupado por TR/ativo → componente → disciplina. Ajuste status, % e datas de tendência direto nas colunas — clique no nome da atividade para observações, impedimento etc.</p>' +
+        '<p class="panel__subtitle">Agrupado por TR/ativo → componente → disciplina. Clique no nome da atividade para observações, impedimento etc.</p>' +
         groupedActivityListHtml(doDia) +
       "</div>" +
       '<div class="panel"><h3 class="panel__title">Atrasadas — ação necessária</h3>' +
-        (atrasadas.length ? ('<div class="activity-list-wrap">' + activityRowHeadHtml() + atrasadas.slice(0, 30).map(activityRowHtml).join("") + "</div>") : '<div class="table-caption">Nenhuma atividade atrasada. 🎉</div>') +
+        (atrasadas.length ? atrasadas.slice(0, 30).map(function (e) { return activityCardHtml(e, true); }).join("") : '<div class="table-caption">Nenhuma atividade atrasada. 🎉</div>') +
       "</div>";
+  }
 
-    // Guarda o estado aberto/fechado de cada grupo pra sobreviver ao proximo re-render (ver groupOpenState).
-    var groupedTreeEl = A.$("pguGroupedTree");
-    if (groupedTreeEl) {
-      groupedTreeEl.querySelectorAll("details[data-gkey]").forEach(function (d) {
-        d.addEventListener("toggle", function () { groupOpenState[d.getAttribute("data-gkey")] = d.open; });
+  // Corpo do Modo Encarregado: card por atividade do turno escolhido, agrupado só por TR/ativo.
+  function renderModoEncarregadoBody(effsAll, diaStr, hojeStr) {
+    var tAtual = meuTurno;
+    var vendoTodaPgu = diaStr === TODA_PGU;
+    var doDia = vendoTodaPgu ? effsAll : effsAll.filter(function (e) { return e.inicio && e.termino && e.inicio <= diaStr && e.termino >= diaStr; });
+    var doTurno = doDia.filter(function (e) { return e.turno === tAtual; })
+      .sort(function (a, b) {
+        var da = a.inicioDataHora || "", db = b.inicioDataHora || "";
+        return da < db ? -1 : (da > db ? 1 : 0);
       });
+
+    var pendentes = doTurno.filter(function (e) { return e.status !== "Concluída"; });
+    var herdadas = doTurno.filter(function (e) { return e.herancaDeTurno; });
+    var atrasadas = doTurno.filter(function (e) { return e.status === "Atrasada"; }).length;
+    var pctMedio = doTurno.length ? Math.round(doTurno.reduce(function (s, e) { return s + (e.percent || 0); }, 0) / doTurno.length) : 0;
+    var tituloDia = vendoTodaPgu ? "todos os dias" : (diaStr === hojeStr ? "hoje" : A.fmtDate(diaStr));
+    // Só faz sentido "encerrar" o turno de hoje de verdade (fechar um dia passado/futuro não tem efeito prático).
+    var podeEncerrar = pendentes.length > 0 && diaStr === hojeStr;
+
+    return '<div class="pgu-turno-header">' +
+        '<div><div class="pgu-turno-header__title">🕐 Turno ' + A.esc(tAtual) + '</div>' +
+        '<div class="pgu-turno-header__sub">Vendo ' + A.esc(tituloDia) + ' · atividades programadas pra esse turno</div></div>' +
+        '<div class="pgu-turno-header__actions">' +
+          (podeEncerrar ? '<button type="button" class="pgu-btn-ghost pgu-btn-ghost--danger" id="pguEncerrarTurno">🔒 Encerrar turno</button>' : "") +
+          '<button type="button" class="pgu-btn-ghost" id="pguTrocarTurno">Trocar turno</button>' +
+        "</div>" +
+      "</div>" +
+      '<div class="kpi-grid">' +
+        kpiCard("📋", "Atividades no turno", A.fmtNum(doTurno.length)) +
+        kpiCard("⏱️", "Atrasadas", A.fmtNum(atrasadas), atrasadas ? "bad" : "") +
+        kpiCard("📊", "Avanço médio", pctMedio + "%", "blue") +
+      "</div>" +
+      (herdadas.length ? '<div class="pgu-inherit-note">ℹ️ ' + herdadas.length + ' atividade(s) chegaram de um turno anterior sem terem sido concluídas lá (marcadas com ↪ abaixo).</div>' : "") +
+      '<div class="panel"><h3 class="panel__title">Atividades deste turno, por TR/ativo</h3>' +
+        (doTurno.length ? groupedByTrOnlyHtml(doTurno) : '<div class="table-caption">Nenhuma atividade programada pra este turno. 🎉</div>') +
+      "</div>";
+  }
+
+  function renderHoje(effsAll) {
+    lastEffs = effsAll;
+    var container = A.$("pguHojeContent");
+    var hojeReal = new Date(); hojeReal.setHours(0, 0, 0, 0);
+    var hojeStr = toISODate(hojeReal);
+
+    // Datas/contagem regressiva sempre baseadas no conjunto completo (o cronograma da PGU nao muda com o filtro)
+    var datas = [];
+    effsAll.forEach(function (e) { if (e.inicio) datas.push(e.inicio); if (e.termino) datas.push(e.termino); });
+    var pguInicio = datas.length ? datas.reduce(function (a, b) { return a < b ? a : b; }) : null;
+    var pguFim = datas.length ? datas.reduce(function (a, b) { return a > b ? a : b; }) : null;
+
+    if (!hojeSelectedDate) {
+      hojeSelectedDate = (pguInicio && hojeStr < pguInicio) ? pguInicio : ((pguFim && hojeStr > pguFim) ? pguFim : hojeStr);
+    }
+    var diaStr = hojeSelectedDate;
+
+    var bodyHtml;
+    if (pguModo === "gestao") {
+      bodyHtml = renderModoGestaoBody(effsAll, diaStr, hojeStr);
+    } else if (!meuTurno) {
+      bodyHtml = turnoPickerHtml();
+    } else {
+      bodyHtml = renderModoEncarregadoBody(effsAll, diaStr, hojeStr);
     }
 
-    A.wireMultiSelect("msHojeEncarregado", function (values) { hojeFilters.encarregado = values; renderHoje(lastEffs); });
-    A.wireMultiSelect("msHojeFiscalObra", function (values) { hojeFilters.fiscalObra = values; renderHoje(lastEffs); });
-    A.wireMultiSelect("msHojeFiscalSeguranca", function (values) { hojeFilters.fiscalSeguranca = values; renderHoje(lastEffs); });
-    A.wireMultiSelect("msHojeEmpresa", function (values) { hojeFilters.executante = values; renderHoje(lastEffs); });
-    A.wireMultiSelect("msHojeTurno", function (values) { hojeFilters.turno = values; renderHoje(lastEffs); });
-    var clearBtn = A.$("pguHojeClearFiltros");
-    if (clearBtn) {
-      clearBtn.addEventListener("click", function () {
-        hojeFilters = { turno: [], executante: [], encarregado: [], fiscalObra: [], fiscalSeguranca: [] };
-        renderHoje(lastEffs);
-      });
+    container.innerHTML = modeSwitchHtml() + raceBannerHtml(effsAll, pguInicio, pguFim, hojeStr, diaStr) + bodyHtml;
+
+    // Guarda o estado aberto/fechado de cada grupo pra sobreviver ao proximo re-render (ver groupOpenState).
+    container.querySelectorAll("details[data-gkey]").forEach(function (d) {
+      d.addEventListener("toggle", function () { groupOpenState[d.getAttribute("data-gkey")] = d.open; });
+    });
+
+    if (pguModo === "gestao") {
+      A.wireMultiSelect("msHojeEncarregado", function (values) { hojeFilters.encarregado = values; renderHoje(lastEffs); });
+      A.wireMultiSelect("msHojeFiscalObra", function (values) { hojeFilters.fiscalObra = values; renderHoje(lastEffs); });
+      A.wireMultiSelect("msHojeFiscalSeguranca", function (values) { hojeFilters.fiscalSeguranca = values; renderHoje(lastEffs); });
+      A.wireMultiSelect("msHojeEmpresa", function (values) { hojeFilters.executante = values; renderHoje(lastEffs); });
+      A.wireMultiSelect("msHojeTurno", function (values) { hojeFilters.turno = values; renderHoje(lastEffs); });
+      var clearBtn = A.$("pguHojeClearFiltros");
+      if (clearBtn) {
+        clearBtn.addEventListener("click", function () {
+          hojeFilters = { turno: [], executante: [], encarregado: [], fiscalObra: [], fiscalSeguranca: [] };
+          renderHoje(lastEffs);
+        });
+      }
     }
   }
 
   // Ligado uma unica vez (em renderShell) sobre o container fixo da aba "Hoje" -- usa delegacao
   // de evento para nao acumular listeners a cada re-render (renderAll roda toda vez que o
   // encarregado salva uma atualizacao).
-  // A.onDelegated (common.js) so escuta "click". Para inputs/selects editaveis nas colunas
-  // precisamos de "change", entao usamos a mesma ideia de delegacao aqui.
-  function onDelegatedChange(container, selector, handler) {
-    container.addEventListener("change", function (e) {
-      var el = e.target.closest(selector);
-      if (el && container.contains(el)) handler(el, e);
-    });
-  }
-
-  var TENDENCIA_FIELD_LABELS = { status: "Status", percent: "Avanço", inicioTendencia: "Início tendência", terminoTendencia: "Término tendência", encarregado: "Encarregado", executante: "Empresa" };
-
   function wireHojeTab() {
     var container = A.$("pguHojeContent");
-    A.onDelegated(container, ".pgu-open", function (el) {
+    // Abre o painel completo -- ignora clique que veio de dentro da barra de avanço (ela tem o
+    // próprio gesto de arrastar, ver mais abaixo) pra não abrir o painel sem querer no meio do drag.
+    A.onDelegated(container, ".pgu-open", function (el, e) {
+      if (e.target.closest(".pgu-card__pct-track")) return;
       var a = activitiesByUid[el.getAttribute("data-uid")];
       if (a) openDrawer(a, renderAll);
     });
@@ -953,14 +1164,129 @@
         var k = d.getAttribute("data-gkey"); if (k) groupOpenState[k] = false;
       });
     });
-    // Edicao inline de status / % / datas de tendencia direto na linha, sem abrir o painel lateral.
-    onDelegatedChange(container, ".pgu-inline-field", function (el) {
-      var field = el.getAttribute("data-field");
-      var value = field === "percent" ? parseInt(el.value, 10) : el.value;
-      saveOverrideField(el.getAttribute("data-uid"), field, value);
-      A.toast((TENDENCIA_FIELD_LABELS[field] || "Campo") + " atualizado.");
+
+    // ---- Modo Encarregado / Modo Gestão + escolha de turno ----
+    A.onDelegated(container, "[data-pgu-modo]", function (el) {
+      pguModo = el.getAttribute("data-pgu-modo");
+      renderHoje(lastEffs);
+    });
+    A.onDelegated(container, "[data-pick-turno]", function (el) {
+      meuTurno = el.getAttribute("data-pick-turno");
+      renderHoje(lastEffs);
+    });
+    A.onDelegated(container, "#pguTrocarTurno", function () {
+      meuTurno = null;
+      renderHoje(lastEffs);
+    });
+
+    // ---- Ações rápidas do card (Concluir / Em andamento / Problema) ----
+    A.onDelegated(container, "[data-pgu-act]", function (el, e) {
+      e.stopPropagation();
+      var uid = el.getAttribute("data-uid");
+      var act = el.getAttribute("data-pgu-act");
+      var atividade = activitiesByUid[uid];
+      if (act === "done") {
+        saveOverrideField(uid, "percent", 100);
+        A.toast("Atividade concluída.");
+      } else if (act === "andamento") {
+        saveOverrideField(uid, "status", "Em andamento");
+        A.toast("Marcada como em andamento.");
+      } else if (act === "problema") {
+        var atual = loadOverrides()[uid] || {};
+        var motivo = prompt('Motivo de "' + (atividade ? atividade.nome : "") + '" não estar em dia (fica registrado na atividade):', atual.observacoes || "");
+        if (motivo === null) return;
+        if (!motivo.trim()) { A.toast("Precisa descrever o motivo pra marcar como problema.", "error"); return; }
+        saveOverrideFields(uid, { status: "Atrasada", observacoes: motivo.trim() });
+        A.toast("Problema registrado.");
+      }
       renderAll();
     });
+
+    // ---- Encerrar turno: separa quem já era pra ultrapassar (segue pro próximo turno de boa) de
+    // quem devia terminar e não terminou (vira "herdada", com motivo obrigatório). ----
+    A.onDelegated(container, "#pguEncerrarTurno", function () {
+      var tAtual = meuTurno;
+      var hojeStr = toISODate(new Date());
+      var doTurnoHoje = lastEffs.filter(function (e) {
+        return e.turno === tAtual && e.inicio && e.termino && e.inicio <= hojeStr && e.termino >= hojeStr;
+      });
+      var pendentes = doTurnoHoje.filter(function (e) { return e.status !== "Concluída"; });
+      if (!pendentes.length) { A.toast("Tudo concluído nesse turno. 🎉"); return; }
+
+      var estouro = pendentes.filter(programadaParaUltrapassarTurno);
+      var atraso = pendentes.filter(function (e) { return !programadaParaUltrapassarTurno(e); });
+
+      var msg = "Encerrar o turno " + tAtual + "?\n";
+      if (estouro.length) msg += "• " + estouro.length + " atividade(s) já programada(s) pra continuar no próximo turno (normal, sem motivo).\n";
+      if (atraso.length) msg += "• " + atraso.length + " atividade(s) deveriam ter terminado neste turno e vão precisar de motivo.";
+      if (!confirm(msg)) return;
+
+      estouro.forEach(function (e) { saveOverrideField(e.uid, "turno", nextTurno(tAtual)); });
+
+      atraso.forEach(function (e) {
+        var pred = predecessoraPendente(activitiesByUid[e.uid]);
+        var motivo;
+        if (pred) {
+          motivo = 'Aguardando "' + pred.nome + '" (predecessora também não concluída neste turno).';
+        } else {
+          motivo = "";
+          while (!motivo.trim()) {
+            motivo = prompt('Motivo de "' + e.nome + '" não ter sido concluída no turno ' + tAtual + ':', e.observacoes || "") || "";
+            if (motivo === "") { if (!confirm("O motivo é obrigatório. Tentar de novo?")) return; }
+          }
+        }
+        saveOverrideFields(e.uid, { status: "Atrasada", observacoes: motivo.trim(), herancaDeTurno: tAtual, turno: nextTurno(tAtual) });
+      });
+
+      A.toast("Turno encerrado.");
+      renderAll();
+    });
+
+    // ---- Barra de avanço arrastável (pula de 10 em 10) ----
+    var draggingTrack = null;
+    function pctFromEvent(e, track) {
+      var rect = track.getBoundingClientRect();
+      var raw = ((e.clientX - rect.left) / rect.width) * 100;
+      return Math.max(0, Math.min(100, Math.round(raw / 10) * 10));
+    }
+    function paintTrack(track, pct) {
+      var fill = track.querySelector(".pgu-card__pct-fill");
+      var thumb = track.querySelector(".pgu-card__pct-thumb");
+      if (fill) fill.style.width = pct + "%";
+      if (thumb) thumb.style.left = pct + "%";
+      var num = container.querySelector('[data-pct-num="' + track.getAttribute("data-pct-track") + '"]');
+      if (num) num.textContent = pct + "%";
+    }
+    container.addEventListener("pointerdown", function (e) {
+      var track = e.target.closest(".pgu-card__pct-track");
+      if (!track || !container.contains(track)) return;
+      track.setPointerCapture(e.pointerId);
+      track.classList.add("pgu-dragging");
+      draggingTrack = track;
+      var pct = pctFromEvent(e, track);
+      track._dragPct = pct;
+      paintTrack(track, pct);
+    });
+    container.addEventListener("pointermove", function (e) {
+      if (!draggingTrack) return;
+      var pct = pctFromEvent(e, draggingTrack);
+      draggingTrack._dragPct = pct;
+      paintTrack(draggingTrack, pct);
+    });
+    function finishDrag() {
+      if (!draggingTrack) return;
+      draggingTrack.classList.remove("pgu-dragging");
+      var uid = draggingTrack.getAttribute("data-pct-track");
+      var pct = draggingTrack._dragPct;
+      draggingTrack = null;
+      if (pct !== undefined) {
+        saveOverrideField(uid, "percent", pct);
+        A.toast("Avanço atualizado.");
+        renderAll();
+      }
+    }
+    container.addEventListener("pointerup", finishDrag);
+    container.addEventListener("pointercancel", finishDrag);
   }
 
   // ------------------------------------------------------------ Tab: Dashboard
@@ -1165,20 +1491,8 @@
         '<button type="button" class="btn-neutral" id="pguImportBtn">Importar</button>' +
         '<span id="pguImportStatus" style="font-size:12px;color:var(--vale-gray);"></span>' +
       "</div>" +
-      '<div id="pguTabs">' +
-        '<div class="tabs">' +
-          '<button type="button" class="tab active" data-tab="hoje">Hoje</button>' +
-          '<button type="button" class="tab" data-tab="dashboard">Dashboard</button>' +
-          '<button type="button" class="tab" data-tab="atividades">Atividades</button>' +
-          '<button type="button" class="tab" data-tab="baseline">Linha de Base</button>' +
-        "</div>" +
-        '<div class="tab-panel active" data-tab-panel="hoje" id="pguHojeContent"></div>' +
-        '<div class="tab-panel" data-tab-panel="dashboard" id="pguDashContent"></div>' +
-        '<div class="tab-panel" data-tab-panel="atividades" id="pguAtividadesContent"></div>' +
-        '<div class="tab-panel" data-tab-panel="baseline" id="pguBaselineContent"></div>' +
-      "</div>" +
+      '<div id="pguHojeContent"></div>' +
       '<div class="footnote">Atualizações de campo (status, %, observações, encarregado, turno) ficam salvas no servidor e são compartilhadas entre todo mundo — atualiza sozinho a cada ~45s, ou aperte "Atualizar" a qualquer momento.</div>';
-    A.wireTabs("pguTabs");
     wireHojeTab();
 
     A.$("pguImportBtn").addEventListener("click", async function () {
@@ -1218,9 +1532,6 @@
     FISCAL_TURNO_PREDOMINANTE = computeFiscalTurnoPredominante(effs);
 
     renderHoje(effs);
-    renderDashboard(effs);
-    renderAtividades(effs);
-    renderBaseline(effs);
 
     A.setStatusPills([
       "PGU: " + ((PGU.projeto && PGU.projeto.nome) || "—"),
