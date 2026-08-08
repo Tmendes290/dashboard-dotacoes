@@ -1031,6 +1031,9 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div class="sb-nav-sec">Materiais</div>
     <div class="sb-item" data-view="materiais" data-label="Materiais"><span class="ico">📦</span><span class="sb-label">Materiais<span class="sb-badge" id="nb-mat" style="display:none;background:#7c3aed"></span></span></div>
     <div class="sb-item" data-view="pipe" data-label="Pipeline de Materiais"><span class="ico">🚦</span><span class="sb-label">Pipeline de Materiais<span class="sb-badge" id="nb-pipe" style="display:none;background:#dc2626"></span></span></div>
+    <!-- FP&A -->
+    <div class="sb-nav-sec">FP&amp;A</div>
+    <div class="sb-item" data-view="fpa" data-label="FP&A"><span class="ico">📈</span><span class="sb-label">FP&amp;A</span></div>
     <!-- IMPRODUTIVIDADE -->
     <div class="sb-nav-sec">Fiscalização</div>
     <div class="sb-item" data-view="improdutividade" data-label="Improdutividade"><span class="ico">⏱</span><span class="sb-label">Produtividade</span></div>
@@ -1345,6 +1348,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="v-materiais" class="hidden"></div>
     <div id="v-milplan" class="hidden"></div>
     <div id="v-pipe" class="hidden"></div>
+    <div id="v-fpa" class="hidden"></div>
     <div id="v-improdutividade" class="hidden"></div>
     <div id="v-indice-produtividade" class="hidden"></div>
     <div id="v-produtividade-rev2" class="hidden"></div>
@@ -1543,6 +1547,10 @@ var _cji3F = { years: [], months: [], gers: [], sites: [], projs: [], forns: [] 
 var _cji3Open = {}; // proj|wbs -> expanded bool
 var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:String(new Date().getFullYear()), mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[], statusEntrega:[]};
 var MAT_MESES_NOMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+var FPA_DATA = []; // linhas cruas da tabela fpa_dados (previsto/executado/forecast por pep/mes/ano)
+var FPA_FILTERS = {projeto:[], squad:[], lider:[], planejador:[]};
+var FPA_ANO = new Date().getFullYear();
+var FPA_TAB = 'forecast'; // 'previsto' | 'executado' | 'forecast' — aba ativa da tabela
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
 var MAT_PAGE = 1;
@@ -1677,6 +1685,14 @@ async function loadFromSupabase(){
         const {data:rfc}=await supa.from('ref_fiscais').select('nome,squad');
         if(rfc&&rfc.length>0){REF_FISCAIS={};rfc.forEach(function(r){if(r.nome)REF_FISCAIS[r.nome.trim()]=r.squad||'';});}
       } catch(e7){console.warn('[Sync] ref_fiscais:',e7);}
+    })(),
+
+    // FP&A
+    (async function(){
+      try {
+        const {data:fpa,error:e8}=await supa.from('fpa_dados').select('*');
+        if(!e8&&fpa) FPA_DATA=fpa;
+      } catch(e8){console.warn('[Sync] fpa_dados:',e8);}
     })(),
 
     // CJI3
@@ -2369,6 +2385,7 @@ const VIEW_META={
   upload:{title:'Atualizar Bases',sub:'Importe as planilhas de Medido, CAPEX e PEP/Sub-PEP/Planejadores'},
   'saude-pep':{title:'Saúde do PEP',sub:'Visão financeira consolidada por projeto'},
   materiais:{title:'Materiais',sub:'Acompanhamento de pedidos, RCs e diligenciamento'},
+  fpa:{title:'FP&A',sub:'Orçamento x Executado x Forecast por projeto'},
   analytics:{title:'Dashboard',sub:'Dotado vs Medido por empresa e PEP'},
   improdutividade:{title:'Produtividade Projetos Salobo',sub:'Registro de chegada e atraso das equipes'},
   'indice-produtividade':{title:'Índice de Produtividade',sub:'Comparativo de HH cobrado pela contratada vs índice de produtividade do projeto'},
@@ -2403,14 +2420,14 @@ function _syncBnav(id){
 function setView(id){
   currentView=id;
   _syncBnav(id);
-  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma','v-milplan','v-pipe'].forEach(v=>document.getElementById(v).classList.add('hidden'));
+  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-fpa','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma','v-milplan','v-pipe'].forEach(v=>document.getElementById(v).classList.add('hidden'));
   document.getElementById('v-'+id).classList.remove('hidden');
   // Lazy-load histograma iframe on first visit
   if(id==='histograma'){
     const fr=document.getElementById('histograma-frame');
     if(!fr.src||fr.src==='about:blank')fr.src='/histograma-eletro.html?embed=1';
   }
-  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios','milplan','pipe'].includes(id));
+  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','fpa','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios','milplan','pipe'].includes(id));
   if(id==='produtividade-rev2'){
     var _mRev2=VIEW_META['produtividade-rev2'];
     var _ptRev2=document.getElementById('page-title');if(_ptRev2)_ptRev2.textContent=_mRev2.title;
@@ -2476,6 +2493,7 @@ function _renderNow(){
   if(currentView==='nova') renderFormNova();
   if(currentView==='upload') renderUpload();
   if(currentView==='materiais') renderMateriais();
+  if(currentView==='fpa') renderFpa();
   if(currentView==='milplan') renderMilplan();
   if(currentView==='pipe') renderPipe();
   if(currentView==='cji3') renderCji3();
@@ -4468,7 +4486,7 @@ function updateUserBadge(){
   document.body.classList.toggle("is-lider", isLider);
   var _perms = (CURRENT_PERFIL.permissoes && CURRENT_PERFIL.permissoes.length) ? CURRENT_PERFIL.permissoes : ['overview'];
   if(!isAdmin){
-    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','velocidade','cji3','improdutividade','indice-produtividade','histograma','milplan','pipe'];
+    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','fpa','velocidade','cji3','improdutividade','indice-produtividade','histograma','milplan','pipe'];
     document.querySelectorAll('.sb-nav .sb-item').forEach(function(item){
       if(item.classList.contains('admin-only')) return;
       var v=item.dataset.view; if(!v||_permViews.indexOf(v)<0) return;
@@ -4804,6 +4822,12 @@ function onMsChange(id){
     MAT_FILTERS[matKey] = selected;
     MAT_PAGE = 1;
     if(currentView === 'materiais') renderMateriais();
+    return;
+  }
+  if(id.startsWith('ms-fpa-')){
+    var fpaKey = id.replace('ms-fpa-','');
+    FPA_FILTERS[fpaKey] = selected;
+    if(currentView === 'fpa') renderFpa();
     return;
   }
   if(id.startsWith('ms-usr-')){
@@ -6492,6 +6516,7 @@ function renderUsuariosHTML(el, usuarios, bloqueados){
         {v:'overview',l:'Visão Geral'},{v:'resumo',l:'Resumo Sub PEP'},{v:'dotacoes',l:'Dotações'},
         {v:'alertas',l:'Capex Projetos'},{v:'nova',l:'Nova Dotação'},{v:'regularizar',l:'Regularizar Saldo'},
         {v:'analytics',l:'Dashboard'},{v:'saude-pep',l:'Saúde do PEP'},{v:'materiais',l:'Materiais'},
+        {v:'fpa',l:'FP&A'},
         {v:'improdutividade',l:'Produtividade'},{v:'indice-produtividade',l:'Índice de Produtividade'},
         {v:'velocidade',l:'Telemetria'},{v:'cji3',l:'CJI3 Tabela'},{v:'histograma',l:'Histograma CTT'},
         {v:'milplan',l:'SS Milplan'},{v:'pipe',l:'Pipeline de Materiais'}
@@ -9170,6 +9195,266 @@ async function matMesclarDuplicados(){
     console.error('[matMesclarDuplicados]', e);
     toast('Erro ao mesclar: '+e.message,'red');
   }
+}
+
+// ═══════════════════════ FP&A — Orçamento x Executado x Forecast ═══════════════════════
+function fpaFmtUsd(v){
+  if(!v||v===0) return 'US$ 0';
+  var a=Math.abs(v), s=v<0?'-':'';
+  if(a>=1e6) return s+'US$ '+(a/1e6).toFixed(1)+'M';
+  if(a>=1e3) return s+'US$ '+(a/1e3).toFixed(0)+'K';
+  return s+'US$ '+a.toFixed(0);
+}
+function fpaCatalog(){
+  var byPep = {};
+  FPA_DATA.forEach(function(r){
+    if(!byPep[r.pep]) byPep[r.pep] = {pep:r.pep, titulo:r.titulo};
+  });
+  return Object.keys(byPep).map(function(pep){
+    var info = REF_SQUADS[pep] || {squad:'',lider:'',planejador:''};
+    var refPep = REF_PEPS.find(function(r){return r[0]===pep;});
+    var titulo = byPep[pep].titulo || (refPep?refPep[1]:'') || '';
+    return {pep:pep, titulo:titulo, squad:info.squad||'(sem squad)', lider:info.lider||'(sem líder)', planejador:info.planejador||'(sem planejador)'};
+  });
+}
+function fpaFilteredPeps(){
+  return fpaCatalog().filter(function(p){
+    if(FPA_FILTERS.squad.length && FPA_FILTERS.squad.indexOf(p.squad)<0) return false;
+    if(FPA_FILTERS.lider.length && FPA_FILTERS.lider.indexOf(p.lider)<0) return false;
+    if(FPA_FILTERS.planejador.length && FPA_FILTERS.planejador.indexOf(p.planejador)<0) return false;
+    if(FPA_FILTERS.projeto.length && FPA_FILTERS.projeto.indexOf(p.pep+' - '+p.titulo)<0) return false;
+    return true;
+  });
+}
+function fpaGetValor(pep,mes,tipo){
+  var row = FPA_DATA.find(function(r){return r.pep===pep && r.mes===mes && r.tipo===tipo && r.ano===FPA_ANO;});
+  return row ? (Number(row.valor)||0) : 0;
+}
+function fpaMonthly(peps,tipo){
+  var arr = new Array(12).fill(0);
+  var pepSet = {}; peps.forEach(function(p){pepSet[p.pep]=true;});
+  FPA_DATA.forEach(function(r){
+    if(r.tipo!==tipo || r.ano!==FPA_ANO || !pepSet[r.pep]) return;
+    var mi = r.mes-1;
+    if(mi>=0 && mi<12) arr[mi] += Number(r.valor)||0;
+  });
+  return arr;
+}
+function fpaCumulative(arr){
+  var out=[], run=0;
+  arr.forEach(function(v){ run+=v; out.push(run); });
+  return out;
+}
+async function fpaHandleUpload(file){
+  if(!file) return;
+  if(typeof XLSX==='undefined'){ toast('Aguardando biblioteca XLSX carregar...','red'); return; }
+  var ano = FPA_ANO;
+  var reader = new FileReader();
+  reader.onload = async function(e){
+    try{
+      var wb = XLSX.read(e.target.result,{type:'array'});
+      var sheetMap = {'PREVISTO REMANJ.':'previsto','EXECUTADO':'executado','FORCAST - PROJEÇÃO':'forecast'};
+      var allRows = [], achouAlguma = false;
+      Object.keys(sheetMap).forEach(function(sheetName){
+        var tipo = sheetMap[sheetName];
+        var sheet = wb.Sheets[sheetName];
+        if(!sheet) return;
+        achouAlguma = true;
+        var data = XLSX.utils.sheet_to_json(sheet,{header:1,defval:''});
+        var startIdx = -1;
+        for(var i=0;i<data.length;i++){
+          if(String((data[i]&&data[i][0])||'').trim()==='Projeto & Título'){ startIdx = i+1; break; }
+        }
+        if(startIdx<0) return;
+        for(var r=startIdx;r<data.length;r++){
+          var row = data[r];
+          var raw = String((row&&row[0])||'').trim();
+          if(!raw || raw==='Total' || raw.indexOf('Filtros')===0) break;
+          var parts = raw.split(' - ');
+          var pep = parts[0].trim();
+          var titulo = parts.slice(1).join(' - ').trim();
+          for(var m=1;m<=12;m++){
+            var valor = parseFloat(row[m]);
+            if(isNaN(valor)) valor = 0;
+            allRows.push({chave:pep+'|'+ano+'|'+m+'|'+tipo, pep:pep, titulo:titulo, ano:ano, mes:m, tipo:tipo, valor:valor});
+          }
+        }
+      });
+      if(!achouAlguma){ toast('Nenhuma das 3 abas esperadas foi encontrada (PREVISTO REMANJ. / EXECUTADO / FORCAST - PROJEÇÃO)','red'); return; }
+      if(!allRows.length){ toast('Nenhum dado de projeto encontrado na planilha','red'); return; }
+      toast('Importando '+allRows.length+' registros...','blue');
+      for(var bi=0; bi<allRows.length; bi+=500){
+        var up = await supa.from('fpa_dados').upsert(allRows.slice(bi,bi+500), {onConflict:'chave'});
+        if(up.error){ toast('Erro ao salvar: '+up.error.message,'red'); return; }
+      }
+      var reload = await supa.from('fpa_dados').select('*');
+      if(reload.data) FPA_DATA = reload.data;
+      toast('✔ Planilha FP&A importada com sucesso!','green');
+      renderFpa();
+    }catch(err){
+      console.error('[fpaHandleUpload]',err);
+      toast('Erro ao importar: '+err.message,'red');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+async function fpaEditarForecast(pep, titulo, ano, mes, input){
+  var raw = String(input.value||'').trim();
+  var novo = parseFloat(raw.replace(/\./g,'').replace(',','.'));
+  if(isNaN(novo)){ toast('Valor inválido','red'); return; }
+  var chave = pep+'|'+ano+'|'+mes+'|forecast';
+  var up = await supa.from('fpa_dados').upsert(
+    {chave:chave, pep:pep, titulo:titulo, ano:ano, mes:mes, tipo:'forecast', valor:novo, atualizado_em:new Date().toISOString()},
+    {onConflict:'chave'}
+  );
+  if(up.error){ toast('Erro ao salvar: '+up.error.message,'red'); return; }
+  var idx = FPA_DATA.findIndex(function(r){return r.chave===chave;});
+  if(idx>=0) FPA_DATA[idx].valor = novo; else FPA_DATA.push({chave:chave,pep:pep,titulo:titulo,ano:ano,mes:mes,tipo:'forecast',valor:novo});
+  toast('Forecast atualizado','green');
+  renderFpa();
+}
+function renderFpa(){
+  var el = document.getElementById('v-fpa');
+  if(!el) return;
+
+  function fpaMsWrap(id, label, minW){
+    return '<div class="fg" style="min-width:'+(minW||150)+'px"><label>'+label+'</label>'
+      +'<div class="ms-wrap" id="'+id+'"><div class="ms-input" onclick="toggleMs(\''+id+'\')">'
+      +'<span class="ms-label" id="'+id+'-label">Todos</span>'
+      +'<span style="color:var(--muted);font-size:10px">▾</span></div>'
+      +'<div class="ms-drop" id="'+id+'-drop" style="display:none"></div></div></div>';
+  }
+  function fpaKpi(title,val,color){
+    return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;border-top:3px solid '+color+'">'
+      +'<div style="font-size:10.5px;font-weight:700;color:#64748b;text-transform:uppercase">'+title+'</div>'
+      +'<div style="font-size:21px;font-weight:900;color:#0f172a;margin-top:4px">'+val+'</div>'
+      +'</div>';
+  }
+
+  var peps = fpaFilteredPeps();
+  var mPrev = fpaMonthly(peps,'previsto'), mExec = fpaMonthly(peps,'executado'), mFcst = fpaMonthly(peps,'forecast');
+  var cPrev = fpaCumulative(mPrev), cExec = fpaCumulative(mExec), cFcst = fpaCumulative(mFcst);
+  var totPrev = mPrev.reduce(function(a,b){return a+b;},0);
+  var totExec = mExec.reduce(function(a,b){return a+b;},0);
+  var totFcst = mFcst.reduce(function(a,b){return a+b;},0);
+  var desvio = totFcst - totPrev;
+  var desvioPct = totPrev>0 ? (desvio/totPrev*100) : 0;
+  var desvioColor = desvioPct>=100?'#dc2626':(desvioPct>=80?'#d97706':'#16a34a');
+
+  var allCat = fpaCatalog();
+  var squadOpts = Array.from(new Set(allCat.map(function(p){return p.squad;}))).sort();
+  var liderOpts = Array.from(new Set(allCat.map(function(p){return p.lider;}))).sort();
+  var planOpts = Array.from(new Set(allCat.map(function(p){return p.planejador;}))).sort();
+  var projOpts = allCat.map(function(p){return p.pep+' - '+p.titulo;}).sort();
+
+  var html = '';
+  if(!FPA_DATA.length){
+    html += '<div style="background:#fff8e1;border:1px solid #fbbf24;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#92400e">Nenhum dado de FP&A importado ainda. Use o botão abaixo pra importar a planilha (abas "PREVISTO REMANJ.", "EXECUTADO", "FORCAST - PROJEÇÃO").</div>';
+  }
+  html += '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px">'
+    + '<input type="file" id="fpa-upload-input" accept=".xlsm,.xlsx" style="display:none" onchange="fpaHandleUpload(this.files[0])">'
+    + '<button onclick="document.getElementById(\'fpa-upload-input\').click()" style="padding:8px 14px;border-radius:7px;border:1px solid #cbd5e1;background:#fff;font-size:12px;font-weight:700;cursor:pointer">⬆ Importar planilha FP&A</button>'
+    + '<label style="font-size:11px;color:#64748b;display:flex;align-items:center;gap:6px">Ano<input type="number" value="'+FPA_ANO+'" onchange="FPA_ANO=parseInt(this.value)||FPA_ANO;renderFpa()" style="width:70px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:6px"></label>'
+    + '</div>';
+
+  html += '<div class="filters" style="margin-bottom:16px;flex-wrap:wrap;gap:8px;align-items:flex-end">'
+    + fpaMsWrap('ms-fpa-projeto','Projeto',200)
+    + fpaMsWrap('ms-fpa-squad','Squad',150)
+    + fpaMsWrap('ms-fpa-lider','Líder',150)
+    + fpaMsWrap('ms-fpa-planejador','Planejador',150)
+    + '</div>';
+
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">'
+    + fpaKpi('Orçamento Total', fpaFmtUsd(totPrev), '#009CDE')
+    + fpaKpi('Executado (YTD)', fpaFmtUsd(totExec), '#16a34a')
+    + fpaKpi('Forecast Total', fpaFmtUsd(totFcst), '#f97316')
+    + fpaKpi('Desvio (Forecast − Orçamento)', (desvio>=0?'+':'')+fpaFmtUsd(desvio)+' ('+desvioPct.toFixed(1)+'%)', desvioColor)
+    + '</div>';
+
+  html += '<div style="margin-bottom:16px">' + cc('fpa-scurve','Curva S — FP&A', peps.length+' projeto(s)', 260, true) + '</div>';
+
+  var mNames=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;padding:16px 18px">';
+  html += '<div style="display:flex;gap:8px;margin-bottom:12px">'
+    + ['previsto','executado','forecast'].map(function(t){
+        var lbl = t==='previsto'?'Orçamento':(t==='executado'?'Executado':'Forecast');
+        var active = FPA_TAB===t;
+        return '<button onclick="FPA_TAB=\''+t+'\';renderFpa()" style="padding:7px 14px;border-radius:20px;border:1px solid '+(active?'#009CDE':'#cbd5e1')+';background:'+(active?'#009CDE':'#fff')+';color:'+(active?'#fff':'#334155')+';font-size:11.5px;font-weight:700;cursor:pointer">'+lbl+'</button>';
+      }).join('')
+    + (FPA_TAB==='forecast'?'<span style="font-size:10.5px;color:#94a3b8;align-self:center;margin-left:6px">Edite uma célula e aperte Enter pra salvar</span>':'')
+    + '</div>';
+
+  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px">';
+  html += '<thead><tr style="background:#1e3a5f;color:#fff">'
+    + '<th style="padding:8px 10px;text-align:left">Projeto</th>'
+    + '<th style="padding:8px 10px;text-align:left">Squad</th>'
+    + mNames.map(function(m){return '<th style="padding:8px 6px;text-align:right">'+m+'</th>';}).join('')
+    + '<th style="padding:8px 10px;text-align:right">Total</th>'
+    + '</tr></thead><tbody>';
+
+  if(!peps.length){
+    html += '<tr><td colspan="15" style="padding:24px;text-align:center;color:#94a3b8">Nenhum projeto encontrado — importe a planilha ou ajuste os filtros.</td></tr>';
+  } else {
+    peps.slice().sort(function(a,b){return (a.titulo||'').localeCompare(b.titulo||'');}).forEach(function(p,i){
+      var tot = 0;
+      var cellsHtml = '';
+      for(var m=1;m<=12;m++){
+        var v = fpaGetValor(p.pep, m, FPA_TAB);
+        tot += v;
+        if(FPA_TAB==='forecast'){
+          cellsHtml += '<td style="padding:3px 4px;text-align:right">'
+            + '<input type="text" value="'+(v?v.toFixed(0):'0')+'" onclick="event.stopPropagation()" '
+            + 'onkeydown="if(event.key===\'Enter\'){fpaEditarForecast(\''+p.pep+'\',\''+escQ(p.titulo||'')+'\','+FPA_ANO+','+m+',this);this.blur();}" '
+            + 'style="width:72px;padding:4px 5px;border:1px solid #cbd5e1;border-radius:5px;text-align:right;font-size:11px">'
+            + '</td>';
+        } else {
+          cellsHtml += '<td style="padding:7px 6px;text-align:right;font-family:\'Share Tech Mono\',monospace">'+fpaFmtUsd(v)+'</td>';
+        }
+      }
+      html += '<tr style="background:'+(i%2?'#f8fafc':'#fff')+'">'
+        + '<td style="padding:7px 10px;font-weight:600;max-width:260px">'+p.pep+' — '+(p.titulo||'')+'</td>'
+        + '<td style="padding:7px 10px;color:#64748b">'+p.squad+'</td>'
+        + cellsHtml
+        + '<td style="padding:7px 10px;text-align:right;font-weight:700;font-family:\'Share Tech Mono\',monospace">'+fpaFmtUsd(tot)+'</td>'
+        + '</tr>';
+    });
+  }
+  html += '</tbody></table></div></div>';
+
+  el.innerHTML = html;
+
+  buildMsDrop('ms-fpa-projeto', projOpts, FPA_FILTERS.projeto, null);
+  buildMsDrop('ms-fpa-squad', squadOpts, FPA_FILTERS.squad, null);
+  buildMsDrop('ms-fpa-lider', liderOpts, FPA_FILTERS.lider, null);
+  buildMsDrop('ms-fpa-planejador', planOpts, FPA_FILTERS.planejador, null);
+  updateMsLabel('ms-fpa-projeto', FPA_FILTERS.projeto);
+  updateMsLabel('ms-fpa-squad', FPA_FILTERS.squad);
+  updateMsLabel('ms-fpa-lider', FPA_FILTERS.lider);
+  updateMsLabel('ms-fpa-planejador', FPA_FILTERS.planejador);
+
+  setTimeout(function(){
+    if(typeof Chart==='undefined') return;
+    var labels = mNames.map(function(m){return m+'/'+String(FPA_ANO).substring(2);});
+    safeChart('fpa-scurve',{
+      type:'line',
+      data:{labels:labels,datasets:[
+        {label:'Orçamento Acum.',data:cPrev,borderColor:'#009CDE',backgroundColor:'rgba(0,156,222,.07)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#009CDE',fill:true,tension:0.4},
+        {label:'Executado Acum.',data:cExec,borderColor:'#16a34a',backgroundColor:'rgba(22,163,74,.06)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#16a34a',fill:false,tension:0.4},
+        {label:'Forecast Acum.',data:cFcst,borderColor:'#f97316',backgroundColor:'rgba(249,115,22,.04)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#f97316',borderDash:[6,3],fill:false,tension:0.4}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+fpaFmtUsd(c.raw);}}}},
+        scales:{x:{ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'rgba(0,0,0,.04)'}},
+                y:{ticks:{color:'#94a3b8',font:{size:10},callback:function(v){return fpaFmtUsd(v);}},grid:{color:'rgba(0,0,0,.05)'}}}}
+    });
+    var leg=document.getElementById('fpa-scurve-leg');
+    if(leg){
+      leg.innerHTML = ['#009CDE|Orçamento','#16a34a|Executado','#f97316|Forecast'].map(function(it){
+        var p=it.split('|');
+        return '<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b"><div style="width:16px;height:3px;border-radius:2px;background:'+p[0]+'"></div>'+p[1]+'</div>';
+      }).join('');
+      leg.style.cssText='display:flex;gap:12px;margin-top:8px;flex-wrap:wrap';
+    }
+  },30);
 }
 
 function renderMateriais(){
