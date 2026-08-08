@@ -14,6 +14,17 @@ const SUPA_URL = 'https://ehbiyqqpzqrluvuqrljp.supabase.co';
 const SUPA_SERVICE_KEY = process.env.SUPA_SERVICE_KEY;
 const RELATORIO_TOKEN = (process.env.RELATORIO_TOKEN || '').trim();
 
+// ── PGU (Projeto CPF): alerta de fim de turno via WhatsApp (WAME-API) ───────
+// Chamado pelo pgu.js do site projeto-cpf (origem diferente, por isso libera CORS só nessa
+// rota) sempre que o encarregado encerra o turno com atividade pendente. PGU_ALERTA_TOKEN é só
+// um filtro anti-spam/uso acidental -- como o site é estático, qualquer token embutido no JS do
+// cliente é visível a quem abrir o código-fonte, então não é segredo de verdade (a chave da
+// WAME-API, essa sim, nunca sai do servidor).
+const WAME_SERVER = (process.env.WAME_SERVER || '').trim();
+const WAME_KEY = (process.env.WAME_KEY || '').trim();
+const PGU_WHATSAPP_GRUPO = (process.env.PGU_WHATSAPP_GRUPO || '').trim();
+const PGU_ALERTA_TOKEN = (process.env.PGU_ALERTA_TOKEN || '').trim();
+
 // ── VERSÃO DO APP: hash do index.html calculado quando o servidor sobe ──────
 // Muda a cada deploy (o Railway reinicia o processo e o arquivo vem
 // atualizado do git). O cliente compara com isso periodicamente pra saber
@@ -741,6 +752,60 @@ app.get('/api/relatorio-diario', async (req, res) => {
     res.json({ html, dataFmt });
   } catch (e) {
     console.error('[relatorio-diario]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── PGU (Projeto CPF): alerta de fim de turno via WhatsApp ─────────────────
+// Chamada pelo pgu.js do projeto-cpf (origem diferente -> precisa de CORS liberado só aqui).
+app.options('/api/pgu-alerta-turno', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.status(204).end();
+});
+
+app.post('/api/pgu-alerta-turno', async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  if (!WAME_SERVER || !WAME_KEY || !PGU_WHATSAPP_GRUPO) {
+    return res.status(500).json({ error: 'WhatsApp não configurado no servidor (WAME_SERVER/WAME_KEY/PGU_WHATSAPP_GRUPO).' });
+  }
+  if (!PGU_ALERTA_TOKEN || req.body.token !== PGU_ALERTA_TOKEN) {
+    return res.status(401).json({ error: 'Token inválido.' });
+  }
+
+  const { turno, dia, atrasadas, linkReport } = req.body;
+  if (!Array.isArray(atrasadas) || !atrasadas.length) {
+    return res.status(400).json({ error: 'Nenhuma atividade pendente informada.' });
+  }
+
+  const linhas = atrasadas.slice(0, 30).map((a) => {
+    const motivo = (a.motivo || '').trim();
+    return `• ${a.nome || '—'}${a.area ? ' (' + a.area + ')' : ''}${motivo ? ' — ' + motivo : ''}`;
+  }).join('\n');
+  const extra = atrasadas.length > 30 ? `\n… e mais ${atrasadas.length - 30} atividade(s).` : '';
+
+  const texto = `⚠️ *Ponto de atenção — PGU Salobo III*\n` +
+    `Turno ${turno || '—'} encerrado${dia ? ' em ' + dia : ''} com atividade(s) não concluída(s):\n\n` +
+    linhas + extra +
+    `\n\nDá atenção nesses itens pra não virarem caminho crítico — vale montar um plano de ação.` +
+    (linkReport ? `\n\nReport completo: ${linkReport}` : '');
+
+  try {
+    const r = await fetch(`${WAME_SERVER}/${WAME_KEY}/message/text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: PGU_WHATSAPP_GRUPO, text: texto })
+    });
+    const bodyText = await r.text();
+    if (!r.ok) {
+      console.error('[pgu-alerta-turno] WAME-API respondeu', r.status, bodyText);
+      return res.status(502).json({ error: `WAME-API recusou o envio (HTTP ${r.status}).` });
+    }
+    console.log(`[pgu-alerta-turno] enviado — turno ${turno}, ${atrasadas.length} atividade(s)`);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[pgu-alerta-turno]', e);
     res.status(500).json({ error: e.message });
   }
 });
