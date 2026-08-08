@@ -774,15 +774,20 @@ app.post('/api/pgu-alerta-turno', async (req, res) => {
     return res.status(401).json({ error: 'Token inválido.' });
   }
 
-  const { turno, dia, produtividade, linkReport } = req.body;
+  const { turno, dia, produtividade } = req.body;
   const atrasadas = Array.isArray(req.body.atrasadas) ? req.body.atrasadas : [];
-  if (!produtividade && !atrasadas.length) {
-    return res.status(400).json({ error: 'Nada pra reportar (sem produtividade nem pendências).' });
+  const porEncarregado = Array.isArray(req.body.porEncarregado) ? req.body.porEncarregado : [];
+  if (!produtividade && !atrasadas.length && !porEncarregado.length) {
+    return res.status(400).json({ error: 'Nada pra reportar.' });
   }
 
   function fmtHoras(h) {
     if (h === null || h === undefined) return '—';
     return Number(h).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'h';
+  }
+  function pad(str, len) {
+    str = String(str == null ? '' : str);
+    return str.length >= len ? str.slice(0, len) : str + ' '.repeat(len - str.length);
   }
 
   // Produtividade = horas concluídas / horas planejadas pro turno -- >=100% é bom ritmo (deu
@@ -799,20 +804,42 @@ app.post('/api/pgu-alerta-turno', async (req, res) => {
     textoTopo = `📋 *Turno ${turno || '—'} encerrado${dia ? ' em ' + dia : ''}*`;
   }
 
+  // Tabela por encarregado x TR/ativo -- monoespaçada (```) pra alinhar as colunas no WhatsApp.
+  // Ex.: "João  TCLD 0101SA-01  8/10".
+  let textoTabela = '';
+  if (porEncarregado.length) {
+    const colEnc = Math.min(16, Math.max('Encarregado'.length, ...porEncarregado.map((r) => (r.encarregado || 'Sem encarregado').length)));
+    const colTr = Math.min(20, Math.max('TR'.length, ...porEncarregado.map((r) => (r.area || '—').length)));
+    const cabecalho = `${pad('Encarregado', colEnc)} ${pad('TR', colTr)} Executado`;
+    const linhas = porEncarregado.map((r) => {
+      const feito = `${r.concluido}/${r.planejado}` + (r.concluido >= r.planejado ? ' ✅' : '');
+      return `${pad(r.encarregado || 'Sem encarregado', colEnc)} ${pad(r.area || '—', colTr)} ${feito}`;
+    }).join('\n');
+    textoTabela = '\n\n```' + cabecalho + '\n' + linhas + '```';
+  }
+
+  // Pendências agrupadas por encarregado -- "João: CT5 (motivo), CT9 (motivo)" em vez de uma
+  // lista solta, pra ficar claro de quem é a responsabilidade de cada item parado.
   let textoPendencias;
   if (atrasadas.length) {
-    const linhas = atrasadas.slice(0, 30).map((a) => {
-      const motivo = (a.motivo || '').trim();
-      return `• ${a.nome || '—'}${a.area ? ' (' + a.area + ')' : ''}${motivo ? ' — ' + motivo : ''}`;
-    }).join('\n');
-    const extra = atrasadas.length > 30 ? `\n… e mais ${atrasadas.length - 30} atividade(s).` : '';
-    textoPendencias = `\n\n⚠️ *Ponto de atenção* — atividade(s) não concluída(s):\n\n${linhas}${extra}` +
+    const porEnc = {}, ordem = [];
+    atrasadas.slice(0, 60).forEach((a) => {
+      const enc = a.encarregado || 'Sem encarregado';
+      if (!porEnc[enc]) { porEnc[enc] = []; ordem.push(enc); }
+      porEnc[enc].push(a);
+    });
+    const blocos = ordem.map((enc) => {
+      const itens = porEnc[enc].map((a) => `• ${a.nome || '—'}${a.area ? ' (' + a.area + ')' : ''}${(a.motivo || '').trim() ? ' — ' + a.motivo.trim() : ''}`).join('\n');
+      return `*${enc}*\n${itens}`;
+    }).join('\n\n');
+    const extra = atrasadas.length > 60 ? `\n… e mais ${atrasadas.length - 60} atividade(s).` : '';
+    textoPendencias = `\n\n⚠️ *Pendências* — quem fica responsável de olhar isso no próximo turno:\n\n${blocos}${extra}` +
       `\n\nDá atenção nesses itens pra não virarem caminho crítico — vale montar um plano de ação.`;
   } else {
     textoPendencias = '\n\n✅ Tudo concluído nesse turno.';
   }
 
-  const texto = textoTopo + textoPendencias + (linkReport ? `\n\nReport completo: ${linkReport}` : '');
+  const texto = textoTopo + textoTabela + textoPendencias;
 
   try {
     const r = await fetch(`${WAME_SERVER}/${WAME_KEY}/message/text`, {
