@@ -9516,7 +9516,7 @@ function renderFpa(){
   html += '<div style="margin-bottom:16px">' + fpaCard('fpa-scurve','Curva S — FP&A (acumulado + execução mensal)', peps.length+' projeto(s)', 320, true) + '</div>';
 
   var mNames=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  html += '<style>.fpa-editcell .fpa-edit-ic{opacity:0;transition:opacity .12s}.fpa-editcell:hover .fpa-edit-ic{opacity:.45}.fpa-editcell:hover{background:#f8fafc}</style>';
+  html += '<style>.fpa-editcell{position:relative}.fpa-editcell .fpa-edit-ic{position:absolute;right:2px;top:50%;transform:translateY(-50%);opacity:0;transition:opacity .12s;pointer-events:none}.fpa-editcell:hover .fpa-edit-ic{opacity:.45}.fpa-editcell:hover{background:#f8fafc}</style>';
   html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;padding:16px 18px">';
   html += '<div style="font-size:10.5px;color:#94a3b8;margin-bottom:10px">Cada projeto tem 4 linhas — Orçamento, Executado, Projeção (editável — Enter pra salvar) e Variação (Projeção − Orçamento). Aderência = Executado / Orçamento. Saldo = Orçamento − Executado.</div>';
 
@@ -9595,7 +9595,7 @@ function renderFpa(){
         var fcCellId = 'fpa-fc-'+p.pep.replace(/[^a-zA-Z0-9]/g,'_')+'-'+m2;
         fcstCells += '<td id="'+fcCellId+'" class="fpa-editcell" style="padding:6px 5px;text-align:right;cursor:pointer;font-family:\'Share Tech Mono\',monospace" '
           + 'onclick="fpaBeginEditForecast(\''+fcCellId+'\',\''+p.pep+'\',\''+escQ(p.titulo||'')+'\','+FPA_ANO+','+m2+','+vFcst[m2-1]+')" title="Clique pra editar a projeção">'
-          + fpaFmtUsd(vFcst[m2-1]) + '<span class="fpa-edit-ic" style="font-size:9px;margin-left:3px">✎</span>'
+          + fpaFmtUsd(vFcst[m2-1]) + '<span class="fpa-edit-ic" style="font-size:9px">✎</span>'
           + '</td>';
       }
       html += '<tr style="background:'+bg+'">'
