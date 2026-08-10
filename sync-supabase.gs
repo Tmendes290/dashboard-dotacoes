@@ -11,7 +11,7 @@ var SHEET_NAME   = 'REGISTROS';
 // (aderência, evolução, composição do improdutivo) e devolve o HTML pronto do e-mail.
 var RELATORIO_URL   = 'https://dashboardsalobo.com.br';
 var RELATORIO_TOKEN = 'b11537b02bae4e1efcf64c05cac6eb0fe0ffa34af3e29c85'; // igual à env var RELATORIO_TOKEN no Render
-var EMAILS_DESTINO  = 'tm0133929@gmail.com,davison.oliveira@vale.com,C0711210@vale.com';
+var EMAILS_DESTINO  = 'tm0133929@gmail.com,davison.oliveira@vale.com,C0711210@vale.com,Danilo.Mundim.Silva@vale.com';
 // ─────────────────────────────────────────────────────────────────
 
 // Fuso da planilha — preenchido em syncToSupabase antes de processar linhas
