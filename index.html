@@ -1566,6 +1566,7 @@ var _cji3Open = {}; // proj|wbs -> expanded bool
 var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:String(new Date().getFullYear()), mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[], statusEntrega:[]};
 var MAT_MESES_NOMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 var FPA_DATA = []; // linhas cruas da tabela fpa_dados (previsto/executado/forecast por pep/mes/ano)
+var FPA_OBS = {}; // pep -> {texto, atualizado_por, atualizado_em} (carregado do Supabase, tabela fpa_observacoes)
 var FPA_FILTERS = {projeto:[], squad:[], lider:[], planejador:[]};
 var FPA_ANO = new Date().getFullYear();
 var FPA_PAGE = 1; // tabela paginada — cada projeto já é 4 linhas, renderizar tudo de uma vez travava o navegador
@@ -1710,6 +1711,10 @@ async function loadFromSupabase(){
       try {
         FPA_DATA = await fpaLoadAll();
       } catch(e8){console.warn('[Sync] fpa_dados:',e8);}
+      try {
+        const {data:fobs,error:e8b}=await supa.from('fpa_observacoes').select('*');
+        if(!e8b&&fobs){FPA_OBS={};fobs.forEach(function(r){FPA_OBS[r.pep]={texto:r.texto||'',atualizado_por:r.atualizado_por||'',atualizado_em:r.atualizado_em||''};});}
+      } catch(e8c){console.warn('[Sync] fpa_observacoes:',e8c);}
     })(),
 
     // CJI3
@@ -1906,6 +1911,17 @@ function startRealtime(){
       })();
       var quemM=(payload.payload&&payload.payload.uploadedBy)||'admin';
       toast('📦 Materiais atualizados por '+quemM+' — dados recarregados','blue');
+    })
+    .on('broadcast', {event: 'fpa-obs-updated'}, function(payload){
+      (async function(){
+        try{
+          var {data:fobs}=await supa.from('fpa_observacoes').select('*');
+          if(fobs){FPA_OBS={};fobs.forEach(function(r){FPA_OBS[r.pep]={texto:r.texto||'',atualizado_por:r.atualizado_por||'',atualizado_em:r.atualizado_em||''};});}
+          renderFpa();
+        }catch(e){console.warn('[Realtime] fpa-obs-updated:',e);}
+      })();
+      var quemO=(payload.payload&&payload.payload.uploadedBy)||'alguém';
+      toast('📝 Observação FP&A atualizada por '+quemO,'blue');
     })
     .subscribe(function(s){ console.log('[Realtime] medido-sync:', s); });
 
@@ -9392,6 +9408,35 @@ async function fpaSalvarSquad(pep, cellId){
   toast('Squad/Líder/Planejador atualizado','green');
   renderFpa();
 }
+function fpaBeginEditObs(cellId, pep){
+  var td = document.getElementById(cellId);
+  if(!td) return;
+  td.onclick = null;
+  var cur = FPA_OBS[pep] || {texto:''};
+  td.innerHTML = '<div style="display:flex;flex-direction:column;gap:4px;min-width:220px">'
+    + '<textarea id="'+cellId+'-tx" placeholder="Por que está sobrando/faltando dinheiro nesse projeto?" onclick="event.stopPropagation()" '
+      + 'style="padding:5px 6px;border:1px solid #009CDE;border-radius:4px;font-size:10.5px;min-height:64px;resize:vertical;font-family:inherit">'+escHtml(cur.texto||'')+'</textarea>'
+    + '<button onclick="event.stopPropagation();fpaSalvarObs(\''+pep+'\',\''+cellId+'\')" style="padding:5px;border-radius:4px;border:none;background:#009CDE;color:#fff;font-size:10.5px;font-weight:700;cursor:pointer">Salvar</button>'
+    + '</div>';
+  var inp = document.getElementById(cellId+'-tx');
+  if(inp){ inp.focus(); }
+}
+async function fpaSalvarObs(pep, cellId){
+  var txEl = document.getElementById(cellId+'-tx');
+  var texto = (txEl && txEl.value || '').trim();
+  var quem = (CURRENT_USER && CURRENT_USER.email) || '';
+  var up = await supa.from('fpa_observacoes').upsert(
+    {pep:pep, texto:texto, atualizado_por:quem, atualizado_em:new Date().toISOString()},
+    {onConflict:'pep'}
+  );
+  if(up.error){ toast('Erro ao salvar observação: '+up.error.message,'red'); return; }
+  FPA_OBS[pep] = {texto:texto, atualizado_por:quem, atualizado_em:new Date().toISOString()};
+  toast('Observação salva','green');
+  renderFpa();
+  if(_medidoSyncChannel){
+    _medidoSyncChannel.send({type:'broadcast',event:'fpa-obs-updated',payload:{uploadedBy:quem}}).catch(function(e){console.warn('[Broadcast] fpa-obs:',e);});
+  }
+}
 function renderFpa(){
   var el = document.getElementById('v-fpa');
   if(!el) return;
@@ -9488,10 +9533,11 @@ function renderFpa(){
     + '<th style="padding:8px 10px;text-align:right">Total</th>'
     + '<th style="padding:8px 10px;text-align:right">Aderência</th>'
     + '<th style="padding:8px 10px;text-align:right">Saldo</th>'
+    + '<th style="padding:8px 10px;text-align:left;min-width:200px">Observações</th>'
     + '</tr></thead><tbody>';
 
   if(!peps.length){
-    html += '<tr><td colspan="19" style="padding:24px;text-align:center;color:#94a3b8">Nenhum projeto encontrado — importe a planilha ou ajuste os filtros.</td></tr>';
+    html += '<tr><td colspan="20" style="padding:24px;text-align:center;color:#94a3b8">Nenhum projeto encontrado — importe a planilha ou ajuste os filtros.</td></tr>';
   } else {
     pagePeps.forEach(function(p,i){
       var vPrev=[], vExec=[], vFcst=[], vVar=[];
@@ -9514,8 +9560,15 @@ function renderFpa(){
         + '</td>';
       var aderColor = aderPct>=100?'#dc2626':(aderPct>=80?'#d97706':'#16a34a');
       var saldoColor = saldo<0?'#dc2626':'#16a34a';
+      var obsCellId = 'fpa-obs-'+p.pep.replace(/[^a-zA-Z0-9]/g,'_');
+      var obsInfo = FPA_OBS[p.pep] || {texto:'',atualizado_por:'',atualizado_em:''};
+      var obsTitle = obsInfo.atualizado_por ? ('Última atualização: '+obsInfo.atualizado_por+(obsInfo.atualizado_em?(' em '+new Date(obsInfo.atualizado_em).toLocaleDateString('pt-BR')):'')) : 'Clique pra adicionar uma observação';
       var rowspanEnd = '<td rowspan="4" style="padding:7px 10px;text-align:right;font-weight:700;border-top:2px solid #e2e8f0;color:'+aderColor+'">'+aderPct.toFixed(1)+'%</td>'
-        + '<td rowspan="4" style="padding:7px 10px;text-align:right;font-weight:700;border-top:2px solid #e2e8f0;color:'+saldoColor+'">'+fpaFmtUsd(saldo)+'</td>';
+        + '<td rowspan="4" style="padding:7px 10px;text-align:right;font-weight:700;border-top:2px solid #e2e8f0;color:'+saldoColor+'">'+fpaFmtUsd(saldo)+'</td>'
+        + '<td rowspan="4" id="'+obsCellId+'" style="padding:7px 10px;color:#475569;border-top:2px solid #e2e8f0;cursor:pointer;max-width:240px;white-space:pre-wrap" onclick="fpaBeginEditObs(\''+obsCellId+'\',\''+p.pep+'\')" title="'+escQ(obsTitle)+'">'
+          + (obsInfo.texto ? escHtml(obsInfo.texto) : '<span style="color:#cbd5e1;font-style:italic">— clique pra adicionar</span>')
+          + '<span style="opacity:.35;font-size:9px;margin-left:4px">✎</span>'
+        + '</td>';
 
       function fmtRow(vals, tot, boldTot){
         return vals.map(function(v){return '<td style="padding:6px 5px;text-align:right;font-family:\'Share Tech Mono\',monospace">'+fpaFmtUsd(v)+'</td>';}).join('')
