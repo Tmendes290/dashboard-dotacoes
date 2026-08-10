@@ -9584,15 +9584,15 @@ function renderFpa(){
     safeChart('fpa-scurve',{
       type:'bar',
       data:{labels:labels,datasets:[
-        {type:'bar',label:'Orçamento (mês)',data:mPrev,backgroundColor:'rgba(0,156,222,.30)',borderRadius:3,barPercentage:0.8,categoryPercentage:0.7,yAxisID:'yBar',order:3},
-        {type:'bar',label:'Executado (mês)',data:mExec,backgroundColor:'rgba(22,163,74,.30)',borderRadius:3,barPercentage:0.8,categoryPercentage:0.7,yAxisID:'yBar',order:3},
-        {type:'bar',label:'Forecast (mês)',data:mFcst,backgroundColor:'rgba(249,115,22,.30)',borderRadius:3,barPercentage:0.8,categoryPercentage:0.7,yAxisID:'yBar',order:3},
-        {type:'line',label:'Orçamento Acum.',data:cPrev,borderColor:'#009CDE',backgroundColor:'rgba(0,156,222,.07)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#009CDE',fill:true,tension:0.4,yAxisID:'yLine',order:1,
-          datalabels:{display:'auto',align:'top',offset:4,color:'#009CDE',font:{size:9,weight:'700'},formatter:dlFmt}},
-        {type:'line',label:'Executado Acum.',data:cExec,borderColor:'#16a34a',backgroundColor:'rgba(22,163,74,.06)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#16a34a',fill:false,tension:0.4,yAxisID:'yLine',order:1,
-          datalabels:{display:'auto',align:'bottom',offset:4,color:'#16a34a',font:{size:9,weight:'700'},formatter:dlFmt}},
-        {type:'line',label:'Forecast Acum.',data:cFcst,borderColor:'#f97316',backgroundColor:'rgba(249,115,22,.04)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#f97316',borderDash:[6,3],fill:false,tension:0.4,yAxisID:'yLine',order:2,
-          datalabels:{display:'auto',align:'top',offset:4,color:'#f97316',font:{size:9,weight:'700'},formatter:dlFmt}}
+        {type:'bar',label:'Orçamento (mês)',data:mPrev,backgroundColor:'rgba(0,126,121,.30)',borderRadius:3,barPercentage:0.8,categoryPercentage:0.7,yAxisID:'yBar',order:3},
+        {type:'bar',label:'Executado (mês)',data:mExec,backgroundColor:'rgba(60,181,229,.30)',borderRadius:3,barPercentage:0.8,categoryPercentage:0.7,yAxisID:'yBar',order:3},
+        {type:'bar',label:'Forecast (mês)',data:mFcst,backgroundColor:'rgba(175,171,171,.30)',borderRadius:3,barPercentage:0.8,categoryPercentage:0.7,yAxisID:'yBar',order:3},
+        {type:'line',label:'Orçamento Acum.',data:cPrev,borderColor:'#007E79',backgroundColor:'rgba(0,126,121,.07)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#007E79',fill:true,tension:0.4,yAxisID:'yLine',order:1,
+          datalabels:{display:'auto',align:'top',offset:4,color:'#007E79',font:{size:9,weight:'700'},formatter:dlFmt}},
+        {type:'line',label:'Executado Acum.',data:cExec,borderColor:'#3CB5E5',backgroundColor:'rgba(60,181,229,.06)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#3CB5E5',fill:false,tension:0.4,yAxisID:'yLine',order:1,
+          datalabels:{display:'auto',align:'bottom',offset:4,color:'#3CB5E5',font:{size:9,weight:'700'},formatter:dlFmt}},
+        {type:'line',label:'Forecast Acum.',data:cFcst,borderColor:'#AFABAB',backgroundColor:'rgba(175,171,171,.04)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#AFABAB',borderDash:[6,3],fill:false,tension:0.4,yAxisID:'yLine',order:2,
+          datalabels:{display:'auto',align:'top',offset:4,color:'#AFABAB',font:{size:9,weight:'700'},formatter:dlFmt}}
       ]},
       options:{responsive:true,maintainAspectRatio:false,animation:false,
         plugins:{legend:{display:false},datalabels:{display:false},
@@ -9606,8 +9606,8 @@ function renderFpa(){
     var leg=document.getElementById('fpa-scurve-leg');
     if(leg){
       leg.innerHTML = [
-        ['#009CDE','Orçamento (acum.)','line'],['#16a34a','Executado (acum.)','line'],['#f97316','Forecast (acum.)','dash'],
-        ['rgba(0,156,222,.5)','Orçamento (mês)','bar'],['rgba(22,163,74,.5)','Executado (mês)','bar'],['rgba(249,115,22,.5)','Forecast (mês)','bar']
+        ['#007E79','Orçamento (acum.)','line'],['#3CB5E5','Executado (acum.)','line'],['#AFABAB','Forecast (acum.)','dash'],
+        ['rgba(0,126,121,.5)','Orçamento (mês)','bar'],['rgba(60,181,229,.5)','Executado (mês)','bar'],['rgba(175,171,171,.5)','Forecast (mês)','bar']
       ].map(function(it){
         var sw = it[2]==='bar' ? '<div style="width:10px;height:10px;border-radius:2px;background:'+it[0]+'"></div>'
           : it[2]==='dash' ? '<div style="width:16px;height:0;border-top:2px dashed '+it[0]+'"></div>'
