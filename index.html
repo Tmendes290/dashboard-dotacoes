@@ -9581,6 +9581,9 @@ function renderFpa(){
     if(typeof Chart==='undefined') return;
     var labels = mNames.map(function(m){return m+'/'+String(FPA_ANO).substring(2);});
     var dlFmt = function(v){ return v?fpaFmtUsd(v):''; };
+    var dlSpec = function(align,offset){ return {display:'auto',align:align,offset:offset,
+      color:'#1e293b',backgroundColor:'rgba(255,255,255,.88)',borderRadius:3,
+      padding:{top:2,bottom:2,left:4,right:4},font:{size:9,weight:'700'},formatter:dlFmt}; };
     safeChart('fpa-scurve',{
       type:'bar',
       data:{labels:labels,datasets:[
@@ -9588,11 +9591,11 @@ function renderFpa(){
         {type:'bar',label:'Executado (mês)',data:mExec,backgroundColor:'rgba(60,181,229,.30)',borderRadius:3,barPercentage:0.8,categoryPercentage:0.7,yAxisID:'yBar',order:3},
         {type:'bar',label:'Forecast (mês)',data:mFcst,backgroundColor:'rgba(175,171,171,.30)',borderRadius:3,barPercentage:0.8,categoryPercentage:0.7,yAxisID:'yBar',order:3},
         {type:'line',label:'Orçamento Acum.',data:cPrev,borderColor:'#007E79',backgroundColor:'rgba(0,126,121,.07)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#007E79',fill:true,tension:0.4,yAxisID:'yLine',order:1,
-          datalabels:{display:'auto',align:'top',offset:4,color:'#007E79',font:{size:9,weight:'700'},formatter:dlFmt}},
+          datalabels:dlSpec('top',4)},
         {type:'line',label:'Executado Acum.',data:cExec,borderColor:'#3CB5E5',backgroundColor:'rgba(60,181,229,.06)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#3CB5E5',fill:false,tension:0.4,yAxisID:'yLine',order:1,
-          datalabels:{display:'auto',align:'bottom',offset:4,color:'#3CB5E5',font:{size:9,weight:'700'},formatter:dlFmt}},
+          datalabels:dlSpec('bottom',6)},
         {type:'line',label:'Forecast Acum.',data:cFcst,borderColor:'#AFABAB',backgroundColor:'rgba(175,171,171,.04)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#AFABAB',borderDash:[6,3],fill:false,tension:0.4,yAxisID:'yLine',order:2,
-          datalabels:{display:'auto',align:'top',offset:4,color:'#AFABAB',font:{size:9,weight:'700'},formatter:dlFmt}}
+          datalabels:dlSpec('top',18)}
       ]},
       options:{responsive:true,maintainAspectRatio:false,animation:false,
         plugins:{legend:{display:false},datalabels:{display:false},
