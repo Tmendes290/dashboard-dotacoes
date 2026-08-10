@@ -9465,6 +9465,7 @@ function renderFpa(){
   html += '<div style="margin-bottom:16px">' + fpaCard('fpa-scurve','Curva S — FP&A (acumulado + execução mensal)', peps.length+' projeto(s)', 320, true) + '</div>';
 
   var mNames=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  html += '<style>.fpa-editcell .fpa-edit-ic{opacity:0;transition:opacity .12s}.fpa-editcell:hover .fpa-edit-ic{opacity:.45}.fpa-editcell:hover{background:#f8fafc}</style>';
   html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;padding:16px 18px">';
   html += '<div style="font-size:10.5px;color:#94a3b8;margin-bottom:10px">Cada projeto tem 4 linhas — Orçamento, Executado, Projeção (editável — Enter pra salvar) e Variação (Projeção − Orçamento). Aderência = Executado / Orçamento. Saldo = Orçamento − Executado.</div>';
 
@@ -9521,30 +9522,31 @@ function renderFpa(){
           + '<td style="padding:6px 10px;text-align:right;font-family:\'Share Tech Mono\',monospace;font-weight:'+(boldTot?'700':'400')+'">'+fpaFmtUsd(tot)+'</td>';
       }
 
+      var kpiLabelStyle = 'color:#1e293b;font-weight:700';
       html += '<tr style="background:'+bg+'">' + rowspanCell
-        + '<td style="padding:6px 10px;border-top:2px solid #e2e8f0;color:#009CDE;font-weight:700">Orçamento</td>'
+        + '<td style="padding:6px 10px;border-top:2px solid #e2e8f0;'+kpiLabelStyle+'">Orçamento</td>'
         + fmtRow(vPrev, tPrev, true) + rowspanEnd + '</tr>';
 
       html += '<tr style="background:'+bg+'">'
-        + '<td style="padding:6px 10px;color:#16a34a;font-weight:700">Executado</td>'
+        + '<td style="padding:6px 10px;'+kpiLabelStyle+'">Executado</td>'
         + fmtRow(vExec, tExec, true) + '</tr>';
 
       var fcstCells = '';
       for(var m2=1;m2<=12;m2++){
         var fcCellId = 'fpa-fc-'+p.pep.replace(/[^a-zA-Z0-9]/g,'_')+'-'+m2;
-        fcstCells += '<td id="'+fcCellId+'" style="padding:6px 5px;text-align:right;cursor:pointer;font-family:\'Share Tech Mono\',monospace" '
-          + 'onclick="fpaBeginEditForecast(\''+fcCellId+'\',\''+p.pep+'\',\''+escQ(p.titulo||'')+'\','+FPA_ANO+','+m2+','+vFcst[m2-1]+')">'
-          + fpaFmtUsd(vFcst[m2-1]) + '<span style="opacity:.35;font-size:9px;margin-left:3px">✎</span>'
+        fcstCells += '<td id="'+fcCellId+'" class="fpa-editcell" style="padding:6px 5px;text-align:right;cursor:pointer;font-family:\'Share Tech Mono\',monospace" '
+          + 'onclick="fpaBeginEditForecast(\''+fcCellId+'\',\''+p.pep+'\',\''+escQ(p.titulo||'')+'\','+FPA_ANO+','+m2+','+vFcst[m2-1]+')" title="Clique pra editar a projeção">'
+          + fpaFmtUsd(vFcst[m2-1]) + '<span class="fpa-edit-ic" style="font-size:9px;margin-left:3px">✎</span>'
           + '</td>';
       }
       html += '<tr style="background:'+bg+'">'
-        + '<td style="padding:6px 10px;color:#f97316;font-weight:700">Projeção</td>'
+        + '<td style="padding:6px 10px;'+kpiLabelStyle+'">Projeção</td>'
         + fcstCells
         + '<td style="padding:6px 10px;text-align:right;font-family:\'Share Tech Mono\',monospace;font-weight:700">'+fpaFmtUsd(tFcst)+'</td>'
         + '</tr>';
 
       html += '<tr style="background:'+bg+'">'
-        + '<td style="padding:6px 10px 10px;color:#64748b;font-weight:700">Variação</td>'
+        + '<td style="padding:6px 10px 10px;'+kpiLabelStyle+'">Variação</td>'
         + vVar.map(function(v){var c=v>0?'#dc2626':(v<0?'#16a34a':'#94a3b8');return '<td style="padding:6px 5px 10px;text-align:right;font-family:\'Share Tech Mono\',monospace;color:'+c+'">'+fpaFmtUsd(v)+'</td>';}).join('')
         + '<td style="padding:6px 10px 10px;text-align:right;font-family:\'Share Tech Mono\',monospace;font-weight:700;color:'+(tVar>0?'#dc2626':(tVar<0?'#16a34a':'#94a3b8'))+'">'+fpaFmtUsd(tVar)+'</td>'
         + '</tr>';
