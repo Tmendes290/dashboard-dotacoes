@@ -9565,7 +9565,7 @@ function renderFpa(){
       var obsTitle = obsInfo.atualizado_por ? ('Última atualização: '+obsInfo.atualizado_por+(obsInfo.atualizado_em?(' em '+new Date(obsInfo.atualizado_em).toLocaleDateString('pt-BR')):'')) : 'Clique pra adicionar uma observação';
       var rowspanEnd = '<td rowspan="4" style="padding:7px 10px;text-align:right;font-weight:700;border-top:2px solid #e2e8f0;color:'+aderColor+'">'+aderPct.toFixed(1)+'%</td>'
         + '<td rowspan="4" style="padding:7px 10px;text-align:right;font-weight:700;border-top:2px solid #e2e8f0;color:'+saldoColor+'">'+fpaFmtUsd(saldo)+'</td>'
-        + '<td rowspan="4" id="'+obsCellId+'" style="padding:7px 10px;color:#475569;border-top:2px solid #e2e8f0;cursor:pointer;max-width:240px;white-space:pre-wrap" onclick="fpaBeginEditObs(\''+obsCellId+'\',\''+p.pep+'\')" title="'+escQ(obsTitle)+'">'
+        + '<td rowspan="4" id="'+obsCellId+'" style="padding:7px 10px;color:#475569;border-top:2px solid #e2e8f0;cursor:pointer;max-width:240px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word" onclick="fpaBeginEditObs(\''+obsCellId+'\',\''+p.pep+'\')" title="'+escQ(obsTitle)+'">'
           + (obsInfo.texto ? escHtml(obsInfo.texto) : '<span style="color:#cbd5e1;font-style:italic">— clique pra adicionar</span>')
           + '<span style="opacity:.35;font-size:9px;margin-left:4px">✎</span>'
         + '</td>';
