@@ -9470,6 +9470,12 @@ function renderFpa(){
   var peps = fpaFilteredPeps(allCat);
   var mPrev = fpaMonthly(peps,'previsto'), mExec = fpaMonthly(peps,'executado'), mFcst = fpaMonthly(peps,'forecast');
   var cPrev = fpaCumulative(mPrev), cExec = fpaCumulative(mExec), cFcst = fpaCumulative(mFcst);
+  // Executado (acum.) só é real até o último mês com lançamento — depois disso não sabemos
+  // quanto foi gasto, então a linha para em vez de "empatar" reto até dezembro (o Forecast
+  // tracejado é quem carrega a estimativa dali pra frente).
+  var lastExecIdx = -1;
+  mExec.forEach(function(v,i){ if(v!==0) lastExecIdx = i; });
+  for(var _ei=lastExecIdx+1; _ei<cExec.length; _ei++) cExec[_ei] = null;
   var totPrev = mPrev.reduce(function(a,b){return a+b;},0);
   var totExec = mExec.reduce(function(a,b){return a+b;},0);
   var totFcst = mFcst.reduce(function(a,b){return a+b;},0);
@@ -9647,7 +9653,7 @@ function renderFpa(){
         {type:'bar',label:'Forecast (mês)',data:mFcst,backgroundColor:'rgba(175,171,171,.30)',borderRadius:3,barPercentage:0.8,categoryPercentage:0.7,yAxisID:'yBar',order:3},
         {type:'line',label:'Orçamento Acum.',data:cPrev,borderColor:'#007E79',backgroundColor:'rgba(0,126,121,.07)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#007E79',fill:true,tension:0.4,yAxisID:'yLine',order:1,
           datalabels:dlSpec('top',4)},
-        {type:'line',label:'Executado Acum.',data:cExec,borderColor:'#3CB5E5',backgroundColor:'rgba(60,181,229,.06)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#3CB5E5',fill:false,tension:0.4,yAxisID:'yLine',order:1,
+        {type:'line',label:'Executado Acum.',data:cExec,borderColor:'#3CB5E5',backgroundColor:'rgba(60,181,229,.06)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#3CB5E5',fill:false,tension:0.4,yAxisID:'yLine',order:1,spanGaps:false,
           datalabels:dlSpec('bottom',6)},
         {type:'line',label:'Forecast Acum.',data:cFcst,borderColor:'#AFABAB',backgroundColor:'rgba(175,171,171,.04)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#AFABAB',borderDash:[6,3],fill:false,tension:0.4,yAxisID:'yLine',order:2,
           datalabels:dlSpec('top',18)}
