@@ -10636,6 +10636,11 @@ async function impLoadFromSupabase(){
       if(page.data.length<PAGE) break;
       from+=PAGE;
     }
+    // Descarta linhas com data futura (ex.: erro de digitação na planilha, tipo 31/08 em vez
+    // de 03/08) — sem isso elas viram uma coluna/semana fantasma nos gráficos e no painel de
+    // Aderência dos Fiscais, mesmo sem nenhum dado real ainda existir pra aquele período.
+    var hojeKey=(function(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+    data=data.filter(function(r){return !r.data_sort_key||r.data_sort_key<=hojeKey;});
     if(!data.length){ _IMP_LOAD_ERR='Tabela vazia (0 linhas)'; return; }
     IMP_DATA=data.map(function(r){return{supaId:r.id,dataStr:r.data_str,dataSortKey:r.data_sort_key,empresa:r.empresa||'',sap:r.sap||'',produto:r.produto||'',descricao:r.descricao||'',projeto:r.projeto||'',fiscal:r.fiscal||'',chegadaMin:r.chegada_min,ptsMin:r.pts_min,inicioMin:r.inicio_min,almIniMin:r.alm_ini_min,almFimMin:r.alm_fim_min,terminoMin:r.termino_min,justificativa:r.justificativa||'',acao:r.acao||'',problemaId:r.problema_id||'',descProblema:r.desc_problema||''};});
     var datas=IMP_DATA.map(function(d){return d.dataSortKey;}).filter(Boolean).sort();
