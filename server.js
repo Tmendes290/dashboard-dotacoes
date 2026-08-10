@@ -712,12 +712,13 @@ app.get('/api/version', (req, res) => {
 // ── RELATÓRIO DIÁRIO DE PRODUTIVIDADE (chamado pelo sync-supabase.gs às 05h) ──
 // Faz o cálculo pesado (aderência, evolução, composição do improdutivo) aqui em Node — o
 // Apps Script só busca este HTML pronto e dispara o e-mail via GmailApp.
-async function supaFetchAllPages(table, select) {
+async function supaFetchAllPages(table, select, extraQuery) {
   const rows = [];
   const PAGE = 1000;
   let from = 0;
   while (true) {
-    const r = await fetch(`${SUPA_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}`, {
+    const url = `${SUPA_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}${extraQuery ? '&' + extraQuery : ''}`;
+    const r = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
         'apikey': SUPA_SERVICE_KEY,
@@ -739,8 +740,17 @@ app.get('/api/relatorio-diario', async (req, res) => {
   if (req.query.token !== RELATORIO_TOKEN) return res.status(401).json({ error: 'Token inválido.' });
 
   try {
+    // Janela de 120 dias (folga sobre as 12 semanas do gráfico "acumulado") — limita o raio de
+    // dano de qualquer linha com data suja/futura na planilha de origem.
+    const hoje = new Date();
+    const desde = new Date(hoje.getTime() - 120 * 86400000);
+    const desdeKey = desde.toISOString().slice(0, 10);
     const [rows, refSquads, refFiscais] = await Promise.all([
-      supaFetchAllPages('improdutividade', 'data_sort_key,empresa,sap,fiscal,chegada_min,pts_min,inicio_min,alm_ini_min,alm_fim_min,termino_min,acao'),
+      supaFetchAllPages(
+        'improdutividade',
+        'data_sort_key,empresa,sap,fiscal,chegada_min,pts_min,inicio_min,alm_ini_min,alm_fim_min,termino_min,acao',
+        `data_sort_key=gte.${desdeKey}`
+      ),
       supaFetchAllPages('ref_squads', 'pep,squad'),
       supaFetchAllPages('ref_fiscais', 'nome,squad')
     ]);

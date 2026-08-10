@@ -54,8 +54,11 @@ function parseDate(val) {
   var y = d.getFullYear(), mo = d.getMonth() + 1, day = d.getDate();
   if (y < 2000 || y > 2100) return { dataSortKey: '', dataStr: '—' }; // data inválida
   var pad = function(n) { return String(n).padStart(2, '0'); };
+  var dataSortKey = y + '-' + pad(mo) + '-' + pad(day);
+  var hojeKey = Utilities.formatDate(new Date(), SHEET_TZ, 'yyyy-MM-dd');
+  if (dataSortKey > hojeKey) return { dataSortKey: '', dataStr: '—' }; // data futura — provável erro de digitação na planilha
   return {
-    dataSortKey: y + '-' + pad(mo) + '-' + pad(day),
+    dataSortKey: dataSortKey,
     dataStr:     pad(day) + '/' + pad(mo) + '/' + y
   };
 }

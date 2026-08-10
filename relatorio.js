@@ -40,6 +40,9 @@ function fmtHM(min) {
 function fmtDMY(dataSortKey) { const p = dataSortKey.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
 function fmtDM(dataSortKey) { const p = dataSortKey.split('-'); return p[2] + '/' + p[1]; }
 
+// "Hoje" no fuso do site (Manaus) — usado pra descartar datas futuras (erro de digitação na planilha).
+function todayKey() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Manaus' }).format(new Date()); }
+
 // Segunda-a-domingo, ancorada em 4/jan — mesma âncora de _impWeekKey no index.html.
 function mondayOf(dateObj) {
   const dow = dateObj.getDay() || 7;
@@ -478,7 +481,8 @@ function montarRelatorioEmail(rawRows, refSquads, refFiscais, opts) {
   opts = opts || {};
   const refMin = opts.refMin != null ? opts.refMin : REF_MIN_DEFAULT;
   const fimMin = opts.fimMin != null ? opts.fimMin : FIM_MIN_DEFAULT;
-  const rows = rawRows.map(toRow).filter(function (r) { return r.dataSortKey; });
+  const hojeKey = todayKey();
+  const rows = rawRows.map(toRow).filter(function (r) { return r.dataSortKey && r.dataSortKey <= hojeKey; });
   const squadMaps = buildSquadMaps(refSquads, refFiscais);
 
   const datas = Array.from(new Set(rows.map(function (r) { return r.dataSortKey; }))).sort();
