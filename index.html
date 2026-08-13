@@ -8812,8 +8812,11 @@ function handleCji3Upload(file){
     var reader=new FileReader();
     reader.onload=async function(e){
       try{
-        // Usa aba RESUMO EXECUÇÕES (já agregada) — muito mais rápida que 85k linhas brutas
-        var wb=XLSX.read(e.target.result,{type:'array'});
+        // Usa aba RESUMO EXECUÇÕES (já agregada) — muito mais rápida que 85k linhas brutas.
+        // Restringe o parse só a essas 2 abas: o arquivo tem ~115MB com várias abas ocultas
+        // gigantes (Export bruto, BD SUBPEP, BD VENDOR, Detalhes1-5) que travavam o navegador
+        // por minutos se o SheetJS tentasse ler o workbook inteiro.
+        var wb=XLSX.read(e.target.result,{type:'array',sheets:['RESUMO EXECUÇÕES','Export rev01']});
         var ws=wb.Sheets['RESUMO EXECUÇÕES'];
         if(!ws){
           // fallback: Export rev01
