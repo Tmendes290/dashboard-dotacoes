@@ -8849,7 +8849,11 @@ function _cji3AggregateCacheRecords(fields,xml){
       if(curProj&&curWbs&&curYear&&CJI3_MO[curMonth]&&v){
         // Lançamentos sem fornecedor associado (rateios, postagens internas etc.)
         // são reais e têm valor — não pode descartar, só não tem nome de empresa.
-        var fornKey=(curVendor||'').trim()||'(Sem fornecedor)';
+        // O campo FORNECEDOR na origem às vezes traz lixo em vez do nome: código SAP puro
+        // (só dígitos) ou erro de fórmula quebrada (#REF!, #N/A etc.) — trata como sem
+        // fornecedor em vez de mostrar isso pro usuário.
+        var fornRaw=(curVendor||'').trim();
+        var fornKey=(!fornRaw||/^#/.test(fornRaw)||/^\d+$/.test(fornRaw))?'(Sem fornecedor)':fornRaw;
         var key=curProj+'|'+curWbs+'|'+fornKey;
         if(!map[key]) map[key]={proj:curProj,pname:curPName,wbs:curWbs,forn:fornKey,ger:'',site:'',wname:'',v:{}};
         var mk=curYear+'-'+curMonth;
