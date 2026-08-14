@@ -8789,12 +8789,178 @@ function _cji3ClearFilters(){
   renderCji3();
 }
 
+var CJI3_MO={JAN:1,FEV:2,MAR:3,ABR:4,MAI:5,JUN:6,JUL:7,AGO:8,SET:9,OUT:10,NOV:11,DEZ:12};
+function _cji3XmlUnescape(s){
+  return String(s).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&');
+}
+// Lê os <cacheField> de um pivotCacheDefinitionN.xml: nome de cada campo e, se ele usa
+// sharedItems (campos de baixa cardinalidade viram índice <x v="N"/> nos records), a lista
+// de valores na ordem — records referenciam essa lista por posição.
+function _cji3ParseCacheFields(xml){
+  return xml.split('<cacheField ').slice(1).map(function(chunk){
+    var nameM=chunk.match(/^name="((?:[^"]|"")*)"/);
+    var name=nameM?_cji3XmlUnescape(nameM[1]):'';
+    var sharedM=chunk.match(/<sharedItems[^>]*>([\s\S]*?)<\/sharedItems>/);
+    var items=null;
+    if(sharedM){
+      items=[];
+      var itemRe=/<(s|n|m|b|e|d)( v="((?:[^"]|"")*)")?[^>]*\/>/g, im;
+      while((im=itemRe.exec(sharedM[1]))){ items.push(im[1]==='m'?'':_cji3XmlUnescape(im[3]||'')); }
+    }
+    return {name:name,items:items};
+  });
+}
+// Tokeniza um pivotCacheRecords*.xml inteiro num único regex global (bem mais rápido que
+// casar cada <r>...</r> individualmente) e agrega direto em {proj,wbs,fornecedor,mês}->valor,
+// igual ao que a tabela "RESUMO EXECUÇÕES" fazia — só que sem depender da pivot table do Excel
+// estar com a saída atualizada/visível.
+function _cji3AggregateCacheRecords(fields,xml){
+  var N=fields.length;
+  var idx=function(n){return fields.findIndex(function(f){return f.name===n;});};
+  var iYear=idx('Fiscal Year'),iMonth=idx('Month'),iProj=idx('Project'),iPName=idx('Project Name'),
+      iWbs=idx('WBS Element'),iVal=idx('Value In Object Currency'),iVendor=idx('Vendor Name');
+  if([iYear,iMonth,iProj,iPName,iWbs,iVal,iVendor].indexOf(-1)>=0) return null;
+
+  var tokenRe=/<x v="(\d+)"\/>|<n v="([^"]*)"\/>|<s v="((?:[^"]|"")*)"\/>|<m\/>|<b v="(\d)"\/>|<d v="([^"]*)"\/>|<e v="([^"]*)"\/>/g;
+  var m,fieldPos=0,map={},months=[];
+  var curYear,curMonth,curProj,curPName,curWbs,curVal,curVendor;
+  while((m=tokenRe.exec(xml))){
+    var val;
+    if(m[1]!==undefined){ var it=fields[fieldPos].items; val=it?it[+m[1]]:''; }
+    else if(m[2]!==undefined) val=m[2];
+    else if(m[3]!==undefined) val=_cji3XmlUnescape(m[3]);
+    else if(m[4]!==undefined) val=m[4];
+    else if(m[5]!==undefined) val=m[5];
+    else if(m[6]!==undefined) val=m[6];
+    else val='';
+
+    if(fieldPos===iYear) curYear=val;
+    else if(fieldPos===iMonth) curMonth=val;
+    else if(fieldPos===iProj) curProj=val;
+    else if(fieldPos===iPName) curPName=val;
+    else if(fieldPos===iWbs) curWbs=val;
+    else if(fieldPos===iVal) curVal=val;
+    else if(fieldPos===iVendor) curVendor=val;
+
+    fieldPos++;
+    if(fieldPos===N){
+      fieldPos=0;
+      var v=parseFloat(curVal)||0;
+      if(curProj&&curWbs&&curYear&&CJI3_MO[curMonth]&&v){
+        // Lançamentos sem fornecedor associado (rateios, postagens internas etc.)
+        // são reais e têm valor — não pode descartar, só não tem nome de empresa.
+        var fornKey=(curVendor||'').trim()||'(Sem fornecedor)';
+        var key=curProj+'|'+curWbs+'|'+fornKey;
+        if(!map[key]) map[key]={proj:curProj,pname:curPName,wbs:curWbs,forn:fornKey,ger:'',site:'',wname:'',v:{}};
+        var mk=curYear+'-'+curMonth;
+        if(!months.includes(mk)) months.push(mk);
+        map[key].v[mk]=(map[key].v[mk]||0)+v;
+      }
+    }
+  }
+  months.sort(function(a,b){
+    var ya=a.split('-')[0],ma=a.split('-')[1],yb=b.split('-')[0],mb=b.split('-')[1];
+    return ya!==yb?parseInt(ya)-parseInt(yb):(CJI3_MO[ma]||0)-(CJI3_MO[mb]||0);
+  });
+  return {months:months,rows:Object.values(map)};
+}
+// Método preferido: lê a memória interna (cache) da tabela dinâmica direto do zip do .xlsx,
+// sem passar pelo Excel. Varre todo pivotCacheDefinition*.xml procurando o que tem os campos
+// que precisamos (não depende de qual aba/pivot table é, nem de nomes/ids que podem mudar entre
+// exportações) e resolve o pivotCacheRecords correspondente pela própria relação interna do zip.
+async function _cji3ParsePivotCache(buf){
+  if(typeof JSZip==='undefined') return null;
+  var zip=await JSZip.loadAsync(buf);
+  var REQUIRED=['Fiscal Year','Month','Project','Project Name','WBS Element','Value In Object Currency','Vendor Name'];
+  var defNames=Object.keys(zip.files).filter(function(n){return /^xl\/pivotCache\/pivotCacheDefinition\d+\.xml$/.test(n);});
+  for(var i=0;i<defNames.length;i++){
+    var defXml=await zip.file(defNames[i]).async('string');
+    var fields=_cji3ParseCacheFields(defXml);
+    var hasAll=REQUIRED.every(function(n){return fields.some(function(f){return f.name===n;});});
+    if(!hasAll) continue;
+    var relsName=defNames[i].replace(/^xl\/pivotCache\/([^/]+)$/,'xl/pivotCache/_rels/$1.rels');
+    var relsFile=zip.file(relsName);
+    if(!relsFile) continue;
+    var relsXml=await relsFile.async('string');
+    var recM=relsXml.match(/Type="[^"]*pivotCacheRecords"[^>]*Target="([^"]+)"/);
+    if(!recM) continue;
+    var recName='xl/pivotCache/'+recM[1].split('/').pop();
+    var recFile=zip.file(recName);
+    if(!recFile) continue;
+    var recXml=await recFile.async('string');
+    var agg=_cji3AggregateCacheRecords(fields,recXml);
+    if(agg&&agg.rows.length) return agg;
+  }
+  return null;
+}
+// Fallback: lê a aba "RESUMO EXECUÇÕES" já renderizada pela tabela dinâmica (rápido quando ela
+// está em dia, mas fica vazia se a pivot foi salva sem atualizar — por isso não é mais o método
+// primário, ver _cji3ParsePivotCache acima).
+function _cji3ParseResumoSheet(ws){
+  var rawRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+  var hdrIdx=-1;
+  for(var i=0;i<rawRows.length;i++){
+    if(String(rawRows[i][0]||'').trim()==='Project Name'){hdrIdx=i;break;}
+  }
+  if(hdrIdx<0){console.error('[CJI3] header "Project Name" não encontrado. Primeiras linhas col A:',rawRows.slice(0,15).map(function(r){return r[0];}));return null;}
+
+  var yearRow=rawRows[hdrIdx-1]||[];
+  var hdrRow=rawRows[hdrIdx];
+  var colToMk={},months=[];
+  for(var c=4;c<hdrRow.length;c++){
+    var mo=String(hdrRow[c]||'').trim();
+    var yr=String(yearRow[c]||'').trim();
+    if(!mo||!yr||!CJI3_MO[mo]) continue;
+    var mk=yr+'-'+mo;
+    colToMk[c]=mk;
+    if(!months.includes(mk)) months.push(mk);
+  }
+  months.sort(function(a,b){
+    var ya=a.split('-')[0],ma=a.split('-')[1],yb=b.split('-')[0],mb=b.split('-')[1];
+    return ya!==yb?parseInt(ya)-parseInt(yb):(CJI3_MO[ma]||0)-(CJI3_MO[mb]||0);
+  });
+
+  var map={};
+  var ctxProj='',ctxPName='',ctxWbs='';
+  for(var ri=hdrIdx+1;ri<rawRows.length;ri++){
+    var r=rawRows[ri];
+    var proj=String(r[1]||'').trim();
+    var pname=String(r[0]||'').trim();
+    var wbs=String(r[2]||'').trim();
+    var forn=String(r[3]||'').trim();
+    if(proj) ctxProj=proj;
+    if(pname) ctxPName=pname;
+    if(wbs) ctxWbs=wbs;
+    if(!ctxProj||!ctxWbs) continue;
+    var fornKey=forn||'(Sem fornecedor)';
+    var key=ctxProj+'|'+ctxWbs+'|'+fornKey;
+    if(!map[key]) map[key]={proj:ctxProj,pname:ctxPName,wbs:ctxWbs,forn:fornKey,ger:'',site:'',wname:'',v:{}};
+    Object.keys(colToMk).forEach(function(c){
+      var v=parseFloat(r[c])||0;
+      if(v!==0){
+        var mk=colToMk[c];
+        map[key].v[mk]=(map[key].v[mk]||0)+v;
+      }
+    });
+  }
+  var rows=Object.values(map).filter(function(r){return Object.keys(r.v).length>0;});
+  return {months:months,rows:rows};
+}
+
 function handleCji3Upload(file){
   if(!file) return;
   if(!file.name.match(/\.xlsx?$/i)){toast('Use arquivo .xlsx','red');return;}
   if(!CURRENT_USER){toast('Você precisa estar logado','red');return;}
+  if(typeof JSZip==='undefined'){
+    toast('Carregando bibliotecas...','blue');
+    var sz=document.createElement('script');
+    sz.src='https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+    sz.onload=function(){handleCji3Upload(file);};
+    document.head.appendChild(sz);
+    return;
+  }
   if(typeof XLSX==='undefined'){
-    toast('Carregando biblioteca XLSX...','blue');
+    toast('Carregando bibliotecas...','blue');
     var s=document.createElement('script');
     s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
     s.onload=function(){handleCji3Upload(file);};
@@ -8802,7 +8968,7 @@ function handleCji3Upload(file){
     return;
   }
   // Feedback imediato antes de qualquer leitura
-  toast('Carregando arquivo '+Math.round(file.size/1024/1024)+'MB — aguarde, pode levar 1 min...','blue');
+  toast('Carregando arquivo '+Math.round(file.size/1024/1024)+'MB — aguarde, pode levar alguns minutos...','blue');
   var el=document.getElementById('v-cji3');
   if(el) el.innerHTML='<div style="padding:80px;text-align:center;color:#64748b;font-size:14px">'
     +'<div style="font-size:40px;margin-bottom:16px">⏳</div>'
@@ -8813,77 +8979,20 @@ function handleCji3Upload(file){
     reader.onload=async function(e){
       try{
         console.time('[CJI3] parse');
-        // Usa aba RESUMO EXECUÇÕES (já agregada) — muito mais rápida que 85k linhas brutas.
-        // Restringe o parse só a essas 2 abas: o arquivo tem ~115MB com várias abas ocultas
-        // gigantes (Export bruto, BD SUBPEP, BD VENDOR, Detalhes1-5) que travavam o navegador
-        // por minutos se o SheetJS tentasse ler o workbook inteiro.
-        var wb=XLSX.read(e.target.result,{type:'array',sheets:['RESUMO EXECUÇÕES','Export rev01']});
-        var ws=wb.Sheets['RESUMO EXECUÇÕES'];
-        if(!ws){
-          // fallback: Export rev01
-          ws=wb.Sheets['Export rev01'];
-          if(!ws){console.error('[CJI3] abas não encontradas. Abas no arquivo:',wb.SheetNames);toast('Abas "RESUMO EXECUÇÕES" e "Export rev01" não encontradas.','red');renderCji3();return;}
-          return _cji3ParseExport(wb.Sheets['Export rev01']);
-        }
-        var rawRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+        var buf=e.target.result;
+        var parsed=null;
+        try{ parsed=await _cji3ParsePivotCache(buf); }
+        catch(pcErr){ console.warn('[CJI3] pivot cache indisponível, tentando aba "RESUMO EXECUÇÕES":',pcErr); }
 
-        // Localiza linha de header (onde tem "Project Name")
-        var hdrIdx=-1;
-        for(var i=0;i<rawRows.length;i++){
-          if(String(rawRows[i][0]||'').trim()==='Project Name'){hdrIdx=i;break;}
-        }
-        if(hdrIdx<0){console.error('[CJI3] header "Project Name" não encontrado. Primeiras linhas col A:',rawRows.slice(0,15).map(function(r){return r[0];}));toast('Formato inesperado em "RESUMO EXECUÇÕES".','red');renderCji3();return;}
-
-        var yearRow=rawRows[hdrIdx-1]||[];  // linha com anos (ex: 2025, 2025, ..., 2026)
-        var hdrRow=rawRows[hdrIdx];         // linha com nomes dos meses
-        var MO={JAN:1,FEV:2,MAR:3,ABR:4,MAI:5,JUN:6,JUL:7,AGO:8,SET:9,OUT:10,NOV:11,DEZ:12};
-
-        // Mapeia índice de coluna → chave do mês "2025-JAN"
-        var colToMk={};
-        var months=[];
-        for(var c=4;c<hdrRow.length;c++){
-          var mo=String(hdrRow[c]||'').trim();
-          var yr=String(yearRow[c]||'').trim();
-          if(!mo||!yr||!MO[mo]) continue;
-          var mk=yr+'-'+mo;
-          colToMk[c]=mk;
-          if(!months.includes(mk)) months.push(mk);
-        }
-        months.sort(function(a,b){
-          var ya=a.split('-')[0],ma=a.split('-')[1],yb=b.split('-')[0],mb=b.split('-')[1];
-          return ya!==yb?parseInt(ya)-parseInt(yb):(MO[ma]||0)-(MO[mb]||0);
-        });
-
-        var map={};
-        // Mantém contexto das linhas hierárquicas (preenchimento para baixo)
-        var ctxProj='',ctxPName='',ctxWbs='';
-        for(var ri=hdrIdx+1;ri<rawRows.length;ri++){
-          var r=rawRows[ri];
-          var proj=String(r[1]||'').trim();
-          var pname=String(r[0]||'').trim();
-          var wbs=String(r[2]||'').trim();
-          var forn=String(r[3]||'').trim();
-          // Preenchimento hierárquico (Excel pivot deixa células vazias acima)
-          if(proj) ctxProj=proj;
-          if(pname) ctxPName=pname;
-          if(wbs) ctxWbs=wbs;
-          if(!ctxProj||!ctxWbs) continue;
-          // Lançamentos sem fornecedor associado (rateios, postagens internas etc.)
-          // são reais e têm valor — não pode descartar, só não tem nome de empresa.
-          var fornKey=forn||'(Sem fornecedor)';
-          var key=ctxProj+'|'+ctxWbs+'|'+fornKey;
-          if(!map[key]) map[key]={proj:ctxProj,pname:ctxPName,wbs:ctxWbs,forn:fornKey,ger:'',site:'',wname:'',v:{}};
-          // Soma valores mensais
-          Object.keys(colToMk).forEach(function(c){
-            var v=parseFloat(r[c])||0;
-            if(v!==0){
-              var mk=colToMk[c];
-              map[key].v[mk]=(map[key].v[mk]||0)+v;
-            }
-          });
+        if(!parsed){
+          var wb=XLSX.read(buf,{type:'array',sheets:['RESUMO EXECUÇÕES']});
+          var ws=wb.Sheets['RESUMO EXECUÇÕES'];
+          if(!ws){console.error('[CJI3] nem cache de tabela dinâmica, nem aba "RESUMO EXECUÇÕES" encontrados. Abas no arquivo:',wb.SheetNames);toast('Não encontrei os dados no arquivo.','red');renderCji3();return;}
+          parsed=_cji3ParseResumoSheet(ws);
+          if(!parsed){toast('Formato inesperado em "RESUMO EXECUÇÕES". Atualize a tabela dinâmica no Excel e tente de novo.','red');renderCji3();return;}
         }
 
-        var rows=Object.values(map).filter(function(r){return Object.keys(r.v).length>0;});
+        var months=parsed.months, rows=parsed.rows;
         var payload={months,rows,atualizado_em:new Date().toISOString()};
         console.timeEnd('[CJI3] parse');
         console.log('[CJI3] parseado:',rows.length,'combinações,',months.length,'meses. Enviando pro servidor...');
