@@ -8818,7 +8818,7 @@ function _cji3AggregateCacheRecords(fields,xml){
   var N=fields.length;
   var idx=function(n){return fields.findIndex(function(f){return f.name===n;});};
   var iYear=idx('Fiscal Year'),iMonth=idx('Month'),iProj=idx('Project'),iPName=idx('Project Name'),
-      iWbs=idx('WBS Element'),iVal=idx('Value In Object Currency'),iVendor=idx('Vendor Name');
+      iWbs=idx('WBS Element'),iVal=idx('Value In Object Currency'),iVendor=idx('FORNECEDOR');
   if([iYear,iMonth,iProj,iPName,iWbs,iVal,iVendor].indexOf(-1)>=0) return null;
 
   var tokenRe=/<x v="(\d+)"\/>|<n v="([^"]*)"\/>|<s v="((?:[^"]|"")*)"\/>|<m\/>|<b v="(\d)"\/>|<d v="([^"]*)"\/>|<e v="([^"]*)"\/>/g;
@@ -8871,7 +8871,7 @@ function _cji3AggregateCacheRecords(fields,xml){
 async function _cji3ParsePivotCache(buf){
   if(typeof JSZip==='undefined') return null;
   var zip=await JSZip.loadAsync(buf);
-  var REQUIRED=['Fiscal Year','Month','Project','Project Name','WBS Element','Value In Object Currency','Vendor Name'];
+  var REQUIRED=['Fiscal Year','Month','Project','Project Name','WBS Element','Value In Object Currency','FORNECEDOR'];
   var defNames=Object.keys(zip.files).filter(function(n){return /^xl\/pivotCache\/pivotCacheDefinition\d+\.xml$/.test(n);});
   for(var i=0;i<defNames.length;i++){
     var defXml=await zip.file(defNames[i]).async('string');
