@@ -9623,6 +9623,22 @@ function renderFpa(){
   var lastExecIdx = -1;
   mExec.forEach(function(v,i){ if(v!==0) lastExecIdx = i; });
   for(var _ei=lastExecIdx+1; _ei<cExec.length; _ei++) cExec[_ei] = null;
+  // Mês atual (0-based) só faz sentido quando FPA_ANO é o ano corrente — visualizando um ano
+  // passado/futuro não há "hoje" nessa linha do tempo, então mantém o Forecast do jeito antigo.
+  var _today = new Date();
+  var fpaCurMonthIdx = (FPA_ANO === _today.getFullYear()) ? _today.getMonth() : -1;
+  if(fpaCurMonthIdx >= 0){
+    // O que já foi medido (até o mês atual) não precisa de projeção — o Forecast acumulado
+    // passa a partir do mês atual, ancorado no acumulado real do Executado até ali, e só soma
+    // dali pra frente. Meses anteriores ficam sem essa linha (já sabemos o que aconteceu).
+    var _fcAnchor = cExec[fpaCurMonthIdx]!=null ? cExec[fpaCurMonthIdx] : (lastExecIdx>=0 ? cExec[lastExecIdx] : 0);
+    var _fcRun = _fcAnchor;
+    for(var _fi=0; _fi<cFcst.length; _fi++){
+      if(_fi < fpaCurMonthIdx) cFcst[_fi] = null;
+      else if(_fi === fpaCurMonthIdx) cFcst[_fi] = _fcAnchor;
+      else { _fcRun += mFcst[_fi]; cFcst[_fi] = _fcRun; }
+    }
+  }
   var totPrev = mPrev.reduce(function(a,b){return a+b;},0);
   var totExec = mExec.reduce(function(a,b){return a+b;},0);
   var totFcst = mFcst.reduce(function(a,b){return a+b;},0);
@@ -9665,7 +9681,7 @@ function renderFpa(){
   var mNames=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   html += '<style>.fpa-editcell{position:relative}.fpa-editcell .fpa-edit-ic{position:absolute;right:2px;top:50%;transform:translateY(-50%);opacity:0;transition:opacity .12s;pointer-events:none}.fpa-editcell:hover .fpa-edit-ic{opacity:.45}.fpa-editcell:hover{background:#f8fafc}</style>';
   html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;padding:16px 18px">';
-  html += '<div style="font-size:10.5px;color:#94a3b8;margin-bottom:10px">Cada projeto tem 4 linhas — Orçamento, Executado, Projeção (editável — Enter pra salvar) e Variação (Projeção − Orçamento). Aderência = Executado / Orçamento. Saldo = Orçamento − Executado.</div>';
+  html += '<div style="font-size:10.5px;color:#94a3b8;margin-bottom:10px">Cada projeto tem 4 linhas — Orçamento, Executado, Projeção (editável — Enter pra salvar) e Variação (Executado − Orçamento). Aderência = Executado / Orçamento. Saldo = Orçamento − Executado.</div>';
 
   // Tabela paginada — cada projeto vira 4 linhas de DOM; renderizar os ~100+ projetos de uma vez
   // travava o navegador a cada clique de filtro. Curva S e KPIs continuam somando TODOS os projetos
@@ -9699,7 +9715,7 @@ function renderFpa(){
         var vp = fpaGetValor(p.pep,m,'previsto');
         var ve = fpaGetValor(p.pep,m,'executado');
         var vf = fpaGetValor(p.pep,m,'forecast');
-        var vv = vf - vp;
+        var vv = ve - vp;
         vPrev.push(vp); vExec.push(ve); vFcst.push(vf); vVar.push(vv);
         tPrev+=vp; tExec+=ve; tFcst+=vf; tVar+=vv;
       }
@@ -9805,6 +9821,31 @@ function renderFpa(){
         {type:'line',label:'Forecast Acum.',data:cFcst,borderColor:'#AFABAB',backgroundColor:'rgba(175,171,171,.04)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#AFABAB',borderDash:[6,3],fill:false,tension:0.4,yAxisID:'yLine',order:2,
           datalabels:dlSpec('top',18)}
       ]},
+      plugins:[{
+        id:'fpaTodayLine',
+        afterDraw:function(chart){
+          if(fpaCurMonthIdx<0) return;
+          var xScale=chart.scales.x;
+          if(!xScale) return;
+          var x=xScale.getPixelForValue(fpaCurMonthIdx);
+          var top=chart.chartArea.top, bottom=chart.chartArea.bottom;
+          var ctx=chart.ctx;
+          ctx.save();
+          ctx.beginPath();
+          ctx.setLineDash([5,4]);
+          ctx.lineWidth=2;
+          ctx.strokeStyle='#f97316';
+          ctx.moveTo(x,top);
+          ctx.lineTo(x,bottom);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font='700 9px Inter,sans-serif';
+          ctx.fillStyle='#f97316';
+          ctx.textAlign='center';
+          ctx.fillText('HOJE',x,bottom-6);
+          ctx.restore();
+        }
+      }],
       options:{responsive:true,maintainAspectRatio:false,animation:false,
         plugins:{legend:{display:false},datalabels:{display:false},
           tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+fpaFmtUsd(c.raw);}}}},
