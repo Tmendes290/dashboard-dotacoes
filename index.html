@@ -137,13 +137,13 @@ function toggleSidebar(forceCollapse){
   if(btn) btn.classList.toggle('open', !isOpen);
 }
 
-// No desktop, a sidebar começa sempre recolhida; clicar nela (em qualquer
-// ícone ou na barra) abre o flyout, e tirar o mouse de cima fecha de novo.
+// No desktop, a sidebar começa sempre recolhida; passar o mouse em cima
+// (em qualquer ícone ou na barra) abre o flyout, e tirar o mouse fecha de novo.
 document.addEventListener('DOMContentLoaded', function(){
   var sb = document.getElementById('sidebar');
   if(!sb) return;
   if(window.innerWidth > 768) sb.classList.add('collapsed');
-  sb.addEventListener('click', function(){
+  sb.addEventListener('mouseenter', function(){
     if(window.innerWidth > 768) sb.classList.add('flyout');
   });
   sb.addEventListener('mouseleave', function(){
