@@ -14935,24 +14935,41 @@ async function iprodHandleContratadaFile(file){
   reader.readAsArrayBuffer(file);
 }
 
-async function iprodHandlePQProjetoFile(file){
-  if(!file) return;
+async function iprodHandlePQProjetoFile(files){
+  if(!files||!files.length) return;
   if(typeof XLSX==='undefined'){ toast('Aguardando biblioteca XLSX carregar, tenta de novo em instantes','red'); return; }
-  var reader=new FileReader();
-  reader.onload=function(e){
-    try{
-      var wb=XLSX.read(e.target.result,{type:'array'});
-      // A PQ do Projeto costuma vir espalhada em várias abas (uma por ativo/equipamento) —
-      // junta e SOMA as quantidades da mesma atividade entre abas (senão a mesma escavação,
-      // por exemplo, aparece 7x repetida — uma por prédio — em vez do total do projeto)
-      var brutas=[], abasComPq=0;
-      wb.SheetNames.forEach(function(name){
-        var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
-        if(!data.length) return;
-        var p=iprodParsePQSheet(data);
-        if(p){ p.forEach(function(item){ item.aba=name; }); brutas=brutas.concat(p); abasComPq++; }
-      });
-      if(!brutas.length){ toast('Não encontrei quantidades nessa planilha — confere os cabeçalhos (Descrição/Atividade + Quantidade)','red'); return; }
+  var listaArquivos=Array.prototype.slice.call(files);
+  // Projeto com PQ separada por disciplina (Civil, Elétrica, Mecânica, Tubulação...) manda vários
+  // arquivos oficiais em vez de um só — lê todos em paralelo e junta tudo antes de agrupar, igual
+  // já fazia entre abas de UM arquivo (mesma soma por código/descrição abaixo, agora também entre
+  // arquivos diferentes).
+  function iprodLerArquivoProjeto(file){
+    return new Promise(function(resolve,reject){
+      var reader=new FileReader();
+      reader.onload=function(e){
+        try{
+          var wb=XLSX.read(e.target.result,{type:'array'});
+          var brutasArquivo=[];
+          wb.SheetNames.forEach(function(name){
+            var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
+            if(!data.length) return;
+            var p=iprodParsePQSheet(data);
+            if(p){
+              p.forEach(function(item){ item.aba=(listaArquivos.length>1?file.name+' › ':'')+name; });
+              brutasArquivo=brutasArquivo.concat(p);
+            }
+          });
+          resolve(brutasArquivo);
+        }catch(err){ reject(err); }
+      };
+      reader.onerror=function(){ reject(new Error('Falha lendo '+file.name)); };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+  try{
+      var resultadosPorArquivo=await Promise.all(listaArquivos.map(iprodLerArquivoProjeto));
+      var brutas=[].concat.apply([],resultadosPorArquivo);
+      if(!brutas.length){ toast('Não encontrei quantidades nessa(s) planilha(s) — confere os cabeçalhos (Descrição/Atividade + Quantidade)','red'); return; }
       var agrupado={};
       brutas.forEach(function(item){
         var key=item.codCliente||('desc:'+iprodNorm(item.desc));
@@ -14974,17 +14991,15 @@ async function iprodHandlePQProjetoFile(file){
         g.porAba.push({aba:item.aba,quantidade:item.quantidade});
       });
       var pq=Object.values(agrupado);
-      IPROD_PROJETO={pq:pq,nomeArquivo:file.name};
+      IPROD_PROJETO={pq:pq,nomeArquivo:listaArquivos.map(function(f){return f.name;}).join(', ')};
       IPROD_RESULT=null;
       // PQ nova = os índices de linha (idxProjeto) apontam pra atividades diferentes agora —
       // sobrescritas manuais e exclusões da PQ anterior não fazem mais sentido aqui.
       IPROD_INDICE_OVERRIDES={};
       IPROD_LINHAS_EXCLUIDAS={};
-      toast('PQ do Projeto lida: '+pq.length+' atividades somadas de '+brutas.length+' linhas (em '+abasComPq+' abas)','green');
+      toast('PQ do Projeto lida: '+pq.length+' atividades somadas de '+brutas.length+' linhas'+(listaArquivos.length>1?' (em '+listaArquivos.length+' arquivos)':''),'green');
       iprodRenderShell();
-    }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
-  };
-  reader.readAsArrayBuffer(file);
+  }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
 }
 
 function iprodSetPrat(v){
@@ -15748,9 +15763,9 @@ function iprodRenderShell(){
     +'<label class="iprod-upl-box'+(p?' filled':'')+'" style="position:relative">'
     +(p?'<span title="Remover PQ do Projeto" onclick="event.preventDefault();event.stopPropagation();iprodLimparPQProjeto()" style="position:absolute;top:8px;right:10px;cursor:pointer;color:#94a3b8;font-weight:900;font-size:14px;line-height:1">×</span>':'')
     +'<div class="iprod-upl-ico">📐</div><div class="iprod-upl-lbl">PQ do Projeto</div>'
-    +'<div class="iprod-upl-sub">Quantidade oficial prevista em projeto, por atividade (opcional)</div>'
+    +'<div class="iprod-upl-sub">Quantidade oficial prevista em projeto, por atividade (opcional) — se o projeto tiver uma PQ por disciplina (Civil, Elétrica, Mecânica...), pode selecionar todos os arquivos de uma vez, as quantidades somam</div>'
     +'<div class="iprod-upl-file">'+(p?('✓ '+p.nomeArquivo+' — '+p.pq.length+' ativ.'):'')+'</div>'
-    +'<input type="file" accept=".xlsx,.xls" style="display:none" onchange="iprodHandlePQProjetoFile(this.files[0])"></label>'
+    +'<input type="file" accept=".xlsx,.xls" multiple style="display:none" onchange="iprodHandlePQProjetoFile(this.files)"></label>'
     +(function(){
       var cat=IPROD_EMPRESA&&REF_CATALOGO_EMPRESA[IPROD_EMPRESA];
       var n=cat?Object.keys(cat).length:0;
