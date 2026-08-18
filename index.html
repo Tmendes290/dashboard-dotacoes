@@ -14866,6 +14866,46 @@ function iprodParseHistSheet(data,lenient){
   return out.length?out:null;
 }
 
+// MILPLAN: a aba "8.1 - Hist Detalhado" é um calendário diário de efetivo por função (uma coluna
+// por dia), mas já vem com uma coluna pronta "TOTAL HH NORMAL" por linha — soma do efetivo diário
+// × horas ao longo de todo o histograma, não precisa somar dia a dia. Confirmado contra dado real:
+// a soma de "TOTAL HH NORMAL" das funções bate exatamente com o HH total da PQ (42.229 = 39.249
+// mão de obra direta + 2.980 indireta). Só pega linha-FOLHA de função (ex.: "Ajudante de
+// Andaime") — os cabeçalhos de grupo em CAIXA ALTA (ex.: "EQUIPE DE ANDAIME") são subtotal dos
+// filhos, e a seção "EQUIPAMENTOS" não é mão de obra, os dois ficam de fora.
+function iprodParseHistDetalhadoMilplan(data){
+  var hdrIdx=-1, iDesc=-1, iTotalHH=-1;
+  for(var ri=0;ri<10;ri++){
+    var row=data[ri]||[];
+    var iTot=row.findIndex(function(v){return v==='TOTAL HH NORMAL';});
+    if(iTot>=0){ hdrIdx=ri; iTotalHH=iTot; iDesc=row.findIndex(function(v){return iprodNorm(v).indexOf('DESCRI')>=0;}); break; }
+  }
+  if(hdrIdx<0||iDesc<0) return null;
+  var out=[], dentroMaoDeObra=false;
+  for(var i=hdrIdx+1;i<data.length;i++){
+    var row=data[i]||[];
+    var desc=row[iDesc];
+    if(typeof desc!=='string') continue;
+    desc=desc.trim();
+    if(!desc) continue;
+    var descN=iprodNorm(desc);
+    var ehCabecalho=(desc===desc.toUpperCase());
+    if(ehCabecalho){
+      // "MÃO DE OBRA DIRETA"/"MÃO DE OBRA INDIRETA" abrem um bloco de funções reais; "EQUIPAMENTOS"
+      // fecha (não é mão de obra); qualquer outro cabeçalho maiúsculo (EQUIPE DE X, CIVIL,
+      // MOTORISTAS/OPERADORES...) é só um subtotal do bloco atual — não muda o estado.
+      if(descN.indexOf('MAO DE OBRA')>=0) dentroMaoDeObra=true;
+      else if(descN==='EQUIPAMENTOS'||descN==='MATERIAIS'||descN==='MATERIAL') dentroMaoDeObra=false;
+      continue;
+    }
+    if(!dentroMaoDeObra) continue;
+    var hh=Number(row[iTotalHH]);
+    if(!isFinite(hh)) hh=0;
+    out.push({funcao:desc,hh:hh});
+  }
+  return out.length?out:null;
+}
+
 async function iprodHandleContratadaFile(file){
   if(!file) return;
   if(typeof XLSX==='undefined'){ toast('Aguardando biblioteca XLSX carregar, tenta de novo em instantes','red'); return; }
@@ -14884,10 +14924,9 @@ async function iprodHandleContratadaFile(file){
         // QUANT. dá falso-positivo certeiro (ex.: aba "11.1", mobilização de pessoal, também bate
         // esse padrão e vem ANTES da aba certa na ordem do workbook). Vai direto na aba "12.0 PQ"
         // (PQ compacta, já vem com HH UNIT/HH TOTAL por atividade — não precisa ratear pelo
-        // histograma). Sem detecção de histograma por função nessa aba nesse momento: a análise
-        // sai igual à da APIA nos totais (HH Cobrado/Referência/Diferença/R$), só sem quebra por
-        // função na seção 4 (mesmo modo "PQ com HH próprio, sem histograma" já usado quando a PQ
-        // de outras contratadas também não separa isso).
+        // histograma). Além disso lê a aba "8.1 - Hist Detalhado" pra pegar o histograma por
+        // função de verdade (ver iprodParseHistDetalhadoMilplan) — com isso a seção 4
+        // "Comparativo por função" passa a funcionar igual à da APIA.
         var nomeAbaPQ=wb.SheetNames.find(function(n){
           var nn=iprodNorm(n);
           return nn==='12.0 PQ'||(nn.indexOf('PQ')>=0&&nn.indexOf('12')>=0&&nn.length<=12);
@@ -14899,6 +14938,14 @@ async function iprodHandleContratadaFile(file){
         var dataMilplan=XLSX.utils.sheet_to_json(wb.Sheets[nomeAbaPQ],{header:1,defval:''});
         pq=iprodParsePQSheet(dataMilplan);
         if(!pq){ toast('Achei a aba "'+nomeAbaPQ+'" mas não consegui ler as colunas dela (esperava Descrição/Quantidade) — confere se o formato dessa aba mudou.','red'); return; }
+        var nomeAbaHist=wb.SheetNames.find(function(n){
+          var nn=iprodNorm(n);
+          return nn.indexOf('8.1')>=0&&(nn.indexOf('HIST')>=0||nn.indexOf('DETALH')>=0);
+        });
+        if(nomeAbaHist){
+          var dataHistMilplan=XLSX.utils.sheet_to_json(wb.Sheets[nomeAbaHist],{header:1,defval:''});
+          hist=iprodParseHistDetalhadoMilplan(dataHistMilplan);
+        }
       } else {
         wb.SheetNames.forEach(function(name){
           var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
@@ -15768,7 +15815,7 @@ function iprodRenderShell(){
     +'<div class="iprod-upload-grid">'
     +'<label class="iprod-upl-box'+(c?' filled':'')+'">'
     +'<div class="iprod-upl-ico">📄</div><div class="iprod-upl-lbl">Arquivo da Contratada</div>'
-    +'<div class="iprod-upl-sub">'+(IPROD_EMPRESA==='MILPLAN'?'Plano de Trabalho da MILPLAN (.xlsm) — lê direto a aba "12.0 PQ" (já vem com HH por atividade, não precisa de Histograma separado)':'1 planilha com aba de PQ (atividade/código/quantidade) e aba de Histograma (função/HH) — lidas automaticamente (opcional se você só quer o HH esperado do projeto)')+'</div>'
+    +'<div class="iprod-upl-sub">'+(IPROD_EMPRESA==='MILPLAN'?'Plano de Trabalho da MILPLAN (.xlsm) — lê a aba "12.0 PQ" (HH por atividade) e a "8.1 - Hist Detalhado" (HH por função)':'1 planilha com aba de PQ (atividade/código/quantidade) e aba de Histograma (função/HH) — lidas automaticamente (opcional se você só quer o HH esperado do projeto)')+'</div>'
     +'<div class="iprod-upl-file">'+(c?('✓ '+c.nomeArquivo+' — '+c.pq.length+' ativ. / '+c.histograma.length+' funções'):'')+'</div>'
     +'<input type="file" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="iprodHandleContratadaFile(this.files[0])"></label>'
     +'<label class="iprod-upl-box'+(p?' filled':'')+'" style="position:relative">'
