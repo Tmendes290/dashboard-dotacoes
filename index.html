@@ -15459,6 +15459,18 @@ async function iprodProcessar(){
 function iprodSetNomeProjeto(v){ IPROD_NOME_PROJETO=v; }
 function iprodSetEmpresa(v){ IPROD_EMPRESA=v; }
 function iprodSetSquad(v){ IPROD_SQUAD=v; }
+// Lista de squads pro dropdown, deduplicada ignorando maiúsc./minúsc. e espaços — o cadastro em
+// ref_squads tem o mesmo squad digitado com casing diferente em PEPs distintos (ex.: "BR I, II,
+// III E FILTRAGEM" vs "BR I, II, III e Filtragem"), e sem essa normalização os dois apareciam
+// como opções separadas no select.
+function iprodGetSquadOptions(){
+  var vistos={};
+  Object.values(REF_SQUADS).forEach(function(r){
+    var sq=(r.squad||'').trim().replace(/\s+/g,' ').toUpperCase();
+    if(sq) vistos[sq]=true;
+  });
+  return Object.keys(vistos).sort();
+}
 function iprodSetHistFiltroSquad(v){ IPROD_HIST_FILTRO_SQUAD=v; iprodRenderShell(); }
 
 // Reseta o arquivo da contratada e o resultado pra rodar uma PQ diferente — mantém a
@@ -15656,7 +15668,7 @@ function iprodRenderShell(){
     +'<option value="Outra"'+(IPROD_EMPRESA&&IPROD_EMPRESAS.indexOf(IPROD_EMPRESA)<0?' selected':'')+'>Outra...</option>'
     +'</select></div>'
     +(function(){
-      var iprodSquads=[...new Set(Object.values(REF_SQUADS).map(function(r){return r.squad;}).filter(Boolean))].sort();
+      var iprodSquads=iprodGetSquadOptions();
       return '<div><div class="iprod-prat-lbl">Squad</div><select class="iprod-text-input" onchange="iprodSetSquad(this.value)">'
         +'<option value=""'+(!IPROD_SQUAD?' selected':'')+'>Selecione...</option>'
         +iprodSquads.map(function(sq){return '<option value="'+sq+'"'+(IPROD_SQUAD===sq?' selected':'')+'>'+sq+'</option>';}).join('')
@@ -15667,7 +15679,7 @@ function iprodRenderShell(){
       ?'<div><div class="iprod-prat-lbl">Qual empresa?</div><input class="iprod-text-input" placeholder="Nome da empresa" value="'+(IPROD_EMPRESAS.indexOf(IPROD_EMPRESA)<0?(IPROD_EMPRESA||''):'')+'" onchange="iprodSetEmpresa(this.value)"></div>'
       :'')
     +(function(){
-      var iprodSquads=[...new Set(Object.values(REF_SQUADS).map(function(r){return r.squad;}).filter(Boolean))].sort();
+      var iprodSquads=iprodGetSquadOptions();
       return (IPROD_SQUAD==='Outra'||(IPROD_SQUAD&&iprodSquads.indexOf(IPROD_SQUAD)<0))
         ?'<div><div class="iprod-prat-lbl">Qual squad?</div><input class="iprod-text-input" placeholder="Nome do squad" value="'+(iprodSquads.indexOf(IPROD_SQUAD)<0?(IPROD_SQUAD||''):'')+'" onchange="iprodSetSquad(this.value)"></div>'
         :'';
