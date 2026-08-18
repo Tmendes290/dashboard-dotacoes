@@ -15799,12 +15799,39 @@ function iprodRenderShell(){
         +'</div>';
     } else {
     var temRS=IPROD_MOSTRAR_RS&&r.taxaRSporHH!=null;
+    // Cards do topo: quando tem PQ do Projeto (seção 3 populada), viram SUBTOTAL do recorte ativo
+    // nos filtros de status/"só cobradas" da seção 3 — em vez de um total fixo (função/histograma)
+    // que mistura HH da contratada sem nenhuma atividade oficial correspondente no projeto. Assim
+    // dá pra clicar em "Divergente", por exemplo, e ver exatamente quanto da Diferença (HH) vem
+    // de atividades realmente divergentes, em vez de só um número agregado sem contexto.
+    var temQtdComp=r.qtdComp.length>0;
+    var nCobradas3=0, qtdCompBase3=[], qtdCompCont={todos:0,bate:0,divergente:0,'medida-diferente':0,'faltando-empresa':0,'sem-contratada':0}, qtdCompFiltrado=[];
+    var kpiCobrado=r.totCobrado, kpiRef=r.totRefAjust, kpiDif=r.totDif, kpiImprod=r.pctImprod;
+    if(temQtdComp){
+      nCobradas3=r.qtdComp.filter(function(q){return q.hhEmpresa!=null&&q.hhEmpresa>0.001;}).length;
+      qtdCompBase3=IPROD_QTDCOMP_FILTRO==='cobradas'?r.qtdComp.filter(function(q){return q.hhEmpresa!=null&&q.hhEmpresa>0.001;}):r.qtdComp;
+      qtdCompCont.todos=qtdCompBase3.length;
+      qtdCompBase3.forEach(function(q){ qtdCompCont[q.status]=(qtdCompCont[q.status]||0)+1; });
+      if(!qtdCompCont[IPROD_FILTRO_STATUS]&&IPROD_FILTRO_STATUS!=='todos') IPROD_FILTRO_STATUS='todos';
+      qtdCompFiltrado=IPROD_FILTRO_STATUS==='todos'?qtdCompBase3:qtdCompBase3.filter(function(q){return q.status===IPROD_FILTRO_STATUS;});
+      kpiCobrado=qtdCompFiltrado.reduce(function(s,q){return s+(q.hhEmpresa||0);},0);
+      kpiRef=qtdCompFiltrado.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
+      kpiDif=kpiCobrado-kpiRef;
+      kpiImprod=kpiCobrado>0?(kpiDif/kpiCobrado):0;
+    }
+    var recorteLbl=(IPROD_QTDCOMP_FILTRO==='cobradas'?'Só cobradas':'Todas')+(IPROD_FILTRO_STATUS!=='todos'?' + '+({'bate':'Bate','divergente':'Divergente','medida-diferente':'Medida diferente','faltando-empresa':'Faltando'}[IPROD_FILTRO_STATUS]||IPROD_FILTRO_STATUS):'');
+    if(temQtdComp){
+      html+='<div class="iprod-panel-note" style="margin:-4px 0 10px">🔎 Cards abaixo = subtotal do recorte ativo na seção 3 ("'+recorteLbl+'") — muda junto com os filtros lá embaixo.</div>';
+    }
     html+='<div class="iprod-kpis">'
-      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(r.totCobrado)+'</div><div class="iprod-kpi-lbl">HH Cobrado</div><div class="iprod-kpi-sub">'+(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma')+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
-      +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(r.totRefAjust)+'</div><div class="iprod-kpi-lbl">HH Referência + Praticabilidade</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
-      +'<div class="iprod-kpi" style="border-top-color:'+(r.totDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(r.totDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(r.totDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div>'+(temRS?'<div class="iprod-kpi-money" style="color:'+(r.totDif>0?'#dc2626':'#16a34a')+'">≈ '+iprodFmtRS(r.valorDif)+'</div>':'')+'</div>'
-      +'<div class="iprod-kpi" style="border-top-color:'+(r.pctImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(r.pctImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(r.pctImprod*100)+'%</div><div class="iprod-kpi-lbl">% Horas Improdutivas</div><div class="iprod-kpi-sub">Diferença ÷ HH Cobrado</div></div>'
+      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Cobrado</div><div class="iprod-kpi-sub">'+(temQtdComp?'Soma do HH da Empresa nas atividades do recorte atual':(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
+      +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(kpiRef)+'</div><div class="iprod-kpi-lbl">HH Referência + Praticabilidade</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
+      +'<div class="iprod-kpi" style="border-top-color:'+(kpiDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(kpiDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div>'+(temRS?'<div class="iprod-kpi-money" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">≈ '+iprodFmtRS(r.valorDif)+'</div>':'')+'</div>'
+      +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiImprod*100)+'%</div><div class="iprod-kpi-lbl">% Horas Improdutivas</div><div class="iprod-kpi-sub">Diferença ÷ HH Cobrado</div></div>'
       +'</div>';
+    if(temQtdComp){
+      html+='<div class="iprod-panel-note" style="margin:-8px 0 16px">Pra referência: o total REAL cobrado pela contratada (toda a PQ dela, incluindo o que não bate com nenhuma atividade oficial do projeto) é <b>'+iprodFmt(r.totCobrado)+' HH</b>. A diferença entre esse número e o "HH Cobrado" do card acima (com o filtro "Todas") mostra quanto ficou de fora da reconciliação atividade-a-atividade.</div>';
+    }
     if(temRS){
       html+='<div class="iprod-insight" style="margin-bottom:16px;border-left-color:'+(r.valorDif>0?'#dc2626':'#16a34a')+';background:'+(r.valorDif>0?'#fef2f2':'#f0fdf4')+';color:'+(r.valorDif>0?'#7f1d1d':'#14532d')+'">'
         +(r.valorDif>0?'💰 <b>Economia potencial estimada: '+iprodFmtRS(r.valorDif)+'</b> — é o quanto da Diferença (HH) acima representa em R$, se a contratada cobrasse só o HH Esperado.':'✅ <b>Sem sobrecobrança estimada em R$</b> — o HH cobrado ficou dentro (ou abaixo) do HH Esperado.')
@@ -15818,12 +15845,6 @@ function iprodRenderShell(){
       +'<button class="iprod-btn" style="margin-top:0" onclick="iprodSalvarHistorico()">💾 Salvar no histórico</button></div>';
 
     if(r.qtdComp.length){
-      var nCobradas3=r.qtdComp.filter(function(q){return q.hhEmpresa!=null&&q.hhEmpresa>0.001;}).length;
-      var qtdCompBase3=IPROD_QTDCOMP_FILTRO==='cobradas'?r.qtdComp.filter(function(q){return q.hhEmpresa!=null&&q.hhEmpresa>0.001;}):r.qtdComp;
-      var qtdCompCont={todos:qtdCompBase3.length,bate:0,divergente:0,'medida-diferente':0,'faltando-empresa':0,'sem-contratada':0};
-      qtdCompBase3.forEach(function(q){ qtdCompCont[q.status]=(qtdCompCont[q.status]||0)+1; });
-      if(!qtdCompCont[IPROD_FILTRO_STATUS]&&IPROD_FILTRO_STATUS!=='todos') IPROD_FILTRO_STATUS='todos';
-      var qtdCompFiltrado=IPROD_FILTRO_STATUS==='todos'?qtdCompBase3:qtdCompBase3.filter(function(q){return q.status===IPROD_FILTRO_STATUS;});
       html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto'+(r.temContratada?' × PQ da Contratada — quantidade e índice':' — HH esperado pelo índice')+'</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto'+(r.temContratada?' (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela.':'.')+' <b>HH Esperado</b> = quantidade do projeto × índice, já com a praticabilidade embutida.'+(r.temContratada?' <b>HH da Empresa</b> = alocação proporcional do HH total cobrado no histograma, distribuído pelo peso (%) do valor (R$) de cada atividade dentro da PQ da contratada — mesmo método usado manualmente na planilha de referência.':'')+' Clique pra ver a composição do índice e corrigir o Cód. Cliente, se precisar.</div>'
         +(r.temContratada?'<div style="display:flex;gap:8px;margin:0 0 12px">'
           +[['todos','Todas ('+r.qtdComp.length+')'],['cobradas','Só cobradas ('+nCobradas3+')']].map(function(f){
