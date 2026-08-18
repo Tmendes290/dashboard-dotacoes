@@ -14007,6 +14007,11 @@ function _rev2InjectStyle(){
 var IPROD_INDICE=null, IPROD_INDICE_LOADING=null, IPROD_FALLBACK=null;
 var IPROD_CONTRATADA=null, IPROD_PROJETO=null, IPROD_RESULT=null;
 var IPROD_PRAT=0.6667, IPROD_TAB='comp';
+// Desligado a pedido do usuário (18/08) até melhorar a precisão da taxa R$/HH (ver dúvida sobre
+// indireto/BDI embutido no valor da PQ) — o cálculo (taxaRSporHH/valorCobrado/valorReferencia/
+// valorDif em IPROD_RESULT) continua rodando normalmente, só a exibição na tela fica escondida.
+// Pra reativar: troca pra true.
+var IPROD_MOSTRAR_RS=false;
 var IPROD_NOME_PROJETO='', IPROD_EMPRESA='', IPROD_SQUAD='';
 var IPROD_HISTORICO=null, IPROD_HISTORICO_LOADING=false, IPROD_CARREGADO_DE_HIST=null;
 var IPROD_HIST_FILTRO_SQUAD='';
@@ -15793,7 +15798,7 @@ function iprodRenderShell(){
         +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(r.totHhEsperadoProjeto)+'</div><div class="iprod-kpi-lbl">HH Esperado Total (Projeto)</div><div class="iprod-kpi-sub">Soma do HH Esperado de cada atividade (seção 3), PQ × Índice já ajustado pela praticabilidade de '+Math.round(IPROD_PRAT*100)+'%</div></div>'
         +'</div>';
     } else {
-    var temRS=r.taxaRSporHH!=null;
+    var temRS=IPROD_MOSTRAR_RS&&r.taxaRSporHH!=null;
     html+='<div class="iprod-kpis">'
       +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(r.totCobrado)+'</div><div class="iprod-kpi-lbl">HH Cobrado</div><div class="iprod-kpi-sub">'+(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma')+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(r.totRefAjust)+'</div><div class="iprod-kpi-lbl">HH Referência + Praticabilidade</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
