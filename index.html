@@ -14883,11 +14883,13 @@ async function iprodHandleContratadaFile(file){
           var nn=iprodNorm(n);
           return nn==='12.0 PQ'||(nn.indexOf('PQ')>=0&&nn.indexOf('12')>=0&&nn.length<=12);
         });
-        if(nomeAbaPQ){
-          var dataMilplan=XLSX.utils.sheet_to_json(wb.Sheets[nomeAbaPQ],{header:1,defval:''});
-          pq=iprodParsePQSheet(dataMilplan);
+        if(!nomeAbaPQ){
+          toast('Não achei uma aba parecida com "12.0 PQ" nesse arquivo — abas encontradas: '+wb.SheetNames.join(', ')+'. Isso parece o arquivo CPU (detalhe por função) — o que precisa aqui é o Plano de Trabalho completo (.xlsm), a mesma pasta que tem a aba "12.0 PQ".','red');
+          return;
         }
-        if(!pq){ toast('Não encontrei a aba "12.0 PQ" nesse arquivo da MILPLAN — confere se é o Plano de Trabalho (.xlsm) certo','red'); return; }
+        var dataMilplan=XLSX.utils.sheet_to_json(wb.Sheets[nomeAbaPQ],{header:1,defval:''});
+        pq=iprodParsePQSheet(dataMilplan);
+        if(!pq){ toast('Achei a aba "'+nomeAbaPQ+'" mas não consegui ler as colunas dela (esperava Descrição/Quantidade) — confere se o formato dessa aba mudou.','red'); return; }
       } else {
         wb.SheetNames.forEach(function(name){
           var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
