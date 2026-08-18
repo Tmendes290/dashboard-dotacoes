@@ -6,6 +6,7 @@ create table if not exists public.iprod_historico (
   id bigint generated always as identity primary key,
   projeto text not null,
   empresa text not null,
+  squad text,
   praticabilidade numeric not null default 0,
   arquivo_contratada text,
   arquivo_projeto text,
@@ -13,8 +14,14 @@ create table if not exists public.iprod_historico (
   criado_em timestamptz not null default now()
 );
 
+-- Rode isso se a tabela já existia antes do campo squad (não quebra o que já existia):
+alter table public.iprod_historico add column if not exists squad text;
+
 create index if not exists idx_iprod_historico_projeto_empresa
   on public.iprod_historico (projeto, empresa);
+
+create index if not exists idx_iprod_historico_squad
+  on public.iprod_historico (squad);
 
 alter table public.iprod_historico enable row level security;
 

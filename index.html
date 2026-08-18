@@ -14007,8 +14007,9 @@ function _rev2InjectStyle(){
 var IPROD_INDICE=null, IPROD_INDICE_LOADING=null, IPROD_FALLBACK=null;
 var IPROD_CONTRATADA=null, IPROD_PROJETO=null, IPROD_RESULT=null;
 var IPROD_PRAT=0.6667, IPROD_TAB='comp';
-var IPROD_NOME_PROJETO='', IPROD_EMPRESA='';
+var IPROD_NOME_PROJETO='', IPROD_EMPRESA='', IPROD_SQUAD='';
 var IPROD_HISTORICO=null, IPROD_HISTORICO_LOADING=false, IPROD_CARREGADO_DE_HIST=null;
+var IPROD_HIST_FILTRO_SQUAD='';
 var IPROD_EMPRESAS=['APIA','LUK','ÔMEGA','TOP ANDAIMES','MILPLAN'];
 var IPROD_FILTRO_STATUS='todos';
 // Filtro de exibição da seção 4 (Comparativo por função) — só esconde linha da tela, não tira do
@@ -15457,6 +15458,8 @@ async function iprodProcessar(){
 
 function iprodSetNomeProjeto(v){ IPROD_NOME_PROJETO=v; }
 function iprodSetEmpresa(v){ IPROD_EMPRESA=v; }
+function iprodSetSquad(v){ IPROD_SQUAD=v; }
+function iprodSetHistFiltroSquad(v){ IPROD_HIST_FILTRO_SQUAD=v; iprodRenderShell(); }
 
 // Reseta o arquivo da contratada e o resultado pra rodar uma PQ diferente — mantém a
 // PQ do Projeto carregada (é a referência do projeto, normalmente reaproveitada entre contratadas)
@@ -15465,6 +15468,7 @@ function iprodNovaAnalise(){
   IPROD_RESULT=null;
   IPROD_NOME_PROJETO='';
   IPROD_EMPRESA='';
+  IPROD_SQUAD='';
   IPROD_CARREGADO_DE_HIST=null;
   iprodRenderShell();
   toast('Pronto pra uma nova análise — a PQ do Projeto continua carregada','green');
@@ -15481,6 +15485,7 @@ function iprodLimparPQProjeto(){
 async function iprodSalvarHistorico(){
   if(!IPROD_RESULT){ toast('Processe o comparativo antes de salvar','red'); return; }
   if(!IPROD_NOME_PROJETO.trim()){ toast('Preencha o nome do projeto antes de salvar','red'); return; }
+  if(!IPROD_SQUAD.trim()){ toast('Selecione o squad antes de salvar','red'); return; }
   // Sem contratada não tem "empresa" de verdade — só exige o campo quando é um comparativo real.
   if(IPROD_RESULT.temContratada && !IPROD_EMPRESA){ toast('Selecione a empresa/contratada antes de salvar','red'); return; }
   if(!supa){ toast('Sem conexão com o banco','red'); return; }
@@ -15488,6 +15493,7 @@ async function iprodSalvarHistorico(){
   var {error}=await supa.from('iprod_historico').insert([{
     projeto:IPROD_NOME_PROJETO.trim(),
     empresa:IPROD_EMPRESA||'(sem contratada)',
+    squad:IPROD_SQUAD.trim(),
     praticabilidade:IPROD_PRAT,
     arquivo_contratada:IPROD_CONTRATADA?IPROD_CONTRATADA.nomeArquivo:null,
     arquivo_projeto:IPROD_PROJETO?IPROD_PROJETO.nomeArquivo:null,
@@ -15501,7 +15507,7 @@ async function iprodSalvarHistorico(){
 async function iprodCarregarHistoricoLista(){
   if(!supa) return;
   IPROD_HISTORICO_LOADING=true; iprodRenderShell();
-  var {data,error}=await supa.from('iprod_historico').select('id,projeto,empresa,praticabilidade,arquivo_contratada,arquivo_projeto,resultado,criado_em').order('criado_em',{ascending:false});
+  var {data,error}=await supa.from('iprod_historico').select('id,projeto,empresa,squad,praticabilidade,arquivo_contratada,arquivo_projeto,resultado,criado_em').order('criado_em',{ascending:false});
   IPROD_HISTORICO_LOADING=false;
   if(error){ toast('Erro ao carregar histórico: '+error.message,'red'); IPROD_HISTORICO=[]; iprodRenderShell(); return; }
   IPROD_HISTORICO=data||[];
@@ -15514,6 +15520,7 @@ function iprodVerHistorico(id){
   IPROD_RESULT=reg.resultado;
   IPROD_NOME_PROJETO=reg.projeto;
   IPROD_EMPRESA=reg.empresa;
+  IPROD_SQUAD=reg.squad||'';
   IPROD_PRAT=Number(reg.praticabilidade)||IPROD_PRAT;
   IPROD_CARREGADO_DE_HIST=reg.criado_em;
   IPROD_TAB='comp';
@@ -15648,9 +15655,23 @@ function iprodRenderShell(){
     +IPROD_EMPRESAS.map(function(emp){return '<option value="'+emp+'"'+(IPROD_EMPRESA===emp?' selected':'')+'>'+emp+'</option>';}).join('')
     +'<option value="Outra"'+(IPROD_EMPRESA&&IPROD_EMPRESAS.indexOf(IPROD_EMPRESA)<0?' selected':'')+'>Outra...</option>'
     +'</select></div>'
+    +(function(){
+      var iprodSquads=[...new Set(Object.values(REF_SQUADS).map(function(r){return r.squad;}).filter(Boolean))].sort();
+      return '<div><div class="iprod-prat-lbl">Squad</div><select class="iprod-text-input" onchange="iprodSetSquad(this.value)">'
+        +'<option value=""'+(!IPROD_SQUAD?' selected':'')+'>Selecione...</option>'
+        +iprodSquads.map(function(sq){return '<option value="'+sq+'"'+(IPROD_SQUAD===sq?' selected':'')+'>'+sq+'</option>';}).join('')
+        +'<option value="Outra"'+(IPROD_SQUAD&&iprodSquads.indexOf(IPROD_SQUAD)<0?' selected':'')+'>Outra...</option>'
+        +'</select></div>';
+    })()
     +(IPROD_EMPRESA==='Outra'||(IPROD_EMPRESA&&IPROD_EMPRESAS.indexOf(IPROD_EMPRESA)<0)
-      ?'<div><div class="iprod-prat-lbl">Qual?</div><input class="iprod-text-input" placeholder="Nome da empresa" value="'+(IPROD_EMPRESAS.indexOf(IPROD_EMPRESA)<0?(IPROD_EMPRESA||''):'')+'" onchange="iprodSetEmpresa(this.value)"></div>'
+      ?'<div><div class="iprod-prat-lbl">Qual empresa?</div><input class="iprod-text-input" placeholder="Nome da empresa" value="'+(IPROD_EMPRESAS.indexOf(IPROD_EMPRESA)<0?(IPROD_EMPRESA||''):'')+'" onchange="iprodSetEmpresa(this.value)"></div>'
       :'')
+    +(function(){
+      var iprodSquads=[...new Set(Object.values(REF_SQUADS).map(function(r){return r.squad;}).filter(Boolean))].sort();
+      return (IPROD_SQUAD==='Outra'||(IPROD_SQUAD&&iprodSquads.indexOf(IPROD_SQUAD)<0))
+        ?'<div><div class="iprod-prat-lbl">Qual squad?</div><input class="iprod-text-input" placeholder="Nome do squad" value="'+(iprodSquads.indexOf(IPROD_SQUAD)<0?(IPROD_SQUAD||''):'')+'" onchange="iprodSetSquad(this.value)"></div>'
+        :'';
+    })()
     +'</div></div>';
 
   if(IPROD_CARREGADO_DE_HIST){
@@ -15925,10 +15946,19 @@ function iprodRenderShell(){
   } else if(!IPROD_HISTORICO || !IPROD_HISTORICO.length){
     html+='<div style="font-size:11.5px;color:var(--muted)">Nenhum comparativo salvo ainda.</div>';
   } else {
-    html+='<table class="iprod-tbl"><thead><tr><th>Projeto</th><th>Empresa</th><th>Data</th><th>HH Cobrado</th><th>Diferença</th><th>% Improd.</th><th></th></tr></thead><tbody>';
-    IPROD_HISTORICO.forEach(function(h){
+    var histSquads=[...new Set(IPROD_HISTORICO.map(function(h){return h.squad;}).filter(Boolean))].sort();
+    if(IPROD_HIST_FILTRO_SQUAD && histSquads.indexOf(IPROD_HIST_FILTRO_SQUAD)<0) IPROD_HIST_FILTRO_SQUAD='';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
+      +'<div class="iprod-prat-lbl" style="margin:0">Filtrar por Squad</div>'
+      +'<select class="iprod-text-input" style="max-width:260px" onchange="iprodSetHistFiltroSquad(this.value)">'
+      +'<option value=""'+(!IPROD_HIST_FILTRO_SQUAD?' selected':'')+'>Todos os squads</option>'
+      +histSquads.map(function(sq){return '<option value="'+sq+'"'+(IPROD_HIST_FILTRO_SQUAD===sq?' selected':'')+'>'+sq+'</option>';}).join('')
+      +'</select></div>';
+    var histFiltrado=IPROD_HIST_FILTRO_SQUAD?IPROD_HISTORICO.filter(function(h){return h.squad===IPROD_HIST_FILTRO_SQUAD;}):IPROD_HISTORICO;
+    html+='<table class="iprod-tbl"><thead><tr><th>Projeto</th><th>Squad</th><th>Empresa</th><th>Data</th><th>HH Cobrado</th><th>Diferença</th><th>% Improd.</th><th></th></tr></thead><tbody>';
+    histFiltrado.forEach(function(h){
       var res=h.resultado||{};
-      html+='<tr><td>'+h.projeto+'</td><td>'+h.empresa+'</td><td>'+new Date(h.criado_em).toLocaleDateString('pt-BR')+'</td>'
+      html+='<tr><td>'+h.projeto+'</td><td>'+(h.squad||'—')+'</td><td>'+h.empresa+'</td><td>'+new Date(h.criado_em).toLocaleDateString('pt-BR')+'</td>'
         +'<td>'+iprodFmt(res.totCobrado)+'</td><td>'+iprodFmt(res.totDif)+'</td><td>'+Math.round((res.pctImprod||0)*100)+'%</td>'
         +'<td><div class="iprod-hist-actions"><button class="iprod-hist-link" onclick="iprodVerHistorico('+h.id+')">Ver</button><button class="iprod-hist-del" onclick="iprodExcluirHistorico('+h.id+')">Excluir</button></div></td></tr>';
     });
