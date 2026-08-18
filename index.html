@@ -14133,6 +14133,10 @@ function iprodFmt(n){
   n=Number(n)||0;
   return n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
+function iprodFmtRS(n){
+  n=Number(n)||0;
+  return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:0,maximumFractionDigits:0});
+}
 
 // Palavras administrativas/gramaticais que não ajudam a diferenciar uma atividade de outra
 // (evita que "Fornecimento de materiais para X" deixe de bater com "X" na base de índices)
@@ -15013,18 +15017,26 @@ async function iprodProcessar(){
   // à parte), usa esse HH declarado direto — o rateio proporcional por R$ só faz sentido quando
   // não existe essa informação e precisa ser estimada a partir do histograma.
   var pqTemHHDeclarado=achouPorItem.some(function(x){return x.item.hhDeclarado!=null;});
+  // Soma o valor (R$) de fornecimento de TODOS os itens que bateram com índice — independe do
+  // ramo abaixo (rateio ou HH declarado), serve tanto pro rateio quanto pra estimar a taxa R$/HH
+  // usada na tradução financeira da Diferença (HH) mais abaixo (ver taxaRSporHH).
+  var somaValorFornecimento=achouPorItem.reduce(function(s,x){return s+(x.item.valorTotal||0);},0);
   if(pqTemHHDeclarado){
     achouPorItem.forEach(function(x){
       x.item.hhAlocado=x.item.hhDeclarado||0;
       x.item.pctValor=null;
     });
   } else {
-    var somaValorFornecimento=achouPorItem.reduce(function(s,x){return s+(x.item.valorTotal||0);},0);
     achouPorItem.forEach(function(x){
       x.item.pctValor=somaValorFornecimento>0?(x.item.valorTotal/somaValorFornecimento):0;
       x.item.hhAlocado=x.item.pctValor*totCobradoHistograma;
     });
   }
+  // Taxa média R$/HH implícita na própria PQ da contratada (valor de fornecimento ÷ HH alocado
+  // dos itens que têm as duas informações) — usada só pra TRADUZIR a Diferença (HH) já calculada
+  // em R$, não pra recalcular HH. Null quando a PQ não tem coluna de valor (R$) nenhuma.
+  var totHHComValor=achouPorItem.reduce(function(s,x){return s+(x.item.valorTotal>0?(x.item.hhAlocado||0):0);},0);
+  var taxaRSporHH=(somaValorFornecimento>0&&totHHComValor>0)?(somaValorFornecimento/totHHComValor):null;
 
   // Consolida a PQ da contratada por "mesmo código OU mesma descrição" — a mesma atividade real
   // aparece espalhada em várias linhas cruas por dois motivos que não se resolvem com uma chave
@@ -15451,7 +15463,14 @@ async function iprodProcessar(){
     return {nome:m,tipo:o.tipo,unidade:o.unidade,qtdNec:o.qtdNec,atividades:o.atividades};
   }).filter(function(m){return m.qtdNec;}).sort(function(a,b){return b.qtdNec-a.qtdNec;});
 
-  IPROD_RESULT={linhas:linhas,linhasExcluidas:linhasExcluidas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto,totCobradoHistograma:totCobradoHistograma};
+  // Tradução em R$ dos totais de HH acima, usando a taxa média R$/HH da própria PQ da contratada
+  // (taxaRSporHH, calculada no PASSO 1) — null quando a PQ não trouxe nenhum valor (R$) por item,
+  // caso em que a UI simplesmente não mostra a linha de R$ (sem inventar número).
+  var valorCobrado=taxaRSporHH!=null?totCobrado*taxaRSporHH:null;
+  var valorReferencia=taxaRSporHH!=null?totRefAjust*taxaRSporHH:null;
+  var valorDif=taxaRSporHH!=null?totDif*taxaRSporHH:null;
+
+  IPROD_RESULT={linhas:linhas,linhasExcluidas:linhasExcluidas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto,totCobradoHistograma:totCobradoHistograma,taxaRSporHH:taxaRSporHH,valorCobrado:valorCobrado,valorReferencia:valorReferencia,valorDif:valorDif};
   toast(temContratada?'Comparativo calculado':'HH esperado calculado pelo índice do projeto (sem contratada)','green');
   iprodRenderShell();
 }
@@ -15586,6 +15605,7 @@ function iprodRenderShell(){
     +'.iprod-kpi-val{font-size:25px;font-weight:900;line-height:1.05}'
     +'.iprod-kpi-lbl{font-size:11px;color:var(--muted);margin-top:6px;font-weight:700}'
     +'.iprod-kpi-sub{font-size:9.5px;color:var(--muted);margin-top:2px}'
+    +'.iprod-kpi-money{font-size:13px;font-weight:800;margin-top:6px}'
     +'.iprod-tbl{width:100%;border-collapse:collapse;font-size:11.5px}'
     +'.iprod-tbl th{background:#1e3a5f;color:#fff;font-size:9.5px;font-weight:700;padding:9px 11px;text-align:left;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}'
     +'.iprod-tbl td{padding:8px 11px;border-bottom:1px solid var(--bord);color:var(--text)}'
@@ -15728,12 +15748,19 @@ function iprodRenderShell(){
         +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(r.totHhEsperadoProjeto)+'</div><div class="iprod-kpi-lbl">HH Esperado Total (Projeto)</div><div class="iprod-kpi-sub">Soma do HH Esperado de cada atividade (seção 3), PQ × Índice já ajustado pela praticabilidade de '+Math.round(IPROD_PRAT*100)+'%</div></div>'
         +'</div>';
     } else {
+    var temRS=r.taxaRSporHH!=null;
     html+='<div class="iprod-kpis">'
-      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(r.totCobrado)+'</div><div class="iprod-kpi-lbl">HH Cobrado</div><div class="iprod-kpi-sub">'+(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma')+'</div></div>'
-      +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(r.totRefAjust)+'</div><div class="iprod-kpi-lbl">HH Referência + Praticabilidade</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div></div>'
-      +'<div class="iprod-kpi" style="border-top-color:'+(r.totDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(r.totDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(r.totDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div></div>'
+      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(r.totCobrado)+'</div><div class="iprod-kpi-lbl">HH Cobrado</div><div class="iprod-kpi-sub">'+(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma')+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
+      +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(r.totRefAjust)+'</div><div class="iprod-kpi-lbl">HH Referência + Praticabilidade</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
+      +'<div class="iprod-kpi" style="border-top-color:'+(r.totDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(r.totDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(r.totDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div>'+(temRS?'<div class="iprod-kpi-money" style="color:'+(r.totDif>0?'#dc2626':'#16a34a')+'">≈ '+iprodFmtRS(r.valorDif)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(r.pctImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(r.pctImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(r.pctImprod*100)+'%</div><div class="iprod-kpi-lbl">% Horas Improdutivas</div><div class="iprod-kpi-sub">Diferença ÷ HH Cobrado</div></div>'
       +'</div>';
+    if(temRS){
+      html+='<div class="iprod-insight" style="margin-bottom:16px;border-left-color:'+(r.valorDif>0?'#dc2626':'#16a34a')+';background:'+(r.valorDif>0?'#fef2f2':'#f0fdf4')+';color:'+(r.valorDif>0?'#7f1d1d':'#14532d')+'">'
+        +(r.valorDif>0?'💰 <b>Economia potencial estimada: '+iprodFmtRS(r.valorDif)+'</b> — é o quanto da Diferença (HH) acima representa em R$, se a contratada cobrasse só o HH Esperado.':'✅ <b>Sem sobrecobrança estimada em R$</b> — o HH cobrado ficou dentro (ou abaixo) do HH Esperado.')
+        +' Taxa usada: '+iprodFmtRS(r.taxaRSporHH)+'/HH, calculada a partir do próprio valor (R$) de fornecimento declarado na PQ da contratada — é uma <b>estimativa</b> (mistura o que estiver no preço unitário dela, não separa mão de obra de material/equipamento), não um valor contratual.'
+        +'</div>';
+    }
     }
 
     html+='<div style="display:flex;justify-content:space-between;align-items:center;margin:-8px 0 16px">'
