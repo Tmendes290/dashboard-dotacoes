@@ -14864,6 +14864,10 @@ function iprodParseHistSheet(data,lenient){
 async function iprodHandleContratadaFile(file){
   if(!file) return;
   if(typeof XLSX==='undefined'){ toast('Aguardando biblioteca XLSX carregar, tenta de novo em instantes','red'); return; }
+  // A leitura do arquivo depende de qual empresa tá selecionada (a MILPLAN usa um leitor
+  // totalmente diferente, ver mais abaixo) — sem isso o upload cai no leitor genérico errado e dá
+  // um erro confuso de "não achei PQ nem histograma" sem dizer o motivo real.
+  if(!IPROD_EMPRESA){ toast('Seleciona a Empresa/Contratada (passo 1, acima) antes de subir o Arquivo da Contratada','red'); return; }
   var reader=new FileReader();
   reader.onload=async function(e){
     try{
