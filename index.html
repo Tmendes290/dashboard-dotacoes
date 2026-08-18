@@ -14655,6 +14655,9 @@ function iprodParsePQSheet(data){
   var iDesc=hdrC.findIndex(function(h){return h.indexOf('DESCRI')>=0;});
   if(iDesc<0) iDesc=hdrC.findIndex(function(h){return h.indexOf('ATIVIDADE')>=0&&h.indexOf('COD')<0;});
   var iQtd=hdrC.findIndex(function(h){return h.indexOf('QUANTIDADE')>=0;});
+  // "QUANT." (sem o resto da palavra, ex.: planilhas da MILPLAN) também conta — só cai pro
+  // fallback "QTD" quando nem isso existir.
+  if(iQtd<0) iQtd=hdrC.findIndex(function(h){return h.indexOf('QUANT')>=0;});
   if(iQtd<0) iQtd=hdrC.findIndex(function(h){return h.indexOf('QTD')>=0;});
   // Código de cliente: prioriza "CLIENTE" ou "VALE" no nome da coluna; evita a coluna de código
   // hierárquico do cronograma (ex.: "CÓD. ATIVIDADE" do MS Project, que não é o código de composição)
@@ -14866,23 +14869,44 @@ async function iprodHandleContratadaFile(file){
     try{
       var wb=XLSX.read(e.target.result,{type:'array'});
       var pq=null, hist=null;
-      wb.SheetNames.forEach(function(name){
-        var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
-        if(!data.length) return;
-        if(!hist){ var h=iprodParseHistSheet(data); if(h){ hist=h; return; } }
-        if(!pq){ var p=iprodParsePQSheet(data); if(p){ pq=p; } }
-      });
-      // Não achou histograma no formato padrão (função × dias) — tenta o formato mais simples
-      // (só função + total, sem quebra por dia), mas só em abas que NÃO são a própria PQ (evita
-      // repetir o falso-positivo de uma coluna "TOTAL" de custo dentro da aba de PQ).
-      if(!hist){
-        wb.SheetNames.forEach(function(name){
-          if(hist) return;
-          var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
-          if(!data.length||iprodParsePQSheet(data)) return;
-          var h=iprodParseHistSheet(data,true);
-          if(h) hist=h;
+      if(IPROD_EMPRESA==='MILPLAN'){
+        // A MILPLAN manda um workbook "Plano de Trabalho" com ~18 abas (orçamento, cronograma
+        // financeiro, histograma diário, mobilização...) — varrer todas em busca de DESCRIÇÃO+
+        // QUANT. dá falso-positivo certeiro (ex.: aba "11.1", mobilização de pessoal, também bate
+        // esse padrão e vem ANTES da aba certa na ordem do workbook). Vai direto na aba "12.0 PQ"
+        // (PQ compacta, já vem com HH UNIT/HH TOTAL por atividade — não precisa ratear pelo
+        // histograma). Sem detecção de histograma por função nessa aba nesse momento: a análise
+        // sai igual à da APIA nos totais (HH Cobrado/Referência/Diferença/R$), só sem quebra por
+        // função na seção 4 (mesmo modo "PQ com HH próprio, sem histograma" já usado quando a PQ
+        // de outras contratadas também não separa isso).
+        var nomeAbaPQ=wb.SheetNames.find(function(n){
+          var nn=iprodNorm(n);
+          return nn==='12.0 PQ'||(nn.indexOf('PQ')>=0&&nn.indexOf('12')>=0&&nn.length<=12);
         });
+        if(nomeAbaPQ){
+          var dataMilplan=XLSX.utils.sheet_to_json(wb.Sheets[nomeAbaPQ],{header:1,defval:''});
+          pq=iprodParsePQSheet(dataMilplan);
+        }
+        if(!pq){ toast('Não encontrei a aba "12.0 PQ" nesse arquivo da MILPLAN — confere se é o Plano de Trabalho (.xlsm) certo','red'); return; }
+      } else {
+        wb.SheetNames.forEach(function(name){
+          var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
+          if(!data.length) return;
+          if(!hist){ var h=iprodParseHistSheet(data); if(h){ hist=h; return; } }
+          if(!pq){ var p=iprodParsePQSheet(data); if(p){ pq=p; } }
+        });
+        // Não achou histograma no formato padrão (função × dias) — tenta o formato mais simples
+        // (só função + total, sem quebra por dia), mas só em abas que NÃO são a própria PQ (evita
+        // repetir o falso-positivo de uma coluna "TOTAL" de custo dentro da aba de PQ).
+        if(!hist){
+          wb.SheetNames.forEach(function(name){
+            if(hist) return;
+            var data=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
+            if(!data.length||iprodParsePQSheet(data)) return;
+            var h=iprodParseHistSheet(data,true);
+            if(h) hist=h;
+          });
+        }
       }
       if(!pq && !hist){ toast('Não encontrei aba de PQ nem de Histograma nesse arquivo — confere os cabeçalhos','red'); return; }
       // Se o código da linha bate com o catálogo-mestre dessa empresa (ver REF_CATALOGO_EMPRESA),
@@ -15718,9 +15742,9 @@ function iprodRenderShell(){
     +'<div class="iprod-upload-grid">'
     +'<label class="iprod-upl-box'+(c?' filled':'')+'">'
     +'<div class="iprod-upl-ico">📄</div><div class="iprod-upl-lbl">Arquivo da Contratada</div>'
-    +'<div class="iprod-upl-sub">1 planilha com aba de PQ (atividade/código/quantidade) e aba de Histograma (função/HH) — lidas automaticamente (opcional se você só quer o HH esperado do projeto)</div>'
+    +'<div class="iprod-upl-sub">'+(IPROD_EMPRESA==='MILPLAN'?'Plano de Trabalho da MILPLAN (.xlsm) — lê direto a aba "12.0 PQ" (já vem com HH por atividade, não precisa de Histograma separado)':'1 planilha com aba de PQ (atividade/código/quantidade) e aba de Histograma (função/HH) — lidas automaticamente (opcional se você só quer o HH esperado do projeto)')+'</div>'
     +'<div class="iprod-upl-file">'+(c?('✓ '+c.nomeArquivo+' — '+c.pq.length+' ativ. / '+c.histograma.length+' funções'):'')+'</div>'
-    +'<input type="file" accept=".xlsx,.xls" style="display:none" onchange="iprodHandleContratadaFile(this.files[0])"></label>'
+    +'<input type="file" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="iprodHandleContratadaFile(this.files[0])"></label>'
     +'<label class="iprod-upl-box'+(p?' filled':'')+'" style="position:relative">'
     +(p?'<span title="Remover PQ do Projeto" onclick="event.preventDefault();event.stopPropagation();iprodLimparPQProjeto()" style="position:absolute;top:8px;right:10px;cursor:pointer;color:#94a3b8;font-weight:900;font-size:14px;line-height:1">×</span>':'')
     +'<div class="iprod-upl-ico">📐</div><div class="iprod-upl-lbl">PQ do Projeto</div>'
