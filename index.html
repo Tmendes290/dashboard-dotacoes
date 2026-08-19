@@ -14487,6 +14487,19 @@ function iprodTokenScore(tokensA,setA,tokensB,unidA,unidB,qA,qB){
   }
   var catA=categoriaArmacao(tokensA), catB=categoriaArmacao(tokensB);
   if(catA&&catB) score+=(catA===catB)?0.2:-0.9;
+  // "Medidor de X" (nível/vazão/pressão/temperatura...) — instrumentos DIFERENTES, nunca
+  // intercambiáveis, mas o texto é quase idêntico ("Montagem de medidor de" repetido, só a
+  // grandeza medida no fim muda) — confirmado real: "medidor de nível" x "medidor de vazão" deu
+  // 0,83 de score bruto (bem acima do limiar de 0,35), juntando as duas atividades como se
+  // fossem uma só. A grandeza é sempre a última palavra depois de "MEDIDOR DE" — mesmo tratamento
+  // de categoriaArmacao/metodoConcreto acima.
+  function grandezaMedidor(tokens){
+    var i=tokens.indexOf('MEDIDOR');
+    if(i<0||i+1>=tokens.length) return null;
+    return tokens[tokens.length-1];
+  }
+  var medA=grandezaMedidor(tokensA), medB=grandezaMedidor(tokensB);
+  if(medA&&medB) score+=(medA===medB)?0.2:-0.9;
   return score;
 }
 // Acha o último token puramente numérico dentro das últimas 4 posições (diâmetro/seção/fck
@@ -15255,7 +15268,29 @@ async function iprodProcessar(){
     function une(i,j){ var ri=acha(i), rj=acha(j); if(ri!==rj) pai[ri]=rj; }
     var porCod={}, porDesc={};
     itens.forEach(function(it,i){
-      if(it.codCliente){ if(porCod[it.codCliente]!=null) une(i,porCod[it.codCliente]); else porCod[it.codCliente]=i; }
+      if(it.codCliente){
+        var jCod=porCod[it.codCliente];
+        if(jCod!=null){
+          // Mesmo código, descrição diferente — só une se for parecido o bastante (sinônimo/
+          // mudança de redação da MESMA atividade). Sem essa checagem, código reaproveitado por
+          // engano pra atividade DIFERENTE (confirmado real: a PQ "12.0 PQ" da MILPLAN reinicia a
+          // numeração "ITEM" por seção, e itens de seções diferentes acabam com o mesmo número —
+          // ex.: item "17" é ao mesmo tempo "Lançamento de cabo de potência...6,0mm²" E "Montagem
+          // de medidor de nível", duas atividades sem nenhuma relação) juntava as duas na força,
+          // fazendo uma delas desaparecer do comparativo (a que sobrava virava "Faltando na PQ da
+          // empresa" mesmo estando lá, porque a busca por descrição exata caía no grupo errado).
+          if(iprodNorm(itens[jCod].desc)===iprodNorm(it.desc)){
+            une(i,jCod);
+          } else {
+            var itTok=iprodTokens(it.desc), itSet={}; itTok.forEach(function(t){itSet[t]=true;});
+            var scCod=iprodTokenScore(itTok,itSet,iprodTokens(itens[jCod].desc),iprodUnitNorm(it.unidade),iprodUnitNorm(itens[jCod].unidade),iprodTemQualquer(it.desc),iprodTemQualquer(itens[jCod].desc));
+            if(scCod>=0.35) une(i,jCod);
+            // score baixo = código reaproveitado por engano — não une, cada um vira seu próprio grupo
+          }
+        } else {
+          porCod[it.codCliente]=i;
+        }
+      }
       var dkey=iprodNorm(it.desc);
       if(porDesc[dkey]!=null) une(i,porDesc[dkey]); else porDesc[dkey]=i;
     });
