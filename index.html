@@ -15487,7 +15487,17 @@ async function iprodProcessar(){
     histList.forEach(function(h,idx){
       if(usadosHist[idx]) return;
       var hn=iprodNorm(h.funcao);
-      var bate=hn.indexOf(fRefN)>=0||fRefN.indexOf(hn)>=0||sinonimos.some(function(s){return hn.indexOf(s)>=0||s.indexOf(hn)>=0;});
+      // Nome BASE = tudo antes do " - " (variantes de pagamento da mesma função, ex.: "Pedreiro -
+      // Hora Normal", "Pedreiro - 50%", "Pedreiro - Percentual de Contingência" são todas a MESMA
+      // função). Exige esse nome base bater EXATO com a função de referência (ou um sinônimo exato
+      // já cadastrado) — nada de "contém o texto": isso juntava cargos diferentes que só têm uma
+      // palavra em comum (ex.: "Ajudante de Andaime" e "Ajudante de Montagem Eletromecânica" caindo
+      // os dois em "SERVENTE" só por conter "AJUDANTE", ou "Montador Andaime" + "Mecânico Montador"
+      // caindo em "MONTADOR" só por conter "MONTADOR" — cargos de verdade diferentes, bug real
+      // confirmado com dado da MILPLAN). Função que não bater exato fica honesta como "Sem
+      // referência" em vez de ser chutada por semelhança de texto.
+      var hnBase=hn.indexOf(' - ')>=0?hn.split(' - ')[0].trim():hn;
+      var bate=hnBase===fRefN||sinonimos.indexOf(hnBase)>=0;
       if(!bate) return;
       usadosHist[idx]=true;
       hhCobrado+=h.hh;
