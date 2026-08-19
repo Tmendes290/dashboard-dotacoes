@@ -15953,7 +15953,13 @@ function iprodRenderShell(){
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiImprod*100)+'%</div><div class="iprod-kpi-lbl">% Horas Improdutivas</div><div class="iprod-kpi-sub">Diferença ÷ HH Cobrado</div></div>'
       +'</div>';
     if(temQtdComp){
-      html+='<div class="iprod-panel-note" style="margin:-8px 0 16px">Pra referência: o total REAL cobrado pela contratada (toda a PQ dela, incluindo o que não bate com nenhuma atividade oficial do projeto) é <b>'+iprodFmt(r.totCobrado)+' HH</b>. A diferença entre esse número e o "HH Cobrado" do card acima (com o filtro "Todas") mostra quanto ficou de fora da reconciliação atividade-a-atividade.</div>';
+      var gapSemProjeto=r.totCobrado-kpiCobrado;
+      html+='<div class="iprod-insight" style="margin-bottom:16px;border-left-color:'+(gapSemProjeto>0.5?'#d97706':'#16a34a')+';background:'+(gapSemProjeto>0.5?'#fffbeb':'#f0fdf4')+';color:'+(gapSemProjeto>0.5?'#78350f':'#14532d')+'">'
+        +'⚠️ O card "HH Cobrado" acima ('+iprodFmt(kpiCobrado)+' no recorte "'+recorteLbl+'") é só a parte que <b>reconciliou</b> com uma atividade oficial do projeto. A contratada cobrou, no total (toda a PQ dela), <b>'+iprodFmt(r.totCobrado)+' HH</b>'
+        +(gapSemProjeto>0.5?' — ou seja, <b>'+iprodFmt(gapSemProjeto)+' HH ('+Math.round(gapSemProjeto/r.totCobrado*100)+'% do total)</b> não bateram com nenhuma atividade do projeto e por isso não entram nesse card. '
+          +'<a href="#" onclick="event.preventDefault();var el=document.getElementById(\'iprod-sem-projeto\');if(el)el.scrollIntoView({behavior:\'smooth\',block:\'start\'});" style="font-weight:800;color:inherit;text-decoration:underline">Ver o que ficou de fora ↓</a>'
+          :' — bate certinho com o card, nada ficou de fora.')
+        +'</div>';
     }
     if(temRS){
       html+='<div class="iprod-insight" style="margin-bottom:16px;border-left-color:'+(r.valorDif>0?'#dc2626':'#16a34a')+';background:'+(r.valorDif>0?'#fef2f2':'#f0fdf4')+';color:'+(r.valorDif>0?'#7f1d1d':'#14532d')+'">'
@@ -16045,7 +16051,7 @@ function iprodRenderShell(){
       }
 
       if(r.contratadaSemProjeto && r.contratadaSemProjeto.length){
-        html+='<div class="iprod-panel"><div class="iprod-panel-title">⚠️ Itens da PQ da contratada sem atividade correspondente no projeto</div><div class="iprod-panel-note">A contratada cobrou por isso, mas não achei atividade equivalente na PQ do Projeto — por isso não aparece na tabela acima. O HH alocado deles soma aqui pra fechar 100% do HH cobrado no histograma. Clique numa linha pra ver como o HH Alocado foi calculado.</div>'
+        html+='<div class="iprod-panel" id="iprod-sem-projeto"><div class="iprod-panel-title">⚠️ Itens da PQ da contratada sem atividade correspondente no projeto</div><div class="iprod-panel-note">A contratada cobrou por isso, mas não achei atividade equivalente na PQ do Projeto — por isso não aparece na tabela acima. O HH alocado deles soma aqui pra fechar 100% do HH cobrado no histograma. Clique numa linha pra ver como o HH Alocado foi calculado.</div>'
           +'<table class="iprod-tbl"><thead><tr><th>Descrição</th><th>Unid.</th><th>Quantidade</th><th>HH Alocado</th></tr></thead><tbody>';
         r.contratadaSemProjeto.forEach(function(c){
           var pctValorC=r.totCobradoHistograma>0?(c.hhAlocado/r.totCobradoHistograma):0;
