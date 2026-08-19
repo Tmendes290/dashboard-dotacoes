@@ -14132,6 +14132,12 @@ function iprodRestaurarFuncao(funcaoNorm){
 // depois de precisar excluir várias funções "Sem referência" (indiretas) numa análise da MILPLAN.
 var IPROD_ATIV_SELECIONADAS={}; // chave: idxProjeto
 var IPROD_FUNC_SELECIONADAS={}; // chave: funcaoNorm, valor: funcaoLabel (label original, pra reusar em IPROD_FUNCOES_EXCLUIDAS)
+// Painéis de "excluída(s) dessa análise" (atividades/funções) começam RECOLHIDOS — a lista de
+// item por item com botão "Restaurar" não tem por que ficar sempre visível na tela nem, mais
+// importante, aparecer numa impressão/PDF do comparativo (display:none não imprime).
+var IPROD_MOSTRAR_EXCLUIDAS_ATIV=false, IPROD_MOSTRAR_EXCLUIDAS_FUNC=false;
+function iprodToggleExcluidasAtiv(){ IPROD_MOSTRAR_EXCLUIDAS_ATIV=!IPROD_MOSTRAR_EXCLUIDAS_ATIV; iprodRenderShell(); }
+function iprodToggleExcluidasFunc(){ IPROD_MOSTRAR_EXCLUIDAS_FUNC=!IPROD_MOSTRAR_EXCLUIDAS_FUNC; iprodRenderShell(); }
 
 function iprodToggleAtivSelecionada(idxProjeto){
   if(IPROD_ATIV_SELECIONADAS[idxProjeto]) delete IPROD_ATIV_SELECIONADAS[idxProjeto];
@@ -16139,7 +16145,11 @@ function iprodRenderShell(){
       var idxExcluidos=Object.keys(IPROD_LINHAS_EXCLUIDAS).filter(function(i){return IPROD_LINHAS_EXCLUIDAS[i]&&IPROD_PROJETO.pq[i];});
       if(idxExcluidos.length){
         html+='<div class="iprod-insight" style="border-left-color:#dc2626;background:#fef2f2;color:#7f1d1d;margin-top:-8px;margin-bottom:16px">'
-          +'<div style="font-weight:800;margin-bottom:6px">🗑️ '+idxExcluidos.length+' atividade(s) excluída(s) dessa análise (fora de todos os totais):</div>'
+          +'<div style="font-weight:800;cursor:pointer;display:flex;align-items:center;gap:6px" onclick="iprodToggleExcluidasAtiv()">'
+          +'<span style="font-size:9px">'+(IPROD_MOSTRAR_EXCLUIDAS_ATIV?'▾':'▸')+'</span>'
+          +'<span>🗑️ '+idxExcluidos.length+' atividade(s) excluída(s) dessa análise (fora de todos os totais) — clique pra '+(IPROD_MOSTRAR_EXCLUIDAS_ATIV?'esconder':'ver')+'</span>'
+          +'</div>'
+          +'<div style="display:'+(IPROD_MOSTRAR_EXCLUIDAS_ATIV?'block':'none')+';margin-top:6px">'
           +idxExcluidos.map(function(i){
             var it=IPROD_PROJETO.pq[i];
             return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 0;border-top:1px dashed #fecaca">'
@@ -16147,6 +16157,7 @@ function iprodRenderShell(){
               +'<button class="iprod-btn" style="margin-top:0;padding:3px 9px;font-size:10px;background:#fff;color:#7f1d1d;border:1px solid #fecaca" onclick="iprodRestaurarLinhaProjeto('+i+')">↺ Restaurar</button>'
               +'</div>';
           }).join('')
+          +'</div>'
           +'</div>';
       }
 
@@ -16244,13 +16255,18 @@ function iprodRenderShell(){
 
     if(r.linhasExcluidas && r.linhasExcluidas.length){
       html+='<div class="iprod-insight" style="border-left-color:#dc2626;background:#fef2f2;color:#7f1d1d;margin-top:-8px;margin-bottom:16px">'
-        +'<div style="font-weight:800;margin-bottom:6px">🗑️ '+r.linhasExcluidas.length+' função(ões) excluída(s) dessa análise (fora do total de HH Cobrado/Referência/Diferença):</div>'
+        +'<div style="font-weight:800;cursor:pointer;display:flex;align-items:center;gap:6px" onclick="iprodToggleExcluidasFunc()">'
+        +'<span style="font-size:9px">'+(IPROD_MOSTRAR_EXCLUIDAS_FUNC?'▾':'▸')+'</span>'
+        +'<span>🗑️ '+r.linhasExcluidas.length+' função(ões) excluída(s) dessa análise (fora do total de HH Cobrado/Referência/Diferença) — clique pra '+(IPROD_MOSTRAR_EXCLUIDAS_FUNC?'esconder':'ver')+'</span>'
+        +'</div>'
+        +'<div style="display:'+(IPROD_MOSTRAR_EXCLUIDAS_FUNC?'block':'none')+';margin-top:6px">'
         +r.linhasExcluidas.map(function(l){
           return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 0;border-top:1px dashed #fecaca">'
             +'<span>'+l.funcao+' <span style="color:#991b1b;font-weight:700">('+iprodFmt(l.hhCobrado)+' HH cobrado)</span></span>'
             +'<button class="iprod-btn" style="margin-top:0;padding:3px 9px;font-size:10px;background:#fff;color:#7f1d1d;border:1px solid #fecaca" onclick="iprodRestaurarFuncao(\''+iprodNorm(l.funcao).replace(/'/g,'')+'\')">↺ Restaurar</button>'
             +'</div>';
         }).join('')
+        +'</div>'
         +'</div>';
     }
     }
