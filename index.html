@@ -15489,7 +15489,10 @@ async function iprodProcessar(){
   var porFuncaoFinal=usaBaseProjeto?porFuncaoProjeto:porFuncao;
   // Sinônimos comuns entre o nome do insumo na base de índices e o nome usado no histograma da contratada
   var IPROD_SINONIMOS={'SERVENTE':['AJUDANTE'],'ENCARREGADO':['ENCARREGADOS DE OBRAS','ENCARREGADO DE OBRAS'],
-    'OPERADOR DE ESCAVADEIRA':['OPERADOR DE RETROESCAVADEIRA'],'MOTORISTA DE CAMINHAO':['MOTORISTA DE CAMINHAO BASCULANTE']};
+    'OPERADOR DE ESCAVADEIRA':['OPERADOR DE RETROESCAVADEIRA'],'MOTORISTA DE CAMINHAO':['MOTORISTA DE CAMINHAO BASCULANTE'],
+    // Confirmado com o usuário (19/08): "Caldeireiro / Encanador" na PQ da MILPLAN é o mesmo cargo
+    // que "CALDEIREIRO" na base da Vale, não dois cargos diferentes — sinônimo exato, não chute.
+    'CALDEIREIRO':['CALDEIREIRO / ENCANADOR']};
   Object.keys(porFuncaoFinal).forEach(function(fRef){
     var fRefN=iprodNorm(fRef);
     var sinonimos=(IPROD_SINONIMOS[fRefN]||[]).map(iprodNorm);
