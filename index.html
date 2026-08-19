@@ -14015,6 +14015,23 @@ var IPROD_MOSTRAR_RS=false;
 var IPROD_NOME_PROJETO='', IPROD_EMPRESA='', IPROD_SQUAD='';
 var IPROD_HISTORICO=null, IPROD_HISTORICO_LOADING=false, IPROD_CARREGADO_DE_HIST=null;
 var IPROD_HIST_FILTRO_SQUAD='';
+// Aba "Base de Índices" — consulta direta na planilha de índice usada nos comparativos, pra
+// tirar dúvida sem precisar abrir o Excel/Supabase por fora.
+var IPROD_BUSCA_INDICE_TERMO='', IPROD_BUSCA_INDICE_FONTE='vale';
+function iprodSetBuscaIndiceTermo(v){ IPROD_BUSCA_INDICE_TERMO=v; iprodRenderShell(); }
+function iprodSetBuscaIndiceFonte(v){ IPROD_BUSCA_INDICE_FONTE=v; iprodRenderShell(); }
+// Achata o índice agrupado por composição (ver iprodConstruirIndice) numa lista simples de linhas
+// pra exibir/buscar em tabela — cada linha já é um insumo (função ou material) de uma composição.
+function iprodGetIndiceRowsFlat(fonte){
+  var estrutura=fonte==='vale'?IPROD_INDICE:(function(){
+    var f=(IPROD_FALLBACK||[]).find(function(x){return x.nome===fonte;});
+    return f?f.indice:null;
+  })();
+  if(!estrutura||!estrutura.descIdx) return [];
+  var out=[];
+  estrutura.descIdx.forEach(function(g){ g.rows.forEach(function(r){ out.push(r); }); });
+  return out;
+}
 var IPROD_EMPRESAS=['APIA','LUK','ÔMEGA','TOP ANDAIMES','MILPLAN'];
 var IPROD_FILTRO_STATUS='todos';
 // Filtro de exibição da seção 4 (Comparativo por função) — só esconde linha da tela, não tira do
@@ -15685,6 +15702,7 @@ function iprodShowTab(id){
   IPROD_TAB=id;
   iprodRenderShell();
   if(id==='hist' && IPROD_HISTORICO===null && !IPROD_HISTORICO_LOADING) iprodCarregarHistoricoLista();
+  if(id==='baseidx' && !IPROD_INDICE) iprodLoadIndice();
 }
 
 function iprodRenderShell(){
@@ -15740,6 +15758,7 @@ function iprodRenderShell(){
     +'<div class="iprod-tab'+(IPROD_TAB==='comp'?' active':'')+'" onclick="iprodShowTab(\'comp\')">Comparativo da Contratada</div>'
     +'<div class="iprod-tab'+(IPROD_TAB==='pq'?' active':'')+'" onclick="iprodShowTab(\'pq\')">PQ do Projeto (referência)</div>'
     +'<div class="iprod-tab'+(IPROD_TAB==='hist'?' active':'')+'" onclick="iprodShowTab(\'hist\')">Histórico</div>'
+    +'<div class="iprod-tab'+(IPROD_TAB==='baseidx'?' active':'')+'" onclick="iprodShowTab(\'baseidx\')">Base de Índices</div>'
     +'</div>'
     +'<button class="iprod-hist-link" style="font-size:12px;margin-bottom:8px" onclick="iprodToggleAjuda()">'+(IPROD_SHOW_AJUDA?'✕ Fechar ajuda':'❓ Dúvidas frequentes')+'</button>'
     +'</div>';
@@ -16132,6 +16151,42 @@ function iprodRenderShell(){
     html+='</tbody></table>';
   }
   html+='</div></div>'; // /iprod-tab-hist
+
+  html+='<div id="iprod-tab-baseidx" class="iprod-tabpanel'+(IPROD_TAB==='baseidx'?' active':'')+'">';
+  html+='<div class="iprod-panel"><div class="iprod-panel-title">Base de Índices de Produtividade</div>'
+    +'<div class="iprod-panel-note">Consulta direta na mesma planilha de índice usada nos comparativos — pesquise por código, descrição da atividade, insumo (função/material) ou disciplina, pra tirar dúvida sobre qual índice foi (ou deveria ser) aplicado.</div>';
+  if(!IPROD_INDICE){
+    html+='<div style="font-size:11.5px;color:var(--muted)">Carregando base de índices...</div>';
+  } else {
+    var iprodFontesIdx=[{id:'vale',label:'Vale (oficial) — '+IPROD_INDICE.total+' linhas'}]
+      .concat((IPROD_FALLBACK||[]).map(function(f){return {id:f.nome,label:f.nome+' — '+f.indice.total+' linhas'};}));
+    html+='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">'
+      +'<input type="text" value="'+(IPROD_BUSCA_INDICE_TERMO||'').replace(/"/g,'&quot;')+'" oninput="iprodSetBuscaIndiceTermo(this.value)" placeholder="🔎 Buscar por código, descrição, insumo, disciplina..." style="flex:1;min-width:240px;font-size:11.5px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
+      +'<select class="iprod-text-input" style="width:auto" onchange="iprodSetBuscaIndiceFonte(this.value)">'
+      +iprodFontesIdx.map(function(f){return '<option value="'+f.id+'"'+(IPROD_BUSCA_INDICE_FONTE===f.id?' selected':'')+'>'+f.label+'</option>';}).join('')
+      +'</select></div>';
+    var todasLinhasIdx=iprodGetIndiceRowsFlat(IPROD_BUSCA_INDICE_FONTE);
+    var termoIdxN=iprodNorm(IPROD_BUSCA_INDICE_TERMO||'');
+    var linhasFiltradasIdx=termoIdxN?todasLinhasIdx.filter(function(r){
+      var hay=iprodNorm((r.codCliente||'')+' '+(r.composicao||'')+' '+(r.desc||'')+' '+(r.insumo||'')+' '+(r.descIns||'')+' '+(r.disciplina||''));
+      return hay.indexOf(termoIdxN)>=0;
+    }):todasLinhasIdx;
+    var CAP_IDX=300;
+    var linhasMostrarIdx=linhasFiltradasIdx.slice(0,CAP_IDX);
+    html+='<div class="iprod-panel-note" style="margin:0 0 10px">'
+      +(termoIdxN?linhasFiltradasIdx.length+' resultado(s) de '+todasLinhasIdx.length:todasLinhasIdx.length+' linhas nessa base')
+      +(linhasFiltradasIdx.length>CAP_IDX?' — mostrando os primeiros '+CAP_IDX+', refine a busca pra ver o resto':'')+'.</div>';
+    if(linhasMostrarIdx.length){
+      html+='<div style="overflow-x:auto"><table class="iprod-tbl"><thead><tr><th>Disciplina</th><th>Composição</th><th>Cód. Cliente</th><th>Descrição</th><th>Unid.</th><th>Insumo</th><th>Descrição Insumo</th><th>Unid. Insumo</th><th>Índice</th><th>Tipo</th></tr></thead><tbody>';
+      linhasMostrarIdx.forEach(function(r){
+        html+='<tr><td>'+(r.disciplina||'')+'</td><td>'+(r.composicao||'')+'</td><td>'+(r.codCliente||'')+'</td><td>'+(r.desc||'')+'</td><td>'+(r.unidade||'')+'</td><td>'+(r.insumo||'')+'</td><td>'+(r.descIns||'')+'</td><td>'+(r.unidIns||'')+'</td><td>'+iprodFmt(r.indice)+'</td><td>'+(r.tipo||'')+'</td></tr>';
+      });
+      html+='</tbody></table></div>';
+    } else {
+      html+='<div style="font-size:11.5px;color:var(--muted)">Nenhum resultado pra "'+IPROD_BUSCA_INDICE_TERMO+'".</div>';
+    }
+  }
+  html+='</div></div>'; // /iprod-tab-baseidx
 
   html+='</div>'; // /iprod-wrap
   el.innerHTML=html;
