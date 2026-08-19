@@ -14046,7 +14046,10 @@ function iprodSetBuscaIndiceFonte(v){ IPROD_BUSCA_INDICE_FONTE=v; iprodRenderShe
 function iprodConferirIndice(codigo){
   IPROD_BUSCA_INDICE_TERMO=codigo||'';
   IPROD_BUSCA_INDICE_DISC_SEL=[];
-  IPROD_BUSCA_INDICE_INSUMO_SEL=[];
+  // Já filtra só mão de obra (IH) — é o que interessa pra conferir o índice de HH usado no
+  // comparativo; sem isso a busca por código também trazia material/equipamento da mesma
+  // composição, poluindo a conferência.
+  IPROD_BUSCA_INDICE_INSUMO_SEL=['IH'];
   iprodShowTab('baseidx');
 }
 // Achata o índice agrupado por composição (ver iprodConstruirIndice) numa lista simples de linhas
