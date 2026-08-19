@@ -14040,6 +14040,15 @@ var IPROD_BUSCA_INDICE_TERMO='', IPROD_BUSCA_INDICE_FONTE='vale';
 var IPROD_BUSCA_INDICE_DISC_SEL=[], IPROD_BUSCA_INDICE_INSUMO_SEL=[];
 function iprodSetBuscaIndiceTermo(v){ IPROD_BUSCA_INDICE_TERMO=v; iprodRenderShell(); }
 function iprodSetBuscaIndiceFonte(v){ IPROD_BUSCA_INDICE_FONTE=v; iprodRenderShell(); }
+// Botão "Conferir índice" nos detalhamentos das seções 3 e 4 — pula direto pra aba "Base de
+// Índices" já filtrada pelo código da composição que foi usada naquele HH de referência, pra
+// conferir se o índice aplicado é mesmo o certo sem precisar digitar/buscar de novo na mão.
+function iprodConferirIndice(codigo){
+  IPROD_BUSCA_INDICE_TERMO=codigo||'';
+  IPROD_BUSCA_INDICE_DISC_SEL=[];
+  IPROD_BUSCA_INDICE_INSUMO_SEL=[];
+  iprodShowTab('baseidx');
+}
 // Achata o índice agrupado por composição (ver iprodConstruirIndice) numa lista simples de linhas
 // pra exibir/buscar em tabela — cada linha já é um insumo (função ou material) de uma composição.
 function iprodGetIndiceRowsFlat(fonte){
@@ -15981,7 +15990,10 @@ function iprodRenderShell(){
           +(q.status==='medida-diferente'?'<div class="iprod-insight" style="margin-bottom:8px">📏 A PQ do projeto pede <b>'+q.specDiff.projeto+'</b>, mas a contratada só cotou essa atividade com <b>'+q.specDiff.empresa+'</b> na PQ dela — mesma composição, medida diferente. Confira se essa troca foi aprovada antes de aceitar a quantidade/HH como equivalente.</div>':'')
           +(q.indiceSoSupervisao?'<div class="iprod-insight" style="margin-bottom:8px">⚠️ Essa composição da base só tem insumo de SUPERVISÃO cadastrado (Encarregado/Mestre...), sem instalador de verdade — provável lacuna na planilha-fonte. O índice reflete só o tempo do encarregado, não o serviço em si. Considere isso ao avaliar essa linha.</div>':'')
           +'<div style="font-size:11px">'+q.detalhe+'</div>'
-          +'<div style="font-size:9.5px;color:var(--muted);margin-top:6px">↳ Base de índices: <b>'+(q.matchCodBase||'—')+'</b> — '+(q.matchDesc||'?')+'</div>'
+          +'<div style="font-size:9.5px;color:var(--muted);margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+          +'<span>↳ Base de índices: <b>'+(q.matchCodBase||'—')+'</b> — '+(q.matchDesc||'?')+'</span>'
+          +(q.matchCodBase?'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndice(\''+q.matchCodBase.replace(/\'/g,'')+'\')">🔍 Conferir índice</button>':'')
+          +'</div>'
           +'<div style="display:flex;gap:6px;align-items:center;margin-top:10px" onclick="event.stopPropagation()">'
           +'<span style="font-size:9.5px;color:var(--muted);font-weight:700">Cód. Cliente (projeto):</span>'
           +'<input value="'+(q.codCliente||'')+'" placeholder="sem código" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;width:140px;text-transform:uppercase" '
@@ -16084,7 +16096,10 @@ function iprodRenderShell(){
         l.atividades.forEach(function(a){
           html+='<div class="iprod-drill-row" style="align-items:flex-start;flex-direction:column;gap:2px;padding:8px 0">'
             +'<div style="display:flex;justify-content:space-between;width:100%"><span>'+a.desc+' ('+iprodFmt(a.qtd)+' '+a.unidade+' × '+iprodFmt(a.indice)+(a.estimado?' — média':'')+')</span><span style="font-weight:700">'+iprodFmt(a.hh)+' HH'+(a.estimado?' ≈':'')+'</span></div>'
-            +'<div style="font-size:9.5px;color:var(--muted)">↳ Base de índices: <b>'+(a.matchCod||'—')+'</b> — '+(a.matchDesc||'?')+(a.estimado?' · <b>'+(a.descIns||'?')+'</b> estimado pela média de '+a.baseadoEm+' composições semelhantes (sem MO cadastrada nessa)':' · insumo '+(a.insumo||'?')+' ('+(a.descIns||'?')+') · '+(a.matchTipo==='código'?'código exato':a.matchTipo))+'</div>'
+            +'<div style="font-size:9.5px;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+            +'<span>↳ Base de índices: <b>'+(a.matchCod||'—')+'</b> — '+(a.matchDesc||'?')+(a.estimado?' · <b>'+(a.descIns||'?')+'</b> estimado pela média de '+a.baseadoEm+' composições semelhantes (sem MO cadastrada nessa)':' · insumo '+(a.insumo||'?')+' ('+(a.descIns||'?')+') · '+(a.matchTipo==='código'?'código exato':a.matchTipo))+'</span>'
+            +(a.matchCod?'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndice(\''+a.matchCod.replace(/\'/g,'')+'\')">🔍 Conferir índice</button>':'')
+            +'</div>'
             +'</div>';
         });
       }
