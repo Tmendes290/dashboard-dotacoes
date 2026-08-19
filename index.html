@@ -14274,12 +14274,26 @@ function iprodIndiceSoSupervisao(rows){
 }
 
 function iprodTokens(s){
+  var n=iprodNorm(s);
+  // Fração escrita por extenso — mista "2.1/2" (bitola "2 e 1/2 polegadas") ou solta "1/2" — TEM
+  // que virar token antes do merge de decimal logo abaixo, senão "2.1/2" vira só "21"+"2" (o "/2"
+  // sobra como token numérico solto igual a uma bitola inteira "2" de verdade) e colide por
+  // acidente com qualquer OUTRA composição de bitola "2" pura — bug real confirmado: "FLANGE
+  // SOBREPOSTO...2"" bateu com "CURVA 90°...2.1/2"" como se fossem o mesmo tamanho (2" ≠ 2,5").
+  // Separa o inteiro da fração com espaço (não gruda em nenhum token) e codifica a fração como
+  // número ×1000 (sempre 3 dígitos — nunca colide com bitola inteira típica de 1–2 dígitos).
+  n=n.replace(/(\d+)\.(\d+)\/(\d+)/g,function(_,inteiro,num,den){
+    return inteiro+' '+Math.round((parseInt(num,10)/parseInt(den,10))*1000);
+  });
+  n=n.replace(/(^|[^0-9])(\d+)\/(\d+)/g,function(_,pre,num,den){
+    return pre+Math.round((parseInt(num,10)/parseInt(den,10))*1000);
+  });
   // Funde número decimal com vírgula/ponto (ex.: "1419,6", "4,75") num token só ANTES de separar
   // por pontuação — senão a parte depois da vírgula vira um token numérico solto (ex.: só "6")
   // que bate por pura coincidência com outro número qualquer solto em texto sem nenhuma relação
   // (ex.: "Cap. Nominal = 1419,6 t/h" de uma peneira batendo com "Pressão Nominal Pn 6" de um
   // tubo só porque os dois têm um "6" avulso — mesma classe de bug do "2"/"50" do bueiro).
-  var n=iprodNorm(s).replace(/([0-9])[,.]([0-9])/g,'$1$2');
+  n=n.replace(/([0-9])[,.]([0-9])/g,'$1$2');
   // Separa número colado direto na unidade sem espaço (ex.: "16mm²", "10M") — sem isso os dois
   // grudam num token só e a busca por tamanho/seção não reconhece o número. Só separa nesse
   // sentido (dígito seguido de letra); não mexe em letra seguida de dígito (ex.: "B36","A53"),
