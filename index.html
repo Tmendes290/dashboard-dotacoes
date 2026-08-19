@@ -14043,8 +14043,16 @@ function iprodSetBuscaIndiceFonte(v){ IPROD_BUSCA_INDICE_FONTE=v; iprodRenderShe
 // Botão "Conferir índice" nos detalhamentos das seções 3 e 4 — pula direto pra aba "Base de
 // Índices" já filtrada pelo código da composição que foi usada naquele HH de referência, pra
 // conferir se o índice aplicado é mesmo o certo sem precisar digitar/buscar de novo na mão.
-function iprodConferirIndice(codigo){
-  IPROD_BUSCA_INDICE_TERMO=codigo||'';
+// insumoDesc é opcional — passa o nome do insumo (ex.: "CALDEIREIRO") quando o HH de referência
+// vem de UM insumo específico dentro de uma composição com vários (seção 4, por função — uma
+// composição de montagem pode ter Caldeireiro + Montador + Ajudante + Soldador etc., cada um sua
+// própria função/índice). Sem isso, filtrar só por código mostra TODOS os insumos daquela
+// composição junto (bug real: usuário via "318" de subtotal, que somava material+equipamento+
+// TODAS as funções da composição, não só a que ele queria conferir). Na seção 3 (por atividade,
+// onde o índice de referência já É a soma de toda a mão de obra da composição) não passa esse
+// segundo parâmetro — ali o subtotal de todo o IH da composição é mesmo o número certo a comparar.
+function iprodConferirIndice(codigo, insumoDesc){
+  IPROD_BUSCA_INDICE_TERMO=(codigo||'')+(insumoDesc?' '+insumoDesc:'');
   IPROD_BUSCA_INDICE_DISC_SEL=[];
   // Já filtra só mão de obra (IH) — é o que interessa pra conferir o índice de HH usado no
   // comparativo; sem isso a busca por código também trazia material/equipamento da mesma
@@ -16101,7 +16109,7 @@ function iprodRenderShell(){
             +'<div style="display:flex;justify-content:space-between;width:100%"><span>'+a.desc+' ('+iprodFmt(a.qtd)+' '+a.unidade+' × '+iprodFmt(a.indice)+(a.estimado?' — média':'')+')</span><span style="font-weight:700">'+iprodFmt(a.hh)+' HH'+(a.estimado?' ≈':'')+'</span></div>'
             +'<div style="font-size:9.5px;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
             +'<span>↳ Base de índices: <b>'+(a.matchCod||'—')+'</b> — '+(a.matchDesc||'?')+(a.estimado?' · <b>'+(a.descIns||'?')+'</b> estimado pela média de '+a.baseadoEm+' composições semelhantes (sem MO cadastrada nessa)':' · insumo '+(a.insumo||'?')+' ('+(a.descIns||'?')+') · '+(a.matchTipo==='código'?'código exato':a.matchTipo))+'</span>'
-            +(a.matchCod?'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndice(\''+a.matchCod.replace(/\'/g,'')+'\')">🔍 Conferir índice</button>':'')
+            +(a.matchCod?'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndice(\''+a.matchCod.replace(/\'/g,'')+'\',\''+(a.descIns||'').replace(/\'/g,'')+'\')">🔍 Conferir índice</button>':'')
             +'</div>'
             +'</div>';
         });
@@ -16237,19 +16245,22 @@ function iprodRenderShell(){
       +'<div class="ms-drop" id="ms-idx-insumo-drop" style="display:none"></div>'
       +'</div>'
       +'</div>';
-    var termoIdxN=iprodNorm(IPROD_BUSCA_INDICE_TERMO||'');
+    // Busca por TODAS as palavras (AND), não só um trecho contínuo — assim "M5510120005
+    // CALDEIREIRO" acha a linha que tem as duas coisas em campos diferentes (código numa coluna,
+    // nome do insumo noutra), em vez de exigir esse texto exato grudado em algum campo só.
+    var termoIdxTokens=iprodNorm(IPROD_BUSCA_INDICE_TERMO||'').split(/\s+/).filter(Boolean);
     var linhasFiltradasIdx=todasLinhasIdx.filter(function(r){
       if(IPROD_BUSCA_INDICE_DISC_SEL.length&&IPROD_BUSCA_INDICE_DISC_SEL.indexOf(r.disciplina||'(sem disciplina)')<0) return false;
       if(IPROD_BUSCA_INDICE_INSUMO_SEL.length&&IPROD_BUSCA_INDICE_INSUMO_SEL.indexOf(iprodInsumoPrefixo(r.insumo))<0) return false;
-      if(termoIdxN){
+      if(termoIdxTokens.length){
         var hay=iprodNorm((r.codCliente||'')+' '+(r.composicao||'')+' '+(r.desc||'')+' '+(r.insumo||'')+' '+(r.descIns||'')+' '+(r.disciplina||''));
-        if(hay.indexOf(termoIdxN)<0) return false;
+        if(!termoIdxTokens.every(function(t){return hay.indexOf(t)>=0;})) return false;
       }
       return true;
     });
     var CAP_IDX=300;
     var linhasMostrarIdx=linhasFiltradasIdx.slice(0,CAP_IDX);
-    var temFiltroAtivo=!!(termoIdxN||IPROD_BUSCA_INDICE_DISC_SEL.length||IPROD_BUSCA_INDICE_INSUMO_SEL.length);
+    var temFiltroAtivo=!!(termoIdxTokens.length||IPROD_BUSCA_INDICE_DISC_SEL.length||IPROD_BUSCA_INDICE_INSUMO_SEL.length);
     html+='<div class="iprod-panel-note" style="margin:0 0 10px">'
       +(temFiltroAtivo?linhasFiltradasIdx.length+' resultado(s) de '+todasLinhasIdx.length:todasLinhasIdx.length+' linhas nessa base')
       +(linhasFiltradasIdx.length>CAP_IDX?' — mostrando os primeiros '+CAP_IDX+', refine a busca pra ver o resto':'')+'.</div>';
