@@ -4892,6 +4892,20 @@ function onMsChange(id){
     if(currentView === 'usuarios') renderUsuariosHTML(document.getElementById('v-usuarios'), _usrCache.usuarios, _usrCache.bloqueados);
     return;
   }
+  if(id==='ms-idx-disc'){
+    IPROD_BUSCA_INDICE_DISC_SEL=selected;
+    updateMsLabel(id, selected);
+    iprodRenderShell();
+    return;
+  }
+  if(id==='ms-idx-insumo'){
+    // As opções mostram um rótulo amigável quando existe (ex.: "IH — Mão de obra"), mas o filtro
+    // real é só o prefixo do código (ex.: "IH") — tira o rótulo antes de guardar.
+    IPROD_BUSCA_INDICE_INSUMO_SEL=selected.map(function(lbl){ return lbl.indexOf(' — ')>=0?lbl.split(' — ')[0]:lbl; });
+    updateMsLabel(id, selected);
+    iprodRenderShell();
+    return;
+  }
   var isReg = id.startsWith('ms-reg-');
   var effectiveId = id.replace('ms-reg-','ms-').replace('ms-sp-','ms-');
   if(isReg){
@@ -4952,7 +4966,9 @@ function updateMsLabel(id, selected){
     'ms-usr-squad': 'Todos os squads',
     'ms-pipe-projeto': 'Projeto (todos)',
     'ms-pipe-disciplina': 'Disciplina (todas)',
-    'ms-pipe-etapa': 'Etapa (todas)'
+    'ms-pipe-etapa': 'Etapa (todas)',
+    'ms-idx-disc': 'Todas as disciplinas',
+    'ms-idx-insumo': 'Todos os insumos'
   };
   if(selected.length === 0){
     label.textContent = defaults[id] || 'Todos';
@@ -14017,11 +14033,13 @@ var IPROD_HISTORICO=null, IPROD_HISTORICO_LOADING=false, IPROD_CARREGADO_DE_HIST
 var IPROD_HIST_FILTRO_SQUAD='';
 // Aba "Base de Índices" — consulta direta na planilha de índice usada nos comparativos, pra
 // tirar dúvida sem precisar abrir o Excel/Supabase por fora.
-var IPROD_BUSCA_INDICE_TERMO='', IPROD_BUSCA_INDICE_FONTE='vale', IPROD_BUSCA_INDICE_DISC='', IPROD_BUSCA_INDICE_INSUMO='';
+var IPROD_BUSCA_INDICE_TERMO='', IPROD_BUSCA_INDICE_FONTE='vale';
+// Multi-seleção (caixas de seleção) — array vazio = "todas". Selecionadas via buildMsDrop/onMsChange
+// (mesmo componente de checkbox já usado nos outros filtros do dashboard, ver ms-idx-disc/
+// ms-idx-insumo em onMsChange), não por dropdown de valor único.
+var IPROD_BUSCA_INDICE_DISC_SEL=[], IPROD_BUSCA_INDICE_INSUMO_SEL=[];
 function iprodSetBuscaIndiceTermo(v){ IPROD_BUSCA_INDICE_TERMO=v; iprodRenderShell(); }
 function iprodSetBuscaIndiceFonte(v){ IPROD_BUSCA_INDICE_FONTE=v; iprodRenderShell(); }
-function iprodSetBuscaIndiceDisc(v){ IPROD_BUSCA_INDICE_DISC=v; iprodRenderShell(); }
-function iprodSetBuscaIndiceInsumo(v){ IPROD_BUSCA_INDICE_INSUMO=v; iprodRenderShell(); }
 // Achata o índice agrupado por composição (ver iprodConstruirIndice) numa lista simples de linhas
 // pra exibir/buscar em tabela — cada linha já é um insumo (função ou material) de uma composição.
 function iprodGetIndiceRowsFlat(fonte){
@@ -16183,25 +16201,28 @@ function iprodRenderShell(){
     // os demais (IS/IR/IM/IO/IN/IQ/IP/CG/CQ/CC/CD/CF/CH) ficam só com o próprio código, sem chutar
     // o que significam.
     var insumoRotulo={'IH':'IH — Mão de obra','IE':'IE — Equipamento'};
-    if(!discCont[IPROD_BUSCA_INDICE_DISC]) IPROD_BUSCA_INDICE_DISC='';
-    if(!insumoCont[IPROD_BUSCA_INDICE_INSUMO]) IPROD_BUSCA_INDICE_INSUMO='';
+    // Tira da seleção qualquer valor que não exista mais nessa fonte (ex.: trocou de Vale pra
+    // PAREX e uma disciplina só existia na Vale) — evita filtro "fantasma" que nunca bate nada.
+    IPROD_BUSCA_INDICE_DISC_SEL=IPROD_BUSCA_INDICE_DISC_SEL.filter(function(d){return discCont[d];});
+    IPROD_BUSCA_INDICE_INSUMO_SEL=IPROD_BUSCA_INDICE_INSUMO_SEL.filter(function(p){return insumoCont[p];});
     html+='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">'
       +'<input id="iprod-busca-idx" type="text" value="'+(IPROD_BUSCA_INDICE_TERMO||'').replace(/"/g,'&quot;')+'" oninput="iprodSetBuscaIndiceTermo(this.value)" placeholder="🔎 Buscar por código, descrição, insumo, disciplina..." style="flex:1;min-width:220px;font-size:11.5px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
       +'<select class="iprod-text-input" style="width:auto" onchange="iprodSetBuscaIndiceFonte(this.value)">'
       +iprodFontesIdx.map(function(f){return '<option value="'+f.id+'"'+(IPROD_BUSCA_INDICE_FONTE===f.id?' selected':'')+'>'+f.label+'</option>';}).join('')
       +'</select>'
-      +'<select class="iprod-text-input" style="width:auto" onchange="iprodSetBuscaIndiceDisc(this.value)">'
-      +'<option value="">Todas as disciplinas</option>'
-      +discOpcoes.map(function(d){return '<option value="'+d+'"'+(IPROD_BUSCA_INDICE_DISC===d?' selected':'')+'>'+d+' ('+discCont[d]+')</option>';}).join('')
-      +'</select>'
-      +'<select class="iprod-text-input" style="width:auto" onchange="iprodSetBuscaIndiceInsumo(this.value)">'
-      +'<option value="">Todos os insumos</option>'
-      +insumoOpcoes.map(function(p){return '<option value="'+p+'"'+(IPROD_BUSCA_INDICE_INSUMO===p?' selected':'')+'>'+(insumoRotulo[p]||p)+' ('+insumoCont[p]+')</option>';}).join('')
-      +'</select></div>';
+      +'<div class="ms-wrap" id="ms-idx-disc" style="min-width:180px">'
+      +'<div class="ms-input" onclick="toggleMs(\'ms-idx-disc\')"><span class="ms-label" id="ms-idx-disc-label">Todas as disciplinas</span><span style="color:var(--muted);font-size:10px">▾</span></div>'
+      +'<div class="ms-drop" id="ms-idx-disc-drop" style="display:none"></div>'
+      +'</div>'
+      +'<div class="ms-wrap" id="ms-idx-insumo" style="min-width:180px">'
+      +'<div class="ms-input" onclick="toggleMs(\'ms-idx-insumo\')"><span class="ms-label" id="ms-idx-insumo-label">Todos os insumos</span><span style="color:var(--muted);font-size:10px">▾</span></div>'
+      +'<div class="ms-drop" id="ms-idx-insumo-drop" style="display:none"></div>'
+      +'</div>'
+      +'</div>';
     var termoIdxN=iprodNorm(IPROD_BUSCA_INDICE_TERMO||'');
     var linhasFiltradasIdx=todasLinhasIdx.filter(function(r){
-      if(IPROD_BUSCA_INDICE_DISC&&(r.disciplina||'(sem disciplina)')!==IPROD_BUSCA_INDICE_DISC) return false;
-      if(IPROD_BUSCA_INDICE_INSUMO&&iprodInsumoPrefixo(r.insumo)!==IPROD_BUSCA_INDICE_INSUMO) return false;
+      if(IPROD_BUSCA_INDICE_DISC_SEL.length&&IPROD_BUSCA_INDICE_DISC_SEL.indexOf(r.disciplina||'(sem disciplina)')<0) return false;
+      if(IPROD_BUSCA_INDICE_INSUMO_SEL.length&&IPROD_BUSCA_INDICE_INSUMO_SEL.indexOf(iprodInsumoPrefixo(r.insumo))<0) return false;
       if(termoIdxN){
         var hay=iprodNorm((r.codCliente||'')+' '+(r.composicao||'')+' '+(r.desc||'')+' '+(r.insumo||'')+' '+(r.descIns||'')+' '+(r.disciplina||''));
         if(hay.indexOf(termoIdxN)<0) return false;
@@ -16210,7 +16231,7 @@ function iprodRenderShell(){
     });
     var CAP_IDX=300;
     var linhasMostrarIdx=linhasFiltradasIdx.slice(0,CAP_IDX);
-    var temFiltroAtivo=!!(termoIdxN||IPROD_BUSCA_INDICE_DISC||IPROD_BUSCA_INDICE_INSUMO);
+    var temFiltroAtivo=!!(termoIdxN||IPROD_BUSCA_INDICE_DISC_SEL.length||IPROD_BUSCA_INDICE_INSUMO_SEL.length);
     html+='<div class="iprod-panel-note" style="margin:0 0 10px">'
       +(temFiltroAtivo?linhasFiltradasIdx.length+' resultado(s) de '+todasLinhasIdx.length:todasLinhasIdx.length+' linhas nessa base')
       +(linhasFiltradasIdx.length>CAP_IDX?' — mostrando os primeiros '+CAP_IDX+', refine a busca pra ver o resto':'')+'.</div>';
@@ -16252,6 +16273,24 @@ function iprodRenderShell(){
       if(iprodFocoSel!=null&&typeof iprodNovoFoco.setSelectionRange==='function'){
         try{ iprodNovoFoco.setSelectionRange(iprodFocoSel,iprodFocoSel); }catch(e){}
       }
+    }
+  }
+  // Popula as caixas de seleção (checkbox) de Disciplina/Insumo da aba "Base de Índices" — só dá
+  // pra fazer DEPOIS do innerHTML acima, porque buildMsDrop procura os elementos #ms-idx-disc-drop
+  // / #ms-idx-insumo-drop já existindo no DOM.
+  if(IPROD_INDICE&&typeof discOpcoes!=='undefined'){
+    buildMsDrop('ms-idx-disc', discOpcoes, IPROD_BUSCA_INDICE_DISC_SEL, onMsChange);
+    updateMsLabel('ms-idx-disc', IPROD_BUSCA_INDICE_DISC_SEL);
+    var insumoRotulos=insumoOpcoes.map(function(p){ return insumoRotulo[p]||p; });
+    var insumoSelRotulos=IPROD_BUSCA_INDICE_INSUMO_SEL.map(function(p){ return insumoRotulo[p]||p; });
+    buildMsDrop('ms-idx-insumo', insumoRotulos, insumoSelRotulos, onMsChange);
+    updateMsLabel('ms-idx-insumo', insumoSelRotulos);
+    // O innerHTML acima recria o painel do dropdown já fechado (display:none) — se o usuário tinha
+    // ele aberto (marcando uma caixa de seleção, que dispara esse re-render inteiro), reabre pra
+    // não fechar sozinho a cada clique.
+    if(_msOpen==='ms-idx-disc'||_msOpen==='ms-idx-insumo'){
+      var iprodDropAberto=document.getElementById(_msOpen+'-drop');
+      if(iprodDropAberto) iprodDropAberto.style.display='block';
     }
   }
 }
