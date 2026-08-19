@@ -14126,6 +14126,44 @@ function iprodRestaurarFuncao(funcaoNorm){
   toast('Função restaurada — recalculando...','blue');
   iprodProcessar();
 }
+
+// Seleção múltipla (checkbox) pra excluir várias atividades (seção 3) ou funções (seção 4) de
+// uma vez, em vez de abrir linha por linha e clicar "Excluir" em cada uma — pedido do usuário
+// depois de precisar excluir várias funções "Sem referência" (indiretas) numa análise da MILPLAN.
+var IPROD_ATIV_SELECIONADAS={}; // chave: idxProjeto
+var IPROD_FUNC_SELECIONADAS={}; // chave: funcaoNorm, valor: funcaoLabel (label original, pra reusar em IPROD_FUNCOES_EXCLUIDAS)
+
+function iprodToggleAtivSelecionada(idxProjeto){
+  if(IPROD_ATIV_SELECIONADAS[idxProjeto]) delete IPROD_ATIV_SELECIONADAS[idxProjeto];
+  else IPROD_ATIV_SELECIONADAS[idxProjeto]=true;
+  iprodRenderShell();
+}
+function iprodLimparSelecaoAtiv(){ IPROD_ATIV_SELECIONADAS={}; iprodRenderShell(); }
+function iprodExcluirAtividadesSelecionadas(){
+  var idxs=Object.keys(IPROD_ATIV_SELECIONADAS);
+  if(!idxs.length) return;
+  if(!confirm('Excluir '+idxs.length+' atividade(s) selecionada(s) dessa análise? Saem de todos os totais (dá pra restaurar depois, uma por uma).')) return;
+  idxs.forEach(function(i){ IPROD_LINHAS_EXCLUIDAS[i]=true; });
+  IPROD_ATIV_SELECIONADAS={};
+  toast(idxs.length+' atividade(s) excluída(s) — recalculando...','blue');
+  iprodProcessar();
+}
+
+function iprodToggleFuncSelecionada(funcaoNorm,funcaoLabel){
+  if(IPROD_FUNC_SELECIONADAS[funcaoNorm]) delete IPROD_FUNC_SELECIONADAS[funcaoNorm];
+  else IPROD_FUNC_SELECIONADAS[funcaoNorm]=funcaoLabel;
+  iprodRenderShell();
+}
+function iprodLimparSelecaoFunc(){ IPROD_FUNC_SELECIONADAS={}; iprodRenderShell(); }
+function iprodExcluirFuncoesSelecionadas(){
+  var chaves=Object.keys(IPROD_FUNC_SELECIONADAS);
+  if(!chaves.length) return;
+  if(!confirm('Excluir '+chaves.length+' função(ões) selecionada(s) dessa análise? Saem do total de HH Cobrado/Referência/Diferença (dá pra restaurar depois, uma por uma).')) return;
+  chaves.forEach(function(k){ IPROD_FUNCOES_EXCLUIDAS[k]=IPROD_FUNC_SELECIONADAS[k]; });
+  IPROD_FUNC_SELECIONADAS={};
+  toast(chaves.length+' função(ões) excluída(s) — recalculando...','blue');
+  iprodProcessar();
+}
 // Catálogo-mestre por empresa: REF_CATALOGO_EMPRESA['APIA']['1290'] = {desc,unidade,preco} — código
 // próprio de cada contratada (estável entre orçamentos de projetos diferentes) → descrição/preço
 // canônicos, carregado do Supabase (ref_catalogo_empresa). Usado pra confirmar com certeza o que um
@@ -15047,6 +15085,7 @@ async function iprodHandleContratadaFile(file){
       // Contratada nova = as funções do histograma podem ser outras — exclusões da análise
       // anterior não fazem mais sentido aqui.
       IPROD_FUNCOES_EXCLUIDAS={};
+      IPROD_FUNC_SELECIONADAS={};
       toast('Arquivo lido: '+(pq?pq.length:0)+' atividades na PQ, '+(hist?hist.length:0)+' funções no histograma'+(nCanon?' ('+nCanon+' confirmadas pelo catálogo)':''),'green');
       iprodRenderShell();
     }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
@@ -15116,6 +15155,7 @@ async function iprodHandlePQProjetoFile(files){
       // sobrescritas manuais e exclusões da PQ anterior não fazem mais sentido aqui.
       IPROD_INDICE_OVERRIDES={};
       IPROD_LINHAS_EXCLUIDAS={};
+      IPROD_ATIV_SELECIONADAS={};
       toast('PQ do Projeto lida: '+pq.length+' atividades somadas de '+brutas.length+' linhas'+(listaArquivos.length>1?' (em '+listaArquivos.length+' arquivos)':''),'green');
       iprodRenderShell();
   }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
@@ -15672,6 +15712,8 @@ function iprodNovaAnalise(){
   IPROD_EMPRESA='';
   IPROD_SQUAD='';
   IPROD_CARREGADO_DE_HIST=null;
+  IPROD_ATIV_SELECIONADAS={};
+  IPROD_FUNC_SELECIONADAS={};
   iprodRenderShell();
   toast('Pronto pra uma nova análise — a PQ do Projeto continua carregada','green');
 }
@@ -15785,6 +15827,9 @@ function iprodRenderShell(){
     +'.iprod-badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:9px;font-weight:700}'
     +'.iprod-b-verde{background:#f0fdf4;color:#15803d}.iprod-b-amar{background:#fefce8;color:#a16207}.iprod-b-verm{background:#fef2f2;color:#dc2626}.iprod-b-cinza{background:#f1f5f9;color:#64748b}.iprod-b-azul{background:#eff6ff;color:#1d4ed8}'
     +'.iprod-tr-expand{cursor:pointer}.iprod-tr-expand td:first-child::before{content:"▸ ";color:var(--muted);font-size:9px}.iprod-tr-expand.open td:first-child::before{content:"▾ ";color:#1e3a5f}'
+    // Linhas com checkbox de seleção (seções 3 e 4) têm a caixa como 1ª coluna — a seta ▸/▾ de
+    // expandir precisa mudar pra 2ª coluna nessas, senão fica grudada no checkbox.
+    +'.iprod-tr-chk td:first-child::before{content:none}.iprod-tr-chk td:nth-child(2)::before{content:"▸ ";color:var(--muted);font-size:9px}.iprod-tr-chk.open td:nth-child(2)::before{content:"▾ ";color:#1e3a5f}'
     +'.iprod-drill{background:var(--bg);padding:12px 16px;border-left:3px solid #1e3a5f;display:none}.iprod-drill.show{display:block}'
     +'.iprod-drill-row{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px dashed var(--bord)}.iprod-drill-row:last-child{border-bottom:none}'
     +'.iprod-tabbar{display:flex;border-bottom:2px solid var(--bord);margin-bottom:18px;gap:2px}'
@@ -15989,7 +16034,12 @@ function iprodRenderShell(){
           return '<span onclick="iprodSetFiltroStatus(\''+f[0]+'\')" style="cursor:pointer;font-size:10.5px;font-weight:800;padding:4px 11px;border-radius:20px;border:1px solid '+(ativo?'#2563eb':'var(--border)')+';background:'+(ativo?'#2563eb':'transparent')+';color:'+(ativo?'#fff':'var(--muted)')+'">'+f[1]+' ('+(qtdCompCont[f[0]]||0)+')</span>';
         }).join('')
         +'</div>'
-        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>HH Esperado</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
+        +(Object.keys(IPROD_ATIV_SELECIONADAS).length?'<div class="iprod-insight" style="margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-left-color:#dc2626;background:#fef2f2;color:#7f1d1d">'
+          +'<span><b>'+Object.keys(IPROD_ATIV_SELECIONADAS).length+' atividade(s) selecionada(s)</b></span>'
+          +'<span style="display:flex;gap:8px"><button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#dc2626;color:#fff" onclick="iprodExcluirAtividadesSelecionadas()">🗑️ Excluir selecionadas</button>'
+          +'<button class="iprod-hist-link" style="font-size:10.5px" onclick="iprodLimparSelecaoAtiv()">Limpar seleção</button></span>'
+          +'</div>':'')
+        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>HH Esperado</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
       qtdCompFiltrado.forEach(function(q){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
@@ -16000,9 +16050,10 @@ function iprodRenderShell(){
         var indiceCell=iprodFmt(q.indiceTotal)+(q.indiceOrigem==='manual'?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Você ajustou esse índice manualmente — clique na linha pra ver/mudar">⚙️ manual</span>'
             :q.indiceOrigem==='contratada'?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="Nossa base não tem essa composição — usado o índice que a própria contratada declara na PQ dela">contratada</span>':'')
           +(q.indiceSoSupervisao?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Composição na base só tem insumo de supervisão (Encarregado/Mestre...) cadastrado, sem instalador — índice provavelmente subestimado">⚠️ só supervisão</span>':'');
-        html+='<tr class="iprod-tr-expand" data-busca="'+iprodNorm(q.desc).replace(/"/g,'')+'" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
+        html+='<tr class="iprod-tr-expand iprod-tr-chk" data-busca="'+iprodNorm(q.desc).replace(/"/g,'')+'" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
+          +'<td onclick="event.stopPropagation()"><input type="checkbox"'+(IPROD_ATIV_SELECIONADAS[q.idxProjeto]?' checked':'')+' onclick="event.stopPropagation();iprodToggleAtivSelecionada('+q.idxProjeto+')"></td>'
           +'<td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+indiceCell+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
-        html+='<tr class="iprod-drill"><td colspan="10">'
+        html+='<tr class="iprod-drill"><td colspan="11">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
           +(q.status==='medida-diferente'?'<div class="iprod-insight" style="margin-bottom:8px">📏 A PQ do projeto pede <b>'+q.specDiff.projeto+'</b>, mas a contratada só cotou essa atividade com <b>'+q.specDiff.empresa+'</b> na PQ dela — mesma composição, medida diferente. Confira se essa troca foi aprovada antes de aceitar a quantidade/HH como equivalente.</div>':'')
           +(q.indiceSoSupervisao?'<div class="iprod-insight" style="margin-bottom:8px">⚠️ Essa composição da base só tem insumo de SUPERVISÃO cadastrado (Encarregado/Mestre...), sem instalador de verdade — provável lacuna na planilha-fonte. O índice reflete só o tempo do encarregado, não o serviço em si. Considere isso ao avaliar essa linha.</div>':'')
@@ -16033,7 +16084,7 @@ function iprodRenderShell(){
       var totHhEmpresaMatched=qtdCompBase3.reduce(function(s,q){return s+(q.hhEmpresa||0);},0);
       var totHhSemProjeto=(r.contratadaSemProjeto||[]).reduce(function(s,c){return s+(c.hhAlocado||0);},0);
       var totHhEmpresa=totHhEmpresaMatched+totHhSemProjeto;
-      html+='<tr class="iprod-tot"><td>TOTAL (atividades do projeto'+(IPROD_QTDCOMP_FILTRO==='cobradas'?' — só cobradas':'')+')</td><td></td><td></td><td></td><td></td><td></td><td>'+iprodFmt(totHhEsperado)+'</td><td>'+iprodFmt(totHhEmpresaMatched)+'</td><td>'+iprodFmt(totHhEmpresaMatched-totHhEsperado)+'</td><td></td></tr>';
+      html+='<tr class="iprod-tot"><td></td><td>TOTAL (atividades do projeto'+(IPROD_QTDCOMP_FILTRO==='cobradas'?' — só cobradas':'')+')</td><td></td><td></td><td></td><td></td><td></td><td>'+iprodFmt(totHhEsperado)+'</td><td>'+iprodFmt(totHhEmpresaMatched)+'</td><td>'+iprodFmt(totHhEmpresaMatched-totHhEsperado)+'</td><td></td></tr>';
       html+='</tbody></table></div>';
 
       var idxExcluidos=Object.keys(IPROD_LINHAS_EXCLUIDAS).filter(function(i){return IPROD_LINHAS_EXCLUIDAS[i]&&IPROD_PROJETO.pq[i];});
@@ -16091,13 +16142,20 @@ function iprodRenderShell(){
       }).join('')
       +'</div>'
       +(IPROD_FUNC_FILTRO==='cobradas'?'<div class="iprod-panel-note" style="margin:0 0 10px">Mostrando só funções com HH cobrado — o TOTAL abaixo é o subtotal desse recorte, não da análise inteira (os cards no topo continuam mostrando o total geral).</div>':'')
-      +'<table class="iprod-tbl"><thead><tr><th>Função</th><th>HH Cobrado</th><th>HH Referência</th><th>HH + Praticabilidade</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
+      +(Object.keys(IPROD_FUNC_SELECIONADAS).length?'<div class="iprod-insight" style="margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-left-color:#dc2626;background:#fef2f2;color:#7f1d1d">'
+        +'<span><b>'+Object.keys(IPROD_FUNC_SELECIONADAS).length+' função(ões) selecionada(s)</b></span>'
+        +'<span style="display:flex;gap:8px"><button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#dc2626;color:#fff" onclick="iprodExcluirFuncoesSelecionadas()">🗑️ Excluir selecionadas</button>'
+        +'<button class="iprod-hist-link" style="font-size:10.5px" onclick="iprodLimparSelecaoFunc()">Limpar seleção</button></span>'
+        +'</div>':'')
+      +'<table class="iprod-tbl"><thead><tr><th style="width:20px"></th><th>Função</th><th>HH Cobrado</th><th>HH Referência</th><th>HH + Praticabilidade</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
     linhasFiltro4.forEach(function(l){
       var hhCobradoCell=iprodFmt(l.hhCobrado)+(l.hhContingencia?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Percentual de Contingência que a própria contratada aplica pra cobrir escopo extra ou atraso">'+iprodFmt(l.hhContingencia)+' contingência</span>':'');
       var hhRefCell=iprodFmt(l.hhRef)+(l.estimadoPorMedia?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="A composição não tem mão de obra cadastrada na base — estimado pela média de composições semelhantes">≈ estimado</span>':'');
-      html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
+      var funcaoNormL=iprodNorm(l.funcao).replace(/'/g,'');
+      html+='<tr class="iprod-tr-expand iprod-tr-chk" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
+        +'<td onclick="event.stopPropagation()"><input type="checkbox"'+(IPROD_FUNC_SELECIONADAS[funcaoNormL]?' checked':'')+' onclick="event.stopPropagation();iprodToggleFuncSelecionada(\''+funcaoNormL+'\',\''+l.funcao.replace(/'/g,'')+'\')"></td>'
         +'<td>'+l.funcao+'</td><td>'+hhCobradoCell+'</td><td>'+hhRefCell+'</td><td>'+iprodFmt(l.hhAjust)+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';
-      html+='<tr class="iprod-drill"><td colspan="6">';
+      html+='<tr class="iprod-drill"><td colspan="7">';
       if(l.hhContingencia){
         html+='<div class="iprod-insight" style="border-left-color:#d97706;background:#fffbeb;color:#78350f;margin-bottom:8px">📌 Desse total, <b>'+iprodFmt(l.hhContingencia)+' HH</b> é "Percentual de Contingência" que a própria contratada apontou no histograma pra essa função — folga que ela reserva pra escopo adicional ou atraso, não é trabalho medido nessas atividades.</div>';
       }
@@ -16132,7 +16190,7 @@ function iprodRenderShell(){
     var totRefFiltro4=linhasFiltro4.reduce(function(s,l){return s+l.hhRef;},0);
     var totAjustFiltro4=linhasFiltro4.reduce(function(s,l){return s+l.hhAjust;},0);
     var totDifFiltro4=totCobradoFiltro4-totAjustFiltro4;
-    html+='<tr class="iprod-tot"><td>TOTAL'+(IPROD_FUNC_FILTRO==='cobradas'?' (só cobradas)':'')+'</td><td>'+iprodFmt(totCobradoFiltro4)+'</td><td>'+iprodFmt(totRefFiltro4)+'</td><td>'+iprodFmt(totAjustFiltro4)+'</td><td>'+iprodFmt(totDifFiltro4)+'</td><td></td></tr>';
+    html+='<tr class="iprod-tot"><td></td><td>TOTAL'+(IPROD_FUNC_FILTRO==='cobradas'?' (só cobradas)':'')+'</td><td>'+iprodFmt(totCobradoFiltro4)+'</td><td>'+iprodFmt(totRefFiltro4)+'</td><td>'+iprodFmt(totAjustFiltro4)+'</td><td>'+iprodFmt(totDifFiltro4)+'</td><td></td></tr>';
     html+='</tbody></table></div>';
 
     if(r.linhasExcluidas && r.linhasExcluidas.length){
