@@ -14017,9 +14017,11 @@ var IPROD_HISTORICO=null, IPROD_HISTORICO_LOADING=false, IPROD_CARREGADO_DE_HIST
 var IPROD_HIST_FILTRO_SQUAD='';
 // Aba "Base de Índices" — consulta direta na planilha de índice usada nos comparativos, pra
 // tirar dúvida sem precisar abrir o Excel/Supabase por fora.
-var IPROD_BUSCA_INDICE_TERMO='', IPROD_BUSCA_INDICE_FONTE='vale';
+var IPROD_BUSCA_INDICE_TERMO='', IPROD_BUSCA_INDICE_FONTE='vale', IPROD_BUSCA_INDICE_DISC='', IPROD_BUSCA_INDICE_INSUMO='';
 function iprodSetBuscaIndiceTermo(v){ IPROD_BUSCA_INDICE_TERMO=v; iprodRenderShell(); }
 function iprodSetBuscaIndiceFonte(v){ IPROD_BUSCA_INDICE_FONTE=v; iprodRenderShell(); }
+function iprodSetBuscaIndiceDisc(v){ IPROD_BUSCA_INDICE_DISC=v; iprodRenderShell(); }
+function iprodSetBuscaIndiceInsumo(v){ IPROD_BUSCA_INDICE_INSUMO=v; iprodRenderShell(); }
 // Achata o índice agrupado por composição (ver iprodConstruirIndice) numa lista simples de linhas
 // pra exibir/buscar em tabela — cada linha já é um insumo (função ou material) de uma composição.
 function iprodGetIndiceRowsFlat(fonte){
@@ -14032,6 +14034,10 @@ function iprodGetIndiceRowsFlat(fonte){
   estrutura.descIdx.forEach(function(g){ g.rows.forEach(function(r){ out.push(r); }); });
   return out;
 }
+// Prefixo do código do insumo (ex.: "IH2073" -> "IH") — IH é sempre mão de obra (tipo M), IE é
+// sempre equipamento (tipo E), o resto (IS/IR/IM/IO/IN/IQ/IP/CG/CQ/CC/CD/CF/CH) é material/serviço
+// (tipo X). Confirmado contra a base real: só existe essa correspondência 1:1 prefixo↔tipo.
+function iprodInsumoPrefixo(insumo){ return String(insumo||'').replace(/[0-9].*/,''); }
 var IPROD_EMPRESAS=['APIA','LUK','ÔMEGA','TOP ANDAIMES','MILPLAN'];
 var IPROD_FILTRO_STATUS='todos';
 // Filtro de exibição da seção 4 (Comparativo por função) — só esconde linha da tela, não tira do
@@ -16163,36 +16169,91 @@ function iprodRenderShell(){
   } else {
     var iprodFontesIdx=[{id:'vale',label:'Vale (oficial) — '+IPROD_INDICE.total+' linhas'}]
       .concat((IPROD_FALLBACK||[]).map(function(f){return {id:f.nome,label:f.nome+' — '+f.indice.total+' linhas'};}));
+    var todasLinhasIdx=iprodGetIndiceRowsFlat(IPROD_BUSCA_INDICE_FONTE);
+    // Opções dos filtros de Disciplina/Insumo derivadas da própria base (não hardcoded) — assim
+    // não desalinha se a fonte trocar (Vale x PAREX x Equalização x REDE têm disciplinas diferentes).
+    var discCont={}, insumoCont={};
+    todasLinhasIdx.forEach(function(r){
+      var d=r.disciplina||'(sem disciplina)'; discCont[d]=(discCont[d]||0)+1;
+      var p=iprodInsumoPrefixo(r.insumo)||'(sem prefixo)'; insumoCont[p]=(insumoCont[p]||0)+1;
+    });
+    var discOpcoes=Object.keys(discCont).sort();
+    var insumoOpcoes=Object.keys(insumoCont).sort();
+    // IH = mão de obra (tipo M), IE = equipamento (tipo E) — únicos prefixos com rótulo conhecido;
+    // os demais (IS/IR/IM/IO/IN/IQ/IP/CG/CQ/CC/CD/CF/CH) ficam só com o próprio código, sem chutar
+    // o que significam.
+    var insumoRotulo={'IH':'IH — Mão de obra','IE':'IE — Equipamento'};
+    if(!discCont[IPROD_BUSCA_INDICE_DISC]) IPROD_BUSCA_INDICE_DISC='';
+    if(!insumoCont[IPROD_BUSCA_INDICE_INSUMO]) IPROD_BUSCA_INDICE_INSUMO='';
     html+='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">'
-      +'<input type="text" value="'+(IPROD_BUSCA_INDICE_TERMO||'').replace(/"/g,'&quot;')+'" oninput="iprodSetBuscaIndiceTermo(this.value)" placeholder="🔎 Buscar por código, descrição, insumo, disciplina..." style="flex:1;min-width:240px;font-size:11.5px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
+      +'<input id="iprod-busca-idx" type="text" value="'+(IPROD_BUSCA_INDICE_TERMO||'').replace(/"/g,'&quot;')+'" oninput="iprodSetBuscaIndiceTermo(this.value)" placeholder="🔎 Buscar por código, descrição, insumo, disciplina..." style="flex:1;min-width:220px;font-size:11.5px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
       +'<select class="iprod-text-input" style="width:auto" onchange="iprodSetBuscaIndiceFonte(this.value)">'
       +iprodFontesIdx.map(function(f){return '<option value="'+f.id+'"'+(IPROD_BUSCA_INDICE_FONTE===f.id?' selected':'')+'>'+f.label+'</option>';}).join('')
+      +'</select>'
+      +'<select class="iprod-text-input" style="width:auto" onchange="iprodSetBuscaIndiceDisc(this.value)">'
+      +'<option value="">Todas as disciplinas</option>'
+      +discOpcoes.map(function(d){return '<option value="'+d+'"'+(IPROD_BUSCA_INDICE_DISC===d?' selected':'')+'>'+d+' ('+discCont[d]+')</option>';}).join('')
+      +'</select>'
+      +'<select class="iprod-text-input" style="width:auto" onchange="iprodSetBuscaIndiceInsumo(this.value)">'
+      +'<option value="">Todos os insumos</option>'
+      +insumoOpcoes.map(function(p){return '<option value="'+p+'"'+(IPROD_BUSCA_INDICE_INSUMO===p?' selected':'')+'>'+(insumoRotulo[p]||p)+' ('+insumoCont[p]+')</option>';}).join('')
       +'</select></div>';
-    var todasLinhasIdx=iprodGetIndiceRowsFlat(IPROD_BUSCA_INDICE_FONTE);
     var termoIdxN=iprodNorm(IPROD_BUSCA_INDICE_TERMO||'');
-    var linhasFiltradasIdx=termoIdxN?todasLinhasIdx.filter(function(r){
-      var hay=iprodNorm((r.codCliente||'')+' '+(r.composicao||'')+' '+(r.desc||'')+' '+(r.insumo||'')+' '+(r.descIns||'')+' '+(r.disciplina||''));
-      return hay.indexOf(termoIdxN)>=0;
-    }):todasLinhasIdx;
+    var linhasFiltradasIdx=todasLinhasIdx.filter(function(r){
+      if(IPROD_BUSCA_INDICE_DISC&&(r.disciplina||'(sem disciplina)')!==IPROD_BUSCA_INDICE_DISC) return false;
+      if(IPROD_BUSCA_INDICE_INSUMO&&iprodInsumoPrefixo(r.insumo)!==IPROD_BUSCA_INDICE_INSUMO) return false;
+      if(termoIdxN){
+        var hay=iprodNorm((r.codCliente||'')+' '+(r.composicao||'')+' '+(r.desc||'')+' '+(r.insumo||'')+' '+(r.descIns||'')+' '+(r.disciplina||''));
+        if(hay.indexOf(termoIdxN)<0) return false;
+      }
+      return true;
+    });
     var CAP_IDX=300;
     var linhasMostrarIdx=linhasFiltradasIdx.slice(0,CAP_IDX);
+    var temFiltroAtivo=!!(termoIdxN||IPROD_BUSCA_INDICE_DISC||IPROD_BUSCA_INDICE_INSUMO);
     html+='<div class="iprod-panel-note" style="margin:0 0 10px">'
-      +(termoIdxN?linhasFiltradasIdx.length+' resultado(s) de '+todasLinhasIdx.length:todasLinhasIdx.length+' linhas nessa base')
+      +(temFiltroAtivo?linhasFiltradasIdx.length+' resultado(s) de '+todasLinhasIdx.length:todasLinhasIdx.length+' linhas nessa base')
       +(linhasFiltradasIdx.length>CAP_IDX?' — mostrando os primeiros '+CAP_IDX+', refine a busca pra ver o resto':'')+'.</div>';
     if(linhasMostrarIdx.length){
+      // Subtotal do Índice sobre TODO o recorte filtrado (não só as 300 linhas exibidas) — pra
+      // somar, ex., o HH/unidade de todas as funções (insumo IH) de uma composição de uma vez,
+      // em vez de somar na mão linha por linha.
+      var somaIndiceFiltrado=linhasFiltradasIdx.reduce(function(s,r){return s+(Number(r.indice)||0);},0);
+      if(temFiltroAtivo){
+        html+='<div class="iprod-insight" style="margin-bottom:10px">Σ <b>Subtotal do Índice</b> nesse recorte ('+linhasFiltradasIdx.length+' linha(s)): <b>'+iprodFmt(somaIndiceFiltrado)+'</b></div>';
+      }
       html+='<div style="overflow-x:auto"><table class="iprod-tbl"><thead><tr><th>Disciplina</th><th>Composição</th><th>Cód. Cliente</th><th>Descrição</th><th>Unid.</th><th>Insumo</th><th>Descrição Insumo</th><th>Unid. Insumo</th><th>Índice</th><th>Tipo</th></tr></thead><tbody>';
       linhasMostrarIdx.forEach(function(r){
         html+='<tr><td>'+(r.disciplina||'')+'</td><td>'+(r.composicao||'')+'</td><td>'+(r.codCliente||'')+'</td><td>'+(r.desc||'')+'</td><td>'+(r.unidade||'')+'</td><td>'+(r.insumo||'')+'</td><td>'+(r.descIns||'')+'</td><td>'+(r.unidIns||'')+'</td><td>'+iprodFmt(r.indice)+'</td><td>'+(r.tipo||'')+'</td></tr>';
       });
+      if(temFiltroAtivo){
+        html+='<tr class="iprod-tot"><td colspan="8">TOTAL do recorte filtrado</td><td>'+iprodFmt(somaIndiceFiltrado)+'</td><td></td></tr>';
+      }
       html+='</tbody></table></div>';
     } else {
-      html+='<div style="font-size:11.5px;color:var(--muted)">Nenhum resultado pra "'+IPROD_BUSCA_INDICE_TERMO+'".</div>';
+      html+='<div style="font-size:11.5px;color:var(--muted)">Nenhum resultado pra esse filtro.</div>';
     }
   }
   html+='</div></div>'; // /iprod-tab-baseidx
 
   html+='</div>'; // /iprod-wrap
+  // Preserva foco/cursor de um <input> com id que esteja em edição — trocar o innerHTML inteiro
+  // (como esse render faz) recria o DOM do zero e tira o foco a cada tecla, quebrando qualquer
+  // campo que re-renderize no oninput (ex.: busca da aba "Base de Índices" — só dava pra digitar
+  // 1 letra por vez, porque cada tecla derrubava o foco do campo).
+  var iprodFocoAtivo=document.activeElement;
+  var iprodFocoId=iprodFocoAtivo&&iprodFocoAtivo.id;
+  var iprodFocoSel=(iprodFocoAtivo&&typeof iprodFocoAtivo.selectionStart==='number')?iprodFocoAtivo.selectionStart:null;
   el.innerHTML=html;
+  if(iprodFocoId){
+    var iprodNovoFoco=document.getElementById(iprodFocoId);
+    if(iprodNovoFoco){
+      iprodNovoFoco.focus();
+      if(iprodFocoSel!=null&&typeof iprodNovoFoco.setSelectionRange==='function'){
+        try{ iprodNovoFoco.setSelectionRange(iprodFocoSel,iprodFocoSel); }catch(e){}
+      }
+    }
+  }
 }
 
 async function renderViewIndiceProdutividade(){
