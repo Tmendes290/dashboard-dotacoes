@@ -14142,6 +14142,7 @@ function iprodToggleExcluidasFunc(){ IPROD_MOSTRAR_EXCLUIDAS_FUNC=!IPROD_MOSTRAR
 // opcionalmente filtrado por disciplina (Civil/Elétrica/Mecânica...).
 var IPROD_TOP5_DISC='';
 function iprodSetTop5Disc(v){ IPROD_TOP5_DISC=v; iprodRenderShell(); }
+var IPROD_TOP5_CHART=null; // instância Chart.js do gráfico do Top 5 — recriada a cada render
 
 function iprodToggleAtivSelecionada(idxProjeto){
   if(IPROD_ATIV_SELECIONADAS[idxProjeto]) delete IPROD_ATIV_SELECIONADAS[idxProjeto];
@@ -15208,14 +15209,14 @@ async function iprodProcessar(){
   var temProjeto=!!(IPROD_PROJETO&&IPROD_PROJETO.pq.length);
   if(!temContratada&&!temProjeto){ toast('Envie ao menos a PQ do Projeto ou o arquivo da contratada','red'); return; }
   IPROD_CARREGADO_DE_HIST=null;
-  toast(temContratada?'Calculando comparativo...':'Calculando HH esperado pelo índice (sem contratada)...','blue');
+  toast(temContratada?'Calculando comparativo...':'Calculando HH com CPU pelo índice (sem contratada)...','blue');
   await iprodLoadIndice();
   if(!IPROD_INDICE){ toast('Base de índices de produtividade indisponível','red'); return; }
 
   var porFuncao={}, porMaterial={}, semIndice=[], porAtividade=[];
   // porFuncaoProjeto: mesma forma de porFuncao, mas acumulado pela quantidade OFICIAL do projeto
   // (ver comentário mais abaixo, dentro do loop de qtdComp) — usado como base da seção 4 quando
-  // há PQ do Projeto, pra reconciliar com o HH Esperado da seção 3.
+  // há PQ do Projeto, pra reconciliar com o HH com CPU da seção 3.
   var porFuncaoProjeto={}, totRefAssumidoProjeto=0;
 
   // PASSO 1: acha o índice de cada item da PQ e calcula a alocação proporcional do HH cobrado
@@ -15223,7 +15224,7 @@ async function iprodProcessar(){
   // todos os itens de fornecimento (os que bateram com algum índice), × HH total do histograma.
   // Mesmo método usado manualmente no modelo de referência. Só roda com contratada carregada —
   // sem ela não tem PQ da empresa nem histograma pra ratear, a seção 3 abaixo já lida com
-  // IPROD_PROJETO sozinho (mostra só o HH esperado pelo índice, sem lado da empresa).
+  // IPROD_PROJETO sozinho (mostra só o HH com CPU pelo índice, sem lado da empresa).
   var achouPorItem=[];
   if(temContratada) IPROD_CONTRATADA.pq.forEach(function(item){
     // Itens em verba (vb, vb/mês...) são custo administrativo/lump-sum (Administração Local,
@@ -15336,7 +15337,7 @@ async function iprodProcessar(){
   // Comparação PQ do Projeto → PQ da Contratada (não o inverso): parte de cada atividade
   // OFICIAL do projeto e checa se a contratada cobriu com a quantidade certa. Isso também
   // pega o que o sentido empresa→projeto não pegava: atividade do projeto que a contratada
-  // nem colocou na PQ dela. Junto, mostra o índice oficial e o HH esperado x o HH que a
+  // nem colocou na PQ dela. Junto, mostra o índice oficial e o HH com CPU x o HH que a
   // quantidade da contratada implica (usando o MESMO índice correto da base).
   var qtdComp=[], contratadaSemProjeto=[];
   if(IPROD_PROJETO && IPROD_PROJETO.pq.length){
@@ -15352,7 +15353,7 @@ async function iprodProcessar(){
     var pendentes=[];
     IPROD_PROJETO.pq.forEach(function(pItem,idxProjeto){
       // Atividade excluída manualmente pelo usuário (botão "Excluir" na seção 3) — tratada como
-      // se nunca tivesse existido na PQ: não entra no HH Esperado, na seção 4 por função, nem em
+      // se nunca tivesse existido na PQ: não entra no HH com CPU, na seção 4 por função, nem em
       // nenhum total/KPI. Ver iprodExcluirLinhaProjeto.
       if(IPROD_LINHAS_EXCLUIDAS[idxProjeto]) return;
       // Atividade administrativa (unidade "vb"/"vb x mês"), categoria "F" (fornecimento puro,
@@ -15389,7 +15390,7 @@ async function iprodProcessar(){
         detalhePartes.push(r.insumo+'-'+(r.descIns||'?')+'('+iprodFmt(r.indice)+')');
         // Quebra por função usando a quantidade OFICIAL do projeto (pItem.quantidade), não a da
         // contratada — vira a base da seção 4 (comparativo por função) quando há PQ do Projeto,
-        // pra bater com o HH Esperado da seção 3 (que também usa quantidade do projeto). Antes a
+        // pra bater com o HH com CPU da seção 3 (que também usa quantidade do projeto). Antes a
         // seção 4 rodava sobre a quantidade da PQ da CONTRATADA (achouPorItem, mais abaixo), uma
         // base diferente da seção 3 — os totais das duas seções nunca reconciliavam.
         var qtdNecProjeto=pItem.quantidade*(Number(r.indice)||0);
@@ -15486,7 +15487,7 @@ async function iprodProcessar(){
       // em vez de simplesmente não comparar nada.
       // Composição encontrada na base mas sem NENHUM insumo de mão de obra cadastrado (indiceTotal
       // fica 0) não é "índice de referência zero" de verdade — é lacuna da base-fonte. Tratar como
-      // achou=0 deixava HH Esperado zerado mesmo quando a contratada cobrou um HH real e alto pra
+      // achou=0 deixava HH com CPU zerado mesmo quando a contratada cobrou um HH real e alto pra
       // essa atividade (ex.: concreto de laje sem IH cadastrado), escondendo a divergência em vez
       // de mostrar. Cai pro mesmo fallback de "sem índice": usa o que a contratada mesma declara,
       // ou na falta disso, considera igual ao HH da empresa — nunca deixa "esperado" em 0 só por
@@ -15497,7 +15498,7 @@ async function iprodProcessar(){
       var indiceOrigem=indiceManual!=null?'manual':(temIndiceValido?'base':(indiceContratadaMedio!=null?'contratada':null));
       var hhEsperado;
       if(temIndiceValido){
-        // HH Esperado já com praticabilidade embutida (Referência × (2 − Praticabilidade), igual à seção 5).
+        // HH com CPU já com praticabilidade embutida (Referência × (2 − Praticabilidade), igual à seção 5).
         hhEsperado=pItem.quantidade*indiceTotal*(2-IPROD_PRAT);
       } else if(indiceContratadaMedio!=null){
         // Índice já é o que a contratada mesma pratica (empírico) — não aplica praticabilidade
@@ -15508,7 +15509,7 @@ async function iprodProcessar(){
         hhEsperado=hhEmpresa||0;
       }
       // Sem índice válido pra quebrar por função (base incompleta e sem taxa própria da
-      // contratada) — o HH esperado dessa atividade entra direto no total da seção 4 como "sem
+      // contratada) — o HH com CPU dessa atividade entra direto no total da seção 4 como "sem
       // referência por função", pra não sumir da soma (ver totRefAjust mais abaixo).
       if(!temIndiceValido) totRefAssumidoProjeto+=hhEsperado;
 
@@ -15629,7 +15630,7 @@ async function iprodProcessar(){
   var linhas=[];
   // Com PQ do Projeto, a seção 4 (por função) usa porFuncaoProjeto (quantidade OFICIAL do
   // projeto × índice) em vez de porFuncao (quantidade da PQ da contratada × índice) — pra somar
-  // o mesmo total de HH Esperado/Referência que a seção 3 mostra por atividade (qtdComp). Sem PQ
+  // o mesmo total de HH com CPU/Referência que a seção 3 mostra por atividade (qtdComp). Sem PQ
   // do Projeto não existe essa base (qtdComp fica vazio), continua usando porFuncao.
   var usaBaseProjeto=temProjeto&&Object.keys(porFuncaoProjeto).length>0;
   var porFuncaoFinal=usaBaseProjeto?porFuncaoProjeto:porFuncao;
@@ -15718,9 +15719,9 @@ async function iprodProcessar(){
   // Atividades sem índice na base mas com HH declarado entram no total "como se fossem iguais"
   // (não geram diferença) — soma direto o HH declarado, sem o ajuste de praticabilidade (que só
   // faz sentido pra HH calculado por índice). Com base no projeto (usaBaseProjeto), usa
-  // totRefAssumidoProjeto (mesma soma de HH Esperado da seção 3 pras atividades sem índice válido)
+  // totRefAssumidoProjeto (mesma soma de HH com CPU da seção 3 pras atividades sem índice válido)
   // em vez de totRefAssumido (que vem de achouPorItem/contratada) — pra fechar totRefAjust
-  // exatamente igual à soma do HH Esperado da seção 3 (totHhEsperadoProjeto, calculado abaixo).
+  // exatamente igual à soma do HH com CPU da seção 3 (totHhEsperadoProjeto, calculado abaixo).
   var totRefAssumido=usaBaseProjeto?totRefAssumidoProjeto
     :porAtividade.filter(function(a){return a.semIndiceMasDeclarado;}).reduce(function(s,a){return s+a.hhCalculado;},0);
   var totRefAjust=linhas.reduce(function(s,l){return s+l.hhAjust;},0)+totRefAssumido;
@@ -15744,7 +15745,7 @@ async function iprodProcessar(){
   var valorDif=taxaRSporHH!=null?totDif*taxaRSporHH:null;
 
   IPROD_RESULT={linhas:linhas,linhasExcluidas:linhasExcluidas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto,totCobradoHistograma:totCobradoHistograma,taxaRSporHH:taxaRSporHH,valorCobrado:valorCobrado,valorReferencia:valorReferencia,valorDif:valorDif};
-  toast(temContratada?'Comparativo calculado':'HH esperado calculado pelo índice do projeto (sem contratada)','green');
+  toast(temContratada?'Comparativo calculado':'HH com CPU calculado pelo índice do projeto (sem contratada)','green');
   iprodRenderShell();
 }
 
@@ -15922,7 +15923,7 @@ function iprodRenderShell(){
       ['O que é "Praticabilidade" e como ela entra na conta?',
        'É um fator único que você digita pra cada análise (ex.: 66,67%) — representa o quanto do tempo a equipe consegue de fato aplicar na atividade, descontando deslocamento, espera de material, etc. A fórmula é <b>HH + Praticabilidade = HH Referência × (2 − Praticabilidade)</b>. Com 66,67%, isso equivale a multiplicar o HH de referência por 1,33 — ou seja, adiciona de volta o tempo "não praticável" que o índice puro não cobre. Quanto MAIOR a praticabilidade, MENOR esse ajuste (100% de praticabilidade = sem ajuste nenhum).'],
       ['Por que uma atividade aparece "Sem correspondência na base de índices"?',
-       'Quer dizer que não achamos, na base oficial da Vale, nenhuma composição parecida o suficiente com a descrição daquela atividade (nem por código, nem por texto). Nesse caso o sistema tenta usar o índice que a própria contratada declara na PQ dela; se ela também não declarar, considera o HH esperado igual ao HH que ela cobrou (não gera divergência, mas também não valida nada — é uma lacuna da nossa base, não um erro da contratada).'],
+       'Quer dizer que não achamos, na base oficial da Vale, nenhuma composição parecida o suficiente com a descrição daquela atividade (nem por código, nem por texto). Nesse caso o sistema tenta usar o índice que a própria contratada declara na PQ dela; se ela também não declarar, considera o HH com CPU igual ao HH que ela cobrou (não gera divergência, mas também não valida nada — é uma lacuna da nossa base, não um erro da contratada).'],
       ['E "Composição achada na base sem insumo de mão de obra (IH) cadastrado"?',
        'Achamos a composição certa na base da Vale, mas ela só tem material/equipamento cadastrado, sem nenhuma linha de mão de obra (isso acontece em ~10% da base — é uma lacuna real da planilha-fonte, não um bug daqui). Quando isso acontece, o sistema tenta estimar o índice pela média de composições parecidas que TÊM mão de obra (fica marcado "≈ estimado"); se não achar nenhuma parecida, cai pro mesmo fallback do item acima.'],
       ['O que significa o selo "contratada" do lado do índice?',
@@ -15930,7 +15931,7 @@ function iprodRenderShell(){
       ['O que significa "⚠️ só supervisão"?',
        'A composição da base só tem cadastrado Encarregado/Mestre/Apontador (quem supervisiona), sem nenhum instalador de verdade (Servente, Pedreiro...). O índice mostrado reflete só o tempo do encarregado observando o serviço, então tende a estar SUBESTIMADO — é um sinal de alerta, não um erro pra corrigir.'],
       ['Por que a seção 3 (Atividades) e a seção 4 (Por Função) mostram números de HH diferentes?',
-       '"HH Esperado" (seção 3) e "HH Referência" (seção 4) usam a MESMA base de cálculo (quantidade oficial do projeto × índice) e devem bater quando somados. Já "HH da Empresa" (seção 3, só atividades que casaram com o projeto) e "HH Cobrado" (seção 4, TODO o histograma da contratada) são coisas diferentes de propósito — "HH Cobrado" inclui também atividades que a contratada lançou sem ter uma atividade correspondente na PQ do projeto (aparecem na tabela "Itens sem correspondência" mais abaixo). Não é bug: são dois recortes diferentes do mesmo universo.'],
+       '"HH com CPU" (seção 3) e "HH Referência" (seção 4) usam a MESMA base de cálculo (quantidade oficial do projeto × índice) e devem bater quando somados. Já "HH da Empresa" (seção 3, só atividades que casaram com o projeto) e "HH Cobrado" (seção 4, TODO o histograma da contratada) são coisas diferentes de propósito — "HH Cobrado" inclui também atividades que a contratada lançou sem ter uma atividade correspondente na PQ do projeto (aparecem na tabela "Itens sem correspondência" mais abaixo). Não é bug: são dois recortes diferentes do mesmo universo.'],
       ['O que quer dizer cada Status na tabela de atividades?',
        '<b>Bate</b> = quantidade da contratada igual à do projeto (dentro de 0,01). <b>Divergente</b> = quantidades diferentes, vale conferir. <b>Medida diferente</b> = mesma composição, mas a contratada cotou noutra unidade/tamanho (ex.: projeto pede lona 0,2mm, ela cotou 0,8mm). <b>Faltando na PQ da empresa</b> = o projeto prevê essa atividade e a contratada nem incluiu na PQ dela.'],
       ['Achei um índice ou código errado — como eu corrijo?',
@@ -15938,7 +15939,7 @@ function iprodRenderShell(){
       ['Por que o índice de uma atividade mudou depois que eu importei a planilha de novo?',
        'A base de índices oficial (Vale) pode ter sido atualizada, ou a correção manual que você fez (código/índice) foi limpa — toda vez que você sobe uma PQ do Projeto NOVA, os ajustes manuais da análise anterior são descartados (porque a linha que era "atividade 5" na PQ antiga pode não ser a mesma "atividade 5" na PQ nova).'],
       ['Sem contratada, dá pra usar essa aba mesmo assim?',
-       'Dá — suba só a "PQ do Projeto" e clique em Processar. O sistema calcula o HH esperado pelo índice oficial da Vale pra cada atividade (KPI "HH Esperado Total"), sem comparar com nenhuma cobrança — útil pra estimar HH antes mesmo de ter uma cotação da contratada.']
+       'Dá — suba só a "PQ do Projeto" e clique em Processar. O sistema calcula o HH com CPU pelo índice oficial da Vale pra cada atividade (KPI "HH com CPU Total"), sem comparar com nenhuma cobrança — útil pra estimar HH antes mesmo de ter uma cotação da contratada.']
     ];
     html+='<div class="iprod-panel" style="border-color:#93c5fd;background:#f8fafc">'
       +'<div class="iprod-panel-title">❓ Dúvidas frequentes</div>'
@@ -15994,11 +15995,11 @@ function iprodRenderShell(){
 
   html+='<div class="iprod-panel">'
     +'<div class="iprod-panel-title">2. Importar dados para o comparativo</div>'
-    +'<div class="iprod-panel-note">A contratada se baseia tanto no projeto quanto na PQ dela pra executar o serviço — por isso as quantidades das duas PQs entram lado a lado. Uma divergência não significa automaticamente que a contratada errou: pode ser a engenharia do projeto que precisa revisar o quantitativo. Também dá pra processar só com a PQ do Projeto (sem arquivo da contratada) pra ver o HH esperado pelo índice antes de ter uma cotação.</div>'
+    +'<div class="iprod-panel-note">A contratada se baseia tanto no projeto quanto na PQ dela pra executar o serviço — por isso as quantidades das duas PQs entram lado a lado. Uma divergência não significa automaticamente que a contratada errou: pode ser a engenharia do projeto que precisa revisar o quantitativo. Também dá pra processar só com a PQ do Projeto (sem arquivo da contratada) pra ver o HH com CPU pelo índice antes de ter uma cotação.</div>'
     +'<div class="iprod-upload-grid">'
     +'<label class="iprod-upl-box'+(c?' filled':'')+'">'
     +'<div class="iprod-upl-ico">📄</div><div class="iprod-upl-lbl">Arquivo da Contratada</div>'
-    +'<div class="iprod-upl-sub">'+(IPROD_EMPRESA==='MILPLAN'?'Plano de Trabalho da MILPLAN (.xlsm) — lê a aba "12.0 PQ" (HH por atividade) e a "8.1 - Hist Detalhado" (HH por função)':'1 planilha com aba de PQ (atividade/código/quantidade) e aba de Histograma (função/HH) — lidas automaticamente (opcional se você só quer o HH esperado do projeto)')+'</div>'
+    +'<div class="iprod-upl-sub">'+(IPROD_EMPRESA==='MILPLAN'?'Plano de Trabalho da MILPLAN (.xlsm) — lê a aba "12.0 PQ" (HH por atividade) e a "8.1 - Hist Detalhado" (HH por função)':'1 planilha com aba de PQ (atividade/código/quantidade) e aba de Histograma (função/HH) — lidas automaticamente (opcional se você só quer o HH com CPU do projeto)')+'</div>'
     +'<div class="iprod-upl-file">'+(c?('✓ '+c.nomeArquivo+' — '+c.pq.length+' ativ. / '+c.histograma.length+' funções'):'')+'</div>'
     +'<input type="file" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="iprodHandleContratadaFile(this.files[0])"></label>'
     +'<label class="iprod-upl-box'+(p?' filled':'')+'" style="position:relative">'
@@ -16023,9 +16024,9 @@ function iprodRenderShell(){
 
   if(r){
     if(!r.temContratada){
-      html+='<div class="iprod-insight" style="margin-bottom:16px">📐 Sem arquivo da contratada — mostrando só o <b>HH Esperado</b> de cada atividade do projeto pelo índice de produtividade (referência antes de ter uma cotação pra comparar).</div>';
+      html+='<div class="iprod-insight" style="margin-bottom:16px">📐 Sem arquivo da contratada — mostrando só o <b>HH com CPU</b> de cada atividade do projeto pelo índice de produtividade (referência antes de ter uma cotação pra comparar).</div>';
       html+='<div class="iprod-kpis" style="grid-template-columns:1fr">'
-        +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(r.totHhEsperadoProjeto)+'</div><div class="iprod-kpi-lbl">HH Esperado Total (Projeto)</div><div class="iprod-kpi-sub">Soma do HH Esperado de cada atividade (seção 3), PQ × Índice já ajustado pela praticabilidade de '+Math.round(IPROD_PRAT*100)+'%</div></div>'
+        +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(r.totHhEsperadoProjeto)+'</div><div class="iprod-kpi-lbl">HH com CPU Total (Projeto)</div><div class="iprod-kpi-sub">Soma do HH com CPU de cada atividade (seção 3), PQ × Índice já ajustado pela praticabilidade de '+Math.round(IPROD_PRAT*100)+'%</div></div>'
         +'</div>';
     } else {
     var temRS=IPROD_MOSTRAR_RS&&r.taxaRSporHH!=null;
@@ -16059,9 +16060,9 @@ function iprodRenderShell(){
     }
     html+='<div class="iprod-kpis">'
       +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Orçado: Empresa</div><div class="iprod-kpi-sub">'+(temQtdComp?'Soma do HH da Empresa nas atividades do recorte atual':(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
-      +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(kpiRef)+'</div><div class="iprod-kpi-lbl">HH Referência + Praticabilidade</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
+      +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(kpiRef)+'</div><div class="iprod-kpi-lbl">HH com CPU</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(kpiDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div>'+(temRS?'<div class="iprod-kpi-money" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">≈ '+iprodFmtRS(r.valorDif)+'</div>':'')+'</div>'
-      +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiAderencia*100)+'%</div><div class="iprod-kpi-lbl">Aderência</div><div class="iprod-kpi-sub">HH Referência ÷ HH Orçado: Empresa</div></div>'
+      +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiAderencia*100)+'%</div><div class="iprod-kpi-lbl">Aderência</div><div class="iprod-kpi-sub">HH com CPU ÷ HH Orçado: Empresa</div></div>'
       +'</div>';
     if(temQtdComp){
       var gapSemProjeto=r.totCobrado-kpiCobrado;
@@ -16074,7 +16075,7 @@ function iprodRenderShell(){
     }
     if(temRS){
       html+='<div class="iprod-insight" style="margin-bottom:16px;border-left-color:'+(r.valorDif>0?'#dc2626':'#16a34a')+';background:'+(r.valorDif>0?'#fef2f2':'#f0fdf4')+';color:'+(r.valorDif>0?'#7f1d1d':'#14532d')+'">'
-        +(r.valorDif>0?'💰 <b>Economia potencial estimada: '+iprodFmtRS(r.valorDif)+'</b> — é o quanto da Diferença (HH) acima representa em R$, se a contratada cobrasse só o HH Esperado.':'✅ <b>Sem sobrecobrança estimada em R$</b> — o HH cobrado ficou dentro (ou abaixo) do HH Esperado.')
+        +(r.valorDif>0?'💰 <b>Economia potencial estimada: '+iprodFmtRS(r.valorDif)+'</b> — é o quanto da Diferença (HH) acima representa em R$, se a contratada cobrasse só o HH com CPU.':'✅ <b>Sem sobrecobrança estimada em R$</b> — o HH cobrado ficou dentro (ou abaixo) do HH com CPU.')
         +' Taxa usada: '+iprodFmtRS(r.taxaRSporHH)+'/HH, calculada a partir do próprio valor (R$) de fornecimento declarado na PQ da contratada — é uma <b>estimativa</b> (mistura o que estiver no preço unitário dela, não separa mão de obra de material/equipamento), não um valor contratual.'
         +'</div>';
     }
@@ -16085,7 +16086,7 @@ function iprodRenderShell(){
       +'<button class="iprod-btn" style="margin-top:0" onclick="iprodSalvarHistorico()">💾 Salvar no histórico</button></div>';
 
     if(r.qtdComp.length){
-      // Painel "Top 5 — Curva ABC": ranking das atividades que mais pesam no HH Esperado
+      // Painel "Top 5 — Curva ABC": ranking das atividades que mais pesam no HH com CPU
       // (referência oficial do projeto) — os "quantitativos direcionadores do orçamento". Sempre
       // sobre o universo INTEIRO de atividades (não usa os filtros Todos/Bate/Divergente da seção
       // 3 abaixo, que são pra outra finalidade) — só o filtro de disciplina, próprio dessa análise.
@@ -16095,29 +16096,35 @@ function iprodRenderShell(){
       var top5TotalHH=top5Base.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
       var top5Itens=top5Base.filter(function(q){return q.hhEsperado>0;}).slice().sort(function(a,b){return (b.hhEsperado||0)-(a.hhEsperado||0);}).slice(0,5);
       html+='<div class="iprod-panel"><div class="iprod-panel-title">Top 5 — Curva ABC do Orçamento</div>'
-        +'<div class="iprod-panel-note">As 5 atividades que mais pesam no HH Esperado (a referência oficial do projeto) — os principais quantitativos direcionadores do orçamento, pra saber onde focar a conferência primeiro.</div>';
+        +'<div class="iprod-panel-note">As 5 atividades que mais pesam no HH com CPU (a referência oficial do projeto) — os principais quantitativos direcionadores do orçamento, pra saber onde focar a conferência primeiro.</div>';
       if(top5DiscOpcoes.length>1){
         html+='<div style="margin-bottom:12px"><select class="iprod-text-input" style="width:auto" onchange="iprodSetTop5Disc(this.value)">'
           +'<option value=""'+(!IPROD_TOP5_DISC?' selected':'')+'>Todas as disciplinas</option>'
           +top5DiscOpcoes.map(function(d){return '<option value="'+d+'"'+(IPROD_TOP5_DISC===d?' selected':'')+'>'+d+'</option>';}).join('')
           +'</select></div>';
       }
+      var top5ChartData=[];
       if(top5Itens.length && top5TotalHH>0){
         var top5Acumulado=0;
-        html+='<table class="iprod-tbl"><thead><tr><th>#</th><th>Atividade</th><th>Disciplina</th><th>HH Esperado</th><th>% do Total</th><th>% Acumulado</th></tr></thead><tbody>';
         top5Itens.forEach(function(q,i){
           var pct=(q.hhEsperado/top5TotalHH)*100;
           top5Acumulado+=pct;
-          html+='<tr><td>'+(i+1)+'</td><td>'+q.desc+'</td><td>'+(q.disciplina||'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+pct.toFixed(1).replace('.',',')+'%</td><td>'+top5Acumulado.toFixed(1).replace('.',',')+'%</td></tr>';
+          top5ChartData.push({label:'#'+(i+1),desc:q.desc,pct:pct,cum:top5Acumulado});
+        });
+        html+='<div style="position:relative;height:260px;margin-bottom:16px"><canvas id="iprod-top5-chart"></canvas></div>'
+          +'<table class="iprod-tbl"><thead><tr><th>#</th><th>Atividade</th><th>Disciplina</th><th>HH com CPU</th><th>% do Total</th><th>% Acumulado</th></tr></thead><tbody>';
+        top5ChartData.forEach(function(cd,i){
+          var q=top5Itens[i];
+          html+='<tr><td>'+(i+1)+'</td><td>'+q.desc+'</td><td>'+(q.disciplina||'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+cd.pct.toFixed(1).replace('.',',')+'%</td><td>'+cd.cum.toFixed(1).replace('.',',')+'%</td></tr>';
         });
         html+='</tbody></table>'
-          +'<div class="iprod-panel-note" style="margin:10px 0 0">Essas 5 atividades respondem por <b>'+top5Acumulado.toFixed(1).replace('.',',')+'%</b> de todo o HH Esperado'+(IPROD_TOP5_DISC?' da disciplina '+IPROD_TOP5_DISC:' do projeto')+'.</div>';
+          +'<div class="iprod-panel-note" style="margin:10px 0 0">Essas 5 atividades respondem por <b>'+top5Acumulado.toFixed(1).replace('.',',')+'%</b> de todo o HH com CPU'+(IPROD_TOP5_DISC?' da disciplina '+IPROD_TOP5_DISC:' do projeto')+'.</div>';
       } else {
-        html+='<div class="iprod-panel-note">Sem atividades com HH Esperado nesse recorte.</div>';
+        html+='<div class="iprod-panel-note">Sem atividades com HH com CPU nesse recorte.</div>';
       }
       html+='</div>';
 
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto'+(r.temContratada?' × PQ da Contratada — quantidade e índice':' — HH esperado pelo índice')+'</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto'+(r.temContratada?' (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela.':'.')+' <b>HH Esperado</b> = quantidade do projeto × índice, já com a praticabilidade embutida.'+(r.temContratada?' <b>HH da Empresa</b> = alocação proporcional do HH total cobrado no histograma, distribuído pelo peso (%) do valor (R$) de cada atividade dentro da PQ da contratada — mesmo método usado manualmente na planilha de referência.':'')+' Clique pra ver a composição do índice e corrigir o Cód. Cliente, se precisar.</div>'
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto'+(r.temContratada?' × PQ da Contratada — quantidade e índice':' — HH com CPU pelo índice')+'</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto'+(r.temContratada?' (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela.':'.')+' <b>HH com CPU</b> = quantidade do projeto × índice, já com a praticabilidade embutida.'+(r.temContratada?' <b>HH da Empresa</b> = alocação proporcional do HH total cobrado no histograma, distribuído pelo peso (%) do valor (R$) de cada atividade dentro da PQ da contratada — mesmo método usado manualmente na planilha de referência.':'')+' Clique pra ver a composição do índice e corrigir o Cód. Cliente, se precisar.</div>'
         +(r.temContratada?'<div style="display:flex;gap:8px;margin:0 0 12px">'
           +[['todos','Todas ('+r.qtdComp.length+')'],['cobradas','Só cobradas ('+nCobradas3+')']].map(function(f){
             var ativo=IPROD_QTDCOMP_FILTRO===f[0];
@@ -16137,7 +16144,7 @@ function iprodRenderShell(){
           +'<span style="display:flex;gap:8px"><button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#dc2626;color:#fff" onclick="iprodExcluirAtividadesSelecionadas()">🗑️ Excluir selecionadas</button>'
           +'<button class="iprod-hist-link" style="font-size:10.5px" onclick="iprodLimparSelecaoAtiv()">Limpar seleção</button></span>'
           +'</div>':'')
-        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>HH Esperado</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
+        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>HH com CPU</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
       qtdCompFiltrado.forEach(function(q){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
@@ -16492,6 +16499,39 @@ function iprodRenderShell(){
     if(_msOpen==='ms-idx-disc'||_msOpen==='ms-idx-insumo'){
       var iprodDropAberto=document.getElementById(_msOpen+'-drop');
       if(iprodDropAberto) iprodDropAberto.style.display='block';
+    }
+  }
+  // Gráfico do painel "Top 5 — Curva ABC": barra (% do Total) + linha (% Acumulado) no MESMO eixo
+  // 0–100% (nunca eixo duplo) — recriado a cada render porque o innerHTML acima troca o <canvas>
+  // do zero, então qualquer instância Chart.js anterior fica órfã (precisa destruir e recriar).
+  if(IPROD_TOP5_CHART){ try{ IPROD_TOP5_CHART.destroy(); }catch(iprodChErr){} IPROD_TOP5_CHART=null; }
+  if(typeof top5ChartData!=='undefined' && top5ChartData.length && typeof Chart!=='undefined'){
+    var iprodTop5Canvas=document.getElementById('iprod-top5-chart');
+    if(iprodTop5Canvas){
+      IPROD_TOP5_CHART=new Chart(iprodTop5Canvas.getContext('2d'),{
+        data:{
+          labels:top5ChartData.map(function(d){return d.label;}),
+          datasets:[
+            {type:'bar',label:'% do Total',data:top5ChartData.map(function(d){return d.pct;}),backgroundColor:'#2563eb',borderRadius:4,barPercentage:0.55,categoryPercentage:0.7,order:2},
+            {type:'line',label:'% Acumulado',data:top5ChartData.map(function(d){return d.cum;}),borderColor:'#d97706',backgroundColor:'#d97706',borderWidth:2,pointRadius:4,pointBackgroundColor:'#d97706',pointBorderColor:'#fff',pointBorderWidth:1.5,tension:0.25,fill:false,order:1,
+              datalabels:{display:true,align:'top',offset:6,color:'#d97706',font:{size:10,weight:'700'},formatter:function(v){return Math.round(v)+'%';}}}
+          ]
+        },
+        options:{
+          responsive:true,maintainAspectRatio:false,animation:false,
+          plugins:{
+            legend:{display:true,position:'top',align:'end',labels:{boxWidth:10,boxHeight:10,font:{size:10.5},color:'#64748b'}},
+            tooltip:{callbacks:{
+              title:function(items){ var idx=items[0].dataIndex; return top5ChartData[idx].desc; },
+              label:function(c){ return c.dataset.label+': '+Math.round(c.raw*10)/10+'%'; }
+            }}
+          },
+          scales:{
+            x:{ticks:{color:'#94a3b8',font:{size:10.5,weight:'700'}},grid:{display:false}},
+            y:{min:0,max:100,ticks:{color:'#94a3b8',font:{size:10},callback:function(v){return v+'%';}},grid:{color:'rgba(0,0,0,.05)'}}
+          }
+        }
+      });
     }
   }
 }
