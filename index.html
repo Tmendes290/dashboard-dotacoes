@@ -16059,18 +16059,20 @@ function iprodRenderShell(){
       html+='<div class="iprod-panel-note" style="margin:-4px 0 10px">🔎 Cards abaixo = subtotal do recorte ativo na seção 3 ("'+recorteLbl+'") — muda junto com os filtros lá embaixo.</div>';
     }
     html+='<div class="iprod-kpis">'
-      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Orçado: Empresa</div><div class="iprod-kpi-sub">'+(temQtdComp?'Soma do HH da Empresa nas atividades do recorte atual':(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
+      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(temQtdComp?r.totCobrado:kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Orçado: Empresa</div><div class="iprod-kpi-sub">'+(temQtdComp?'Total cobrado pela contratada em toda a PQ dela (reconciliado com o projeto: '+iprodFmt(kpiCobrado)+' HH, é o valor usado no cálculo de Aderência/Diferença abaixo)':(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(kpiRef)+'</div><div class="iprod-kpi-lbl">HH com CPU</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(kpiDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div>'+(temRS?'<div class="iprod-kpi-money" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">≈ '+iprodFmtRS(r.valorDif)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiAderencia*100)+'%</div><div class="iprod-kpi-lbl">Aderência</div><div class="iprod-kpi-sub">HH com CPU ÷ HH Orçado: Empresa</div></div>'
       +'</div>';
     if(temQtdComp){
       var gapSemProjeto=r.totCobrado-kpiCobrado;
+      var gapItens=r.contratadaSemProjeto||[];
       html+='<div class="iprod-insight" style="margin-bottom:16px;border-left-color:'+(gapSemProjeto>0.5?'#d97706':'#16a34a')+';background:'+(gapSemProjeto>0.5?'#fffbeb':'#f0fdf4')+';color:'+(gapSemProjeto>0.5?'#78350f':'#14532d')+'">'
-        +'⚠️ O card "HH Cobrado" acima ('+iprodFmt(kpiCobrado)+' no recorte "'+recorteLbl+'") é só a parte que <b>reconciliou</b> com uma atividade oficial do projeto. A contratada cobrou, no total (toda a PQ dela), <b>'+iprodFmt(r.totCobrado)+' HH</b>'
-        +(gapSemProjeto>0.5?' — ou seja, <b>'+iprodFmt(gapSemProjeto)+' HH ('+Math.round(gapSemProjeto/r.totCobrado*100)+'% do total)</b> não bateram com nenhuma atividade do projeto e por isso não entram nesse card. '
-          +'<a href="#" onclick="event.preventDefault();var el=document.getElementById(\'iprod-sem-projeto\');if(el)el.scrollIntoView({behavior:\'smooth\',block:\'start\'});" style="font-weight:800;color:inherit;text-decoration:underline">Ver o que ficou de fora ↓</a>'
-          :' — bate certinho com o card, nada ficou de fora.')
+        +'⚠️ Do <b>HH Orçado: Empresa</b> acima ('+iprodFmt(r.totCobrado)+' HH, toda a PQ da contratada), só <b>'+iprodFmt(kpiCobrado)+' HH</b> (recorte "'+recorteLbl+'") <b>reconciliou</b> com uma atividade oficial do projeto — é esse valor que entra no cálculo de Aderência/Diferença acima.'
+        +(gapSemProjeto>0.5?' Os outros <b>'+iprodFmt(gapSemProjeto)+' HH</b>, em <b>'+gapItens.length+' item(ns)</b>, não bateram com nenhuma atividade do projeto:'
+          +'<ul style="margin:8px 0 0 18px;padding:0">'+gapItens.map(function(c){return '<li>'+c.desc+' — '+iprodFmt(c.quantidade)+' '+(c.unidade||'')+'</li>';}).join('')+'</ul>'
+          +'<a href="#" onclick="event.preventDefault();var el=document.getElementById(\'iprod-sem-projeto\');if(el)el.scrollIntoView({behavior:\'smooth\',block:\'start\'});" style="font-weight:800;color:inherit;text-decoration:underline;display:inline-block;margin-top:8px">Ver detalhamento do cálculo ↓</a>'
+          :' — bate certinho, nada ficou de fora.')
         +'</div>';
     }
     if(temRS){
