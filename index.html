@@ -14112,22 +14112,23 @@ function iprodRestaurarLinhaProjeto(idxProjeto){
 }
 // Realocação manual de um item da PQ da contratada que o matching automático (código/descrição/
 // similaridade) não conseguiu casar com nenhuma atividade da PQ do Projeto (painel "Itens sem
-// atividade correspondente") — o usuário sabe que aquele item É daquela atividade e força a
-// associação na mão. Chave é iprodGrupoKey(desc do grupo da contratada), estável entre renders
-// porque deriva só da descrição normalizada (o grupo em si é reconstruído do zero a cada render);
-// valor é o idxProjeto de destino. Aplicado ANTES do matching automático em iprodProcessar — reserva
-// o grupo pra essa atividade e tira ele da disputa/candidatos de todas as outras.
+// atividade correspondente") — promove esse item pra virar sua PRÓPRIA linha independente na
+// tabela 3, com Índice/HH com CPU calculados igual a qualquer atividade do projeto. NÃO mistura
+// número com nenhuma atividade já existente (pedido explícito do usuário: "não quero embutir
+// dentro de uma atividade, quero que suba e seja mais uma atividade"). Chave é
+// iprodGrupoKey(desc do grupo da contratada), estável entre renders porque deriva só da
+// descrição normalizada (o grupo em si é reconstruído do zero a cada render); é um SET (valor
+// sempre true), não mapeia pra nenhuma atividade específica.
 var IPROD_REALOCACOES={};
 function iprodGrupoKey(desc){ return iprodNorm(desc); }
-function iprodRealocarItem(grupoKey,idxProjeto){
-  if(idxProjeto===''||idxProjeto==null){ toast('Escolhe a atividade do projeto antes de transferir','red'); return; }
-  IPROD_REALOCACOES[grupoKey]=Number(idxProjeto);
-  toast('Item transferido pra atividade — recalculando...','blue');
+function iprodRealocarItem(grupoKey){
+  IPROD_REALOCACOES[grupoKey]=true;
+  toast('Item incluído como atividade própria na tabela 3 — recalculando...','blue');
   iprodProcessar();
 }
 function iprodDesfazerRealocacao(grupoKey){
   delete IPROD_REALOCACOES[grupoKey];
-  toast('Realocação desfeita — recalculando...','blue');
+  toast('Realocação desfeita — o item volta pra lista de sem correspondência','blue');
   iprodProcessar();
 }
 // Funções excluídas da seção 4 (Comparativo por função) — chave é o nome normalizado da função.
@@ -15193,6 +15194,7 @@ async function iprodHandleContratadaFile(file){
       // anterior não fazem mais sentido aqui.
       IPROD_FUNCOES_EXCLUIDAS={};
       IPROD_FUNC_SELECIONADAS={};
+      IPROD_REALOCACOES={};
       toast('Arquivo lido: '+(pq?pq.length:0)+' atividades na PQ, '+(hist?hist.length:0)+' funções no histograma'+(nCanon?' ('+nCanon+' confirmadas pelo catálogo)':''),'green');
       iprodRenderShell();
     }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
@@ -15263,7 +15265,6 @@ async function iprodHandlePQProjetoFile(files){
       IPROD_INDICE_OVERRIDES={};
       IPROD_LINHAS_EXCLUIDAS={};
       IPROD_ATIV_SELECIONADAS={};
-      IPROD_REALOCACOES={};
       toast('PQ do Projeto lida: '+pq.length+' atividades somadas de '+brutas.length+' linhas'+(listaArquivos.length>1?' (em '+listaArquivos.length+' arquivos)':''),'green');
       iprodRenderShell();
   }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
@@ -15416,17 +15417,6 @@ async function iprodProcessar(){
     // do projeto batendo os dois com a única linha de concreto da contratada, duplicando o
     // HH no total.
     var usadosEmp=[];
-    // Realocações manuais (ver IPROD_REALOCACOES/iprodRealocarItem) têm prioridade sobre QUALQUER
-    // matching automático: reserva o grupo da contratada pra atividade escolhida pelo usuário antes
-    // da primeira passagem rodar, pra nenhuma outra atividade do projeto conseguir roubá-lo por
-    // código/descrição/similaridade.
-    var realocPorProjeto={};
-    Object.keys(IPROD_REALOCACOES).forEach(function(gk){
-      var idxP=IPROD_REALOCACOES[gk];
-      if(IPROD_LINHAS_EXCLUIDAS[idxP]||!IPROD_PROJETO.pq[idxP]) return;
-      var g=contratadaAgrupadaList.filter(function(gg){return usadosEmp.indexOf(gg)<0;}).find(function(gg){return iprodGrupoKey(gg.desc)===gk;});
-      if(g){ realocPorProjeto[idxP]=g; usadosEmp.push(g); }
-    });
     // PRIMEIRA PASSAGEM: só matches exatos (código, descrição exata, similaridade normal com a
     // penalidade de número ativa) — reivindica candidatos antes de qualquer fallback de "medida
     // diferente" entrar em jogo, pra não deixar um item roubar o candidato exato de outro item
@@ -15522,19 +15512,6 @@ async function iprodProcessar(){
         var achouEmp=iprodFindInPq(pItem.desc,pItem.unidade,candidatos);
         if(achouEmp){ emp=achouEmp.item; matchTipo='descrição ('+Math.min(100,Math.round(achouEmp.score*100))+'% similar)'; }
       }
-      // Realocação manual (ver IPROD_REALOCACOES acima): SOMA ao que o matching automático já achou
-      // pra essa atividade (ou vira o próprio match, se não tinha nenhum) — nunca substitui/descarta
-      // um match automático existente, só inclui esse item a mais e entra no recálculo de Qtd./HH.
-      var realoc=realocPorProjeto[idxProjeto];
-      if(realoc){
-        if(emp){
-          emp={quantidade:(emp.quantidade||0)+(realoc.quantidade||0),hhAlocado:(emp.hhAlocado||0)+(realoc.hhAlocado||0),hhViaIndiceContratada:(emp.hhViaIndiceContratada||0)+(realoc.hhViaIndiceContratada||0)};
-          matchTipo=(matchTipo?matchTipo+' + ':'')+'realocado manualmente ('+realoc.desc+')';
-        } else {
-          emp={quantidade:realoc.quantidade,hhAlocado:realoc.hhAlocado||0,hhViaIndiceContratada:realoc.hhViaIndiceContratada||0};
-          matchTipo='realocado manualmente';
-        }
-      }
       if(emp) usadosEmp.push(emp);
       pendentes.push({pItem:pItem,idxProjeto:idxProjeto,achouIndice:achouIndice,indiceTotal:indiceTotal,
         detalhePartes:detalhePartes,indiceSoSupervisao:indiceSoSupervisao,emp:emp,matchTipo:matchTipo,specDiff:null,indiceManual:indiceManual});
@@ -15628,6 +15605,44 @@ async function iprodProcessar(){
     // projeto). Mostrar à parte pra fechar 100% do HH cobrado.
     contratadaSemProjeto=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;})
       .map(function(g){return {desc:g.desc,unidade:g.unidade,quantidade:g.quantidade,hhAlocado:g.hhAlocado||0,valorTotal:g.valorTotal||0};});
+    // Realocações manuais (ver IPROD_REALOCACOES/iprodRealocarItem/iprodDesfazerRealocacao):
+    // promove um item que não bateu com NENHUMA atividade do projeto pra virar sua PRÓPRIA linha
+    // na tabela 3 — não mistura número com nenhuma atividade já existente lá (pedido explícito do
+    // usuário: "não quero embutir dentro de uma atividade, quero que suba e seja mais uma
+    // atividade"). Índice/HH com CPU calculados igual a qualquer atividade do projeto (mesma
+    // lógica das 3 passagens acima), só que a partir da PRÓPRIA descrição/quantidade da
+    // contratada — não existe "Qtd. Projeto" oficial pra essa linha, então Qtd. Projeto = Qtd.
+    // Empresa = a mesma quantidade cobrada (Dif. Qtd. sempre 0).
+    var promovidos=[], restantes=[];
+    contratadaSemProjeto.forEach(function(g){
+      if(IPROD_REALOCACOES[iprodGrupoKey(g.desc)]) promovidos.push(g); else restantes.push(g);
+    });
+    contratadaSemProjeto=restantes;
+    promovidos.forEach(function(g,pi){
+      var codHintG=Object.keys(g.codigos||{})[0]||null;
+      var achouIndiceG=iprodFindIndice(codHintG,g.desc,g.unidade);
+      var indiceTotalG=0, detalhePartesG=[];
+      var indiceSoSupervisaoG=achouIndiceG&&iprodIndiceSoSupervisao(achouIndiceG.rows);
+      if(achouIndiceG) achouIndiceG.rows.forEach(function(rr){
+        if(rr.tipo!=='M') return;
+        indiceTotalG+=Number(rr.indice)||0;
+        detalhePartesG.push(rr.insumo+'-'+(rr.descIns||'?')+'('+iprodFmt(rr.indice)+')');
+      });
+      var temIndiceValidoG=!!achouIndiceG&&indiceTotalG>0;
+      var hhEsperadoG=temIndiceValidoG?(g.quantidade*indiceTotalG*(2-IPROD_PRAT)):(g.hhAlocado||0);
+      if(!temIndiceValidoG) totRefAssumidoProjeto+=hhEsperadoG;
+      qtdComp.push({desc:g.desc,unidade:g.unidade,codCliente:codHintG,idxProjeto:-(pi+1),
+        qtdProjeto:g.quantidade,qtdEmpresa:g.quantidade,diffQtd:0,
+        indiceTotal:indiceTotalG,hhEsperado:hhEsperadoG,hhEmpresa:g.hhAlocado||0,
+        diffHH:(g.hhAlocado||0)-hhEsperadoG,
+        status:'realocado',matchTipo:'realocado manualmente',specDiff:null,semIndiceProjeto:!temIndiceValidoG,
+        indiceOrigem:temIndiceValidoG?'base':null,indiceSoSupervisao:!!indiceSoSupervisaoG,
+        disciplina:(achouIndiceG&&achouIndiceG.rows&&achouIndiceG.rows[0])?achouIndiceG.rows[0].disciplina:null,
+        matchDesc:achouIndiceG?achouIndiceG.matchDesc:null,matchCodBase:achouIndiceG?achouIndiceG.matchCod:null,
+        detalhe:temIndiceValidoG?(detalhePartesG.join(' + ')+' = '+iprodFmt(indiceTotalG))
+          :'Sem correspondência na base de índices — considerado igual ao HH alocado da contratada, sem aplicar índice próprio.',
+        realocadoKey:iprodGrupoKey(g.desc)});
+    });
   }
 
   // PASSO 2: monta os comparativos usando o índice e a alocação já calculados
@@ -15880,7 +15895,6 @@ function iprodLimparPQProjeto(){
   IPROD_PROJETO=null;
   IPROD_RESULT=null;
   IPROD_INDICE_OVERRIDES={};
-  IPROD_REALOCACOES={};
   iprodRenderShell();
   toast('PQ do Projeto removida','green');
 }
@@ -16263,8 +16277,9 @@ function iprodRenderShell(){
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
           :q.status==='medida-diferente'?'<span class="iprod-badge iprod-b-azul" title="PQ do projeto pede '+q.specDiff.projeto+', a contratada considerou '+q.specDiff.empresa+'">📏 Medida diferente</span>'
           :q.status==='sem-contratada'?'<span class="iprod-badge iprod-b-cinza">Referência (sem contratada)</span>'
+          :q.status==='realocado'?'<span class="iprod-badge iprod-b-azul" title="Item incluído na mão, promovido da lista de \'sem correspondência\' — não é uma atividade oficial da PQ do Projeto">🔀 Incluído manualmente</span>'
           :'<span class="iprod-badge iprod-b-verm">Faltando na PQ da empresa</span>';
-        var descCell=q.desc+(q.status==='medida-diferente'?' <span class="iprod-badge iprod-b-azul" style="font-size:9.5px;padding:1px 6px">PQ pede '+q.specDiff.projeto+', empresa considerou '+q.specDiff.empresa+'</span>':(q.matchTipo&&q.matchTipo!=='código'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':''));
+        var descCell=q.desc+(q.status==='medida-diferente'?' <span class="iprod-badge iprod-b-azul" style="font-size:9.5px;padding:1px 6px">PQ pede '+q.specDiff.projeto+', empresa considerou '+q.specDiff.empresa+'</span>':(q.matchTipo&&q.matchTipo!=='código'&&q.status!=='realocado'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':''));
         var indiceCell=iprodFmt(q.indiceTotal)+(q.indiceOrigem==='manual'?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Você ajustou esse índice manualmente — clique na linha pra ver/mudar">⚙️ manual</span>'
             :q.indiceOrigem==='contratada'?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="Nossa base não tem essa composição — usado o índice que a própria contratada declara na PQ dela">contratada</span>':'')
           +(q.indiceSoSupervisao?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Composição na base só tem insumo de supervisão (Encarregado/Mestre...) cadastrado, sem instalador — índice provavelmente subestimado">⚠️ só supervisão</span>':'');
@@ -16280,22 +16295,29 @@ function iprodRenderShell(){
           +'<span>↳ Base de índices: <b>'+(q.matchCodBase||'—')+'</b> — '+(q.matchDesc||'?')+'</span>'
           +(q.matchCodBase?'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndice(\''+q.matchCodBase.replace(/\'/g,'')+'\')">🔍 Conferir índice</button>':'')
           +'</div>'
-          +'<div style="display:flex;gap:6px;align-items:center;margin-top:10px" onclick="event.stopPropagation()">'
-          +'<span style="font-size:9.5px;color:var(--muted);font-weight:700">Cód. Cliente (projeto):</span>'
-          +'<input value="'+(q.codCliente||'')+'" placeholder="sem código" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;width:140px;text-transform:uppercase" '
-          +'onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\') iprodEditarCodigoProjeto('+q.idxProjeto+',this)">'
-          +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px" onclick="event.stopPropagation();iprodEditarCodigoProjeto('+q.idxProjeto+',this.previousElementSibling)">Salvar e recalcular</button>'
-          +'</div>'
-          +'<div style="display:flex;gap:6px;align-items:center;margin-top:8px" onclick="event.stopPropagation()">'
-          +'<span style="font-size:9.5px;color:var(--muted);font-weight:700">Índice (HH/unid.):</span>'
-          +'<input value="'+(IPROD_INDICE_OVERRIDES[q.idxProjeto]!=null?iprodFmt(IPROD_INDICE_OVERRIDES[q.idxProjeto]):'')+'" placeholder="'+iprodFmt(q.indiceTotal)+' (automático)" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;width:140px" '
-          +'onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\') iprodEditarIndiceProjeto('+q.idxProjeto+',this)">'
-          +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px" onclick="event.stopPropagation();iprodEditarIndiceProjeto('+q.idxProjeto+',this.previousElementSibling)">Salvar e recalcular</button>'
-          +(IPROD_INDICE_OVERRIDES[q.idxProjeto]!=null?'<span style="font-size:9px;color:#d97706;font-weight:700">⚙️ ajustado manualmente</span>':'')
-          +'</div>'
-          +'<div style="margin-top:10px" onclick="event.stopPropagation()">'
-          +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#fef2f2;color:#dc2626" onclick="event.stopPropagation();iprodExcluirLinhaProjeto('+q.idxProjeto+')">🗑️ Excluir essa atividade da análise</button>'
-          +'</div>'
+          +(q.status==='realocado'?(
+            '<div class="iprod-insight" style="margin-top:10px">🔀 Essa linha não é uma atividade oficial da PQ do Projeto — é um item da contratada incluído na mão porque não bateu com nada automaticamente. Qtd. Projeto = Qtd. Empresa (não existe quantidade oficial pra comparar).</div>'
+            +'<div style="margin-top:10px" onclick="event.stopPropagation()">'
+            +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#fef2f2;color:#dc2626" onclick="event.stopPropagation();iprodDesfazerRealocacao(\''+q.realocadoKey.replace(/\'/g,'')+'\')">↺ Desfazer — volta pra lista de sem correspondência</button>'
+            +'</div>'
+          ):(
+            '<div style="display:flex;gap:6px;align-items:center;margin-top:10px" onclick="event.stopPropagation()">'
+            +'<span style="font-size:9.5px;color:var(--muted);font-weight:700">Cód. Cliente (projeto):</span>'
+            +'<input value="'+(q.codCliente||'')+'" placeholder="sem código" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;width:140px;text-transform:uppercase" '
+            +'onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\') iprodEditarCodigoProjeto('+q.idxProjeto+',this)">'
+            +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px" onclick="event.stopPropagation();iprodEditarCodigoProjeto('+q.idxProjeto+',this.previousElementSibling)">Salvar e recalcular</button>'
+            +'</div>'
+            +'<div style="display:flex;gap:6px;align-items:center;margin-top:8px" onclick="event.stopPropagation()">'
+            +'<span style="font-size:9.5px;color:var(--muted);font-weight:700">Índice (HH/unid.):</span>'
+            +'<input value="'+(IPROD_INDICE_OVERRIDES[q.idxProjeto]!=null?iprodFmt(IPROD_INDICE_OVERRIDES[q.idxProjeto]):'')+'" placeholder="'+iprodFmt(q.indiceTotal)+' (automático)" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;width:140px" '
+            +'onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\') iprodEditarIndiceProjeto('+q.idxProjeto+',this)">'
+            +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px" onclick="event.stopPropagation();iprodEditarIndiceProjeto('+q.idxProjeto+',this.previousElementSibling)">Salvar e recalcular</button>'
+            +(IPROD_INDICE_OVERRIDES[q.idxProjeto]!=null?'<span style="font-size:9px;color:#d97706;font-weight:700">⚙️ ajustado manualmente</span>':'')
+            +'</div>'
+            +'<div style="margin-top:10px" onclick="event.stopPropagation()">'
+            +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#fef2f2;color:#dc2626" onclick="event.stopPropagation();iprodExcluirLinhaProjeto('+q.idxProjeto+')">🗑️ Excluir essa atividade da análise</button>'
+            +'</div>'
+          ))
           +'</td></tr>';
       });
       var totHhEsperado=qtdCompBase3.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
@@ -16325,12 +16347,7 @@ function iprodRenderShell(){
       }
 
       if(r.contratadaSemProjeto && r.contratadaSemProjeto.length){
-        var iprodProjOpcoesHtml='<option value="">— escolher atividade do projeto —</option>'
-          +IPROD_PROJETO.pq.map(function(pi,idx){
-            if(IPROD_LINHAS_EXCLUIDAS[idx]) return '';
-            return '<option value="'+idx+'">'+String(pi.desc||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')+(pi.unidade?' ('+pi.unidade+')':'')+'</option>';
-          }).join('');
-        html+='<div class="iprod-panel" id="iprod-sem-projeto"><div class="iprod-panel-title">⚠️ Itens da PQ da contratada sem atividade correspondente no projeto</div><div class="iprod-panel-note">A contratada cobrou por isso, mas não achei atividade equivalente na PQ do Projeto — por isso não aparece na tabela acima. O HH alocado deles soma aqui pra fechar 100% do HH cobrado no histograma. Clique numa linha pra ver como o HH Alocado foi calculado ou pra realocar o item na mão, se você souber que ele é de uma atividade específica do projeto que o matching automático não achou.</div>'
+        html+='<div class="iprod-panel" id="iprod-sem-projeto"><div class="iprod-panel-title">⚠️ Itens da PQ da contratada sem atividade correspondente no projeto</div><div class="iprod-panel-note">A contratada cobrou por isso, mas não achei atividade equivalente na PQ do Projeto — por isso não aparece na tabela acima. O HH alocado deles soma aqui pra fechar 100% do HH cobrado no histograma. Clique numa linha pra ver como o HH Alocado foi calculado ou pra incluir o item na tabela 3 como atividade própria (linha nova e independente, não mexe em nenhuma atividade já existente lá).</div>'
           +'<table class="iprod-tbl"><thead><tr><th>Descrição</th><th>Unid.</th><th>Quantidade</th><th>HH Alocado</th></tr></thead><tbody>';
         r.contratadaSemProjeto.forEach(function(c){
           var pctValorC=r.totCobradoHistograma>0?(c.hhAlocado/r.totCobradoHistograma):0;
@@ -16345,11 +16362,7 @@ function iprodRenderShell(){
             +'<div class="iprod-drill-row" style="border-top:2px solid var(--border);margin-top:4px;padding-top:8px"><span style="font-weight:800">= HH Alocado dessa atividade</span><span style="font-weight:800">'+iprodFmt(c.hhAlocado)+' HH</span></div>'
             +'<div class="iprod-insight" style="margin-top:8px">O rateio é por PESO NO VALOR (R$), não por quantidade física — atividades mais caras "puxam" mais HH do histograma pra si, mesmo sem saber exatamente quantas pessoas trabalharam em cada atividade no dia a dia. É uma aproximação (mesmo método usado manualmente na planilha de referência), não uma medição direta.</div>'
             +'<div style="margin-top:10px" onclick="event.stopPropagation()">'
-            +'<span style="font-size:9.5px;color:var(--muted);font-weight:700;display:block;margin-bottom:4px">🔀 Realocar esse item pra uma atividade do projeto (soma ao que a atividade já tiver na tabela 3 — não substitui):</span>'
-            +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
-            +'<select class="iprod-text-input" style="width:auto;max-width:70%" onclick="event.stopPropagation()">'+iprodProjOpcoesHtml+'</select>'
-            +'<button class="iprod-btn" style="margin-top:0" onclick="event.stopPropagation();iprodRealocarItem(\''+chaveG+'\',this.previousElementSibling.value)">🔀 Transferir pra atividade</button>'
-            +'</div>'
+            +'<button class="iprod-btn" style="margin-top:0" onclick="event.stopPropagation();iprodRealocarItem(\''+chaveG+'\')">🔀 Incluir como atividade própria na tabela 3</button>'
             +'</div>'
             +'</td></tr>';
         });
