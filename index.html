@@ -14069,6 +14069,10 @@ var IPROD_HIST_FILTRO_SQUAD='';
 // Aba "Base de Índices" — consulta direta na planilha de índice usada nos comparativos, pra
 // tirar dúvida sem precisar abrir o Excel/Supabase por fora.
 var IPROD_BUSCA_INDICE_TERMO='', IPROD_BUSCA_INDICE_FONTE='vale';
+// Busca por texto na aba "PQ do Projeto (referência)" — filtra por código ou descrição da
+// atividade, mesmo padrão de re-render + preservação de foco já usado na busca da Base de Índices.
+var IPROD_BUSCA_PQPROJETO='';
+function iprodSetBuscaPQProjeto(v){ IPROD_BUSCA_PQPROJETO=v; iprodRenderShell(); }
 // Multi-seleção (caixas de seleção) — array vazio = "todas". Selecionadas via buildMsDrop/onMsChange
 // (mesmo componente de checkbox já usado nos outros filtros do dashboard, ver ms-idx-disc/
 // ms-idx-insumo em onMsChange), não por dropdown de valor único.
@@ -15325,6 +15329,7 @@ async function iprodHandlePQProjetoFile(files){
       IPROD_INDICE_OVERRIDES={};
       IPROD_LINHAS_EXCLUIDAS={};
       IPROD_ATIV_SELECIONADAS={};
+      IPROD_BUSCA_PQPROJETO='';
       toast('PQ do Projeto lida: '+pq.length+' atividades somadas de '+brutas.length+' linhas'+(listaArquivos.length>1?' (em '+listaArquivos.length+' arquivos)':''),'green');
       iprodRenderShell();
   }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
@@ -16588,21 +16593,32 @@ function iprodRenderShell(){
   html+='<div class="iprod-panel"><div class="iprod-panel-title">PQ do Projeto (base de referência)</div>'
     +'<div class="iprod-panel-note">Quantidades oficiais do projeto por atividade — importadas junto no passo 1. Se uma atividade não estiver aqui, o comparativo cai no cálculo direto pelo índice (sem checagem de quantidade).</div>';
   if(p&&p.pq.length){
-    html+='<table class="iprod-tbl"><thead><tr><th>Cód. Cliente</th><th>Descrição da Atividade</th><th>Unid.</th><th>Qtd. Oficial (Projeto)</th></tr></thead><tbody>';
-    p.pq.forEach(function(row){
-      var temAbas=row.porAba&&row.porAba.length>0;
-      html+='<tr'+(temAbas?' class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')"':'')+'>'
-        +'<td>'+(row.codCliente||'—')+'</td><td>'+row.desc+'</td><td>'+row.unidade+'</td><td>'+iprodFmt(row.quantidade)+'</td></tr>';
-      if(temAbas){
-        html+='<tr class="iprod-drill"><td colspan="4">'
-          +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">'+(row.porAba.length>1?'Somado a partir de '+row.porAba.length+' aba(s)':'Vem da aba')+'</div>';
-        row.porAba.forEach(function(a){
-          html+='<div class="iprod-drill-row"><span>'+a.aba+'</span><span>'+iprodFmt(a.quantidade)+' '+row.unidade+'</span></div>';
-        });
-        html+='</td></tr>';
-      }
-    });
-    html+='</tbody></table>';
+    var buscaPQTokens=iprodNorm(IPROD_BUSCA_PQPROJETO||'').split(/\s+/).filter(Boolean);
+    var pqFiltrada=buscaPQTokens.length?p.pq.filter(function(row){
+      var hay=iprodNorm((row.codCliente||'')+' '+row.desc);
+      return buscaPQTokens.every(function(t){return hay.indexOf(t)>=0;});
+    }):p.pq;
+    html+='<input id="iprod-busca-pq" type="text" value="'+(IPROD_BUSCA_PQPROJETO||'').replace(/"/g,'&quot;')+'" oninput="iprodSetBuscaPQProjeto(this.value)" placeholder="🔎 Buscar por código ou descrição da atividade..." style="width:100%;font-size:11.5px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);margin-bottom:12px">'
+      +'<div class="iprod-panel-note" style="margin:-4px 0 10px">'+(buscaPQTokens.length?pqFiltrada.length+' resultado(s) de '+p.pq.length:p.pq.length+' atividade(s)')+'.</div>';
+    if(pqFiltrada.length){
+      html+='<table class="iprod-tbl"><thead><tr><th>Cód. Cliente</th><th>Descrição da Atividade</th><th>Unid.</th><th>Qtd. Oficial (Projeto)</th></tr></thead><tbody>';
+      pqFiltrada.forEach(function(row){
+        var temAbas=row.porAba&&row.porAba.length>0;
+        html+='<tr'+(temAbas?' class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')"':'')+'>'
+          +'<td>'+(row.codCliente||'—')+'</td><td>'+row.desc+'</td><td>'+row.unidade+'</td><td>'+iprodFmt(row.quantidade)+'</td></tr>';
+        if(temAbas){
+          html+='<tr class="iprod-drill"><td colspan="4">'
+            +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">'+(row.porAba.length>1?'Somado a partir de '+row.porAba.length+' aba(s)':'Vem da aba')+'</div>';
+          row.porAba.forEach(function(a){
+            html+='<div class="iprod-drill-row"><span>'+a.aba+'</span><span>'+iprodFmt(a.quantidade)+' '+row.unidade+'</span></div>';
+          });
+          html+='</td></tr>';
+        }
+      });
+      html+='</tbody></table>';
+    } else {
+      html+='<div style="font-size:11.5px;color:var(--muted)">Nenhum resultado pra essa busca.</div>';
+    }
   } else {
     html+='<div style="font-size:11.5px;color:var(--muted)">Nenhuma PQ do Projeto importada ainda.</div>';
   }
