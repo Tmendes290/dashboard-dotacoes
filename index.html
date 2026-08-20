@@ -16231,20 +16231,6 @@ function iprodRenderShell(){
     +'.iprod-hist-actions{display:flex;gap:8px}'
     +'.iprod-hist-link{background:none;border:none;color:#2563eb;font-size:11px;font-weight:700;cursor:pointer;padding:0}'
     +'.iprod-hist-del{background:none;border:none;color:#dc2626;font-size:11px;font-weight:700;cursor:pointer;padding:0}'
-    // Formato enxuto do comparativo Vale x SINAPI por atividade (só usado no PDF) — Disciplina/
-    // Descrição/Unid. não repetem em toda linha (já estão no título do bloco), as duas fontes
-    // ficam lado a lado num card só, sem empilhar painel dentro de painel.
-    +'.iprod-lean{background:var(--card);border:1px solid var(--bord);border-radius:10px;padding:12px 16px;margin-top:8px}'
-    +'.iprod-lean-strip{display:flex;align-items:baseline;gap:20px;padding:7px 10px;background:var(--bg);border-radius:7px;margin-bottom:10px}'
-    +'.iprod-lean-strip b{font-size:14px}'
-    +'.iprod-lean-strip span{font-size:8.5px;color:var(--muted);font-weight:700;margin-left:3px}'
-    +'.iprod-lean-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}'
-    +'.iprod-lean-tbl{width:100%;border-collapse:collapse;font-size:10px}'
-    +'.iprod-lean-tbl caption{text-align:left;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding-bottom:5px;caption-side:top}'
-    +'.iprod-lean-tbl th{font-size:8px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:left;padding:3px 6px 3px 0;border-bottom:1px solid var(--bord)}'
-    +'.iprod-lean-tbl td{padding:4px 6px 4px 0;border-bottom:1px solid var(--bord)}'
-    +'.iprod-lean-tbl td:last-child,.iprod-lean-tbl th:last-child{text-align:right;padding-right:0}'
-    +'.iprod-lean-tbl tr.tot td{font-weight:800;border-bottom:none;padding-top:5px}'
     // PDF/impressão: só o nome do projeto (seção 1) e os cards/tabelas do resultado ficam no
     // relatório — nada de nome de arquivo enviado, botão ou controle de tela (pedido explícito do
     // usuário: "não quero que saia essa parte do item com os nomes do arquivo"). .iprod-print-hide
@@ -16258,19 +16244,10 @@ function iprodRenderShell(){
       +'.iprod-text-input,.iprod-prat-input{border:none !important;background:transparent !important;padding:2px 0 !important;font-weight:700 !important}'
       // Nada de "break-inside:avoid" no .iprod-panel genérico — a tabela 3 inteira (todas as
       // atividades) é um .iprod-panel só, e forçar ele a não quebrar de página empurra o painel
-      // inteiro pra frente até sobrar espaço, criando um vão enorme em branco (era exatamente o
-      // "quebra de informação" que o usuário reclamou). Só o bloco de comparação (pequeno, uma
-      // atividade por vez) usa .iprod-print-avoid pra tentar ficar inteiro numa página.
+      // inteiro pra frente até sobrar espaço, criando um vão enorme em branco.
       +'.iprod-panel{box-shadow:none !important}'
-      +'.iprod-print-avoid{break-inside:avoid;page-break-inside:avoid}'
       +'.iprod-tr-expand{cursor:default !important}'
       +'.iprod-print-only{display:block !important}'
-      // Sobrescreve a regra global "tr{page-break-inside:avoid}" (do @media print lá em cima, pra
-      // impressão do app inteiro) só pra essa linha — ela agora carrega um bloco de comparação
-      // dentro; se não coubesse inteira e ficasse travada tentando não quebrar, gerava o mesmo
-      // vão em branco. O bloco em si (.iprod-print-avoid) já tenta ficar junto por conta própria.
-      +'tr.iprod-drill-print-force{display:table-row !important;page-break-inside:auto !important}'
-      +'tr.iprod-drill-print-force>td{display:table-cell !important;padding:8px 12px !important}'
     +'}'
     +'</style>';
 
@@ -16531,10 +16508,6 @@ function iprodRenderShell(){
       // atividades com maior quantidade orçada primeiro. Cópia do array só pra exibição: não afeta
       // qtdCompBase3/qtdCompFiltrado (usados nos totais e nos KPIs acima).
       var qtdCompOrdenado=qtdCompFiltrado.slice().sort(function(a,b){return (b.qtdEmpresa||0)-(a.qtdEmpresa||0);});
-      // Achatado uma vez só fora do loop (usado no comparativo Vale x SINAPI do PDF, abaixo) — sem
-      // isso, cada atividade Divergente re-achatava a base inteira de novo, deixando a tela lenta.
-      var iprodFlatValePrint=iprodGetIndiceRowsFlat('vale');
-      var iprodFlatSinapiPrint=IPROD_INDICE_SINAPI?iprodGetIndiceRowsFlat('sinapi'):[];
       qtdCompOrdenado.forEach(function(q,qi){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
@@ -16550,7 +16523,7 @@ function iprodRenderShell(){
         html+='<tr class="iprod-tr-expand iprod-tr-chk" data-busca="'+iprodNorm(q.desc).replace(/"/g,'')+'" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
           +'<td onclick="event.stopPropagation()"><input type="checkbox"'+(IPROD_ATIV_SELECIONADAS[q.idxProjeto]?' checked':'')+' onclick="event.stopPropagation();iprodToggleAtivSelecionada('+q.idxProjeto+')"></td>'
           +'<td>'+(qi+1)+'</td><td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td style="color:#7c3aed">'+(q.hhSinapi!=null?iprodFmt(q.hhSinapi):'—')+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+(difPct!=null?difPct.toFixed(1).replace('.',',')+'%':'—')+'</td><td>'+badge+'</td></tr>';
-        html+='<tr class="iprod-drill'+(q.status==='divergente'&&q.matchCodBase?' iprod-drill-print-force':'')+'"><td colspan="13">'
+        html+='<tr class="iprod-drill"><td colspan="13">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
           +(q.status==='medida-diferente'?'<div class="iprod-insight" style="margin-bottom:8px">📏 A PQ do projeto pede <b>'+q.specDiff.projeto+'</b>, mas a contratada só cotou essa atividade com <b>'+q.specDiff.empresa+'</b> na PQ dela — mesma composição, medida diferente. Confira se essa troca foi aprovada antes de aceitar a quantidade/HH como equivalente.</div>':'')
           +(q.indiceSoSupervisao?'<div class="iprod-insight" style="margin-bottom:8px">⚠️ Essa composição da base só tem insumo de SUPERVISÃO cadastrado (Encarregado/Mestre...), sem instalador de verdade — provável lacuna na planilha-fonte. O índice reflete só o tempo do encarregado, não o serviço em si. Considere isso ao avaliar essa linha.</div>':'')
@@ -16564,38 +16537,6 @@ function iprodRenderShell(){
             +'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndiceSinapi(\''+String(q.matchCodSinapi||'').replace(/\'/g,'')+'\')">🔍 Conferir na base SINAPI</button>'
             +(q.matchCodBase?'<button class="iprod-hist-link" style="font-size:9.5px;font-weight:800" onclick="event.stopPropagation();iprodCompararIndices(\''+q.matchCodBase.replace(/\'/g,'')+'\',\''+String(q.matchCodSinapi||'').replace(/\'/g,'')+'\',\''+q.desc.replace(/\'/g,'').replace(/"/g,'')+'\')">⇄ Comparar Vale × SINAPI</button>':'')
             +'</div>'):'<div style="font-size:9.5px;color:var(--muted);margin-top:4px">↳ Base SINAPI: sem composição correspondente encontrada.</div>')
-          +(q.status==='divergente'&&q.matchCodBase?(function(){
-            // Comparativo Vale x SINAPI, formato enxuto (mesma lógica de iprodCompararIndices,
-            // só que sem repetir Disciplina/Descrição/Unid. em toda linha) — só divergentes, só
-            // pro PDF (iprod-print-only). Compacto de propósito: a versão cheia (painel dentro de
-            // painel, 3 cards grandes) empurrava o detalhamento pra página seguinte com um vão em
-            // branco enorme quando não cabia inteiro — pedido do usuário pra ficar "ajustado,
-            // estilo gerencial". Continua na tela via botão "Comparar Vale × SINAPI" quando quiser
-            // ver com Disciplina/Descrição também.
-            var lv=iprodFlatValePrint.filter(function(r){return r.codCliente===q.matchCodBase&&r.tipo==='M';});
-            var ls=iprodFlatSinapiPrint.filter(function(r){return r.codCliente===q.matchCodSinapi&&r.tipo==='M';});
-            if(!lv.length) return '';
-            var tv=lv.reduce(function(s,r){return s+(Number(r.indice)||0);},0);
-            var ts=ls.reduce(function(s,r){return s+(Number(r.indice)||0);},0);
-            var tabelaLean=function(titulo,cor,linhas,tot){
-              return '<table class="iprod-lean-tbl"><caption style="color:'+cor+'">'+titulo+'</caption>'
-                +'<thead><tr><th>Insumo</th><th>Índice</th></tr></thead><tbody>'
-                +linhas.map(function(r){return '<tr><td>'+(r.descIns||r.insumo||'')+'</td><td>'+iprodFmt(r.indice)+'</td></tr>';}).join('')
-                +'<tr class="tot"><td>Total</td><td>'+iprodFmt(tot)+'</td></tr>'
-                +'</tbody></table>';
-            };
-            return '<div class="iprod-print-only iprod-print-avoid">'
-              +'<div class="iprod-lean">'
-              +'<div class="iprod-lean-strip">'
-              +'<span><b style="color:#d97706">'+iprodFmt(tv)+'</b><span>VALE HH/UNID.</span></span>'
-              +'<span><b style="color:#7c3aed">'+iprodFmt(ts)+'</b><span>SINAPI HH/UNID.</span></span>'
-              +'<span style="margin-left:auto"><b style="color:'+(Math.abs(tv-ts)>0.001?'#dc2626':'#16a34a')+'">'+iprodFmt(tv-ts)+'</b><span>DIFERENÇA</span></span>'
-              +'</div>'
-              +'<div class="iprod-lean-cols">'
-              +tabelaLean('Vale · '+q.matchCodBase,'#d97706',lv,tv)
-              +(ls.length?tabelaLean('SINAPI · '+(q.matchCodSinapi||'—'),'#7c3aed',ls,ts):'<div class="iprod-panel-note" style="margin:0">Sem composição correspondente no SINAPI.</div>')
-              +'</div></div></div>';
-          })():'')
           +(q.status==='sem-projeto'?(
             '<div class="iprod-insight" style="margin-top:10px">📦 Essa linha não é uma atividade oficial da PQ do Projeto — é um item que a contratada cobrou sem correspondência no projeto, incluído aqui automaticamente pra fechar 100% do HH cobrado. Qtd. PQ = Qtd. Orçada (não existe quantidade oficial pra comparar).</div>'
             +'<div style="margin-top:10px" onclick="event.stopPropagation()">'
