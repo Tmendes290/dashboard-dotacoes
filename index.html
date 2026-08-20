@@ -16112,10 +16112,10 @@ function iprodRenderShell(){
           top5ChartData.push({label:'#'+(i+1),desc:q.desc,pct:pct,cum:top5Acumulado});
         });
         html+='<div style="position:relative;height:260px;margin-bottom:16px"><canvas id="iprod-top5-chart"></canvas></div>'
-          +'<table class="iprod-tbl"><thead><tr><th>#</th><th>Atividade</th><th>Disciplina</th><th>Quantidade</th><th>HH com CPU</th><th>HH Orçado (Empresa)</th><th>% do Total</th></tr></thead><tbody>';
+          +'<table class="iprod-tbl"><thead><tr><th>#</th><th>Atividade</th><th>Disciplina</th><th>Qtd. Projeto (PQ)</th><th>Qtd. Empresa</th><th>HH com CPU</th><th>HH Orçado (Empresa)</th><th>% do Total</th></tr></thead><tbody>';
         top5ChartData.forEach(function(cd,i){
           var q=top5Itens[i];
-          html+='<tr><td>'+(i+1)+'</td><td>'+q.desc+'</td><td>'+(q.disciplina||'—')+'</td><td>'+iprodFmt(q.qtdProjeto)+' '+(q.unidade||'')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+cd.pct.toFixed(1).replace('.',',')+'%</td></tr>';
+          html+='<tr><td>'+(i+1)+'</td><td>'+q.desc+'</td><td>'+(q.disciplina||'—')+'</td><td>'+iprodFmt(q.qtdProjeto)+' '+(q.unidade||'')+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa)+' '+(q.unidade||''):'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+cd.pct.toFixed(1).replace('.',',')+'%</td></tr>';
         });
         html+='</tbody></table>'
           +'<div class="iprod-panel-note" style="margin:10px 0 0">Essas 5 atividades respondem por <b>'+top5Acumulado.toFixed(1).replace('.',',')+'%</b> de todo o HH com CPU'+(IPROD_TOP5_DISC?' da disciplina '+IPROD_TOP5_DISC:' do projeto')+'.</div>';
