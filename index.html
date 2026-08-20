@@ -16015,6 +16015,19 @@ async function iprodProcessar(){
     var g=semRefAgrupado[base];
     linhas.push({funcao:base,hhCobrado:g.hhCobrado,hhContingencia:g.hhContingencia,hhRef:0,hhAjust:0,hhAjustSinapi:null,dif:0,status:'cinza',atividades:[],semReferencia:true});
   });
+  // Atividades sem NENHUM índice (nem Vale, nem SINAPI) na seção 3 caem no fallback "considerado
+  // igual ao HH da empresa" — entram no total de lá (HH com CPU/KPI do topo), mas não têm
+  // composição pra quebrar por insumo/função, então nunca apareciam aqui na seção 4, e o TOTAL das
+  // duas seções nunca batia (mesmo bug de fundo do "porFuncaoProjeto" pros itens promovidos,
+  // corrigido antes — esse é o resto: atividade sem NENHUM match, nem Vale nem SINAPI). Sobe como
+  // uma linha só, agrupando tudo, pra fechar a soma — cobrado=esperado por construção (o fallback
+  // já usa o próprio HH da empresa como referência), por isso Diferença sempre 0 aqui.
+  if(usaBaseProjeto&&totRefAssumidoProjeto>0.001){
+    // hhCobrado fica 0 de propósito: o HH cobrado dessas atividades já está 100% contabilizado
+    // nas funções normais acima (via o histograma) — contar de novo aqui somaria em dobro. Essa
+    // linha só existe pra trazer o HH CPU (Vale) que faltava, sem inflar o HH Orçado.
+    linhas.push({funcao:'⚙️ HH CPU de atividades sem correspondência em nenhuma base de índices',hhCobrado:0,hhContingencia:0,hhRef:totRefAssumidoProjeto,hhAjust:totRefAssumidoProjeto,hhAjustSinapi:null,dif:-totRefAssumidoProjeto,status:'cinza',atividades:[],semReferencia:false});
+  }
   linhas.sort(function(a,b){return b.dif-a.dif;});
   // Tira as funções excluídas manualmente ANTES dos totais abaixo (todos via linhas.reduce) —
   // assim HH Cobrado/Referência/Diferença/%Improd já saem recalculados sem elas.
