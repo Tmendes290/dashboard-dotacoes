@@ -15433,15 +15433,13 @@ async function iprodProcessar(){
       });
 
       var emp=null, matchTipo=null;
-      // Realocação manual (ver acima) tem prioridade total — pula concreto/código/descrição.
-      if(realocPorProjeto[idxProjeto]){ emp=realocPorProjeto[idxProjeto]; matchTipo='realocado manualmente'; }
       // Concreto: junta a quantidade de TODO concreto da contratada SEM contexto de aplicação
       // (ex.: "Bombeável fck=30", sem dizer fundação/elevada/laje) no mesmo fck pedido pelo
       // projeto — pra fins de quantidade, o que importa é a resistência, não o método de
       // lançamento, quando a própria contratada não separa isso por aplicação (pedido do
       // usuário). Concreto com contexto ESPECÍFICO diferente do pedido fica de fora, pra não
       // misturar aplicações diferentes só porque o fck bateu.
-      var fckProjeto=!emp?iprodExtrairFck(pItem.desc):null;
+      var fckProjeto=iprodExtrairFck(pItem.desc);
       if(fckProjeto!=null){
         var ctxProjeto=iprodContextoConcreto(pItem.desc);
         var candidatosFck=contratadaAgrupadaList.filter(function(g){
@@ -15474,6 +15472,19 @@ async function iprodProcessar(){
         var candidatos=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;});
         var achouEmp=iprodFindInPq(pItem.desc,pItem.unidade,candidatos);
         if(achouEmp){ emp=achouEmp.item; matchTipo='descrição ('+Math.min(100,Math.round(achouEmp.score*100))+'% similar)'; }
+      }
+      // Realocação manual (ver IPROD_REALOCACOES acima): SOMA ao que o matching automático já achou
+      // pra essa atividade (ou vira o próprio match, se não tinha nenhum) — nunca substitui/descarta
+      // um match automático existente, só inclui esse item a mais e entra no recálculo de Qtd./HH.
+      var realoc=realocPorProjeto[idxProjeto];
+      if(realoc){
+        if(emp){
+          emp={quantidade:(emp.quantidade||0)+(realoc.quantidade||0),hhAlocado:(emp.hhAlocado||0)+(realoc.hhAlocado||0),hhViaIndiceContratada:(emp.hhViaIndiceContratada||0)+(realoc.hhViaIndiceContratada||0)};
+          matchTipo=(matchTipo?matchTipo+' + ':'')+'realocado manualmente ('+realoc.desc+')';
+        } else {
+          emp={quantidade:realoc.quantidade,hhAlocado:realoc.hhAlocado||0,hhViaIndiceContratada:realoc.hhViaIndiceContratada||0};
+          matchTipo='realocado manualmente';
+        }
       }
       if(emp) usadosEmp.push(emp);
       pendentes.push({pItem:pItem,idxProjeto:idxProjeto,achouIndice:achouIndice,indiceTotal:indiceTotal,
