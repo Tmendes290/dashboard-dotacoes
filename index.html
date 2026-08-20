@@ -14030,6 +14030,15 @@ var IPROD_INDICE=null, IPROD_INDICE_LOADING=null, IPROD_FALLBACK=null;
 // já com o índice de mão de obra (HH/unidade) resolvido recursivamente através de composições
 // aninhadas (uma composição SINAPI pode usar outra composição como item, não só insumo direto).
 var IPROD_INDICE_SINAPI=null, IPROD_INDICE_SINAPI_LOADING=null;
+// Limiar de confiança bem mais alto que o padrão da Vale (0,35) só pra essa comparação SINAPI —
+// confirmado com dado real que o padrão deixa passar match sem nenhuma relação (ex.: "Leito para
+// cabos... altura 150mm, largura 400mm" batendo com "PLANTIO DE PALMEIRA... altura de muda maior
+// que 4,00 M", score 0,55 — bateu só por causa de "ALTURA" em comum + o "4,00" da palmeira virando
+// token "400" igual ao "400mm" da largura do leito, pura coincidência de token). O SINAPI é uma
+// base de construção civil/edificação, não tem cobertura de item industrial/elétrico/mecânico de
+// mineração — pedido explícito do usuário: sem confiança alta, mostrar "—" (sem match) em vez de
+// arriscar um número sem relação nenhuma com a atividade.
+var IPROD_SINAPI_MINSCORE=0.65;
 async function iprodLoadIndiceSinapi(){
   if(IPROD_INDICE_SINAPI) return IPROD_INDICE_SINAPI;
   if(IPROD_INDICE_SINAPI_LOADING) return IPROD_INDICE_SINAPI_LOADING;
@@ -15516,7 +15525,7 @@ async function iprodProcessar(){
       // (esse é só pra Vale). É só um número pra você comparar visualmente e julgar se o índice da
       // Vale está coerente/aderente ou não — não decide nem substitui NADA sozinho (HH com CPU,
       // Diferença e Aderência continuam 100% baseados só no índice da Vale).
-      var achouSinapi=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,pItem.desc,pItem.unidade):null;
+      var achouSinapi=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,pItem.desc,pItem.unidade,IPROD_SINAPI_MINSCORE):null;
       var indiceSinapiTotal=0;
       if(achouSinapi) achouSinapi.rows.forEach(function(r){ if(r.tipo==='M') indiceSinapiTotal+=Number(r.indice)||0; });
 
@@ -15684,7 +15693,7 @@ async function iprodProcessar(){
       var temIndiceValidoG=!!achouIndiceG&&indiceTotalG>0;
       var hhEsperadoG=temIndiceValidoG?(g.quantidade*indiceTotalG*(2-IPROD_PRAT)):(g.hhAlocado||0);
       if(!temIndiceValidoG) totRefAssumidoProjeto+=hhEsperadoG;
-      var achouSinapiG=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,g.desc,g.unidade):null;
+      var achouSinapiG=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,g.desc,g.unidade,IPROD_SINAPI_MINSCORE):null;
       var indiceSinapiTotalG=0;
       if(achouSinapiG) achouSinapiG.rows.forEach(function(rr){ if(rr.tipo==='M') indiceSinapiTotalG+=Number(rr.indice)||0; });
       qtdComp.push({desc:g.desc,unidade:g.unidade,codCliente:codHintG,idxProjeto:-(pi+1),
