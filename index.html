@@ -14120,9 +14120,9 @@ function iprodRestaurarLinhaProjeto(idxProjeto){
 var IPROD_REALOCACOES={};
 function iprodGrupoKey(desc){ return iprodNorm(desc); }
 function iprodRealocarItem(grupoKey,idxProjeto){
-  if(idxProjeto===''||idxProjeto==null){ delete IPROD_REALOCACOES[grupoKey]; toast('Realocação removida — recalculando...','blue'); iprodProcessar(); return; }
+  if(idxProjeto===''||idxProjeto==null){ toast('Escolhe a atividade do projeto antes de transferir','red'); return; }
   IPROD_REALOCACOES[grupoKey]=Number(idxProjeto);
-  toast('Item realocado — recalculando...','blue');
+  toast('Item transferido pra atividade — recalculando...','blue');
   iprodProcessar();
 }
 function iprodDesfazerRealocacao(grupoKey){
@@ -15063,6 +15063,54 @@ function iprodParseHistDetalhadoMilplan(data){
   return out.length?out:null;
 }
 
+// MILPLAN: extrai da MESMA aba "12.0 PQ" (ver iprodParsePQSheet) o total de Mão de Obra
+// Indireta e de Equipamentos e o Valor Total Aprovado (linha "TOTAL" no fim da planilha) — pra
+// calcular o card "% de Custo Indireto" = (Mão de Obra Indireta + Equipamentos) ÷ Valor Total
+// Aprovado. Rastreia o cabeçalho de seção mais recente (linha em CAIXA ALTA SEM Unid.
+// preenchida, ex.: "MOBILIZAÇÃO", "MÃO DE OBRA INDIRETA", "EQUIPAMENTOS") pra saber a que bloco
+// pertence cada linha de dado (COM Unid. preenchida) que vem depois — confirmado contra arquivo
+// real da MILPLAN (LS04): "MOBILIZAÇÃO"/"DESMOBILIZAÇÃO" têm 3 linhas-filha que já se chamam
+// "MÃO DE OBRA DIRETA"/"MÃO DE OBRA INDIRETA"/"EQUIPAMENTOS" (a própria linha já diz a categoria,
+// nesse caso vale o nome dela mesma); e existe um bloco "MÃO DE OBRA INDIRETA" e um
+// "EQUIPAMENTOS" à parte, com linhas-filha de nome próprio (Horas normais/extras/
+// periculosidade, "Equipamentos") — nesse caso vale a categoria do cabeçalho de seção.
+function iprodParseIndiretosMilplan(data){
+  var hdrIdx=-1, iDesc=-1, iUnid=-1, iTotal=-1;
+  for(var ri=0;ri<Math.min(data.length,15);ri++){
+    var cand=(data[ri]||[]).map(function(h){return iprodNorm(h);});
+    if(cand.some(function(h){return h.indexOf('DESCRI')>=0;})){
+      hdrIdx=ri;
+      iDesc=cand.findIndex(function(h){return h.indexOf('DESCRI')>=0;});
+      iUnid=cand.findIndex(function(h){return h.indexOf('UNID')>=0;});
+      iTotal=cand.findIndex(function(h){return h.indexOf('TOTAL')>=0&&h.indexOf('R$')>=0;});
+      if(iTotal<0) iTotal=cand.findIndex(function(h){return h.indexOf('TOTAL')>=0&&h.indexOf('HORA')<0&&h.indexOf('HH')<0;});
+      break;
+    }
+  }
+  if(hdrIdx<0||iDesc<0||iTotal<0) return null;
+  var maoObraIndireta=0, equipamentos=0, valorTotalAprovado=null, categoriaAtual='';
+  for(var i=hdrIdx+1;i<data.length;i++){
+    var row=data[i]||[];
+    var desc=String(row[iDesc]==null?'':row[iDesc]).trim();
+    if(!desc) continue;
+    var descN=iprodNorm(desc);
+    var unid=iUnid>=0?String(row[iUnid]==null?'':row[iUnid]).trim():'';
+    var valor=parseFloat(String(row[iTotal]==null?'':row[iTotal]).replace(',','.'))||0;
+    // Linha "TOTAL" (ITEM "----", só ela na aba inteira) = valor total aprovado da PQ — encerra a leitura.
+    if(descN==='TOTAL'){ valorTotalAprovado=valor; break; }
+    if(!unid){
+      // Cabeçalho de seção — só atualiza a categoria corrente, não soma nada dela mesma.
+      categoriaAtual=descN;
+      continue;
+    }
+    var rotulo=(descN==='MAO DE OBRA INDIRETA'||descN==='EQUIPAMENTOS'||descN==='MAO DE OBRA DIRETA')?descN:categoriaAtual;
+    if(rotulo==='MAO DE OBRA INDIRETA') maoObraIndireta+=valor;
+    else if(rotulo==='EQUIPAMENTOS') equipamentos+=valor;
+  }
+  if(valorTotalAprovado==null||valorTotalAprovado<=0) return null;
+  return {maoObraIndireta:maoObraIndireta,equipamentos:equipamentos,valorTotalAprovado:valorTotalAprovado};
+}
+
 async function iprodHandleContratadaFile(file){
   if(!file) return;
   if(typeof XLSX==='undefined'){ toast('Aguardando biblioteca XLSX carregar, tenta de novo em instantes','red'); return; }
@@ -15074,7 +15122,7 @@ async function iprodHandleContratadaFile(file){
   reader.onload=async function(e){
     try{
       var wb=XLSX.read(e.target.result,{type:'array'});
-      var pq=null, hist=null;
+      var pq=null, hist=null, indiretosMilplan=null;
       if(IPROD_EMPRESA==='MILPLAN'){
         // A MILPLAN manda um workbook "Plano de Trabalho" com ~18 abas (orçamento, cronograma
         // financeiro, histograma diário, mobilização...) — varrer todas em busca de DESCRIÇÃO+
@@ -15095,6 +15143,7 @@ async function iprodHandleContratadaFile(file){
         var dataMilplan=XLSX.utils.sheet_to_json(wb.Sheets[nomeAbaPQ],{header:1,defval:''});
         pq=iprodParsePQSheet(dataMilplan);
         if(!pq){ toast('Achei a aba "'+nomeAbaPQ+'" mas não consegui ler as colunas dela (esperava Descrição/Quantidade) — confere se o formato dessa aba mudou.','red'); return; }
+        indiretosMilplan=iprodParseIndiretosMilplan(dataMilplan);
         var nomeAbaHist=wb.SheetNames.find(function(n){
           var nn=iprodNorm(n);
           return nn.indexOf('8.1')>=0&&(nn.indexOf('HIST')>=0||nn.indexOf('DETALH')>=0);
@@ -15138,7 +15187,7 @@ async function iprodHandleContratadaFile(file){
           });
         }
       }
-      IPROD_CONTRATADA={pq:pq||[],histograma:hist||[],nomeArquivo:file.name};
+      IPROD_CONTRATADA={pq:pq||[],histograma:hist||[],nomeArquivo:file.name,indiretos:indiretosMilplan};
       IPROD_RESULT=null;
       // Contratada nova = as funções do histograma podem ser outras — exclusões da análise
       // anterior não fazem mais sentido aqui.
@@ -16116,11 +16165,18 @@ function iprodRenderShell(){
       html+='<div class="iprod-panel-note" style="margin:-4px 0 10px">🔎 Cards abaixo = subtotal do recorte ativo na seção 3 ("'+recorteLbl+'") — muda junto com os filtros lá embaixo.</div>';
     }
     var gapSemProjeto=temQtdComp?(r.totCobrado-kpiCobradoReconciliado):0;
-    html+='<div class="iprod-kpis">'
+    // Card extra "% de Custo Indireto" — só quando o Arquivo da Contratada é da MILPLAN e a
+    // aba "12.0 PQ" tinha os blocos de Mão de Obra Indireta/Equipamentos/TOTAL reconhecíveis
+    // (ver iprodParseIndiretosMilplan). Fórmula pedida pelo usuário: (Mão de Obra Indireta +
+    // Equipamentos) ÷ Valor Total Aprovado da PQ — não tem nada a ver com HH, é só sobre R$.
+    var indiretosMP=IPROD_CONTRATADA&&IPROD_CONTRATADA.indiretos;
+    var pctIndireto=indiretosMP?((indiretosMP.maoObraIndireta+indiretosMP.equipamentos)/indiretosMP.valorTotalAprovado):null;
+    html+='<div class="iprod-kpis"'+(pctIndireto!=null?' style="grid-template-columns:repeat(5,1fr)"':'')+'>'
       +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Orçado: Empresa</div><div class="iprod-kpi-sub">'+(temQtdComp?(recorteAberto?'Total cobrado pela contratada em toda a PQ dela — inclui '+iprodFmt(gapSemProjeto)+' HH sem atividade correspondente no projeto (ver alerta abaixo)':'Soma do HH da Empresa nas atividades reconciliadas do recorte atual'):(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(kpiRef)+'</div><div class="iprod-kpi-lbl">HH com CPU</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(kpiDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div>'+(temRS?'<div class="iprod-kpi-money" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">≈ '+iprodFmtRS(r.valorDif)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiAderencia*100)+'%</div><div class="iprod-kpi-lbl">Aderência</div><div class="iprod-kpi-sub">HH com CPU ÷ HH Orçado: Empresa</div></div>'
+      +(pctIndireto!=null?'<div class="iprod-kpi" style="border-top-color:#7c3aed"><div class="iprod-kpi-val" style="color:#7c3aed">'+Math.round(pctIndireto*100)+'%</div><div class="iprod-kpi-lbl">% de Custo Indireto</div><div class="iprod-kpi-sub">(Mão de Obra Indireta '+iprodFmtRS(indiretosMP.maoObraIndireta)+' + Equipamentos '+iprodFmtRS(indiretosMP.equipamentos)+') ÷ Valor Total Aprovado '+iprodFmtRS(indiretosMP.valorTotalAprovado)+' — da PQ da MILPLAN (aba 12.0 PQ)</div></div>':'')
       +'</div>';
     if(temQtdComp){
       var gapItens=r.contratadaSemProjeto||[];
@@ -16289,8 +16345,11 @@ function iprodRenderShell(){
             +'<div class="iprod-drill-row" style="border-top:2px solid var(--border);margin-top:4px;padding-top:8px"><span style="font-weight:800">= HH Alocado dessa atividade</span><span style="font-weight:800">'+iprodFmt(c.hhAlocado)+' HH</span></div>'
             +'<div class="iprod-insight" style="margin-top:8px">O rateio é por PESO NO VALOR (R$), não por quantidade física — atividades mais caras "puxam" mais HH do histograma pra si, mesmo sem saber exatamente quantas pessoas trabalharam em cada atividade no dia a dia. É uma aproximação (mesmo método usado manualmente na planilha de referência), não uma medição direta.</div>'
             +'<div style="margin-top:10px" onclick="event.stopPropagation()">'
-            +'<span style="font-size:9.5px;color:var(--muted);font-weight:700;display:block;margin-bottom:4px">🔀 Realocar esse item pra uma atividade do projeto (sobrepõe o matching automático):</span>'
-            +'<select class="iprod-text-input" style="width:auto;max-width:100%" onclick="event.stopPropagation()" onchange="event.stopPropagation();iprodRealocarItem(\''+chaveG+'\',this.value)">'+iprodProjOpcoesHtml+'</select>'
+            +'<span style="font-size:9.5px;color:var(--muted);font-weight:700;display:block;margin-bottom:4px">🔀 Realocar esse item pra uma atividade do projeto (soma ao que a atividade já tiver na tabela 3 — não substitui):</span>'
+            +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+            +'<select class="iprod-text-input" style="width:auto;max-width:70%" onclick="event.stopPropagation()">'+iprodProjOpcoesHtml+'</select>'
+            +'<button class="iprod-btn" style="margin-top:0" onclick="event.stopPropagation();iprodRealocarItem(\''+chaveG+'\',this.previousElementSibling.value)">🔀 Transferir pra atividade</button>'
+            +'</div>'
             +'</div>'
             +'</td></tr>';
         });
