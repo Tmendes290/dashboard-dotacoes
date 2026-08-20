@@ -14138,6 +14138,10 @@ var IPROD_FUNC_SELECIONADAS={}; // chave: funcaoNorm, valor: funcaoLabel (label 
 var IPROD_MOSTRAR_EXCLUIDAS_ATIV=false, IPROD_MOSTRAR_EXCLUIDAS_FUNC=false;
 function iprodToggleExcluidasAtiv(){ IPROD_MOSTRAR_EXCLUIDAS_ATIV=!IPROD_MOSTRAR_EXCLUIDAS_ATIV; iprodRenderShell(); }
 function iprodToggleExcluidasFunc(){ IPROD_MOSTRAR_EXCLUIDAS_FUNC=!IPROD_MOSTRAR_EXCLUIDAS_FUNC; iprodRenderShell(); }
+// Painel "Top 5 — Curva ABC": ranking das atividades que mais pesam no HH orçado (referência),
+// opcionalmente filtrado por disciplina (Civil/Elétrica/Mecânica...).
+var IPROD_TOP5_DISC='';
+function iprodSetTop5Disc(v){ IPROD_TOP5_DISC=v; iprodRenderShell(); }
 
 function iprodToggleAtivSelecionada(idxProjeto){
   if(IPROD_ATIV_SELECIONADAS[idxProjeto]) delete IPROD_ATIV_SELECIONADAS[idxProjeto];
@@ -15516,6 +15520,9 @@ async function iprodProcessar(){
         indiceTotal:indiceTotal,hhEsperado:hhEsperado,hhEmpresa:hhEmpresa,
         diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
         status:status,matchTipo:matchTipo,specDiff:specDiff,semIndiceProjeto:semIndiceProjeto,indiceOrigem:indiceOrigem,indiceSoSupervisao:!!indiceSoSupervisao,
+        // Disciplina vem da própria composição batida na base (todo insumo de uma composição
+        // pertence à mesma disciplina) — usada no painel "Top 5" (curva ABC) pra agrupar/filtrar.
+        disciplina:(achouIndice&&achouIndice.rows&&achouIndice.rows[0])?achouIndice.rows[0].disciplina:null,
         matchDesc:achouIndice?achouIndice.matchDesc:null,matchCodBase:achouIndice?achouIndice.matchCod:null,
         detalhe:temIndiceValido?(detalhePartes.join(' + ')+' = '+iprodFmt(indiceTotal))
           :(indiceOrigem==='contratada'?((achouSemMaoDeObra?'Composição achada na base sem insumo de mão de obra (IH) cadastrado — ':'Sem correspondência na nossa base de índices — ')+'usado o índice de produtividade que a própria contratada declara na PQ dela ('+iprodFmt(indiceContratadaMedio)+').')
@@ -16042,15 +16049,19 @@ function iprodRenderShell(){
       kpiDif=kpiCobrado-kpiRef;
       kpiImprod=kpiCobrado>0?(kpiDif/kpiCobrado):0;
     }
+    // Aderência = HH Referência ÷ HH Orçado (Empresa) — o quanto do que a empresa orçou realmente
+    // corresponde ao HH de referência (o inverso de %Improdutivas: 100% − %Improd, ex.: 11% de
+    // improdutividade = 89% de aderência).
+    var kpiAderencia=kpiCobrado>0?(kpiRef/kpiCobrado):0;
     var recorteLbl=(IPROD_QTDCOMP_FILTRO==='cobradas'?'Só cobradas':'Todas')+(IPROD_FILTRO_STATUS!=='todos'?' + '+({'bate':'Bate','divergente':'Divergente','medida-diferente':'Medida diferente','faltando-empresa':'Faltando'}[IPROD_FILTRO_STATUS]||IPROD_FILTRO_STATUS):'');
     if(temQtdComp){
       html+='<div class="iprod-panel-note" style="margin:-4px 0 10px">🔎 Cards abaixo = subtotal do recorte ativo na seção 3 ("'+recorteLbl+'") — muda junto com os filtros lá embaixo.</div>';
     }
     html+='<div class="iprod-kpis">'
-      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Cobrado</div><div class="iprod-kpi-sub">'+(temQtdComp?'Soma do HH da Empresa nas atividades do recorte atual':(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
+      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Orçado: Empresa</div><div class="iprod-kpi-sub">'+(temQtdComp?'Soma do HH da Empresa nas atividades do recorte atual':(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(kpiRef)+'</div><div class="iprod-kpi-lbl">HH Referência + Praticabilidade</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(kpiDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div>'+(temRS?'<div class="iprod-kpi-money" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">≈ '+iprodFmtRS(r.valorDif)+'</div>':'')+'</div>'
-      +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiImprod*100)+'%</div><div class="iprod-kpi-lbl">% Horas Improdutivas</div><div class="iprod-kpi-sub">Diferença ÷ HH Cobrado</div></div>'
+      +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiAderencia*100)+'%</div><div class="iprod-kpi-lbl">Aderência</div><div class="iprod-kpi-sub">HH Referência ÷ HH Orçado: Empresa</div></div>'
       +'</div>';
     if(temQtdComp){
       var gapSemProjeto=r.totCobrado-kpiCobrado;
@@ -16074,6 +16085,38 @@ function iprodRenderShell(){
       +'<button class="iprod-btn" style="margin-top:0" onclick="iprodSalvarHistorico()">💾 Salvar no histórico</button></div>';
 
     if(r.qtdComp.length){
+      // Painel "Top 5 — Curva ABC": ranking das atividades que mais pesam no HH Esperado
+      // (referência oficial do projeto) — os "quantitativos direcionadores do orçamento". Sempre
+      // sobre o universo INTEIRO de atividades (não usa os filtros Todos/Bate/Divergente da seção
+      // 3 abaixo, que são pra outra finalidade) — só o filtro de disciplina, próprio dessa análise.
+      var top5DiscOpcoes=Array.from(new Set(r.qtdComp.map(function(q){return q.disciplina;}).filter(Boolean))).sort();
+      if(IPROD_TOP5_DISC && top5DiscOpcoes.indexOf(IPROD_TOP5_DISC)<0) IPROD_TOP5_DISC='';
+      var top5Base=IPROD_TOP5_DISC?r.qtdComp.filter(function(q){return q.disciplina===IPROD_TOP5_DISC;}):r.qtdComp;
+      var top5TotalHH=top5Base.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
+      var top5Itens=top5Base.filter(function(q){return q.hhEsperado>0;}).slice().sort(function(a,b){return (b.hhEsperado||0)-(a.hhEsperado||0);}).slice(0,5);
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">Top 5 — Curva ABC do Orçamento</div>'
+        +'<div class="iprod-panel-note">As 5 atividades que mais pesam no HH Esperado (a referência oficial do projeto) — os principais quantitativos direcionadores do orçamento, pra saber onde focar a conferência primeiro.</div>';
+      if(top5DiscOpcoes.length>1){
+        html+='<div style="margin-bottom:12px"><select class="iprod-text-input" style="width:auto" onchange="iprodSetTop5Disc(this.value)">'
+          +'<option value=""'+(!IPROD_TOP5_DISC?' selected':'')+'>Todas as disciplinas</option>'
+          +top5DiscOpcoes.map(function(d){return '<option value="'+d+'"'+(IPROD_TOP5_DISC===d?' selected':'')+'>'+d+'</option>';}).join('')
+          +'</select></div>';
+      }
+      if(top5Itens.length && top5TotalHH>0){
+        var top5Acumulado=0;
+        html+='<table class="iprod-tbl"><thead><tr><th>#</th><th>Atividade</th><th>Disciplina</th><th>HH Esperado</th><th>% do Total</th><th>% Acumulado</th></tr></thead><tbody>';
+        top5Itens.forEach(function(q,i){
+          var pct=(q.hhEsperado/top5TotalHH)*100;
+          top5Acumulado+=pct;
+          html+='<tr><td>'+(i+1)+'</td><td>'+q.desc+'</td><td>'+(q.disciplina||'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+pct.toFixed(1).replace('.',',')+'%</td><td>'+top5Acumulado.toFixed(1).replace('.',',')+'%</td></tr>';
+        });
+        html+='</tbody></table>'
+          +'<div class="iprod-panel-note" style="margin:10px 0 0">Essas 5 atividades respondem por <b>'+top5Acumulado.toFixed(1).replace('.',',')+'%</b> de todo o HH Esperado'+(IPROD_TOP5_DISC?' da disciplina '+IPROD_TOP5_DISC:' do projeto')+'.</div>';
+      } else {
+        html+='<div class="iprod-panel-note">Sem atividades com HH Esperado nesse recorte.</div>';
+      }
+      html+='</div>';
+
       html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto'+(r.temContratada?' × PQ da Contratada — quantidade e índice':' — HH esperado pelo índice')+'</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto'+(r.temContratada?' (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela.':'.')+' <b>HH Esperado</b> = quantidade do projeto × índice, já com a praticabilidade embutida.'+(r.temContratada?' <b>HH da Empresa</b> = alocação proporcional do HH total cobrado no histograma, distribuído pelo peso (%) do valor (R$) de cada atividade dentro da PQ da contratada — mesmo método usado manualmente na planilha de referência.':'')+' Clique pra ver a composição do índice e corrigir o Cód. Cliente, se precisar.</div>'
         +(r.temContratada?'<div style="display:flex;gap:8px;margin:0 0 12px">'
           +[['todos','Todas ('+r.qtdComp.length+')'],['cobradas','Só cobradas ('+nCobradas3+')']].map(function(f){
