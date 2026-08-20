@@ -14173,25 +14173,14 @@ function iprodRestaurarLinhaProjeto(idxProjeto){
   toast('Atividade restaurada — recalculando...','blue');
   iprodProcessar();
 }
-// Realocação manual de um item da PQ da contratada que o matching automático (código/descrição/
-// similaridade) não conseguiu casar com nenhuma atividade da PQ do Projeto (painel "Itens sem
-// atividade correspondente") — promove esse item pra virar sua PRÓPRIA linha independente na
-// tabela 3, com Índice/HH com CPU calculados igual a qualquer atividade do projeto. NÃO mistura
-// número com nenhuma atividade já existente (pedido explícito do usuário: "não quero embutir
-// dentro de uma atividade, quero que suba e seja mais uma atividade"). Chave é
-// iprodGrupoKey(desc do grupo da contratada), estável entre renders porque deriva só da
-// descrição normalizada (o grupo em si é reconstruído do zero a cada render); é um SET (valor
-// sempre true), não mapeia pra nenhuma atividade específica.
-var IPROD_REALOCACOES={};
-function iprodGrupoKey(desc){ return iprodNorm(desc); }
-function iprodRealocarItem(grupoKey){
-  IPROD_REALOCACOES[grupoKey]=true;
-  toast('Item incluído como atividade própria na tabela 3 — recalculando...','blue');
-  iprodProcessar();
-}
-function iprodDesfazerRealocacao(grupoKey){
-  delete IPROD_REALOCACOES[grupoKey];
-  toast('Realocação desfeita — o item volta pra lista de sem correspondência','blue');
+// Exclusão de um item da PQ da contratada sem correspondência no projeto (status "Incluído pela
+// empresa", ver iprodProcessar) — mesmo mecanismo de IPROD_LINHAS_EXCLUIDAS acima, mas sem exigir
+// IPROD_PROJETO.pq[idxProjeto] (esses itens não são uma atividade oficial do projeto, então não
+// existem lá — usam idxProjeto negativo, só como chave).
+function iprodExcluirItemPromovido(idxProjeto,desc){
+  if(!confirm('Excluir "'+desc+'" dessa análise? Ela sai de todos os totais (dá pra restaurar depois).')) return;
+  IPROD_LINHAS_EXCLUIDAS[idxProjeto]=true;
+  toast('Item excluído — recalculando...','blue');
   iprodProcessar();
 }
 // Funções excluídas da seção 4 (Comparativo por função) — chave é o nome normalizado da função.
@@ -15294,7 +15283,6 @@ async function iprodHandleContratadaFile(file){
       // anterior não fazem mais sentido aqui.
       IPROD_FUNCOES_EXCLUIDAS={};
       IPROD_FUNC_SELECIONADAS={};
-      IPROD_REALOCACOES={};
       toast('Arquivo lido: '+(pq?pq.length:0)+' atividades na PQ, '+(hist?hist.length:0)+' funções no histograma'+(nCanon?' ('+nCanon+' confirmadas pelo catálogo)':''),'green');
       iprodRenderShell();
     }catch(err){ toast('Erro lendo arquivo: '+err.message,'red'); }
@@ -15511,7 +15499,7 @@ async function iprodProcessar(){
   // pega o que o sentido empresa→projeto não pegava: atividade do projeto que a contratada
   // nem colocou na PQ dela. Junto, mostra o índice oficial e o HH com CPU x o HH que a
   // quantidade da contratada implica (usando o MESMO índice correto da base).
-  var qtdComp=[], contratadaSemProjeto=[];
+  var qtdComp=[], contratadaSemProjeto=[], promovidosExcluidos=[];
   if(IPROD_PROJETO && IPROD_PROJETO.pq.length){
     // Evita que a mesma atividade consolidada da contratada seja "reivindicada" (e seu HH
     // alocado contado) por mais de uma atividade do projeto — ex.: concreto fck=10 e fck=30
@@ -15737,24 +15725,22 @@ async function iprodProcessar(){
             :((achouSemMaoDeObra?'Composição achada na base sem insumo de mão de obra (IH) cadastrado':'Sem correspondência na base de índices')+' — considerado igual ao HH da empresa, sem aplicar índice próprio.')))});
     });
     // Itens de fornecimento da PQ da contratada que não bateram com NENHUMA atividade da PQ do
-    // Projeto — o HH alocado deles fica de fora da tabela acima (que só lista atividades do
-    // projeto). Mostrar à parte pra fechar 100% do HH cobrado.
-    contratadaSemProjeto=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;})
+    // Projeto — em vez de ficarem numa tabela separada, sobem AUTOMATICAMENTE como linha própria
+    // na tabela 3 (status "Incluído pela empresa"), abaixo. Não mistura número com nenhuma
+    // atividade já existente lá (pedido original do usuário: "não quero embutir dentro de uma
+    // atividade, quero que suba e seja mais uma atividade") — só que agora sem precisar de ação
+    // manual pra aparecer, pra não ter que manter duas tabelas. Índice/HH com CPU calculados igual
+    // a qualquer atividade do projeto (mesma lógica das 3 passagens acima), a partir da PRÓPRIA
+    // descrição/quantidade da contratada — não existe "Qtd. Projeto" oficial pra essa linha, então
+    // Qtd. Projeto = Qtd. Empresa (Dif. Qtd. sempre 0). Dá pra excluir uma linha individual (ou em
+    // lote, pelo checkbox) se algum item não for uma atividade de verdade — reaproveita
+    // IPROD_LINHAS_EXCLUIDAS, mesmo mecanismo das atividades do projeto.
+    var promovidos=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;})
       .map(function(g){return {desc:g.desc,unidade:g.unidade,quantidade:g.quantidade,hhAlocado:g.hhAlocado||0,valorTotal:g.valorTotal||0};});
-    // Realocações manuais (ver IPROD_REALOCACOES/iprodRealocarItem/iprodDesfazerRealocacao):
-    // promove um item que não bateu com NENHUMA atividade do projeto pra virar sua PRÓPRIA linha
-    // na tabela 3 — não mistura número com nenhuma atividade já existente lá (pedido explícito do
-    // usuário: "não quero embutir dentro de uma atividade, quero que suba e seja mais uma
-    // atividade"). Índice/HH com CPU calculados igual a qualquer atividade do projeto (mesma
-    // lógica das 3 passagens acima), só que a partir da PRÓPRIA descrição/quantidade da
-    // contratada — não existe "Qtd. Projeto" oficial pra essa linha, então Qtd. Projeto = Qtd.
-    // Empresa = a mesma quantidade cobrada (Dif. Qtd. sempre 0).
-    var promovidos=[], restantes=[];
-    contratadaSemProjeto.forEach(function(g){
-      if(IPROD_REALOCACOES[iprodGrupoKey(g.desc)]) promovidos.push(g); else restantes.push(g);
-    });
-    contratadaSemProjeto=restantes;
+    contratadaSemProjeto=[];
+    promovidosExcluidos=[];
     promovidos.forEach(function(g,pi){
+      if(IPROD_LINHAS_EXCLUIDAS[-(pi+1)]){ promovidosExcluidos.push({idxProjeto:-(pi+1),desc:g.desc}); return; }
       var codHintG=Object.keys(g.codigos||{})[0]||null;
       var achouIndiceG=iprodFindIndice(codHintG,g.desc,g.unidade);
       var indiceTotalG=0, detalhePartesG=[];
@@ -15789,7 +15775,7 @@ async function iprodProcessar(){
         qtdProjeto:g.quantidade,qtdEmpresa:g.quantidade,diffQtd:0,
         indiceTotal:indiceTotalG,hhEsperado:hhEsperadoG,hhSinapi:hhSinapiG,hhEmpresa:g.hhAlocado||0,
         diffHH:(g.hhAlocado||0)-hhEsperadoG,
-        status:'realocado',matchTipo:'realocado manualmente',specDiff:null,semIndiceProjeto:!temIndiceValidoG&&!temIndiceSinapiG,
+        status:'sem-projeto',matchTipo:'sem correspondência no projeto — incluído automaticamente',specDiff:null,semIndiceProjeto:!temIndiceValidoG&&!temIndiceSinapiG,
         indiceOrigem:indiceOrigemG,indiceSoSupervisao:!!indiceSoSupervisaoG,
         indiceSinapi:indiceSinapiTotalG>0?indiceSinapiTotalG:null,
         matchDescSinapi:achouSinapiG?achouSinapiG.matchDesc:null,matchCodSinapi:achouSinapiG?achouSinapiG.matchCod:null,
@@ -15798,7 +15784,7 @@ async function iprodProcessar(){
         detalhe:temIndiceValidoG?(detalhePartesG.join(' + ')+' = '+iprodFmt(indiceTotalG))
           :temIndiceSinapiG?('Sem correspondência na base da Vale — usado o índice do SINAPI ("'+(achouSinapiG?achouSinapiG.matchDesc:'?')+'", cód. '+(achouSinapiG?achouSinapiG.matchCod:'—')+') = '+iprodFmt(indiceSinapiTotalG)+'.')
           :'Sem correspondência na base de índices — considerado igual ao HH alocado da contratada, sem aplicar índice próprio.',
-        realocadoKey:iprodGrupoKey(g.desc)});
+        });
     });
   }
 
@@ -16010,7 +15996,7 @@ async function iprodProcessar(){
   var valorReferencia=taxaRSporHH!=null?totRefAjust*taxaRSporHH:null;
   var valorDif=taxaRSporHH!=null?totDif*taxaRSporHH:null;
 
-  IPROD_RESULT={linhas:linhas,linhasExcluidas:linhasExcluidas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto,totCobradoHistograma:totCobradoHistograma,taxaRSporHH:taxaRSporHH,valorCobrado:valorCobrado,valorReferencia:valorReferencia,valorDif:valorDif};
+  IPROD_RESULT={linhas:linhas,linhasExcluidas:linhasExcluidas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,promovidosExcluidos:promovidosExcluidos,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto,totCobradoHistograma:totCobradoHistograma,taxaRSporHH:taxaRSporHH,valorCobrado:valorCobrado,valorReferencia:valorReferencia,valorDif:valorDif};
   toast(temContratada?'Comparativo calculado':'HH com CPU calculado pelo índice do projeto (sem contratada)','green');
   iprodRenderShell();
 }
@@ -16043,7 +16029,6 @@ function iprodNovaAnalise(){
   IPROD_CARREGADO_DE_HIST=null;
   IPROD_ATIV_SELECIONADAS={};
   IPROD_FUNC_SELECIONADAS={};
-  IPROD_REALOCACOES={};
   iprodRenderShell();
   toast('Pronto pra uma nova análise — a PQ do Projeto continua carregada','green');
 }
@@ -16198,9 +16183,9 @@ function iprodRenderShell(){
       ['O que significa "⚠️ só supervisão"?',
        'A composição da base só tem cadastrado Encarregado/Mestre/Apontador (quem supervisiona), sem nenhum instalador de verdade (Servente, Pedreiro...). O índice mostrado reflete só o tempo do encarregado observando o serviço, então tende a estar SUBESTIMADO — é um sinal de alerta, não um erro pra corrigir.'],
       ['Por que a seção 3 (Atividades) e a seção 4 (Por Função) mostram números de HH diferentes?',
-       '"HH com CPU" (seção 3) e "HH Referência" (seção 4) usam a MESMA base de cálculo (quantidade oficial do projeto × índice) e devem bater quando somados. Já "HH da Empresa" (seção 3, só atividades que casaram com o projeto) e "HH Cobrado" (seção 4, TODO o histograma da contratada) são coisas diferentes de propósito — "HH Cobrado" inclui também atividades que a contratada lançou sem ter uma atividade correspondente na PQ do projeto (aparecem na tabela "Itens sem correspondência" mais abaixo). Não é bug: são dois recortes diferentes do mesmo universo.'],
+       '"HH com CPU" (seção 3) e "HH Referência" (seção 4) usam a MESMA base de cálculo (quantidade oficial do projeto × índice) e devem bater quando somados. Já "HH Orçado" (seção 3) e "HH Cobrado" (seção 4, TODO o histograma da contratada) são coisas diferentes de propósito — "HH Cobrado" inclui também atividades que a contratada lançou sem ter uma atividade correspondente na PQ do projeto (aparecem na própria seção 3, como linhas com status "Incluído pela empresa"). Não é bug: são dois recortes diferentes do mesmo universo.'],
       ['O que quer dizer cada Status na tabela de atividades?',
-       '<b>Bate</b> = quantidade da contratada igual à do projeto (dentro de 0,01). <b>Divergente</b> = quantidades diferentes, vale conferir. <b>Medida diferente</b> = mesma composição, mas a contratada cotou noutra unidade/tamanho (ex.: projeto pede lona 0,2mm, ela cotou 0,8mm). <b>Faltando na PQ da empresa</b> = o projeto prevê essa atividade e a contratada nem incluiu na PQ dela.'],
+       '<b>Bate</b> = quantidade da contratada igual à do projeto (dentro de 0,01). <b>Divergente</b> = quantidades diferentes, vale conferir. <b>Medida diferente</b> = mesma composição, mas a contratada cotou noutra unidade/tamanho (ex.: projeto pede lona 0,2mm, ela cotou 0,8mm). <b>Faltando na PQ da empresa</b> = o projeto prevê essa atividade e a contratada nem incluiu na PQ dela. <b>Incluído pela empresa</b> = o oposto: a contratada cobrou por isso, mas não existe atividade equivalente na PQ do Projeto — sobe automaticamente como linha própria pra fechar 100% do HH cobrado (dá pra excluir da análise se não for uma atividade de verdade).'],
       ['Achei um índice ou código errado — como eu corrijo?',
        'Clica na linha da atividade (seção 3) pra abrir o detalhamento. Lá tem dois campos: "Cód. Cliente (projeto)" (corrige o código, o sistema tenta casar de novo automaticamente pelo texto) e "Índice (HH/unid.)" (você digita o valor que considera certo e ele substitui o automático na hora — aparece um selo "⚙️ manual" nessa linha depois). Os dois recalculam a análise inteira ao salvar.'],
       ['Por que o índice de uma atividade mudou depois que eu importei a planilha de novo?',
@@ -16343,19 +16328,19 @@ function iprodRenderShell(){
     var indiretosMP=IPROD_CONTRATADA&&IPROD_CONTRATADA.indiretos;
     var pctIndireto=indiretosMP?((indiretosMP.maoObraIndireta+indiretosMP.equipamentos)/indiretosMP.valorTotalAprovado):null;
     html+='<div class="iprod-kpis"'+(pctIndireto!=null?' style="grid-template-columns:repeat(5,1fr)"':'')+'>'
-      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Orçado: Empresa</div><div class="iprod-kpi-sub">'+(temQtdComp?(recorteAberto?'Total cobrado pela contratada em toda a PQ dela — inclui '+iprodFmt(gapSemProjeto)+' HH sem atividade correspondente no projeto (ver alerta abaixo)':'Soma do HH da Empresa nas atividades reconciliadas do recorte atual'):(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
+      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Orçado: Empresa</div><div class="iprod-kpi-sub">'+(temQtdComp?(recorteAberto?'Total cobrado pela contratada em toda a PQ dela'+(gapSemProjeto>0.5?' — '+iprodFmt(gapSemProjeto)+' HH excluídos manualmente da análise (ver alerta abaixo)':''):'Soma do HH Orçado nas atividades reconciliadas do recorte atual'):(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(kpiRef)+'</div><div class="iprod-kpi-lbl">HH com CPU</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(kpiDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div>'+(temRS?'<div class="iprod-kpi-money" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">≈ '+iprodFmtRS(r.valorDif)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiAderencia*100)+'%</div><div class="iprod-kpi-lbl">Aderência</div><div class="iprod-kpi-sub">HH com CPU ÷ HH Orçado: Empresa</div></div>'
       +(pctIndireto!=null?'<div class="iprod-kpi" style="border-top-color:#7c3aed"><div class="iprod-kpi-val" style="color:#7c3aed">'+Math.round(pctIndireto*100)+'%</div><div class="iprod-kpi-lbl">% de Custo Indireto</div><div class="iprod-kpi-sub">(Mão de Obra Indireta '+iprodFmtRS(indiretosMP.maoObraIndireta)+' + Equipamentos '+iprodFmtRS(indiretosMP.equipamentos)+') ÷ Valor Total Aprovado '+iprodFmtRS(indiretosMP.valorTotalAprovado)+' — da PQ da MILPLAN (aba 12.0 PQ)</div></div>':'')
       +'</div>';
     if(temQtdComp){
-      var gapItens=r.contratadaSemProjeto||[];
+      var gapItens=r.promovidosExcluidos||[];
       html+='<div class="iprod-insight" style="margin-bottom:16px;border-left-color:'+(gapSemProjeto>0.5?'#d97706':'#16a34a')+';background:'+(gapSemProjeto>0.5?'#fffbeb':'#f0fdf4')+';color:'+(gapSemProjeto>0.5?'#78350f':'#14532d')+'">'
-        +(gapSemProjeto>0.5?'⚠️ <b>'+iprodFmt(gapSemProjeto)+' HH</b>, em <b>'+gapItens.length+' item(ns)</b> cobrados pela contratada, não bateram com nenhuma atividade do projeto — sem HH com CPU de referência pra comparar, contam '+(recorteAberto?'como divergência total (100% do HH deles) no cálculo de Diferença/Aderência acima.':'no total geral, mas NÃO entram no card acima porque o recorte atual ("'+recorteLbl+'") só mostra itens reconciliados.')
-          +'<ul style="margin:8px 0 0 18px;padding:0">'+gapItens.map(function(c){return '<li>'+c.desc+' — '+iprodFmt(c.quantidade)+' '+(c.unidade||'')+'</li>';}).join('')+'</ul>'
-          +'<a href="#" onclick="event.preventDefault();var el=document.getElementById(\'iprod-sem-projeto\');if(el)el.scrollIntoView({behavior:\'smooth\',block:\'start\'});" style="font-weight:800;color:inherit;text-decoration:underline;display:inline-block;margin-top:8px">Ver detalhamento do cálculo ↓</a>'
-          :'✅ Todo HH cobrado bateu com alguma atividade do projeto — nada ficou de fora.')
+        +(gapSemProjeto>0.5?'⚠️ <b>'+iprodFmt(gapSemProjeto)+' HH</b>, em <b>'+gapItens.length+' item(ns)</b> cobrados pela contratada sem atividade correspondente no projeto, foram excluídos manualmente da análise — não é um item "perdido": todo item sem correspondência já sobe automaticamente pra tabela 3 (status "Incluído pela empresa"), esses aqui é que você tirou de lá.'
+          +(recorteAberto?' Contam como divergência total (100% do HH deles) no cálculo de Diferença/Aderência acima.':' Ficam de fora do total geral, mas NÃO entram no card acima porque o recorte atual ("'+recorteLbl+'") só mostra itens reconciliados.')
+          +'<ul style="margin:8px 0 0 18px;padding:0">'+gapItens.map(function(c){return '<li>'+c.desc+'</li>';}).join('')+'</ul>'
+          :'✅ Todo HH cobrado bateu com alguma atividade do projeto (ou foi incluído automaticamente na tabela 3) — nada ficou de fora.')
         +'</div>';
     }
     if(temRS){
@@ -16396,7 +16381,7 @@ function iprodRenderShell(){
           top5Acumulado+=pct;
           top5ChartData.push({label:'#'+(i+1),desc:q.desc,pct:pct,cum:top5Acumulado});
         });
-        html+='<table class="iprod-tbl"><thead><tr><th>#</th><th>Atividade</th><th>Disciplina</th><th>Qtd. Projeto (PQ)</th><th>Qtd. Empresa</th><th>HH com CPU</th><th>HH Orçado (Empresa)</th><th>% do Total</th></tr></thead><tbody>';
+        html+='<table class="iprod-tbl"><thead><tr><th>#</th><th>Atividade</th><th>Disciplina</th><th>Qtd. PQ</th><th>Qtd. Orçada</th><th>HH com CPU</th><th>HH Orçado</th><th>% do Total</th></tr></thead><tbody>';
         top5ChartData.forEach(function(cd,i){
           var q=top5Itens[i];
           html+='<tr><td>'+(i+1)+'</td><td>'+q.desc+'</td><td>'+(q.disciplina||'—')+'</td><td>'+iprodFmt(q.qtdProjeto)+' '+(q.unidade||'')+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa)+' '+(q.unidade||''):'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+cd.pct.toFixed(1).replace('.',',')+'%</td></tr>';
@@ -16408,14 +16393,14 @@ function iprodRenderShell(){
       }
       html+='</div>';
 
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto'+(r.temContratada?' × PQ da Contratada — quantidade e índice':' — HH com CPU pelo índice')+'</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto'+(r.temContratada?' (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela.':'.')+' <b>HH com CPU (Vale)</b> e <b>HH CPU (SINAPI)</b> = quantidade do projeto × índice de cada base, já com a praticabilidade embutida — o índice em si não aparece mais como coluna, só o HH resultante; clique na linha pra ver a composição completa de cada um.'+(r.temContratada?' <b>HH da Empresa</b> = alocação proporcional do HH total cobrado no histograma, distribuído pelo peso (%) do valor (R$) de cada atividade dentro da PQ da contratada — mesmo método usado manualmente na planilha de referência.':'')+' Clique pra ver a composição do índice e corrigir o Cód. Cliente, se precisar.</div>'
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto'+(r.temContratada?' × PQ da Contratada — quantidade e índice':' — HH com CPU pelo índice')+'</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto'+(r.temContratada?' (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela.':'.')+' <b>HH com CPU (Vale)</b> e <b>HH CPU (SINAPI)</b> = quantidade do projeto × índice de cada base, já com a praticabilidade embutida — o índice em si não aparece mais como coluna, só o HH resultante; clique na linha pra ver a composição completa de cada um.'+(r.temContratada?' <b>HH Orçado</b> = alocação proporcional do HH total cobrado no histograma, distribuído pelo peso (%) do valor (R$) de cada atividade dentro da PQ da contratada — mesmo método usado manualmente na planilha de referência.':'')+' Clique pra ver a composição do índice e corrigir o Cód. Cliente, se precisar.</div>'
         +(r.temContratada?'<div style="display:flex;gap:8px;margin:0 0 12px">'
           +[['todos','Todas ('+r.qtdComp.length+')'],['cobradas','Só cobradas ('+nCobradas3+')']].map(function(f){
             var ativo=IPROD_QTDCOMP_FILTRO===f[0];
             return '<span onclick="iprodSetQtdCompFiltro(\''+f[0]+'\')" style="cursor:pointer;font-size:10.5px;font-weight:800;padding:4px 11px;border-radius:20px;border:1px solid '+(ativo?'#2563eb':'var(--border)')+';background:'+(ativo?'#2563eb':'transparent')+';color:'+(ativo?'#fff':'var(--muted)')+'">'+f[1]+'</span>';
           }).join('')
           +'</div>'
-          +(IPROD_QTDCOMP_FILTRO==='cobradas'?'<div class="iprod-panel-note" style="margin:0 0 10px">Mostrando só atividades com HH da Empresa — o TOTAL abaixo é o subtotal desse recorte, não da análise inteira.</div>':''):'')
+          +(IPROD_QTDCOMP_FILTRO==='cobradas'?'<div class="iprod-panel-note" style="margin:0 0 10px">Mostrando só atividades com HH Orçado — o TOTAL abaixo é o subtotal desse recorte, não da análise inteira.</div>':''):'')
         +'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 12px">'
         +'<input id="iprod-busca-3" type="text" placeholder="🔎 Buscar atividade..." oninput="iprodFiltrarBusca(this)" style="flex:1;min-width:200px;font-size:11.5px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
         +(r.temContratada?[['todos','Todos'],['bate','Bate'],['divergente','Divergente'],['medida-diferente','Medida diferente'],['faltando-empresa','Faltando']]:[['todos','Todos']]).map(function(f){
@@ -16428,7 +16413,7 @@ function iprodRenderShell(){
           +'<span style="display:flex;gap:8px"><button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#dc2626;color:#fff" onclick="iprodExcluirAtividadesSelecionadas()">🗑️ Excluir selecionadas</button>'
           +'<button class="iprod-hist-link" style="font-size:10.5px" onclick="iprodLimparSelecaoAtiv()">Limpar seleção</button></span>'
           +'</div>':'')
-        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th>Atividade</th><th style="width:28px">#</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>HH com CPU (Vale)</th><th>HH CPU (SINAPI)</th><th>HH da Empresa</th><th>Dif. HH</th><th>Dif. HH %</th><th>Status</th></tr></thead><tbody>';
+        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th>Atividade</th><th style="width:28px">#</th><th>Unid.</th><th>Qtd. PQ</th><th>Qtd. Orçada</th><th>Dif. Qtd.</th><th>HH com CPU (Vale)</th><th>HH CPU (SINAPI)</th><th>HH Orçado</th><th>Dif. HH</th><th>Dif. HH %</th><th>Status</th></tr></thead><tbody>';
       // Ordenado por HH da Empresa (orçado), maior pro menor — pedido do usuário pra focar a
       // conferência nas atividades que mais pesam no orçamento primeiro. Cópia do array só pra
       // exibição: não afeta qtdCompBase3/qtdCompFiltrado (usados nos totais e nos KPIs acima).
@@ -16438,9 +16423,9 @@ function iprodRenderShell(){
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
           :q.status==='medida-diferente'?'<span class="iprod-badge iprod-b-azul" title="PQ do projeto pede '+q.specDiff.projeto+', a contratada considerou '+q.specDiff.empresa+'">📏 Medida diferente</span>'
           :q.status==='sem-contratada'?'<span class="iprod-badge iprod-b-cinza">Referência (sem contratada)</span>'
-          :q.status==='realocado'?'<span class="iprod-badge iprod-b-azul" title="Item incluído na mão, promovido da lista de \'sem correspondência\' — não é uma atividade oficial da PQ do Projeto">🔀 Incluído manualmente</span>'
+          :q.status==='sem-projeto'?'<span class="iprod-badge iprod-b-azul" title="A contratada cobrou por isso, mas não existe atividade correspondente na PQ do Projeto — incluído automaticamente pra fechar 100% do HH cobrado">📦 Incluído pela empresa</span>'
           :'<span class="iprod-badge iprod-b-verm">Faltando na PQ da empresa</span>';
-        var descCell=q.desc+(q.status==='medida-diferente'?' <span class="iprod-badge iprod-b-azul" style="font-size:9.5px;padding:1px 6px">PQ pede '+q.specDiff.projeto+', empresa considerou '+q.specDiff.empresa+'</span>':(q.matchTipo&&q.matchTipo!=='código'&&q.status!=='realocado'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':''));
+        var descCell=q.desc+(q.status==='medida-diferente'?' <span class="iprod-badge iprod-b-azul" style="font-size:9.5px;padding:1px 6px">PQ pede '+q.specDiff.projeto+', empresa considerou '+q.specDiff.empresa+'</span>':(q.matchTipo&&q.matchTipo!=='código'&&q.status!=='sem-projeto'?' <em style="color:var(--muted);font-size:9.5px">['+q.matchTipo+']</em>':''));
         // Índice/Índice SINAPI saíram da linha visível (efeito já embutido no HH com CPU/HH CPU
         // SINAPI abaixo) — a composição completa (origem, manual, só-supervisão) continua
         // disponível ao clicar na linha, no painel "Detalhamento do índice" logo abaixo.
@@ -16462,10 +16447,10 @@ function iprodRenderShell(){
             +'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndiceSinapi(\''+String(q.matchCodSinapi||'').replace(/\'/g,'')+'\')">🔍 Conferir na base SINAPI</button>'
             +(q.matchCodBase?'<button class="iprod-hist-link" style="font-size:9.5px;font-weight:800" onclick="event.stopPropagation();iprodCompararIndices(\''+q.matchCodBase.replace(/\'/g,'')+'\',\''+String(q.matchCodSinapi||'').replace(/\'/g,'')+'\',\''+q.desc.replace(/\'/g,'').replace(/"/g,'')+'\')">⇄ Comparar Vale × SINAPI</button>':'')
             +'</div>'):'<div style="font-size:9.5px;color:var(--muted);margin-top:4px">↳ Base SINAPI: sem composição correspondente encontrada.</div>')
-          +(q.status==='realocado'?(
-            '<div class="iprod-insight" style="margin-top:10px">🔀 Essa linha não é uma atividade oficial da PQ do Projeto — é um item da contratada incluído na mão porque não bateu com nada automaticamente. Qtd. Projeto = Qtd. Empresa (não existe quantidade oficial pra comparar).</div>'
+          +(q.status==='sem-projeto'?(
+            '<div class="iprod-insight" style="margin-top:10px">📦 Essa linha não é uma atividade oficial da PQ do Projeto — é um item que a contratada cobrou sem correspondência no projeto, incluído aqui automaticamente pra fechar 100% do HH cobrado. Qtd. PQ = Qtd. Orçada (não existe quantidade oficial pra comparar).</div>'
             +'<div style="margin-top:10px" onclick="event.stopPropagation()">'
-            +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#fef2f2;color:#dc2626" onclick="event.stopPropagation();iprodDesfazerRealocacao(\''+q.realocadoKey.replace(/\'/g,'')+'\')">↺ Desfazer — volta pra lista de sem correspondência</button>'
+            +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#fef2f2;color:#dc2626" onclick="event.stopPropagation();iprodExcluirItemPromovido('+q.idxProjeto+',\''+q.desc.replace(/\'/g,'').replace(/"/g,'')+'\')">🗑️ Excluir essa atividade da análise</button>'
             +'</div>'
           ):(
             '<div style="display:flex;gap:6px;align-items:center;margin-top:10px" onclick="event.stopPropagation()">'
@@ -16515,30 +16500,23 @@ function iprodRenderShell(){
           +'</div>';
       }
 
-      if(r.contratadaSemProjeto && r.contratadaSemProjeto.length){
-        html+='<div class="iprod-panel" id="iprod-sem-projeto"><div class="iprod-panel-title">⚠️ Itens da PQ da contratada sem atividade correspondente no projeto</div><div class="iprod-panel-note">A contratada cobrou por isso, mas não achei atividade equivalente na PQ do Projeto — por isso não aparece na tabela acima. O HH alocado deles soma aqui pra fechar 100% do HH cobrado no histograma. Clique numa linha pra ver como o HH Alocado foi calculado ou pra incluir o item na tabela 3 como atividade própria (linha nova e independente, não mexe em nenhuma atividade já existente lá).</div>'
-          +'<table class="iprod-tbl"><thead><tr><th>Descrição</th><th>Unid.</th><th>Quantidade</th><th>HH Alocado</th></tr></thead><tbody>';
-        r.contratadaSemProjeto.forEach(function(c){
-          var pctValorC=r.totCobradoHistograma>0?(c.hhAlocado/r.totCobradoHistograma):0;
-          var chaveG=iprodGrupoKey(c.desc).replace(/'/g,"\\'");
-          html+='<tr class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
-            +'<td>'+c.desc+'</td><td>'+c.unidade+'</td><td>'+iprodFmt(c.quantidade)+'</td><td>'+iprodFmt(c.hhAlocado)+'</td></tr>';
-          html+='<tr class="iprod-drill"><td colspan="4">'
-            +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Como esse HH Alocado foi calculado</div>'
-            +'<div class="iprod-drill-row"><span>Valor (R$) dessa atividade na PQ da contratada</span><span style="font-weight:700">R$ '+iprodFmt(c.valorTotal)+'</span></div>'
-            +'<div class="iprod-drill-row"><span>÷ Soma do valor (R$) de TODAS as atividades de fornecimento da PQ da contratada</span><span>= '+(pctValorC*100).toFixed(2).replace('.',',')+'% do total</span></div>'
-            +'<div class="iprod-drill-row"><span>× HH total cobrado no histograma (todas as funções, todos os dias)</span><span style="font-weight:700">'+iprodFmt(r.totCobradoHistograma)+' HH</span></div>'
-            +'<div class="iprod-drill-row" style="border-top:2px solid var(--border);margin-top:4px;padding-top:8px"><span style="font-weight:800">= HH Alocado dessa atividade</span><span style="font-weight:800">'+iprodFmt(c.hhAlocado)+' HH</span></div>'
-            +'<div class="iprod-insight" style="margin-top:8px">O rateio é por PESO NO VALOR (R$), não por quantidade física — atividades mais caras "puxam" mais HH do histograma pra si, mesmo sem saber exatamente quantas pessoas trabalharam em cada atividade no dia a dia. É uma aproximação (mesmo método usado manualmente na planilha de referência), não uma medição direta.</div>'
-            +'<div style="margin-top:10px" onclick="event.stopPropagation()">'
-            +'<button class="iprod-btn" style="margin-top:0" onclick="event.stopPropagation();iprodRealocarItem(\''+chaveG+'\')">🔀 Incluir como atividade própria na tabela 3</button>'
-            +'</div>'
-            +'</td></tr>';
-        });
-        html+='<tr class="iprod-tot"><td colspan="3">TOTAL sem correspondência</td><td>'+iprodFmt(totHhSemProjeto)+'</td></tr>';
-        html+='</tbody></table>'
-          +'<div class="iprod-insight" style="margin-top:12px">Σ HH da Empresa (com + sem correspondência no projeto) = <b>'+iprodFmt(totHhEmpresa)+'</b> — deve bater com o HH Cobrado total do histograma (seção 4).</div>'
+      if((r.promovidosExcluidos||[]).length){
+        html+='<div class="iprod-insight" style="border-left-color:#dc2626;background:#fef2f2;color:#7f1d1d;margin-top:-8px;margin-bottom:16px">'
+          +'<div style="font-weight:800;cursor:pointer;display:flex;align-items:center;gap:6px" onclick="iprodToggleExcluidasAtiv()">'
+          +'<span style="font-size:9px">'+(IPROD_MOSTRAR_EXCLUIDAS_ATIV?'▾':'▸')+'</span>'
+          +'<span>🗑️ '+r.promovidosExcluidos.length+' item(ns) da contratada excluído(s) dessa análise (fora de todos os totais) — clique pra '+(IPROD_MOSTRAR_EXCLUIDAS_ATIV?'esconder':'ver')+'</span>'
+          +'</div>'
+          +'<div style="display:'+(IPROD_MOSTRAR_EXCLUIDAS_ATIV?'block':'none')+';margin-top:6px">'
+          +r.promovidosExcluidos.map(function(c){
+            return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 0;border-top:1px dashed #fecaca">'
+              +'<span>'+c.desc+'</span>'
+              +'<button class="iprod-btn" style="margin-top:0;padding:3px 9px;font-size:10px;background:#fff;color:#7f1d1d;border:1px solid #fecaca" onclick="iprodRestaurarLinhaProjeto('+c.idxProjeto+')">↺ Restaurar</button>'
+              +'</div>';
+          }).join('')
+          +'</div>'
           +'</div>';
+      }
+      html+='<div class="iprod-insight" style="margin-top:-8px;margin-bottom:16px">Σ HH Orçado (tabela acima, já inclusive itens "Incluído pela empresa") = <b>'+iprodFmt(totHhEmpresa)+'</b> — deve bater com o HH Cobrado total do histograma (seção 4), exceto pelo(s) item(ns) excluído(s) manualmente acima.</div>';
       }
     }
 
