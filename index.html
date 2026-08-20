@@ -14073,6 +14073,19 @@ var IPROD_BUSCA_INDICE_TERMO='', IPROD_BUSCA_INDICE_FONTE='vale';
 // (mesmo componente de checkbox já usado nos outros filtros do dashboard, ver ms-idx-disc/
 // ms-idx-insumo em onMsChange), não por dropdown de valor único.
 var IPROD_BUSCA_INDICE_DISC_SEL=[], IPROD_BUSCA_INDICE_INSUMO_SEL=[];
+// Modo comparação lado a lado (Vale × SINAPI) dentro da aba "Base de Índices" — acionado pelo
+// botão "🔍 Comparar Vale × SINAPI" no detalhamento da seção 3, quando a linha tem match nas DUAS
+// bases. Enquanto ativo, substitui a busca normal por duas tabelas (uma por fonte), pra não
+// precisar clicar em "Conferir índice" de cada fonte separadamente e trocar o filtro na mão.
+var IPROD_COMPARAR_INDICES=null; // {codVale, codSinapi, desc} ou null
+function iprodCompararIndices(codVale,codSinapi,desc){
+  IPROD_COMPARAR_INDICES={codVale:codVale,codSinapi:codSinapi,desc:desc};
+  iprodShowTab('baseidx');
+}
+function iprodSairComparacaoIndices(){
+  IPROD_COMPARAR_INDICES=null;
+  iprodRenderShell();
+}
 function iprodSetBuscaIndiceTermo(v){ IPROD_BUSCA_INDICE_TERMO=v; iprodRenderShell(); }
 function iprodSetBuscaIndiceFonte(v){ IPROD_BUSCA_INDICE_FONTE=v; iprodRenderShell(); }
 // Botão "Conferir índice" nos detalhamentos das seções 3 e 4 — pula direto pra aba "Base de
@@ -16393,6 +16406,7 @@ function iprodRenderShell(){
           +(q.indiceSinapi!=null?('<div style="font-size:9.5px;color:#7c3aed;margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
             +'<span>↳ Base SINAPI: <b>'+(q.matchCodSinapi||'—')+'</b> — '+(q.matchDescSinapi||'?')+' — índice <b>'+iprodFmt(q.indiceSinapi)+'</b> HH/unid.</span>'
             +'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndiceSinapi(\''+String(q.matchCodSinapi||'').replace(/\'/g,'')+'\')">🔍 Conferir na base SINAPI</button>'
+            +(q.matchCodBase?'<button class="iprod-hist-link" style="font-size:9.5px;font-weight:800" onclick="event.stopPropagation();iprodCompararIndices(\''+q.matchCodBase.replace(/\'/g,'')+'\',\''+String(q.matchCodSinapi||'').replace(/\'/g,'')+'\',\''+q.desc.replace(/\'/g,'').replace(/"/g,'')+'\')">⇄ Comparar Vale × SINAPI</button>':'')
             +'</div>'):'<div style="font-size:9.5px;color:var(--muted);margin-top:4px">↳ Base SINAPI: sem composição correspondente encontrada.</div>')
           +(q.status==='realocado'?(
             '<div class="iprod-insight" style="margin-top:10px">🔀 Essa linha não é uma atividade oficial da PQ do Projeto — é um item da contratada incluído na mão porque não bateu com nada automaticamente. Qtd. Projeto = Qtd. Empresa (não existe quantidade oficial pra comparar).</div>'
@@ -16627,6 +16641,32 @@ function iprodRenderShell(){
     +'<div class="iprod-panel-note">Consulta direta na mesma planilha de índice usada nos comparativos — pesquise por código, descrição da atividade, insumo (função/material) ou disciplina, pra tirar dúvida sobre qual índice foi (ou deveria ser) aplicado.</div>';
   if(!IPROD_INDICE){
     html+='<div style="font-size:11.5px;color:var(--muted)">Carregando base de índices...</div>';
+  } else if(IPROD_COMPARAR_INDICES){
+    var cmp=IPROD_COMPARAR_INDICES;
+    var linhasVale=iprodGetIndiceRowsFlat('vale').filter(function(r){return r.codCliente===cmp.codVale;});
+    var linhasSinapi=IPROD_INDICE_SINAPI?iprodGetIndiceRowsFlat('sinapi').filter(function(r){return r.codCliente===cmp.codSinapi;}):[];
+    var totVale=linhasVale.reduce(function(s,r){return s+(Number(r.indice)||0);},0);
+    var totSinapi=linhasSinapi.reduce(function(s,r){return s+(Number(r.indice)||0);},0);
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+      +'<div class="iprod-panel-note" style="margin:0">Comparando as composições batidas pra <b>"'+(cmp.desc||'')+'"</b> nas duas bases — só mão de obra (tipo M).</div>'
+      +'<button class="iprod-hist-link" onclick="iprodSairComparacaoIndices()">← Voltar pra busca normal</button>'
+      +'</div>'
+      +'<div class="iprod-kpis" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">'
+      +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(totVale)+'</div><div class="iprod-kpi-lbl">Índice Vale (HH/unid.)</div></div>'
+      +'<div class="iprod-kpi" style="border-top-color:#7c3aed"><div class="iprod-kpi-val" style="color:#7c3aed">'+iprodFmt(totSinapi)+'</div><div class="iprod-kpi-lbl">Índice SINAPI (HH/unid.)</div></div>'
+      +'<div class="iprod-kpi" style="border-top-color:'+(Math.abs(totVale-totSinapi)>0.001?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(Math.abs(totVale-totSinapi)>0.001?'#dc2626':'#16a34a')+'">'+iprodFmt(totVale-totSinapi)+'</div><div class="iprod-kpi-lbl">Diferença (Vale − SINAPI)</div></div>'
+      +'</div>';
+    var iprodTabelaComparacao=function(titulo,cor,linhas,tot){
+      return '<div class="iprod-panel" style="margin-bottom:16px"><div class="iprod-panel-title" style="color:'+cor+'">'+titulo+'</div>'
+        +(linhas.length?('<table class="iprod-tbl"><thead><tr><th>Disciplina</th><th>Descrição</th><th>Unid.</th><th>Insumo</th><th>Descrição Insumo</th><th>Índice</th></tr></thead><tbody>'
+          +linhas.map(function(r){return '<tr><td>'+(r.disciplina||'')+'</td><td>'+(r.desc||'')+'</td><td>'+(r.unidade||'')+'</td><td>'+(r.insumo||'')+'</td><td>'+(r.descIns||'')+'</td><td>'+iprodFmt(r.indice)+'</td></tr>';}).join('')
+          +'<tr class="iprod-tot"><td colspan="5">TOTAL</td><td>'+iprodFmt(tot)+'</td></tr>'
+          +'</tbody></table>')
+          :'<div class="iprod-panel-note" style="margin:0">Sem composição correspondente encontrada nessa base.</div>')
+        +'</div>';
+    };
+    html+=iprodTabelaComparacao('Vale (código '+(cmp.codVale||'—')+')','#d97706',linhasVale,totVale)
+      +iprodTabelaComparacao('SINAPI (código '+(cmp.codSinapi||'—')+')','#7c3aed',linhasSinapi,totSinapi);
   } else {
     var iprodFontesIdx=[{id:'vale',label:'Vale (oficial) — '+IPROD_INDICE.total+' linhas'}]
       .concat((IPROD_FALLBACK||[]).map(function(f){return {id:f.nome,label:f.nome+' — '+f.indice.total+' linhas'};}))
