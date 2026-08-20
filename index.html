@@ -14030,15 +14030,15 @@ var IPROD_INDICE=null, IPROD_INDICE_LOADING=null, IPROD_FALLBACK=null;
 // já com o índice de mão de obra (HH/unidade) resolvido recursivamente através de composições
 // aninhadas (uma composição SINAPI pode usar outra composição como item, não só insumo direto).
 var IPROD_INDICE_SINAPI=null, IPROD_INDICE_SINAPI_LOADING=null;
-// Limiar de confiança mais alto que o padrão da Vale (0,35) só pra essa comparação SINAPI — depois
-// de corrigir o bug de tokenização abaixo (limparDesc, no build-indice-sinapi.js), os scores
-// ficaram bem mais discriminativos, mas ainda existe caso ruim de sobra (ex.: "Leito para cabos...
-// altura 150mm, largura 400mm" batendo com item de guarda-corpo, score 0,45 — só "ALTURA"/"AÇO"
-// em comum, sem relação real). Testado contra exemplo real: com 0,55 os 3 casos ruins confirmados
-// ficam de fora e os bons continuam passando (inclusive "Montagem de eletroduto rígido" — o SINAPI
-// TEM essa composição, só não aparecia por causa do bug de tokenização). Pedido explícito do
-// usuário: sem confiança razoável, mostrar "—" em vez de arriscar um número sem relação.
-var IPROD_SINAPI_MINSCORE=0.55;
+// Limiar de confiança mais alto que o padrão da Vale (0,35) só pra essa comparação SINAPI —
+// combinado com exigirUnidadeIgual (ver iprodBuscarNaFonte), que já descarta candidato de unidade
+// diferente ANTES de pontuar (o principal filtro contra match sem relação, ex.: transporte
+// terrestre batendo com transporte fluvial em balsa só por "carga"+"descarga"+"1000" em comum).
+// Com esse filtro rígido fazendo a parte pesada, o limiar em si pôde descer de 0,55 pra 0,45 sem
+// deixar nenhum dos casos ruins confirmados passar (score exato do pior caso ruim testado: 0,4473
+// — "Leito para cabos" x "guarda-corpo") e recuperando match bom que 0,55 tava perdendo (Reaterro,
+// Concreto, ambos ~0,54). Testado contra os casos bons e ruins reais antes de fixar o valor.
+var IPROD_SINAPI_MINSCORE=0.45;
 async function iprodLoadIndiceSinapi(){
   if(IPROD_INDICE_SINAPI) return IPROD_INDICE_SINAPI;
   if(IPROD_INDICE_SINAPI_LOADING) return IPROD_INDICE_SINAPI_LOADING;
@@ -14648,6 +14648,20 @@ function iprodExtrairFck(desc){
   var m=n.match(/FCK\s*=?\s*(\d+(?:[.,]\d+)?)/);
   return m?parseFloat(m[1].replace(',','.')):null;
 }
+// Extrai a DMT (Distância Média de Transporte) de uma descrição de atividade de transporte, em
+// KM — ex.: "Carga, transporte... DMT até 1000m" -> 1. Usado só pra aceitar composição SINAPI de
+// transporte medida em M3XKM/TXKM (por m³ ou tonelada × km rodado, não por unidade simples) como
+// compatível com a unidade "crua" (m³/t) da PQ, multiplicando o índice pela distância real
+// informada — sem essa distância no texto, não dá pra converter com segurança, então não entra.
+function iprodExtrairDMT(desc){
+  var n=iprodNorm(desc);
+  var m=n.match(/D\.?\s*M\.?\s*T\.?\s*(?:ATE|=|:)?\s*([0-9][0-9.,]*)\s*(KM|M)\b/);
+  if(!m) return null;
+  var numStr=m[1].replace(/\.(?=[0-9]{3}([^0-9]|$))/g,'').replace(',','.');
+  var num=parseFloat(numStr);
+  if(!isFinite(num)||num<=0) return null;
+  return m[2]==='KM'?num:num/1000;
+}
 // Contexto de aplicação do concreto (fundação/elevada/laje) — null quando a descrição não
 // especifica nenhum (ex.: "Concreto usinado Bombeável fck = 30,0 MPa", sem dizer onde vai ser
 // usado). Só concreto SEM contexto é elegível pra entrar na soma de qualquer necessidade daquele
@@ -14767,7 +14781,7 @@ function iprodBuscarNaFonte(fonte,codCliente,desc,unidade,minScore,exigirUnidade
   // diferente (isso já é resolvido pelo resto do score).
   var kQuery=/^[MD]/.test(cod)?cod[0]:null;
   var pesoK=iprodPesoLetraK(desc);
-  var best=null, bestScore=0;
+  var best=null, bestScore=0, bestDmtKm=null;
   fonte.descIdx.forEach(function(d){
     // Unidade diferente = filtro RÍGIDO, não só bônus — usado quando quem chama passa
     // exigirUnidadeIgual (ver IPROD_SINAPI_MINSCORE/iprodBuscarNaFonte no comparativo SINAPI).
@@ -14776,16 +14790,30 @@ function iprodBuscarNaFonte(fonte,codCliente,desc,unidade,minScore,exigirUnidade
     // FLUVIAL) com score 0,80 — bem acima de qualquer limiar razoável — só por "carga"+"descarga"+
     // "1000" em comum, ignorando que unidade e assunto (terraplenagem x balsa) não têm nada a ver.
     // Não mexe na Vale nem nos fallbacks (não passam esse parâmetro) — validados sem isso.
-    if(exigirUnidadeIgual&&pqUnid&&d.unidNorm&&pqUnid!==d.unidNorm) return;
+    var dmtKmCandidato=null;
+    if(exigirUnidadeIgual&&pqUnid&&d.unidNorm&&pqUnid!==d.unidNorm){
+      // Exceção: composição de TRANSPORTE da SINAPI vem medida em unidade × km (ex.: "M3XKM",
+      // "TXKM" — o índice depende da distância rodada, não só da quantidade). Compatível com a
+      // unidade "crua" da PQ (M3/T) SE a própria PQ informa a distância (DMT) no texto — confirmado
+      // com dado real: "Carga, transporte... DMT até 1000m" tinha candidato certo descartado
+      // (unidade M3XKM) pelo filtro rígido acima, mesmo sendo a composição certa pra essa
+      // atividade. Sem DMT no texto não dá pra converter com segurança — fica de fora mesmo.
+      if(d.unidNorm===pqUnid+'xkm'){
+        dmtKmCandidato=iprodExtrairDMT(desc);
+        if(dmtKmCandidato==null) return;
+      } else {
+        return;
+      }
+    }
     var score=iprodTokenScore(pqTokens,pqSet,d.tokens,pqUnid,d.unidNorm,pqQualquer,iprodTemQualquer(d.desc));
     var kBase=/^[MD]/.test(d.codCliente||'')?d.codCliente[0]:null;
     if(kBase){
       if(kQuery) score+=(kBase===kQuery)?0.05:-0.3;
       else if(pesoK) score+=(kBase===pesoK)?0.05:-0.3;
     }
-    if(score>bestScore){ bestScore=score; best=d; }
+    if(score>bestScore){ bestScore=score; best=d; bestDmtKm=dmtKmCandidato; }
   });
-  if(best && bestScore>=minScore) return {rows:best.rows,matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)',matchCod:best.codCliente,matchDesc:best.desc,score:bestScore};
+  if(best && bestScore>=minScore) return {rows:best.rows,matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)'+(bestDmtKm!=null?' — índice ajustado pela DMT ('+iprodFmt(bestDmtKm)+' km) informada na própria PQ':''),matchCod:best.codCliente,matchDesc:best.desc,score:bestScore,dmtKm:bestDmtKm};
   return null;
 }
 function iprodFindIndiceCru(codCliente,desc,unidade){
@@ -15554,6 +15582,9 @@ async function iprodProcessar(){
       var achouSinapi=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,pItem.desc,pItem.unidade,IPROD_SINAPI_MINSCORE,true):null;
       var indiceSinapiTotal=0;
       if(achouSinapi) achouSinapi.rows.forEach(function(r){ if(r.tipo==='M') indiceSinapiTotal+=Number(r.indice)||0; });
+      // Composição de transporte (M3XKM/TXKM) — índice é por unidade × km, multiplica pela DMT
+      // (em km) que a própria iprodBuscarNaFonte já extraiu do texto da PQ (ver iprodExtrairDMT).
+      if(achouSinapi&&achouSinapi.dmtKm!=null) indiceSinapiTotal*=achouSinapi.dmtKm;
 
       var emp=null, matchTipo=null;
       // Concreto: junta a quantidade de TODO concreto da contratada SEM contexto de aplicação
@@ -15732,6 +15763,7 @@ async function iprodProcessar(){
       var achouSinapiG=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,g.desc,g.unidade,IPROD_SINAPI_MINSCORE,true):null;
       var indiceSinapiTotalG=0;
       if(achouSinapiG) achouSinapiG.rows.forEach(function(rr){ if(rr.tipo==='M') indiceSinapiTotalG+=Number(rr.indice)||0; });
+      if(achouSinapiG&&achouSinapiG.dmtKm!=null) indiceSinapiTotalG*=achouSinapiG.dmtKm;
       // Mesma cascata do loop principal: Vale → SINAPI (só se a Vale não achou nada) → HH alocado
       // da contratada (não tem "índice da contratada" separado aqui porque, pra item realocado,
       // esse índice JÁ é o próprio HH alocado — não existe outro número empírico dela pra usar).
