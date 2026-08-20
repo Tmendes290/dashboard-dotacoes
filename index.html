@@ -14030,15 +14030,15 @@ var IPROD_INDICE=null, IPROD_INDICE_LOADING=null, IPROD_FALLBACK=null;
 // já com o índice de mão de obra (HH/unidade) resolvido recursivamente através de composições
 // aninhadas (uma composição SINAPI pode usar outra composição como item, não só insumo direto).
 var IPROD_INDICE_SINAPI=null, IPROD_INDICE_SINAPI_LOADING=null;
-// Limiar de confiança bem mais alto que o padrão da Vale (0,35) só pra essa comparação SINAPI —
-// confirmado com dado real que o padrão deixa passar match sem nenhuma relação (ex.: "Leito para
-// cabos... altura 150mm, largura 400mm" batendo com "PLANTIO DE PALMEIRA... altura de muda maior
-// que 4,00 M", score 0,55 — bateu só por causa de "ALTURA" em comum + o "4,00" da palmeira virando
-// token "400" igual ao "400mm" da largura do leito, pura coincidência de token). O SINAPI é uma
-// base de construção civil/edificação, não tem cobertura de item industrial/elétrico/mecânico de
-// mineração — pedido explícito do usuário: sem confiança alta, mostrar "—" (sem match) em vez de
-// arriscar um número sem relação nenhuma com a atividade.
-var IPROD_SINAPI_MINSCORE=0.65;
+// Limiar de confiança mais alto que o padrão da Vale (0,35) só pra essa comparação SINAPI — depois
+// de corrigir o bug de tokenização abaixo (limparDesc, no build-indice-sinapi.js), os scores
+// ficaram bem mais discriminativos, mas ainda existe caso ruim de sobra (ex.: "Leito para cabos...
+// altura 150mm, largura 400mm" batendo com item de guarda-corpo, score 0,45 — só "ALTURA"/"AÇO"
+// em comum, sem relação real). Testado contra exemplo real: com 0,55 os 3 casos ruins confirmados
+// ficam de fora e os bons continuam passando (inclusive "Montagem de eletroduto rígido" — o SINAPI
+// TEM essa composição, só não aparecia por causa do bug de tokenização). Pedido explícito do
+// usuário: sem confiança razoável, mostrar "—" em vez de arriscar um número sem relação.
+var IPROD_SINAPI_MINSCORE=0.55;
 async function iprodLoadIndiceSinapi(){
   if(IPROD_INDICE_SINAPI) return IPROD_INDICE_SINAPI;
   if(IPROD_INDICE_SINAPI_LOADING) return IPROD_INDICE_SINAPI_LOADING;
