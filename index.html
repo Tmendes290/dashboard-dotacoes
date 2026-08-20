@@ -14022,9 +14022,10 @@ function _rev2InjectStyle(){
 // ============================================================
 var IPROD_INDICE=null, IPROD_INDICE_LOADING=null, IPROD_FALLBACK=null;
 // Base SINAPI (Sistema Nacional de Pesquisa de Custos e Índices) — carregada à parte da base
-// oficial da Vale (IPROD_INDICE), pra comparar lado a lado qual índice se encaixa melhor numa
-// atividade (aba 3, coluna "HH SINAPI"), sem entrar no fallback automático da Vale (ver
-// iprodFindIndiceCru) — é uma referência pública/nacional, não uma correção da base da Vale.
+// oficial da Vale (IPROD_INDICE), pra comparar lado a lado o índice na aba 3 (coluna "Índice
+// SINAPI", ao lado da coluna "Índice" da Vale) — é só um número de referência pro usuário
+// julgar visualmente se o índice da Vale está aderente/coerente, não entra no fallback
+// automático da Vale (ver iprodFindIndiceCru) nem afeta HH com CPU/Diferença/Aderência.
 // Gerada offline a partir da aba "Analítico" do arquivo SINAPI (ver data/indice-sinapi.json),
 // já com o índice de mão de obra (HH/unidade) resolvido recursivamente através de composições
 // aninhadas (uma composição SINAPI pode usar outra composição como item, não só insumo direto).
@@ -14700,8 +14701,9 @@ function iprodEstimarInsumosPorMedia(matchDesc,unidade){
     return {descIns:k,indiceMedio:somaPorInsumo[k]/contPorInsumo[k],baseadoEm:contPorInsumo[k]};
   });
 }
-function iprodBuscarNaFonte(fonte,codCliente,desc,unidade){
+function iprodBuscarNaFonte(fonte,codCliente,desc,unidade,minScore){
   if(!fonte) return null;
+  if(minScore==null) minScore=0.35;
   var cod=String(codCliente||'').trim();
   var pqTokens=iprodTokens(desc);
   var pqSet={}; pqTokens.forEach(function(t){pqSet[t]=true;});
@@ -14749,7 +14751,7 @@ function iprodBuscarNaFonte(fonte,codCliente,desc,unidade){
     }
     if(score>bestScore){ bestScore=score; best=d; }
   });
-  if(best && bestScore>=0.35) return {rows:best.rows,matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)',matchCod:best.codCliente,matchDesc:best.desc,score:bestScore};
+  if(best && bestScore>=minScore) return {rows:best.rows,matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)',matchCod:best.codCliente,matchDesc:best.desc,score:bestScore};
   return null;
 }
 function iprodFindIndiceCru(codCliente,desc,unidade){
@@ -15508,14 +15510,15 @@ async function iprodProcessar(){
       });
 
       // Índice SINAPI (referência pública/nacional, separada da base da Vale) pra comparar lado a
-      // lado com o "HH com CPU" na seção 3 — mesma busca por descrição/unidade usada pra Vale
+      // lado com o "Índice" da Vale na seção 3 — mesma busca por descrição/unidade usada pra Vale
       // (iprodBuscarNaFonte), sem código (SINAPI não tem Cod.Cliente da Vale), sem fallback entre
       // fontes (só entra se achar na própria base SINAPI) e SEM aplicar índice manual do usuário
-      // (esse é só pra Vale). Aplica a MESMA praticabilidade, pra ser comparável ponto a ponto.
+      // (esse é só pra Vale). É só um número pra você comparar visualmente e julgar se o índice da
+      // Vale está coerente/aderente ou não — não decide nem substitui NADA sozinho (HH com CPU,
+      // Diferença e Aderência continuam 100% baseados só no índice da Vale).
       var achouSinapi=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,pItem.desc,pItem.unidade):null;
       var indiceSinapiTotal=0;
       if(achouSinapi) achouSinapi.rows.forEach(function(r){ if(r.tipo==='M') indiceSinapiTotal+=Number(r.indice)||0; });
-      var hhSinapi=(achouSinapi&&indiceSinapiTotal>0)?(pItem.quantidade*indiceSinapiTotal*(2-IPROD_PRAT)):null;
 
       var emp=null, matchTipo=null;
       // Concreto: junta a quantidade de TODO concreto da contratada SEM contexto de aplicação
@@ -15561,7 +15564,7 @@ async function iprodProcessar(){
       if(emp) usadosEmp.push(emp);
       pendentes.push({pItem:pItem,idxProjeto:idxProjeto,achouIndice:achouIndice,indiceTotal:indiceTotal,
         detalhePartes:detalhePartes,indiceSoSupervisao:indiceSoSupervisao,emp:emp,matchTipo:matchTipo,specDiff:null,indiceManual:indiceManual,
-        achouSinapi:achouSinapi,indiceSinapiTotal:indiceSinapiTotal,hhSinapi:hhSinapi});
+        achouSinapi:achouSinapi,indiceSinapiTotal:indiceSinapiTotal});
     });
 
     // SEGUNDA PASSAGEM: só pros itens que sobraram sem match nenhum, e só entre os candidatos que
@@ -15584,7 +15587,7 @@ async function iprodProcessar(){
     pendentes.forEach(function(ctx){
       var pItem=ctx.pItem, idxProjeto=ctx.idxProjeto, achouIndice=ctx.achouIndice, indiceTotal=ctx.indiceTotal,
         detalhePartes=ctx.detalhePartes, indiceSoSupervisao=ctx.indiceSoSupervisao, emp=ctx.emp, matchTipo=ctx.matchTipo, specDiff=ctx.specDiff, indiceManual=ctx.indiceManual,
-        achouSinapi=ctx.achouSinapi, indiceSinapiTotal=ctx.indiceSinapiTotal, hhSinapi=ctx.hhSinapi;
+        achouSinapi=ctx.achouSinapi, indiceSinapiTotal=ctx.indiceSinapiTotal;
 
       if(emp){
         // Guarda no próprio grupo a quantidade oficial do projeto e a diferença — usado pelo
@@ -15640,7 +15643,7 @@ async function iprodProcessar(){
         indiceTotal:indiceTotal,hhEsperado:hhEsperado,hhEmpresa:hhEmpresa,
         diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
         status:status,matchTipo:matchTipo,specDiff:specDiff,semIndiceProjeto:semIndiceProjeto,indiceOrigem:indiceOrigem,indiceSoSupervisao:!!indiceSoSupervisao,
-        indiceSinapi:indiceSinapiTotal>0?indiceSinapiTotal:null,hhSinapi:hhSinapi,
+        indiceSinapi:indiceSinapiTotal>0?indiceSinapiTotal:null,
         matchDescSinapi:achouSinapi?achouSinapi.matchDesc:null,matchCodSinapi:achouSinapi?achouSinapi.matchCod:null,
         // Disciplina vem da própria composição batida na base (todo insumo de uma composição
         // pertence à mesma disciplina) — usada no painel "Top 5" (curva ABC) pra agrupar/filtrar.
@@ -15684,14 +15687,13 @@ async function iprodProcessar(){
       var achouSinapiG=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,g.desc,g.unidade):null;
       var indiceSinapiTotalG=0;
       if(achouSinapiG) achouSinapiG.rows.forEach(function(rr){ if(rr.tipo==='M') indiceSinapiTotalG+=Number(rr.indice)||0; });
-      var hhSinapiG=(achouSinapiG&&indiceSinapiTotalG>0)?(g.quantidade*indiceSinapiTotalG*(2-IPROD_PRAT)):null;
       qtdComp.push({desc:g.desc,unidade:g.unidade,codCliente:codHintG,idxProjeto:-(pi+1),
         qtdProjeto:g.quantidade,qtdEmpresa:g.quantidade,diffQtd:0,
         indiceTotal:indiceTotalG,hhEsperado:hhEsperadoG,hhEmpresa:g.hhAlocado||0,
         diffHH:(g.hhAlocado||0)-hhEsperadoG,
         status:'realocado',matchTipo:'realocado manualmente',specDiff:null,semIndiceProjeto:!temIndiceValidoG,
         indiceOrigem:temIndiceValidoG?'base':null,indiceSoSupervisao:!!indiceSoSupervisaoG,
-        indiceSinapi:indiceSinapiTotalG>0?indiceSinapiTotalG:null,hhSinapi:hhSinapiG,
+        indiceSinapi:indiceSinapiTotalG>0?indiceSinapiTotalG:null,
         matchDescSinapi:achouSinapiG?achouSinapiG.matchDesc:null,matchCodSinapi:achouSinapiG?achouSinapiG.matchCod:null,
         disciplina:(achouIndiceG&&achouIndiceG.rows&&achouIndiceG.rows[0])?achouIndiceG.rows[0].disciplina:null,
         matchDesc:achouIndiceG?achouIndiceG.matchDesc:null,matchCodBase:achouIndiceG?achouIndiceG.matchCod:null,
@@ -16327,7 +16329,7 @@ function iprodRenderShell(){
           +'<span style="display:flex;gap:8px"><button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#dc2626;color:#fff" onclick="iprodExcluirAtividadesSelecionadas()">🗑️ Excluir selecionadas</button>'
           +'<button class="iprod-hist-link" style="font-size:10.5px" onclick="iprodLimparSelecaoAtiv()">Limpar seleção</button></span>'
           +'</div>':'')
-        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>HH com CPU</th><th>HH SINAPI</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
+        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>Índice SINAPI</th><th>HH com CPU</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
       qtdCompFiltrado.forEach(function(q){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
@@ -16339,10 +16341,10 @@ function iprodRenderShell(){
         var indiceCell=iprodFmt(q.indiceTotal)+(q.indiceOrigem==='manual'?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Você ajustou esse índice manualmente — clique na linha pra ver/mudar">⚙️ manual</span>'
             :q.indiceOrigem==='contratada'?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="Nossa base não tem essa composição — usado o índice que a própria contratada declara na PQ dela">contratada</span>':'')
           +(q.indiceSoSupervisao?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Composição na base só tem insumo de supervisão (Encarregado/Mestre...) cadastrado, sem instalador — índice provavelmente subestimado">⚠️ só supervisão</span>':'');
-        var sinapiCell=q.hhSinapi!=null?('<span title="Índice SINAPI: '+iprodFmt(q.indiceSinapi)+' HH/unid. — composição \''+(q.matchDescSinapi||'?')+'\' (Cód. '+(q.matchCodSinapi||'—')+')">'+iprodFmt(q.hhSinapi)+'</span>'):'—';
+        var sinapiCell=q.indiceSinapi!=null?('<span title="Composição SINAPI: \''+(q.matchDescSinapi||'?')+'\' (Cód. '+(q.matchCodSinapi||'—')+')">'+iprodFmt(q.indiceSinapi)+'</span>'):'—';
         html+='<tr class="iprod-tr-expand iprod-tr-chk" data-busca="'+iprodNorm(q.desc).replace(/"/g,'')+'" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
           +'<td onclick="event.stopPropagation()"><input type="checkbox"'+(IPROD_ATIV_SELECIONADAS[q.idxProjeto]?' checked':'')+' onclick="event.stopPropagation();iprodToggleAtivSelecionada('+q.idxProjeto+')"></td>'
-          +'<td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+indiceCell+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td style="color:#7c3aed">'+sinapiCell+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
+          +'<td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+indiceCell+'</td><td style="color:#7c3aed">'+sinapiCell+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
         html+='<tr class="iprod-drill"><td colspan="12">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
           +(q.status==='medida-diferente'?'<div class="iprod-insight" style="margin-bottom:8px">📏 A PQ do projeto pede <b>'+q.specDiff.projeto+'</b>, mas a contratada só cotou essa atividade com <b>'+q.specDiff.empresa+'</b> na PQ dela — mesma composição, medida diferente. Confira se essa troca foi aprovada antes de aceitar a quantidade/HH como equivalente.</div>':'')
@@ -16352,7 +16354,7 @@ function iprodRenderShell(){
           +'<span>↳ Base de índices (Vale): <b>'+(q.matchCodBase||'—')+'</b> — '+(q.matchDesc||'?')+'</span>'
           +(q.matchCodBase?'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndice(\''+q.matchCodBase.replace(/\'/g,'')+'\')">🔍 Conferir índice</button>':'')
           +'</div>'
-          +(q.hhSinapi!=null?('<div style="font-size:9.5px;color:#7c3aed;margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+          +(q.indiceSinapi!=null?('<div style="font-size:9.5px;color:#7c3aed;margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
             +'<span>↳ Base SINAPI: <b>'+(q.matchCodSinapi||'—')+'</b> — '+(q.matchDescSinapi||'?')+' — índice <b>'+iprodFmt(q.indiceSinapi)+'</b> HH/unid.</span>'
             +'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndiceSinapi(\''+String(q.matchCodSinapi||'').replace(/\'/g,'')+'\')">🔍 Conferir na base SINAPI</button>'
             +'</div>'):'<div style="font-size:9.5px;color:var(--muted);margin-top:4px">↳ Base SINAPI: sem composição correspondente encontrada.</div>')
@@ -16382,11 +16384,10 @@ function iprodRenderShell(){
           +'</td></tr>';
       });
       var totHhEsperado=qtdCompBase3.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
-      var totHhSinapi=qtdCompBase3.reduce(function(s,q){return s+(q.hhSinapi||0);},0);
       var totHhEmpresaMatched=qtdCompBase3.reduce(function(s,q){return s+(q.hhEmpresa||0);},0);
       var totHhSemProjeto=(r.contratadaSemProjeto||[]).reduce(function(s,c){return s+(c.hhAlocado||0);},0);
       var totHhEmpresa=totHhEmpresaMatched+totHhSemProjeto;
-      html+='<tr class="iprod-tot"><td></td><td>TOTAL (atividades do projeto'+(IPROD_QTDCOMP_FILTRO==='cobradas'?' — só cobradas':'')+')</td><td></td><td></td><td></td><td></td><td></td><td>'+iprodFmt(totHhEsperado)+'</td><td style="color:#7c3aed">'+iprodFmt(totHhSinapi)+'</td><td>'+iprodFmt(totHhEmpresaMatched)+'</td><td>'+iprodFmt(totHhEmpresaMatched-totHhEsperado)+'</td><td></td></tr>';
+      html+='<tr class="iprod-tot"><td></td><td>TOTAL (atividades do projeto'+(IPROD_QTDCOMP_FILTRO==='cobradas'?' — só cobradas':'')+')</td><td></td><td></td><td></td><td></td><td></td><td></td><td>'+iprodFmt(totHhEsperado)+'</td><td>'+iprodFmt(totHhEmpresaMatched)+'</td><td>'+iprodFmt(totHhEmpresaMatched-totHhEsperado)+'</td><td></td></tr>';
       html+='</tbody></table></div>';
 
       var idxExcluidos=Object.keys(IPROD_LINHAS_EXCLUIDAS).filter(function(i){return IPROD_LINHAS_EXCLUIDAS[i]&&IPROD_PROJETO.pq[i];});
