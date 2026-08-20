@@ -16203,11 +16203,18 @@ function iprodRenderShell(){
     // relatório — nada de nome de arquivo enviado, botão ou controle de tela (pedido explícito do
     // usuário: "não quero que saia essa parte do item com os nomes do arquivo"). .iprod-print-hide
     // marca os painéis inteiros a esconder (seção 2 e o FAQ); o resto são controles pontuais.
+    // .iprod-print-only é o oposto: só some da TELA, só aparece no PDF — usado no resumo
+    // executivo, no "onde focar primeiro" e no comparativo Vale x SINAPI de cada atividade
+    // divergente (ver qtdCompOrdenado.forEach), pra não duplicar informação/poluir a tela normal.
+    +'.iprod-print-only{display:none}'
     +'@media print{'
       +'.iprod-print-hide,.iprod-tabbar,.iprod-hist-link,.iprod-btn,.iprod-tr-expand input[type="checkbox"],#iprod-busca-3,#iprod-busca-pq,#iprod-busca-idx{display:none !important}'
       +'.iprod-text-input,.iprod-prat-input{border:none !important;background:transparent !important;padding:2px 0 !important;font-weight:700 !important}'
       +'.iprod-panel{box-shadow:none !important;break-inside:avoid;page-break-inside:avoid}'
       +'.iprod-tr-expand{cursor:default !important}'
+      +'.iprod-print-only{display:block !important}'
+      +'tr.iprod-drill-print-force{display:table-row !important}'
+      +'tr.iprod-drill-print-force>td{display:table-cell !important}'
     +'}'
     +'</style>';
 
@@ -16379,6 +16386,25 @@ function iprodRenderShell(){
     // Equipamentos) ÷ Valor Total Aprovado da PQ — não tem nada a ver com HH, é só sobre R$.
     var indiretosMP=IPROD_CONTRATADA&&IPROD_CONTRATADA.indiretos;
     var pctIndireto=indiretosMP?((indiretosMP.maoObraIndireta+indiretosMP.equipamentos)/indiretosMP.valorTotalAprovado):null;
+
+    // Resumo executivo — só no PDF (.iprod-print-only), pedido do usuário: "o gerente não vai
+    // querer ler isso tudo" — um veredito em uma frase antes de qualquer tabela. Mesmo critério
+    // de severidade já usado por função na seção 4 (dif/cobrado > 15% = crítico).
+    if(temQtdComp){
+      var vPctExcesso=kpiRef>0.001?(kpiDif/kpiRef*100):null;
+      var vStatus=kpiDif<=0.001?'verde':((kpiDif/Math.max(kpiCobrado,1))>0.15?'vermelho':'amarelo');
+      var vCores={vermelho:['#dc2626','#fef2f2','#7f1d1d','#991b1b'],amarelo:['#d97706','#fffbeb','#78350f','#92400e'],verde:['#16a34a','#f0fdf4','#14532d','#166534']}[vStatus];
+      var vHeadline=vStatus==='verde'?'Contratada dentro do HH justificado pelo índice de produtividade'
+        :'Contratada cobrou '+(vPctExcesso!=null?Math.round(vPctExcesso)+'%':iprodFmt(kpiDif)+' HH')+' acima do HH justificado pelo índice de produtividade';
+      var vSub='Aderência de '+Math.round(kpiAderencia*100)+'% entre o HH orçado e o HH com CPU de referência'+(vStatus!=='verde'?' — vale revisar antes da próxima medição.':' — dentro do esperado.');
+      html+='<div class="iprod-print-only">'
+        +'<div style="border-left:3px solid '+vCores[0]+';background:'+vCores[1]+';border-radius:8px;padding:16px 18px;margin-bottom:16px;color:'+vCores[2]+';display:flex;align-items:center;gap:14px">'
+        +'<span style="font-size:20px;flex-shrink:0">'+(vStatus==='verde'?'✅':'⚠️')+'</span>'
+        +'<div><div style="font-size:14.5px;font-weight:800;margin-bottom:3px;color:'+vCores[2]+'">'+vHeadline+'</div>'
+        +'<div style="font-size:11px;color:'+vCores[3]+'">'+vSub+'</div></div>'
+        +'</div></div>';
+    }
+
     html+='<div class="iprod-kpis"'+(pctIndireto!=null?' style="grid-template-columns:repeat(5,1fr)"':'')+'>'
       +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Orçado: Empresa</div><div class="iprod-kpi-sub">'+(temQtdComp?(recorteAberto?'Total cobrado pela contratada em toda a PQ dela'+(gapSemProjeto>0.5?' — '+iprodFmt(gapSemProjeto)+' HH excluídos manualmente da análise (ver alerta abaixo)':''):'Soma do HH Orçado nas atividades reconciliadas do recorte atual'):(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(kpiRef)+'</div><div class="iprod-kpi-lbl">HH com CPU</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
@@ -16386,6 +16412,21 @@ function iprodRenderShell(){
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiAderencia*100)+'%</div><div class="iprod-kpi-lbl">Aderência</div><div class="iprod-kpi-sub">HH com CPU ÷ HH Orçado: Empresa</div></div>'
       +(pctIndireto!=null?'<div class="iprod-kpi" style="border-top-color:#7c3aed"><div class="iprod-kpi-val" style="color:#7c3aed">'+Math.round(pctIndireto*100)+'%</div><div class="iprod-kpi-lbl">% de Custo Indireto</div><div class="iprod-kpi-sub">(Mão de Obra Indireta '+iprodFmtRS(indiretosMP.maoObraIndireta)+' + Equipamentos '+iprodFmtRS(indiretosMP.equipamentos)+') ÷ Valor Total Aprovado '+iprodFmtRS(indiretosMP.valorTotalAprovado)+' — da PQ da MILPLAN (aba 12.0 PQ)</div></div>':'')
       +'</div>';
+
+    // "Onde focar primeiro" — só no PDF, top 3 funções mais divergentes (mesmo critério de
+    // severidade do resumo executivo acima). Complementa o veredito com o próximo passo prático.
+    if(temQtdComp){
+      var focoPrint=r.linhas.filter(function(l){return l.status==='vermelho'||l.status==='amarelo';}).slice().sort(function(a,b){return (b.dif||0)-(a.dif||0);}).slice(0,3);
+      if(focoPrint.length){
+        html+='<div class="iprod-panel iprod-print-only">'
+          +'<div class="iprod-panel-title">Onde focar primeiro</div>'
+          +'<div class="iprod-panel-note">As '+focoPrint.length+' função(ões) com maior divergência — por aqui que a conferência com a contratada deveria começar.</div>'
+          +'<table class="iprod-tbl"><thead><tr><th>#</th><th>Função</th><th>HH Orçado</th><th>HH CPU (Vale)</th><th>Diferença</th><th>Status</th></tr></thead><tbody>'
+          +focoPrint.map(function(l,i){return '<tr><td>'+(i+1)+'</td><td>'+l.funcao+'</td><td>'+iprodFmt(l.hhCobrado)+'</td><td>'+(l.hhRef>0?iprodFmt(l.hhAjust):'—')+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';}).join('')
+          +'</tbody></table></div>';
+      }
+    }
+
     if(temQtdComp){
       var gapItens=r.promovidosExcluidos||[];
       html+='<div class="iprod-insight" style="margin-bottom:16px;border-left-color:'+(gapSemProjeto>0.5?'#d97706':'#16a34a')+';background:'+(gapSemProjeto>0.5?'#fffbeb':'#f0fdf4')+';color:'+(gapSemProjeto>0.5?'#78350f':'#14532d')+'">'
@@ -16433,6 +16474,10 @@ function iprodRenderShell(){
       // atividades com maior quantidade orçada primeiro. Cópia do array só pra exibição: não afeta
       // qtdCompBase3/qtdCompFiltrado (usados nos totais e nos KPIs acima).
       var qtdCompOrdenado=qtdCompFiltrado.slice().sort(function(a,b){return (b.qtdEmpresa||0)-(a.qtdEmpresa||0);});
+      // Achatado uma vez só fora do loop (usado no comparativo Vale x SINAPI do PDF, abaixo) — sem
+      // isso, cada atividade Divergente re-achatava a base inteira de novo, deixando a tela lenta.
+      var iprodFlatValePrint=iprodGetIndiceRowsFlat('vale');
+      var iprodFlatSinapiPrint=IPROD_INDICE_SINAPI?iprodGetIndiceRowsFlat('sinapi'):[];
       qtdCompOrdenado.forEach(function(q,qi){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
@@ -16448,7 +16493,7 @@ function iprodRenderShell(){
         html+='<tr class="iprod-tr-expand iprod-tr-chk" data-busca="'+iprodNorm(q.desc).replace(/"/g,'')+'" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
           +'<td onclick="event.stopPropagation()"><input type="checkbox"'+(IPROD_ATIV_SELECIONADAS[q.idxProjeto]?' checked':'')+' onclick="event.stopPropagation();iprodToggleAtivSelecionada('+q.idxProjeto+')"></td>'
           +'<td>'+(qi+1)+'</td><td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td style="color:#7c3aed">'+(q.hhSinapi!=null?iprodFmt(q.hhSinapi):'—')+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+(difPct!=null?difPct.toFixed(1).replace('.',',')+'%':'—')+'</td><td>'+badge+'</td></tr>';
-        html+='<tr class="iprod-drill"><td colspan="13">'
+        html+='<tr class="iprod-drill'+(q.status==='divergente'&&q.matchCodBase?' iprod-drill-print-force':'')+'"><td colspan="13">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
           +(q.status==='medida-diferente'?'<div class="iprod-insight" style="margin-bottom:8px">📏 A PQ do projeto pede <b>'+q.specDiff.projeto+'</b>, mas a contratada só cotou essa atividade com <b>'+q.specDiff.empresa+'</b> na PQ dela — mesma composição, medida diferente. Confira se essa troca foi aprovada antes de aceitar a quantidade/HH como equivalente.</div>':'')
           +(q.indiceSoSupervisao?'<div class="iprod-insight" style="margin-bottom:8px">⚠️ Essa composição da base só tem insumo de SUPERVISÃO cadastrado (Encarregado/Mestre...), sem instalador de verdade — provável lacuna na planilha-fonte. O índice reflete só o tempo do encarregado, não o serviço em si. Considere isso ao avaliar essa linha.</div>':'')
@@ -16462,6 +16507,33 @@ function iprodRenderShell(){
             +'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndiceSinapi(\''+String(q.matchCodSinapi||'').replace(/\'/g,'')+'\')">🔍 Conferir na base SINAPI</button>'
             +(q.matchCodBase?'<button class="iprod-hist-link" style="font-size:9.5px;font-weight:800" onclick="event.stopPropagation();iprodCompararIndices(\''+q.matchCodBase.replace(/\'/g,'')+'\',\''+String(q.matchCodSinapi||'').replace(/\'/g,'')+'\',\''+q.desc.replace(/\'/g,'').replace(/"/g,'')+'\')">⇄ Comparar Vale × SINAPI</button>':'')
             +'</div>'):'<div style="font-size:9.5px;color:var(--muted);margin-top:4px">↳ Base SINAPI: sem composição correspondente encontrada.</div>')
+          +(q.status==='divergente'&&q.matchCodBase?(function(){
+            // Comparativo Vale x SINAPI completo (mesma lógica de iprodCompararIndices) — só
+            // divergentes, só pro PDF (iprod-print-only), pra não duplicar isso na tela onde já
+            // existe o botão "Comparar Vale × SINAPI" pra quem quiser abrir sob demanda.
+            var lv=iprodFlatValePrint.filter(function(r){return r.codCliente===q.matchCodBase&&r.tipo==='M';});
+            var ls=iprodFlatSinapiPrint.filter(function(r){return r.codCliente===q.matchCodSinapi&&r.tipo==='M';});
+            if(!lv.length) return '';
+            var tv=lv.reduce(function(s,r){return s+(Number(r.indice)||0);},0);
+            var ts=ls.reduce(function(s,r){return s+(Number(r.indice)||0);},0);
+            var tabelaQ=function(titulo,cor,linhas,tot){
+              return '<div class="iprod-panel" style="margin-bottom:12px"><div class="iprod-panel-title" style="color:'+cor+'">'+titulo+'</div>'
+                +'<table class="iprod-tbl"><thead><tr><th>Disciplina</th><th>Descrição</th><th>Unid.</th><th>Insumo</th><th>Descrição Insumo</th><th>Índice</th></tr></thead><tbody>'
+                +linhas.map(function(r){return '<tr><td>'+(r.disciplina||'')+'</td><td>'+(r.desc||'')+'</td><td>'+(r.unidade||'')+'</td><td>'+(r.insumo||'')+'</td><td>'+(r.descIns||'')+'</td><td>'+iprodFmt(r.indice)+'</td></tr>';}).join('')
+                +'<tr class="iprod-tot"><td colspan="5">TOTAL</td><td>'+iprodFmt(tot)+'</td></tr>'
+                +'</tbody></table></div>';
+            };
+            return '<div class="iprod-print-only" style="margin-top:10px">'
+              +'<div class="iprod-panel-note" style="margin:0 0 8px">Comparativo completo Vale × SINAPI dessa atividade (só sai no PDF):</div>'
+              +'<div class="iprod-kpis" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px">'
+              +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(tv)+'</div><div class="iprod-kpi-lbl">Índice Vale (HH/unid.)</div></div>'
+              +'<div class="iprod-kpi" style="border-top-color:#7c3aed"><div class="iprod-kpi-val" style="color:#7c3aed">'+iprodFmt(ts)+'</div><div class="iprod-kpi-lbl">Índice SINAPI (HH/unid.)</div></div>'
+              +'<div class="iprod-kpi" style="border-top-color:'+(Math.abs(tv-ts)>0.001?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(Math.abs(tv-ts)>0.001?'#dc2626':'#16a34a')+'">'+iprodFmt(tv-ts)+'</div><div class="iprod-kpi-lbl">Diferença (Vale − SINAPI)</div></div>'
+              +'</div>'
+              +tabelaQ('Vale (código '+q.matchCodBase+')','#d97706',lv,tv)
+              +(ls.length?tabelaQ('SINAPI (código '+(q.matchCodSinapi||'—')+')','#7c3aed',ls,ts):'')
+              +'</div>';
+          })():'')
           +(q.status==='sem-projeto'?(
             '<div class="iprod-insight" style="margin-top:10px">📦 Essa linha não é uma atividade oficial da PQ do Projeto — é um item que a contratada cobrou sem correspondência no projeto, incluído aqui automaticamente pra fechar 100% do HH cobrado. Qtd. PQ = Qtd. Orçada (não existe quantidade oficial pra comparar).</div>'
             +'<div style="margin-top:10px" onclick="event.stopPropagation()">'
