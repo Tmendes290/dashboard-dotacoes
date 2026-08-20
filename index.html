@@ -16414,10 +16414,10 @@ function iprodRenderShell(){
           +'<button class="iprod-hist-link" style="font-size:10.5px" onclick="iprodLimparSelecaoAtiv()">Limpar seleção</button></span>'
           +'</div>':'')
         +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th>Atividade</th><th style="width:28px">#</th><th>Unid.</th><th>Qtd. PQ</th><th>Qtd. Orçada</th><th>Dif. Qtd.</th><th>HH com CPU (Vale)</th><th>HH CPU (SINAPI)</th><th>HH Orçado</th><th>Dif. HH</th><th>Dif. HH %</th><th>Status</th></tr></thead><tbody>';
-      // Ordenado por HH da Empresa (orçado), maior pro menor — pedido do usuário pra focar a
-      // conferência nas atividades que mais pesam no orçamento primeiro. Cópia do array só pra
-      // exibição: não afeta qtdCompBase3/qtdCompFiltrado (usados nos totais e nos KPIs acima).
-      var qtdCompOrdenado=qtdCompFiltrado.slice().sort(function(a,b){return (b.hhEmpresa||0)-(a.hhEmpresa||0);});
+      // Ordenado por Qtd. Orçada, maior pro menor — pedido do usuário pra focar a conferência nas
+      // atividades com maior quantidade orçada primeiro. Cópia do array só pra exibição: não afeta
+      // qtdCompBase3/qtdCompFiltrado (usados nos totais e nos KPIs acima).
+      var qtdCompOrdenado=qtdCompFiltrado.slice().sort(function(a,b){return (b.qtdEmpresa||0)-(a.qtdEmpresa||0);});
       qtdCompOrdenado.forEach(function(q,qi){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
