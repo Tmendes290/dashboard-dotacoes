@@ -14021,6 +14021,31 @@ function _rev2InjectStyle(){
 // vs índice de produtividade oficial do projeto (base pci00, multi-disciplina)
 // ============================================================
 var IPROD_INDICE=null, IPROD_INDICE_LOADING=null, IPROD_FALLBACK=null;
+// Base SINAPI (Sistema Nacional de Pesquisa de Custos e Índices) — carregada à parte da base
+// oficial da Vale (IPROD_INDICE), pra comparar lado a lado qual índice se encaixa melhor numa
+// atividade (aba 3, coluna "HH SINAPI"), sem entrar no fallback automático da Vale (ver
+// iprodFindIndiceCru) — é uma referência pública/nacional, não uma correção da base da Vale.
+// Gerada offline a partir da aba "Analítico" do arquivo SINAPI (ver data/indice-sinapi.json),
+// já com o índice de mão de obra (HH/unidade) resolvido recursivamente através de composições
+// aninhadas (uma composição SINAPI pode usar outra composição como item, não só insumo direto).
+var IPROD_INDICE_SINAPI=null, IPROD_INDICE_SINAPI_LOADING=null;
+async function iprodLoadIndiceSinapi(){
+  if(IPROD_INDICE_SINAPI) return IPROD_INDICE_SINAPI;
+  if(IPROD_INDICE_SINAPI_LOADING) return IPROD_INDICE_SINAPI_LOADING;
+  IPROD_INDICE_SINAPI_LOADING=fetch('/data/indice-sinapi.json').then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(json){
+    IPROD_INDICE_SINAPI=iprodConstruirIndice(json);
+    if(IPROD_TAB) iprodRenderShell();
+    return IPROD_INDICE_SINAPI;
+  }).catch(function(e){
+    console.warn('[iprod] falha ao carregar base SINAPI:',e.message);
+    IPROD_INDICE_SINAPI_LOADING=null;
+    return null;
+  });
+  return IPROD_INDICE_SINAPI_LOADING;
+}
 var IPROD_CONTRATADA=null, IPROD_PROJETO=null, IPROD_RESULT=null;
 var IPROD_PRAT=0.6667, IPROD_TAB='comp';
 // Desligado a pedido do usuário (18/08) até melhorar a precisão da taxa R$/HH (ver dúvida sobre
@@ -14058,12 +14083,23 @@ function iprodConferirIndice(codigo, insumoDesc){
   // comparativo; sem isso a busca por código também trazia material/equipamento da mesma
   // composição, poluindo a conferência.
   IPROD_BUSCA_INDICE_INSUMO_SEL=['IH'];
+  IPROD_BUSCA_INDICE_FONTE='vale';
+  iprodShowTab('baseidx');
+}
+// Mesma ideia do iprodConferirIndice acima, só que pra base SINAPI — não usa o filtro de prefixo
+// IH (esquema de código próprio da Vale, não existe na SINAPI) porque data/indice-sinapi.json já
+// só tem linha de mão de obra (tipo M), não precisa filtrar mais nada além do código em si.
+function iprodConferirIndiceSinapi(codigo){
+  IPROD_BUSCA_INDICE_TERMO=codigo||'';
+  IPROD_BUSCA_INDICE_DISC_SEL=[];
+  IPROD_BUSCA_INDICE_INSUMO_SEL=[];
+  IPROD_BUSCA_INDICE_FONTE='sinapi';
   iprodShowTab('baseidx');
 }
 // Achata o índice agrupado por composição (ver iprodConstruirIndice) numa lista simples de linhas
 // pra exibir/buscar em tabela — cada linha já é um insumo (função ou material) de uma composição.
 function iprodGetIndiceRowsFlat(fonte){
-  var estrutura=fonte==='vale'?IPROD_INDICE:(function(){
+  var estrutura=fonte==='vale'?IPROD_INDICE:fonte==='sinapi'?IPROD_INDICE_SINAPI:(function(){
     var f=(IPROD_FALLBACK||[]).find(function(x){return x.nome===fonte;});
     return f?f.indice:null;
   })();
@@ -15471,6 +15507,16 @@ async function iprodProcessar(){
         porFuncaoProjeto[keyProjeto].atividades.push({desc:pItem.desc,qtd:pItem.quantidade,unidade:pItem.unidade,indice:r.indice,hh:qtdNecProjeto,matchTipo:achouIndice.matchTipo,matchCod:achouIndice.matchCod,matchDesc:achouIndice.matchDesc,insumo:r.insumo,descIns:r.descIns});
       });
 
+      // Índice SINAPI (referência pública/nacional, separada da base da Vale) pra comparar lado a
+      // lado com o "HH com CPU" na seção 3 — mesma busca por descrição/unidade usada pra Vale
+      // (iprodBuscarNaFonte), sem código (SINAPI não tem Cod.Cliente da Vale), sem fallback entre
+      // fontes (só entra se achar na própria base SINAPI) e SEM aplicar índice manual do usuário
+      // (esse é só pra Vale). Aplica a MESMA praticabilidade, pra ser comparável ponto a ponto.
+      var achouSinapi=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,pItem.desc,pItem.unidade):null;
+      var indiceSinapiTotal=0;
+      if(achouSinapi) achouSinapi.rows.forEach(function(r){ if(r.tipo==='M') indiceSinapiTotal+=Number(r.indice)||0; });
+      var hhSinapi=(achouSinapi&&indiceSinapiTotal>0)?(pItem.quantidade*indiceSinapiTotal*(2-IPROD_PRAT)):null;
+
       var emp=null, matchTipo=null;
       // Concreto: junta a quantidade de TODO concreto da contratada SEM contexto de aplicação
       // (ex.: "Bombeável fck=30", sem dizer fundação/elevada/laje) no mesmo fck pedido pelo
@@ -15514,7 +15560,8 @@ async function iprodProcessar(){
       }
       if(emp) usadosEmp.push(emp);
       pendentes.push({pItem:pItem,idxProjeto:idxProjeto,achouIndice:achouIndice,indiceTotal:indiceTotal,
-        detalhePartes:detalhePartes,indiceSoSupervisao:indiceSoSupervisao,emp:emp,matchTipo:matchTipo,specDiff:null,indiceManual:indiceManual});
+        detalhePartes:detalhePartes,indiceSoSupervisao:indiceSoSupervisao,emp:emp,matchTipo:matchTipo,specDiff:null,indiceManual:indiceManual,
+        achouSinapi:achouSinapi,indiceSinapiTotal:indiceSinapiTotal,hhSinapi:hhSinapi});
     });
 
     // SEGUNDA PASSAGEM: só pros itens que sobraram sem match nenhum, e só entre os candidatos que
@@ -15536,7 +15583,8 @@ async function iprodProcessar(){
     // TERCEIRA PASSAGEM: com emp/specDiff já definitivos pra todo mundo, monta o resultado de cada linha.
     pendentes.forEach(function(ctx){
       var pItem=ctx.pItem, idxProjeto=ctx.idxProjeto, achouIndice=ctx.achouIndice, indiceTotal=ctx.indiceTotal,
-        detalhePartes=ctx.detalhePartes, indiceSoSupervisao=ctx.indiceSoSupervisao, emp=ctx.emp, matchTipo=ctx.matchTipo, specDiff=ctx.specDiff, indiceManual=ctx.indiceManual;
+        detalhePartes=ctx.detalhePartes, indiceSoSupervisao=ctx.indiceSoSupervisao, emp=ctx.emp, matchTipo=ctx.matchTipo, specDiff=ctx.specDiff, indiceManual=ctx.indiceManual,
+        achouSinapi=ctx.achouSinapi, indiceSinapiTotal=ctx.indiceSinapiTotal, hhSinapi=ctx.hhSinapi;
 
       if(emp){
         // Guarda no próprio grupo a quantidade oficial do projeto e a diferença — usado pelo
@@ -15592,6 +15640,8 @@ async function iprodProcessar(){
         indiceTotal:indiceTotal,hhEsperado:hhEsperado,hhEmpresa:hhEmpresa,
         diffHH:hhEmpresa!=null?(hhEmpresa-hhEsperado):null,
         status:status,matchTipo:matchTipo,specDiff:specDiff,semIndiceProjeto:semIndiceProjeto,indiceOrigem:indiceOrigem,indiceSoSupervisao:!!indiceSoSupervisao,
+        indiceSinapi:indiceSinapiTotal>0?indiceSinapiTotal:null,hhSinapi:hhSinapi,
+        matchDescSinapi:achouSinapi?achouSinapi.matchDesc:null,matchCodSinapi:achouSinapi?achouSinapi.matchCod:null,
         // Disciplina vem da própria composição batida na base (todo insumo de uma composição
         // pertence à mesma disciplina) — usada no painel "Top 5" (curva ABC) pra agrupar/filtrar.
         disciplina:(achouIndice&&achouIndice.rows&&achouIndice.rows[0])?achouIndice.rows[0].disciplina:null,
@@ -15631,12 +15681,18 @@ async function iprodProcessar(){
       var temIndiceValidoG=!!achouIndiceG&&indiceTotalG>0;
       var hhEsperadoG=temIndiceValidoG?(g.quantidade*indiceTotalG*(2-IPROD_PRAT)):(g.hhAlocado||0);
       if(!temIndiceValidoG) totRefAssumidoProjeto+=hhEsperadoG;
+      var achouSinapiG=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,g.desc,g.unidade):null;
+      var indiceSinapiTotalG=0;
+      if(achouSinapiG) achouSinapiG.rows.forEach(function(rr){ if(rr.tipo==='M') indiceSinapiTotalG+=Number(rr.indice)||0; });
+      var hhSinapiG=(achouSinapiG&&indiceSinapiTotalG>0)?(g.quantidade*indiceSinapiTotalG*(2-IPROD_PRAT)):null;
       qtdComp.push({desc:g.desc,unidade:g.unidade,codCliente:codHintG,idxProjeto:-(pi+1),
         qtdProjeto:g.quantidade,qtdEmpresa:g.quantidade,diffQtd:0,
         indiceTotal:indiceTotalG,hhEsperado:hhEsperadoG,hhEmpresa:g.hhAlocado||0,
         diffHH:(g.hhAlocado||0)-hhEsperadoG,
         status:'realocado',matchTipo:'realocado manualmente',specDiff:null,semIndiceProjeto:!temIndiceValidoG,
         indiceOrigem:temIndiceValidoG?'base':null,indiceSoSupervisao:!!indiceSoSupervisaoG,
+        indiceSinapi:indiceSinapiTotalG>0?indiceSinapiTotalG:null,hhSinapi:hhSinapiG,
+        matchDescSinapi:achouSinapiG?achouSinapiG.matchDesc:null,matchCodSinapi:achouSinapiG?achouSinapiG.matchCod:null,
         disciplina:(achouIndiceG&&achouIndiceG.rows&&achouIndiceG.rows[0])?achouIndiceG.rows[0].disciplina:null,
         matchDesc:achouIndiceG?achouIndiceG.matchDesc:null,matchCodBase:achouIndiceG?achouIndiceG.matchCod:null,
         detalhe:temIndiceValidoG?(detalhePartesG.join(' + ')+' = '+iprodFmt(indiceTotalG))
@@ -16271,7 +16327,7 @@ function iprodRenderShell(){
           +'<span style="display:flex;gap:8px"><button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#dc2626;color:#fff" onclick="iprodExcluirAtividadesSelecionadas()">🗑️ Excluir selecionadas</button>'
           +'<button class="iprod-hist-link" style="font-size:10.5px" onclick="iprodLimparSelecaoAtiv()">Limpar seleção</button></span>'
           +'</div>':'')
-        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>HH com CPU</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
+        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th>Atividade</th><th>Unid.</th><th>Qtd. Projeto</th><th>Qtd. Empresa</th><th>Dif. Qtd.</th><th>Índice</th><th>HH com CPU</th><th>HH SINAPI</th><th>HH da Empresa</th><th>Dif. HH</th><th>Status</th></tr></thead><tbody>';
       qtdCompFiltrado.forEach(function(q){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
@@ -16283,18 +16339,23 @@ function iprodRenderShell(){
         var indiceCell=iprodFmt(q.indiceTotal)+(q.indiceOrigem==='manual'?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Você ajustou esse índice manualmente — clique na linha pra ver/mudar">⚙️ manual</span>'
             :q.indiceOrigem==='contratada'?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="Nossa base não tem essa composição — usado o índice que a própria contratada declara na PQ dela">contratada</span>':'')
           +(q.indiceSoSupervisao?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Composição na base só tem insumo de supervisão (Encarregado/Mestre...) cadastrado, sem instalador — índice provavelmente subestimado">⚠️ só supervisão</span>':'');
+        var sinapiCell=q.hhSinapi!=null?('<span title="Índice SINAPI: '+iprodFmt(q.indiceSinapi)+' HH/unid. — composição \''+(q.matchDescSinapi||'?')+'\' (Cód. '+(q.matchCodSinapi||'—')+')">'+iprodFmt(q.hhSinapi)+'</span>'):'—';
         html+='<tr class="iprod-tr-expand iprod-tr-chk" data-busca="'+iprodNorm(q.desc).replace(/"/g,'')+'" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
           +'<td onclick="event.stopPropagation()"><input type="checkbox"'+(IPROD_ATIV_SELECIONADAS[q.idxProjeto]?' checked':'')+' onclick="event.stopPropagation();iprodToggleAtivSelecionada('+q.idxProjeto+')"></td>'
-          +'<td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+indiceCell+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
-        html+='<tr class="iprod-drill"><td colspan="11">'
+          +'<td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+indiceCell+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td style="color:#7c3aed">'+sinapiCell+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+badge+'</td></tr>';
+        html+='<tr class="iprod-drill"><td colspan="12">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
           +(q.status==='medida-diferente'?'<div class="iprod-insight" style="margin-bottom:8px">📏 A PQ do projeto pede <b>'+q.specDiff.projeto+'</b>, mas a contratada só cotou essa atividade com <b>'+q.specDiff.empresa+'</b> na PQ dela — mesma composição, medida diferente. Confira se essa troca foi aprovada antes de aceitar a quantidade/HH como equivalente.</div>':'')
           +(q.indiceSoSupervisao?'<div class="iprod-insight" style="margin-bottom:8px">⚠️ Essa composição da base só tem insumo de SUPERVISÃO cadastrado (Encarregado/Mestre...), sem instalador de verdade — provável lacuna na planilha-fonte. O índice reflete só o tempo do encarregado, não o serviço em si. Considere isso ao avaliar essa linha.</div>':'')
           +'<div style="font-size:11px">'+q.detalhe+'</div>'
           +'<div style="font-size:9.5px;color:var(--muted);margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
-          +'<span>↳ Base de índices: <b>'+(q.matchCodBase||'—')+'</b> — '+(q.matchDesc||'?')+'</span>'
+          +'<span>↳ Base de índices (Vale): <b>'+(q.matchCodBase||'—')+'</b> — '+(q.matchDesc||'?')+'</span>'
           +(q.matchCodBase?'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndice(\''+q.matchCodBase.replace(/\'/g,'')+'\')">🔍 Conferir índice</button>':'')
           +'</div>'
+          +(q.hhSinapi!=null?('<div style="font-size:9.5px;color:#7c3aed;margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+            +'<span>↳ Base SINAPI: <b>'+(q.matchCodSinapi||'—')+'</b> — '+(q.matchDescSinapi||'?')+' — índice <b>'+iprodFmt(q.indiceSinapi)+'</b> HH/unid.</span>'
+            +'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndiceSinapi(\''+String(q.matchCodSinapi||'').replace(/\'/g,'')+'\')">🔍 Conferir na base SINAPI</button>'
+            +'</div>'):'<div style="font-size:9.5px;color:var(--muted);margin-top:4px">↳ Base SINAPI: sem composição correspondente encontrada.</div>')
           +(q.status==='realocado'?(
             '<div class="iprod-insight" style="margin-top:10px">🔀 Essa linha não é uma atividade oficial da PQ do Projeto — é um item da contratada incluído na mão porque não bateu com nada automaticamente. Qtd. Projeto = Qtd. Empresa (não existe quantidade oficial pra comparar).</div>'
             +'<div style="margin-top:10px" onclick="event.stopPropagation()">'
@@ -16321,10 +16382,11 @@ function iprodRenderShell(){
           +'</td></tr>';
       });
       var totHhEsperado=qtdCompBase3.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
+      var totHhSinapi=qtdCompBase3.reduce(function(s,q){return s+(q.hhSinapi||0);},0);
       var totHhEmpresaMatched=qtdCompBase3.reduce(function(s,q){return s+(q.hhEmpresa||0);},0);
       var totHhSemProjeto=(r.contratadaSemProjeto||[]).reduce(function(s,c){return s+(c.hhAlocado||0);},0);
       var totHhEmpresa=totHhEmpresaMatched+totHhSemProjeto;
-      html+='<tr class="iprod-tot"><td></td><td>TOTAL (atividades do projeto'+(IPROD_QTDCOMP_FILTRO==='cobradas'?' — só cobradas':'')+')</td><td></td><td></td><td></td><td></td><td></td><td>'+iprodFmt(totHhEsperado)+'</td><td>'+iprodFmt(totHhEmpresaMatched)+'</td><td>'+iprodFmt(totHhEmpresaMatched-totHhEsperado)+'</td><td></td></tr>';
+      html+='<tr class="iprod-tot"><td></td><td>TOTAL (atividades do projeto'+(IPROD_QTDCOMP_FILTRO==='cobradas'?' — só cobradas':'')+')</td><td></td><td></td><td></td><td></td><td></td><td>'+iprodFmt(totHhEsperado)+'</td><td style="color:#7c3aed">'+iprodFmt(totHhSinapi)+'</td><td>'+iprodFmt(totHhEmpresaMatched)+'</td><td>'+iprodFmt(totHhEmpresaMatched-totHhEsperado)+'</td><td></td></tr>';
       html+='</tbody></table></div>';
 
       var idxExcluidos=Object.keys(IPROD_LINHAS_EXCLUIDAS).filter(function(i){return IPROD_LINHAS_EXCLUIDAS[i]&&IPROD_PROJETO.pq[i];});
@@ -16530,7 +16592,8 @@ function iprodRenderShell(){
     html+='<div style="font-size:11.5px;color:var(--muted)">Carregando base de índices...</div>';
   } else {
     var iprodFontesIdx=[{id:'vale',label:'Vale (oficial) — '+IPROD_INDICE.total+' linhas'}]
-      .concat((IPROD_FALLBACK||[]).map(function(f){return {id:f.nome,label:f.nome+' — '+f.indice.total+' linhas'};}));
+      .concat((IPROD_FALLBACK||[]).map(function(f){return {id:f.nome,label:f.nome+' — '+f.indice.total+' linhas'};}))
+      .concat(IPROD_INDICE_SINAPI?[{id:'sinapi',label:'SINAPI — '+IPROD_INDICE_SINAPI.total+' linhas (só mão de obra)'}]:[]);
     var todasLinhasIdx=iprodGetIndiceRowsFlat(IPROD_BUSCA_INDICE_FONTE);
     // Opções dos filtros de Disciplina/Insumo derivadas da própria base (não hardcoded) — assim
     // não desalinha se a fonte trocar (Vale x PAREX x Equalização x REDE têm disciplinas diferentes).
@@ -16647,6 +16710,7 @@ async function renderViewIndiceProdutividade(){
   var el=document.getElementById('v-indice-produtividade'); if(!el) return;
   iprodRenderShell();
   iprodLoadIndice();
+  iprodLoadIndiceSinapi();
   iprodLoadCatalogoEmpresa().then(function(){ if(Object.keys(REF_CATALOGO_EMPRESA).length) iprodRenderShell(); });
 }
 
