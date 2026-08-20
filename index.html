@@ -16111,8 +16111,7 @@ function iprodRenderShell(){
           top5Acumulado+=pct;
           top5ChartData.push({label:'#'+(i+1),desc:q.desc,pct:pct,cum:top5Acumulado});
         });
-        html+='<div style="position:relative;height:260px;margin-bottom:16px"><canvas id="iprod-top5-chart"></canvas></div>'
-          +'<table class="iprod-tbl"><thead><tr><th>#</th><th>Atividade</th><th>Disciplina</th><th>Qtd. Projeto (PQ)</th><th>Qtd. Empresa</th><th>HH com CPU</th><th>HH Orçado (Empresa)</th><th>% do Total</th></tr></thead><tbody>';
+        html+='<table class="iprod-tbl"><thead><tr><th>#</th><th>Atividade</th><th>Disciplina</th><th>Qtd. Projeto (PQ)</th><th>Qtd. Empresa</th><th>HH com CPU</th><th>HH Orçado (Empresa)</th><th>% do Total</th></tr></thead><tbody>';
         top5ChartData.forEach(function(cd,i){
           var q=top5Itens[i];
           html+='<tr><td>'+(i+1)+'</td><td>'+q.desc+'</td><td>'+(q.disciplina||'—')+'</td><td>'+iprodFmt(q.qtdProjeto)+' '+(q.unidade||'')+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa)+' '+(q.unidade||''):'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+cd.pct.toFixed(1).replace('.',',')+'%</td></tr>';
@@ -16501,39 +16500,7 @@ function iprodRenderShell(){
       if(iprodDropAberto) iprodDropAberto.style.display='block';
     }
   }
-  // Gráfico do painel "Top 5 — Curva ABC": barra (% do Total) + linha (% Acumulado) no MESMO eixo
-  // 0–100% (nunca eixo duplo) — recriado a cada render porque o innerHTML acima troca o <canvas>
-  // do zero, então qualquer instância Chart.js anterior fica órfã (precisa destruir e recriar).
   if(IPROD_TOP5_CHART){ try{ IPROD_TOP5_CHART.destroy(); }catch(iprodChErr){} IPROD_TOP5_CHART=null; }
-  if(typeof top5ChartData!=='undefined' && top5ChartData.length && typeof Chart!=='undefined'){
-    var iprodTop5Canvas=document.getElementById('iprod-top5-chart');
-    if(iprodTop5Canvas){
-      IPROD_TOP5_CHART=new Chart(iprodTop5Canvas.getContext('2d'),{
-        data:{
-          labels:top5ChartData.map(function(d){return d.label;}),
-          datasets:[
-            {type:'bar',label:'% do Total',data:top5ChartData.map(function(d){return d.pct;}),backgroundColor:'#2563eb',borderRadius:4,barPercentage:0.55,categoryPercentage:0.7,order:2},
-            {type:'line',label:'% Acumulado',data:top5ChartData.map(function(d){return d.cum;}),borderColor:'#d97706',backgroundColor:'#d97706',borderWidth:2,pointRadius:4,pointBackgroundColor:'#d97706',pointBorderColor:'#fff',pointBorderWidth:1.5,tension:0.25,fill:false,order:1,
-              datalabels:{display:true,align:'top',offset:6,color:'#d97706',font:{size:10,weight:'700'},formatter:function(v){return Math.round(v)+'%';}}}
-          ]
-        },
-        options:{
-          responsive:true,maintainAspectRatio:false,animation:false,
-          plugins:{
-            legend:{display:true,position:'top',align:'end',labels:{boxWidth:10,boxHeight:10,font:{size:10.5},color:'#64748b'}},
-            tooltip:{callbacks:{
-              title:function(items){ var idx=items[0].dataIndex; return top5ChartData[idx].desc; },
-              label:function(c){ return c.dataset.label+': '+Math.round(c.raw*10)/10+'%'; }
-            }}
-          },
-          scales:{
-            x:{ticks:{color:'#94a3b8',font:{size:10.5,weight:'700'}},grid:{display:false}},
-            y:{min:0,max:100,ticks:{color:'#94a3b8',font:{size:10},callback:function(v){return v+'%';}},grid:{color:'rgba(0,0,0,.05)'}}
-          }
-        }
-      });
-    }
-  }
 }
 
 async function renderViewIndiceProdutividade(){
