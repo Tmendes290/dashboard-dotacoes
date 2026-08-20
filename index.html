@@ -15378,6 +15378,9 @@ async function iprodProcessar(){
   // (ver comentário mais abaixo, dentro do loop de qtdComp) — usado como base da seção 4 quando
   // há PQ do Projeto, pra reconciliar com o HH com CPU da seção 3.
   var porFuncaoProjeto={}, totRefAssumidoProjeto=0;
+  // *Sinapi: mesma ideia, mas acumulado pelo índice do SINAPI em vez da Vale — alimenta a coluna
+  // "HH CPU (SINAPI)" da seção 4, espelhando a coluna já existente na seção 3.
+  var porFuncaoSinapi={}, porFuncaoProjetoSinapi={};
 
   // PASSO 1: acha o índice de cada item da PQ e calcula a alocação proporcional do HH cobrado
   // (histograma) por atividade — % do valor (R$) de cada item de fornecimento sobre a soma de
@@ -15573,6 +15576,15 @@ async function iprodProcessar(){
       // Composição de transporte (M3XKM/TXKM) — índice é por unidade × km, multiplica pela DMT
       // (em km) que a própria iprodBuscarNaFonte já extraiu do texto da PQ (ver iprodExtrairDMT).
       if(achouSinapi&&achouSinapi.dmtKm!=null) indiceSinapiTotal*=achouSinapi.dmtKm;
+      // Quebra por função via SINAPI (mesma mecânica da Vale acima, linhas anteriores) — alimenta
+      // a coluna "HH CPU (SINAPI)" da seção 4.
+      if(achouSinapi) achouSinapi.rows.forEach(function(r){
+        if(r.tipo!=='M') return;
+        var qtdNecProjetoSinapi=pItem.quantidade*(Number(r.indice)||0)*(achouSinapi.dmtKm!=null?achouSinapi.dmtKm:1);
+        var keyProjetoS=r.descIns||'(sem nome)';
+        if(!porFuncaoProjetoSinapi[keyProjetoS]) porFuncaoProjetoSinapi[keyProjetoS]={hhRef:0};
+        porFuncaoProjetoSinapi[keyProjetoS].hhRef+=qtdNecProjetoSinapi;
+      });
 
       var emp=null, matchTipo=null;
       // Concreto: junta a quantidade de TODO concreto da contratada SEM contexto de aplicação
@@ -15749,11 +15761,26 @@ async function iprodProcessar(){
         if(rr.tipo!=='M') return;
         indiceTotalG+=Number(rr.indice)||0;
         detalhePartesG.push(rr.insumo+'-'+(rr.descIns||'?')+'('+iprodFmt(rr.indice)+')');
+        // Item sem correspondência no projeto (status "Incluído pela empresa", seção 3) entra na
+        // quebra por função da seção 4 igual a qualquer atividade do projeto — senão o HH dele
+        // conta no total da seção 3 mas nunca aparece na seção 4, e os dois totais nunca batem.
+        var qtdNecG=g.quantidade*(Number(rr.indice)||0);
+        var keyG=rr.descIns||'(sem nome)';
+        if(!porFuncaoProjeto[keyG]) porFuncaoProjeto[keyG]={hhRef:0,atividades:[]};
+        porFuncaoProjeto[keyG].hhRef+=qtdNecG;
+        porFuncaoProjeto[keyG].atividades.push({desc:g.desc,qtd:g.quantidade,unidade:g.unidade,indice:rr.indice,hh:qtdNecG,matchTipo:'sem correspondência no projeto — incluído automaticamente',matchCod:achouIndiceG.matchCod,matchDesc:achouIndiceG.matchDesc,insumo:rr.insumo,descIns:rr.descIns});
       });
       var temIndiceValidoG=!!achouIndiceG&&indiceTotalG>0;
       var achouSinapiG=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,g.desc,g.unidade,IPROD_SINAPI_MINSCORE,true):null;
       var indiceSinapiTotalG=0;
-      if(achouSinapiG) achouSinapiG.rows.forEach(function(rr){ if(rr.tipo==='M') indiceSinapiTotalG+=Number(rr.indice)||0; });
+      if(achouSinapiG) achouSinapiG.rows.forEach(function(rr){
+        if(rr.tipo!=='M') return;
+        indiceSinapiTotalG+=Number(rr.indice)||0;
+        var qtdNecGS=g.quantidade*(Number(rr.indice)||0)*(achouSinapiG.dmtKm!=null?achouSinapiG.dmtKm:1);
+        var keyGS=rr.descIns||'(sem nome)';
+        if(!porFuncaoProjetoSinapi[keyGS]) porFuncaoProjetoSinapi[keyGS]={hhRef:0};
+        porFuncaoProjetoSinapi[keyGS].hhRef+=qtdNecGS;
+      });
       if(achouSinapiG&&achouSinapiG.dmtKm!=null) indiceSinapiTotalG*=achouSinapiG.dmtKm;
       // Mesma cascata do loop principal: Vale → SINAPI (só se a Vale não achou nada) → HH alocado
       // da contratada (não tem "índice da contratada" separado aqui porque, pra item realocado,
@@ -15807,6 +15834,16 @@ async function iprodProcessar(){
         porMaterial[mkey].qtdNec+=qtdNec;
         porMaterial[mkey].atividades.push({desc:item.desc,qtd:item.quantidade,unidade:item.unidade,indice:r.indice,qtdNec:qtdNec,matchTipo:achou.matchTipo,matchCod:achou.matchCod,matchDesc:achou.matchDesc,insumo:r.insumo,descIns:r.descIns});
       }
+    });
+    // Quebra por função via SINAPI (sem PQ do Projeto — usa a quantidade da própria PQ da
+    // contratada, mesma base que porFuncao acima) — alimenta "HH CPU (SINAPI)" na seção 4.
+    var achouSinapiItem=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,item.desc,item.unidade,IPROD_SINAPI_MINSCORE,true):null;
+    if(achouSinapiItem) achouSinapiItem.rows.forEach(function(r){
+      if(r.tipo!=='M') return;
+      var qtdNecS=item.quantidade*(Number(r.indice)||0)*(achouSinapiItem.dmtKm!=null?achouSinapiItem.dmtKm:1);
+      var keyS=r.descIns||'(sem nome)';
+      if(!porFuncaoSinapi[keyS]) porFuncaoSinapi[keyS]={hhRef:0};
+      porFuncaoSinapi[keyS].hhRef+=qtdNecS;
     });
     // Composição achada mas SEM nenhum insumo de mão de obra cadastrado (lacuna na base, ver
     // iprodEstimarInsumosPorMedia) — estima pela média de composições irmãs (mesmo assunto +
@@ -15886,6 +15923,7 @@ async function iprodProcessar(){
   // do Projeto não existe essa base (qtdComp fica vazio), continua usando porFuncao.
   var usaBaseProjeto=temProjeto&&Object.keys(porFuncaoProjeto).length>0;
   var porFuncaoFinal=usaBaseProjeto?porFuncaoProjeto:porFuncao;
+  var porFuncaoFinalSinapi=usaBaseProjeto?porFuncaoProjetoSinapi:porFuncaoSinapi;
   // Sinônimos comuns entre o nome do insumo na base de índices e o nome usado no histograma da contratada
   var IPROD_SINONIMOS={'SERVENTE':['AJUDANTE'],'ENCARREGADO':['ENCARREGADOS DE OBRAS','ENCARREGADO DE OBRAS'],
     'OPERADOR DE ESCAVADEIRA':['OPERADOR DE RETROESCAVADEIRA'],'MOTORISTA DE CAMINHAO':['MOTORISTA DE CAMINHAO BASCULANTE'],
@@ -15934,7 +15972,12 @@ async function iprodProcessar(){
     var status='verde';
     if(dif>0) status=(dif/Math.max(hhCobrado,1))>0.15?'vermelho':'amarelo';
     var temEstimado=porFuncaoFinal[fRef].atividades.some(function(a){return a.estimado;});
-    linhas.push({funcao:fRef,hhCobrado:hhCobrado,hhContingencia:hhContingencia,hhRef:hhRef,hhAjust:hhAjust,dif:dif,status:status,atividades:porFuncaoFinal[fRef].atividades,semHistograma:semHistograma,estimadoPorMedia:temEstimado});
+    // HH CPU (SINAPI) por função — mesma praticabilidade da Vale, mas sem o fallback pro HH
+    // cobrado quando não há match (é só referência/comparação, igual na seção 3 — null quando o
+    // SINAPI não tem composição correspondente, não vira "0" nem herda o cobrado).
+    var hhRefSinapi=(porFuncaoFinalSinapi[fRef]&&porFuncaoFinalSinapi[fRef].hhRef)||0;
+    var hhAjustSinapi=hhRefSinapi>0?hhRefSinapi*(2-IPROD_PRAT):null;
+    linhas.push({funcao:fRef,hhCobrado:hhCobrado,hhContingencia:hhContingencia,hhRef:hhRef,hhAjust:hhAjust,hhAjustSinapi:hhAjustSinapi,dif:dif,status:status,atividades:porFuncaoFinal[fRef].atividades,semHistograma:semHistograma,estimadoPorMedia:temEstimado});
   });
   // Função sem NENHUMA composição correspondente na base (indireto, ou fora do escopo mapeado) —
   // mesmo problema das linhas COM referência: "Pedreiro - Hora Normal" e "Pedreiro - Percentual
@@ -15953,7 +15996,7 @@ async function iprodProcessar(){
   });
   semRefOrdem.forEach(function(base){
     var g=semRefAgrupado[base];
-    linhas.push({funcao:base,hhCobrado:g.hhCobrado,hhContingencia:g.hhContingencia,hhRef:0,hhAjust:g.hhCobrado,dif:0,status:'cinza',atividades:[],semReferencia:true});
+    linhas.push({funcao:base,hhCobrado:g.hhCobrado,hhContingencia:g.hhContingencia,hhRef:0,hhAjust:g.hhCobrado,hhAjustSinapi:null,dif:0,status:'cinza',atividades:[],semReferencia:true});
   });
   linhas.sort(function(a,b){return b.dif-a.dif;});
   // Tira as funções excluídas manualmente ANTES dos totais abaixo (todos via linhas.reduce) —
@@ -16184,7 +16227,7 @@ function iprodRenderShell(){
       ['O que significa "⚠️ só supervisão"?',
        'A composição da base só tem cadastrado Encarregado/Mestre/Apontador (quem supervisiona), sem nenhum instalador de verdade (Servente, Pedreiro...). O índice mostrado reflete só o tempo do encarregado observando o serviço, então tende a estar SUBESTIMADO — é um sinal de alerta, não um erro pra corrigir.'],
       ['Por que a seção 3 (Atividades) e a seção 4 (Por Função) mostram números de HH diferentes?',
-       '"HH com CPU" (seção 3) e "HH Referência" (seção 4) usam a MESMA base de cálculo (quantidade oficial do projeto × índice) e devem bater quando somados. Já "HH Orçado" (seção 3) e "HH Cobrado" (seção 4, TODO o histograma da contratada) são coisas diferentes de propósito — "HH Cobrado" inclui também atividades que a contratada lançou sem ter uma atividade correspondente na PQ do projeto (aparecem na própria seção 3, como linhas com status "Incluído pela empresa"). Não é bug: são dois recortes diferentes do mesmo universo.'],
+       '"HH com CPU (Vale)" (seção 3) e "HH CPU (Vale)" (seção 4) usam a MESMA base de cálculo (quantidade × índice × praticabilidade) e devem bater bem próximo quando somados — a diferença que sobra normalmente é HH de funções "Sem referência" (indireto: encarregado, técnico SSMA, apontador...), que a seção 4 soma pelo HH cobrado cheio por não ter nenhuma atividade física pra atrelar, e que por isso não existe na seção 3 (organizada por atividade, não por função). Já "HH Orçado" nas duas seções é a MESMA coisa (TODO o histograma da contratada) — deve bater exato.'],
       ['O que quer dizer cada Status na tabela de atividades?',
        '<b>Bate</b> = quantidade da contratada igual à do projeto (dentro de 0,01). <b>Divergente</b> = quantidades diferentes, vale conferir. <b>Medida diferente</b> = mesma composição, mas a contratada cotou noutra unidade/tamanho (ex.: projeto pede lona 0,2mm, ela cotou 0,8mm). <b>Faltando na PQ da empresa</b> = o projeto prevê essa atividade e a contratada nem incluiu na PQ dela. <b>Incluído pela empresa</b> = o oposto: a contratada cobrou por isso, mas não existe atividade equivalente na PQ do Projeto — sobe automaticamente como linha própria pra fechar 100% do HH cobrado (dá pra excluir da análise se não for uma atividade de verdade).'],
       ['Achei um índice ou código errado — como eu corrijo?',
@@ -16530,6 +16573,8 @@ function iprodRenderShell(){
     var linhasBase4=r.linhas.filter(function(l){return l.hhCobrado||l.hhRef||l.hhAjust||l.dif;});
     var nCobradas4=linhasBase4.filter(function(l){return l.hhCobrado>0.001;}).length;
     var linhasFiltro4=IPROD_FUNC_FILTRO==='cobradas'?linhasBase4.filter(function(l){return l.hhCobrado>0.001;}):linhasBase4;
+    // Ordenado por HH Orçado, maior pro menor — mesmo critério da tabela 3.
+    linhasFiltro4=linhasFiltro4.slice().sort(function(a,b){return (b.hhCobrado||0)-(a.hhCobrado||0);});
     html+='<div class="iprod-panel"><div class="iprod-panel-title">4. Comparativo por função</div><div class="iprod-panel-note">Clique numa linha pra abrir o detalhamento das atividades que compõem aquele HH de referência.</div>'
       +'<div style="display:flex;gap:8px;margin:0 0 12px">'
       +[['todos','Todas ('+linhasBase4.length+')'],['cobradas','Só cobradas ('+nCobradas4+')']].map(function(f){
@@ -16543,14 +16588,14 @@ function iprodRenderShell(){
         +'<span style="display:flex;gap:8px"><button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#dc2626;color:#fff" onclick="iprodExcluirFuncoesSelecionadas()">🗑️ Excluir selecionadas</button>'
         +'<button class="iprod-hist-link" style="font-size:10.5px" onclick="iprodLimparSelecaoFunc()">Limpar seleção</button></span>'
         +'</div>':'')
-      +'<table class="iprod-tbl"><thead><tr><th style="width:20px"></th><th>Função</th><th>HH Cobrado</th><th>HH Referência</th><th>HH + Praticabilidade</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
+      +'<table class="iprod-tbl"><thead><tr><th style="width:20px"></th><th>Função</th><th>HH Orçado</th><th>HH CPU (Vale)</th><th>HH CPU (SINAPI)</th><th>Diferença</th><th>Status</th></tr></thead><tbody>';
     linhasFiltro4.forEach(function(l){
       var hhCobradoCell=iprodFmt(l.hhCobrado)+(l.hhContingencia?' <span class="iprod-badge iprod-b-amar" style="font-size:8.5px;padding:1px 6px" title="Percentual de Contingência que a própria contratada aplica pra cobrir escopo extra ou atraso">'+iprodFmt(l.hhContingencia)+' contingência</span>':'');
-      var hhRefCell=iprodFmt(l.hhRef)+(l.estimadoPorMedia?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="A composição não tem mão de obra cadastrada na base — estimado pela média de composições semelhantes">≈ estimado</span>':'');
+      var hhCpuValeCell=iprodFmt(l.hhAjust)+(l.estimadoPorMedia?' <span class="iprod-badge iprod-b-azul" style="font-size:8.5px;padding:1px 6px" title="A composição não tem mão de obra cadastrada na base — estimado pela média de composições semelhantes">≈ estimado</span>':'');
       var funcaoNormL=iprodNorm(l.funcao).replace(/'/g,'');
       html+='<tr class="iprod-tr-expand iprod-tr-chk" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
         +'<td onclick="event.stopPropagation()"><input type="checkbox"'+(IPROD_FUNC_SELECIONADAS[funcaoNormL]?' checked':'')+' onclick="event.stopPropagation();iprodToggleFuncSelecionada(\''+funcaoNormL+'\',\''+l.funcao.replace(/'/g,'')+'\')"></td>'
-        +'<td>'+l.funcao+'</td><td>'+hhCobradoCell+'</td><td>'+hhRefCell+'</td><td>'+iprodFmt(l.hhAjust)+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';
+        +'<td>'+l.funcao+'</td><td>'+hhCobradoCell+'</td><td>'+hhCpuValeCell+'</td><td style="color:#7c3aed">'+(l.hhAjustSinapi!=null?iprodFmt(l.hhAjustSinapi):'—')+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';
       html+='<tr class="iprod-drill"><td colspan="7">';
       if(l.hhContingencia){
         html+='<div class="iprod-insight" style="border-left-color:#d97706;background:#fffbeb;color:#78350f;margin-bottom:8px">📌 Desse total, <b>'+iprodFmt(l.hhContingencia)+' HH</b> é "Percentual de Contingência" que a própria contratada apontou no histograma pra essa função — folga que ela reserva pra escopo adicional ou atraso, não é trabalho medido nessas atividades.</div>';
@@ -16583,11 +16628,10 @@ function iprodRenderShell(){
       html+='</td></tr>';
     });
     var totCobradoFiltro4=linhasFiltro4.reduce(function(s,l){return s+l.hhCobrado;},0);
-    var totRefFiltro4=linhasFiltro4.reduce(function(s,l){return s+l.hhRef;},0);
     var totAjustFiltro4=linhasFiltro4.reduce(function(s,l){return s+l.hhAjust;},0);
+    var totAjustSinapiFiltro4=linhasFiltro4.reduce(function(s,l){return s+(l.hhAjustSinapi||0);},0);
     var totDifFiltro4=totCobradoFiltro4-totAjustFiltro4;
-    html+='<tr class="iprod-tot"><td></td><td>TOTAL'+(IPROD_FUNC_FILTRO==='cobradas'?' (só cobradas)':'')+'</td><td>'+iprodFmt(totCobradoFiltro4)+'</td><td>'+iprodFmt(totRefFiltro4)+'</td><td>'+iprodFmt(totAjustFiltro4)+'</td><td>'+iprodFmt(totDifFiltro4)+'</td><td></td></tr>';
-    html+='</tbody></table></div>';
+    html+='<tr class="iprod-tot"><td></td><td>TOTAL'+(IPROD_FUNC_FILTRO==='cobradas'?' (só cobradas)':'')+'</td><td>'+iprodFmt(totCobradoFiltro4)+'</td><td>'+iprodFmt(totAjustFiltro4)+'</td><td style="color:#7c3aed">'+(totAjustSinapiFiltro4?iprodFmt(totAjustSinapiFiltro4):'—')+'</td><td>'+iprodFmt(totDifFiltro4)+'</td><td></td></tr>';
 
     if(r.linhasExcluidas && r.linhasExcluidas.length){
       html+='<div class="iprod-insight" style="border-left-color:#dc2626;background:#fef2f2;color:#7f1d1d;margin-top:-8px;margin-bottom:16px">'
