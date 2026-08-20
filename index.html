@@ -16402,16 +16402,17 @@ function iprodRenderShell(){
       kpiCobrado=qtdCompFiltrado.reduce(function(s,q){return s+(q.hhEmpresa||0);},0);
       kpiRef=qtdCompFiltrado.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
     }
-    // No recorte "Todas" (sem filtro de status/só cobradas), o universo INTEIRO da PQ da
-    // contratada entra na conta — inclusive os itens sem nenhuma atividade correspondente no
-    // projeto (r.contratadaSemProjeto), que não têm HH com CPU de referência pra comparar e por
-    // isso contam como divergência total (100% daquele HH vira Diferença, sem abater Aderência
-    // artificialmente ao ficar de fora do card). Só quando o usuário filtra por status
-    // (Bate/Divergente/...) faz sentido restringir aos itens RECONCILIADOS daquele status — os
-    // itens sem correspondência não têm status nenhum pra entrar num filtro desses.
+    // kpiCobrado já vem de qtdCompFiltrado (linha acima) — e qtdComp hoje cobre o universo INTEIRO
+    // da PQ da contratada (itens sem atividade correspondente no projeto sobem automaticamente
+    // pra tabela 3 como "Incluído pela empresa", não ficam mais escondidos — ver seção 3). Por
+    // isso não tem mais motivo pra esse card mostrar r.totCobrado (o bruto, ANTES de qualquer
+    // exclusão manual) no recorte "Todas": o único jeito de algo sumir da soma agora é o usuário
+    // excluir manualmente uma linha, e nesse caso o card deve refletir a exclusão, não escondê-la
+    // atrás de uma nota pequena embaixo (bug real: card mostrava 33.518,00 quando o total de
+    // verdade, já com os itens duplicados/riscados excluídos, era 28.329,15 — a nota dizia isso,
+    // mas o número grande em destaque continuava errado).
     var recorteAberto=(IPROD_QTDCOMP_FILTRO==='todos'&&IPROD_FILTRO_STATUS==='todos');
     var kpiCobradoReconciliado=kpiCobrado;
-    if(temQtdComp&&recorteAberto) kpiCobrado=r.totCobrado;
     kpiDif=kpiCobrado-kpiRef;
     kpiImprod=kpiCobrado>0?(kpiDif/kpiCobrado):0;
     // Aderência = HH Referência ÷ HH Orçado (Empresa) — o quanto do que a empresa orçou realmente
@@ -16449,7 +16450,7 @@ function iprodRenderShell(){
     }
 
     html+='<div class="iprod-kpis"'+(pctIndireto!=null?' style="grid-template-columns:repeat(5,1fr)"':'')+'>'
-      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Orçado: Empresa</div><div class="iprod-kpi-sub">'+(temQtdComp?(recorteAberto?'Total cobrado pela contratada em toda a PQ dela'+(gapSemProjeto>0.5?' — '+iprodFmt(gapSemProjeto)+' HH excluídos manualmente da análise (ver alerta abaixo)':''):'Soma do HH Orçado nas atividades reconciliadas do recorte atual'):(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
+      +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Orçado: Empresa</div><div class="iprod-kpi-sub">'+(temQtdComp?('Soma do HH Orçado nas atividades reconciliadas do recorte atual'+(recorteAberto&&gapSemProjeto>0.5?' — '+iprodFmt(gapSemProjeto)+' HH excluídos manualmente da análise (ver alerta abaixo)':'')):(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(kpiRef)+'</div><div class="iprod-kpi-lbl">HH com CPU</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(kpiDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div>'+(temRS?'<div class="iprod-kpi-money" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">≈ '+iprodFmtRS(r.valorDif)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiAderencia*100)+'%</div><div class="iprod-kpi-lbl">Aderência</div><div class="iprod-kpi-sub">HH com CPU ÷ HH Orçado: Empresa</div></div>'
