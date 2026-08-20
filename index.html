@@ -14953,11 +14953,30 @@ function iprodParsePQSheet(data){
   // vazio (formato sem esse código, ex.: PQ da APIA, que não quebra por essa letra).
   var iprodKValidos={'C':true,'M':true,'D':true};
 
+  // Linha "cancelada/substituída" (contratada risca em vez de apagar, ex.: MILPLAN duplicando a
+  // mesma atividade com quantidade nova) não dá pra achar pelo estilo riscado — a biblioteca XLSX
+  // gratuita que a gente usa não expõe formatação de fonte (testado e confirmado: só a versão
+  // paga faz isso). Mas o próprio padrão da planilha já entrega o mesmo sinal sem precisar de
+  // estilo: a linha cancelada tem Descrição/Qtd preenchidas só que HH e R$ (unitário e total)
+  // ficam em branco, enquanto a linha "de verdade" ao lado tem os dois. Só ativa esse filtro
+  // quando a planilha REALMENTE usa essas colunas linha a linha (senão excluiria tudo em formatos
+  // que só têm total geral no rodapé, sem preço por item).
+  var linhasDadosPQ=data.slice(hdrIdx+1);
+  var iprodCelVazia=function(row,col){ return col<0||String(row[col]==null?'':row[col]).trim()===''; };
+  var temAlgumHHPQ=iHH>=0&&linhasDadosPQ.some(function(row){ return !iprodCelVazia(row,iHH); });
+  var temAlgumValorPQ=(iTotal>=0&&linhasDadosPQ.some(function(row){ return !iprodCelVazia(row,iTotal); }))
+    ||(iUnitario>=0&&linhasDadosPQ.some(function(row){ return !iprodCelVazia(row,iUnitario); }));
+
   var out=[];
-  data.slice(hdrIdx+1).forEach(function(row){
+  linhasDadosPQ.forEach(function(row){
     var desc=String(row[iDesc]||'').trim();
     var qtd=parseFloat(String(row[iQtd]==null?'':row[iQtd]).replace(',','.'));
     if(!desc||!isFinite(qtd)||qtd===0) return;
+    if(temAlgumHHPQ||temAlgumValorPQ){
+      var temHHRow=!iprodCelVazia(row,iHH);
+      var temValorRow=!iprodCelVazia(row,iTotal)||!iprodCelVazia(row,iUnitario);
+      if(!temHHRow&&!temValorRow) return;
+    }
     // Itens em verba (vb) já têm tratamento próprio (excluídos do cálculo de índice mais adiante,
     // mas mantidos visíveis) — o filtro de categoria K só vale pra atividade física de verdade.
     var unidRow=iUnid>=0?String(row[iUnid]||'').trim():'';
