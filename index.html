@@ -14211,11 +14211,6 @@ var IPROD_FUNC_SELECIONADAS={}; // chave: funcaoNorm, valor: funcaoLabel (label 
 var IPROD_MOSTRAR_EXCLUIDAS_ATIV=false, IPROD_MOSTRAR_EXCLUIDAS_FUNC=false;
 function iprodToggleExcluidasAtiv(){ IPROD_MOSTRAR_EXCLUIDAS_ATIV=!IPROD_MOSTRAR_EXCLUIDAS_ATIV; iprodRenderShell(); }
 function iprodToggleExcluidasFunc(){ IPROD_MOSTRAR_EXCLUIDAS_FUNC=!IPROD_MOSTRAR_EXCLUIDAS_FUNC; iprodRenderShell(); }
-// Painel "Top 5 — Curva ABC": ranking das atividades que mais pesam no HH orçado (referência),
-// opcionalmente filtrado por disciplina (Civil/Elétrica/Mecânica...).
-var IPROD_TOP5_DISC='';
-function iprodSetTop5Disc(v){ IPROD_TOP5_DISC=v; iprodRenderShell(); }
-var IPROD_TOP5_CHART=null; // instância Chart.js do gráfico do Top 5 — recriada a cada render
 
 function iprodToggleAtivSelecionada(idxProjeto){
   if(IPROD_ATIV_SELECIONADAS[idxProjeto]) delete IPROD_ATIV_SELECIONADAS[idxProjeto];
@@ -16403,43 +16398,6 @@ function iprodRenderShell(){
       +'<button class="iprod-btn" style="margin-top:0" onclick="iprodSalvarHistorico()">💾 Salvar no histórico</button></div>';
 
     if(r.qtdComp.length){
-      // Painel "Top 5 — Curva ABC": ranking das atividades que mais pesam no HH com CPU
-      // (referência oficial do projeto) — os "quantitativos direcionadores do orçamento". Sempre
-      // sobre o universo INTEIRO de atividades (não usa os filtros Todos/Bate/Divergente da seção
-      // 3 abaixo, que são pra outra finalidade) — só o filtro de disciplina, próprio dessa análise.
-      var top5DiscOpcoes=Array.from(new Set(r.qtdComp.map(function(q){return q.disciplina;}).filter(Boolean))).sort();
-      if(IPROD_TOP5_DISC && top5DiscOpcoes.indexOf(IPROD_TOP5_DISC)<0) IPROD_TOP5_DISC='';
-      var top5Base=IPROD_TOP5_DISC?r.qtdComp.filter(function(q){return q.disciplina===IPROD_TOP5_DISC;}):r.qtdComp;
-      var top5TotalHH=top5Base.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
-      var top5Itens=top5Base.filter(function(q){return q.hhEsperado>0;}).slice().sort(function(a,b){return (b.hhEsperado||0)-(a.hhEsperado||0);}).slice(0,5);
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">Top 5 — Curva ABC do Orçamento</div>'
-        +'<div class="iprod-panel-note">As 5 atividades que mais pesam no HH com CPU (a referência oficial do projeto) — os principais quantitativos direcionadores do orçamento, pra saber onde focar a conferência primeiro.</div>';
-      if(top5DiscOpcoes.length>1){
-        html+='<div style="margin-bottom:12px"><select class="iprod-text-input" style="width:auto" onchange="iprodSetTop5Disc(this.value)">'
-          +'<option value=""'+(!IPROD_TOP5_DISC?' selected':'')+'>Todas as disciplinas</option>'
-          +top5DiscOpcoes.map(function(d){return '<option value="'+d+'"'+(IPROD_TOP5_DISC===d?' selected':'')+'>'+d+'</option>';}).join('')
-          +'</select></div>';
-      }
-      var top5ChartData=[];
-      if(top5Itens.length && top5TotalHH>0){
-        var top5Acumulado=0;
-        top5Itens.forEach(function(q,i){
-          var pct=(q.hhEsperado/top5TotalHH)*100;
-          top5Acumulado+=pct;
-          top5ChartData.push({label:'#'+(i+1),desc:q.desc,pct:pct,cum:top5Acumulado});
-        });
-        html+='<table class="iprod-tbl"><thead><tr><th>#</th><th>Atividade</th><th>Disciplina</th><th>Qtd. PQ</th><th>Qtd. Orçada</th><th>HH com CPU</th><th>HH Orçado</th><th>% do Total</th></tr></thead><tbody>';
-        top5ChartData.forEach(function(cd,i){
-          var q=top5Itens[i];
-          html+='<tr><td>'+(i+1)+'</td><td>'+q.desc+'</td><td>'+(q.disciplina||'—')+'</td><td>'+iprodFmt(q.qtdProjeto)+' '+(q.unidade||'')+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa)+' '+(q.unidade||''):'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+cd.pct.toFixed(1).replace('.',',')+'%</td></tr>';
-        });
-        html+='</tbody></table>'
-          +'<div class="iprod-panel-note" style="margin:10px 0 0">Essas 5 atividades respondem por <b>'+top5Acumulado.toFixed(1).replace('.',',')+'%</b> de todo o HH com CPU'+(IPROD_TOP5_DISC?' da disciplina '+IPROD_TOP5_DISC:' do projeto')+'.</div>';
-      } else {
-        html+='<div class="iprod-panel-note">Sem atividades com HH com CPU nesse recorte.</div>';
-      }
-      html+='</div>';
-
       html+='<div class="iprod-panel"><div class="iprod-panel-title">3. PQ do Projeto'+(r.temContratada?' × PQ da Contratada — quantidade e índice':' — HH com CPU pelo índice')+'</div><div class="iprod-panel-note">Parte de cada atividade OFICIAL do projeto'+(r.temContratada?' (não da PQ da contratada) — assim pega também atividade que o projeto prevê e a contratada nem incluiu na PQ dela.':'.')+' <b>HH com CPU (Vale)</b> e <b>HH CPU (SINAPI)</b> = quantidade do projeto × índice de cada base, já com a praticabilidade embutida — o índice em si não aparece mais como coluna, só o HH resultante; clique na linha pra ver a composição completa de cada um.'+(r.temContratada?' <b>HH Orçado</b> = alocação proporcional do HH total cobrado no histograma, distribuído pelo peso (%) do valor (R$) de cada atividade dentro da PQ da contratada — mesmo método usado manualmente na planilha de referência.':'')+' Clique pra ver a composição do índice e corrigir o Cód. Cliente, se precisar.</div>'
         +(r.temContratada?'<div style="display:flex;gap:8px;margin:0 0 12px">'
           +[['todos','Todas ('+r.qtdComp.length+')'],['cobradas','Só cobradas ('+nCobradas3+')']].map(function(f){
@@ -16876,7 +16834,6 @@ function iprodRenderShell(){
       if(iprodDropAberto) iprodDropAberto.style.display='block';
     }
   }
-  if(IPROD_TOP5_CHART){ try{ IPROD_TOP5_CHART.destroy(); }catch(iprodChErr){} IPROD_TOP5_CHART=null; }
 }
 
 async function renderViewIndiceProdutividade(){
