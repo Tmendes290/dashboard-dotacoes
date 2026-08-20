@@ -14727,7 +14727,7 @@ function iprodEstimarInsumosPorMedia(matchDesc,unidade){
     return {descIns:k,indiceMedio:somaPorInsumo[k]/contPorInsumo[k],baseadoEm:contPorInsumo[k]};
   });
 }
-function iprodBuscarNaFonte(fonte,codCliente,desc,unidade,minScore){
+function iprodBuscarNaFonte(fonte,codCliente,desc,unidade,minScore,exigirUnidadeIgual){
   if(!fonte) return null;
   if(minScore==null) minScore=0.35;
   var cod=String(codCliente||'').trim();
@@ -14769,6 +14769,14 @@ function iprodBuscarNaFonte(fonte,codCliente,desc,unidade,minScore){
   var pesoK=iprodPesoLetraK(desc);
   var best=null, bestScore=0;
   fonte.descIdx.forEach(function(d){
+    // Unidade diferente = filtro RÍGIDO, não só bônus — usado quando quem chama passa
+    // exigirUnidadeIgual (ver IPROD_SINAPI_MINSCORE/iprodBuscarNaFonte no comparativo SINAPI).
+    // Confirmado com dado real: "Carga, transporte, descarga... em ADME" (m³, terraplenagem)
+    // batia com "CARGA E DESCARGA DE RETROESCAVADEIRA, EM BALSA DE 1000 TONELADAS" (T, transporte
+    // FLUVIAL) com score 0,80 — bem acima de qualquer limiar razoável — só por "carga"+"descarga"+
+    // "1000" em comum, ignorando que unidade e assunto (terraplenagem x balsa) não têm nada a ver.
+    // Não mexe na Vale nem nos fallbacks (não passam esse parâmetro) — validados sem isso.
+    if(exigirUnidadeIgual&&pqUnid&&d.unidNorm&&pqUnid!==d.unidNorm) return;
     var score=iprodTokenScore(pqTokens,pqSet,d.tokens,pqUnid,d.unidNorm,pqQualquer,iprodTemQualquer(d.desc));
     var kBase=/^[MD]/.test(d.codCliente||'')?d.codCliente[0]:null;
     if(kBase){
@@ -15543,7 +15551,7 @@ async function iprodProcessar(){
       // (esse é só pra Vale). É só um número pra você comparar visualmente e julgar se o índice da
       // Vale está coerente/aderente ou não — não decide nem substitui NADA sozinho (HH com CPU,
       // Diferença e Aderência continuam 100% baseados só no índice da Vale).
-      var achouSinapi=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,pItem.desc,pItem.unidade,IPROD_SINAPI_MINSCORE):null;
+      var achouSinapi=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,pItem.desc,pItem.unidade,IPROD_SINAPI_MINSCORE,true):null;
       var indiceSinapiTotal=0;
       if(achouSinapi) achouSinapi.rows.forEach(function(r){ if(r.tipo==='M') indiceSinapiTotal+=Number(r.indice)||0; });
 
@@ -15721,7 +15729,7 @@ async function iprodProcessar(){
         detalhePartesG.push(rr.insumo+'-'+(rr.descIns||'?')+'('+iprodFmt(rr.indice)+')');
       });
       var temIndiceValidoG=!!achouIndiceG&&indiceTotalG>0;
-      var achouSinapiG=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,g.desc,g.unidade,IPROD_SINAPI_MINSCORE):null;
+      var achouSinapiG=IPROD_INDICE_SINAPI?iprodBuscarNaFonte(IPROD_INDICE_SINAPI,null,g.desc,g.unidade,IPROD_SINAPI_MINSCORE,true):null;
       var indiceSinapiTotalG=0;
       if(achouSinapiG) achouSinapiG.rows.forEach(function(rr){ if(rr.tipo==='M') indiceSinapiTotalG+=Number(rr.indice)||0; });
       // Mesma cascata do loop principal: Vale → SINAPI (só se a Vale não achou nada) → HH alocado
