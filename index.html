@@ -16145,6 +16145,7 @@ function iprodRenderShell(){
     // Linhas com checkbox de seleção (seções 3 e 4) têm a caixa como 1ª coluna — a seta ▸/▾ de
     // expandir precisa mudar pra 2ª coluna nessas, senão fica grudada no checkbox.
     +'.iprod-tr-chk td:first-child::before{content:none}.iprod-tr-chk td:nth-child(2)::before{content:"▸ ";color:var(--muted);font-size:9px}.iprod-tr-chk.open td:nth-child(2)::before{content:"▾ ";color:#1e3a5f}'
+    +'#iprod-tbl-3 tr.iprod-tr-chk td:nth-child(2)::before{content:none}#iprod-tbl-3 tr.iprod-tr-chk td:nth-child(3)::before{content:"▸ ";color:var(--muted);font-size:9px}#iprod-tbl-3 tr.iprod-tr-chk.open td:nth-child(3)::before{content:"▾ ";color:#1e3a5f}'
     +'.iprod-drill{background:var(--bg);padding:12px 16px;border-left:3px solid #1e3a5f;display:none}.iprod-drill.show{display:block}'
     +'.iprod-drill-row{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px dashed var(--bord)}.iprod-drill-row:last-child{border-bottom:none}'
     +'.iprod-tabbar{display:flex;border-bottom:2px solid var(--bord);margin-bottom:18px;gap:2px}'
@@ -16413,7 +16414,7 @@ function iprodRenderShell(){
           +'<span style="display:flex;gap:8px"><button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#dc2626;color:#fff" onclick="iprodExcluirAtividadesSelecionadas()">🗑️ Excluir selecionadas</button>'
           +'<button class="iprod-hist-link" style="font-size:10.5px" onclick="iprodLimparSelecaoAtiv()">Limpar seleção</button></span>'
           +'</div>':'')
-        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th>Atividade</th><th style="width:28px">#</th><th>Unid.</th><th>Qtd. PQ</th><th>Qtd. Orçada</th><th>Dif. Qtd.</th><th>HH com CPU (Vale)</th><th>HH CPU (SINAPI)</th><th>HH Orçado</th><th>Dif. HH</th><th>Dif. HH %</th><th>Status</th></tr></thead><tbody>';
+        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th style="width:28px">#</th><th>Atividade</th><th>Unid.</th><th>Qtd. PQ</th><th>Qtd. Orçada</th><th>Dif. Qtd.</th><th>HH com CPU (Vale)</th><th>HH CPU (SINAPI)</th><th>HH Orçado</th><th>Dif. HH</th><th>Dif. HH %</th><th>Status</th></tr></thead><tbody>';
       // Ordenado por Qtd. Orçada, maior pro menor — pedido do usuário pra focar a conferência nas
       // atividades com maior quantidade orçada primeiro. Cópia do array só pra exibição: não afeta
       // qtdCompBase3/qtdCompFiltrado (usados nos totais e nos KPIs acima).
@@ -16432,7 +16433,7 @@ function iprodRenderShell(){
         var difPct=(q.diffHH!=null&&q.hhEmpresa)?(q.diffHH/q.hhEmpresa*100):null;
         html+='<tr class="iprod-tr-expand iprod-tr-chk" data-busca="'+iprodNorm(q.desc).replace(/"/g,'')+'" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
           +'<td onclick="event.stopPropagation()"><input type="checkbox"'+(IPROD_ATIV_SELECIONADAS[q.idxProjeto]?' checked':'')+' onclick="event.stopPropagation();iprodToggleAtivSelecionada('+q.idxProjeto+')"></td>'
-          +'<td>'+descCell+'</td><td>'+(qi+1)+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td style="color:#7c3aed">'+(q.hhSinapi!=null?iprodFmt(q.hhSinapi):'—')+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+(difPct!=null?difPct.toFixed(1).replace('.',',')+'%':'—')+'</td><td>'+badge+'</td></tr>';
+          +'<td>'+(qi+1)+'</td><td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td style="color:#7c3aed">'+(q.hhSinapi!=null?iprodFmt(q.hhSinapi):'—')+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+(difPct!=null?difPct.toFixed(1).replace('.',',')+'%':'—')+'</td><td>'+badge+'</td></tr>';
         html+='<tr class="iprod-drill"><td colspan="13">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
           +(q.status==='medida-diferente'?'<div class="iprod-insight" style="margin-bottom:8px">📏 A PQ do projeto pede <b>'+q.specDiff.projeto+'</b>, mas a contratada só cotou essa atividade com <b>'+q.specDiff.empresa+'</b> na PQ dela — mesma composição, medida diferente. Confira se essa troca foi aprovada antes de aceitar a quantidade/HH como equivalente.</div>':'')
@@ -16478,7 +16479,7 @@ function iprodRenderShell(){
       var totHhSemProjeto=(r.contratadaSemProjeto||[]).reduce(function(s,c){return s+(c.hhAlocado||0);},0);
       var totHhEmpresa=totHhEmpresaMatched+totHhSemProjeto;
       var totDifPct=totHhEmpresaMatched?((totHhEmpresaMatched-totHhEsperado)/totHhEmpresaMatched*100):null;
-      html+='<tr class="iprod-tot"><td></td><td>TOTAL (atividades do projeto'+(IPROD_QTDCOMP_FILTRO==='cobradas'?' — só cobradas':'')+')</td><td></td><td></td><td></td><td></td><td></td><td>'+iprodFmt(totHhEsperado)+'</td><td style="color:#7c3aed">'+(totHhSinapi?iprodFmt(totHhSinapi):'—')+'</td><td>'+iprodFmt(totHhEmpresaMatched)+'</td><td>'+iprodFmt(totHhEmpresaMatched-totHhEsperado)+'</td><td>'+(totDifPct!=null?totDifPct.toFixed(1).replace('.',',')+'%':'—')+'</td><td></td></tr>';
+      html+='<tr class="iprod-tot"><td></td><td></td><td>TOTAL (atividades do projeto'+(IPROD_QTDCOMP_FILTRO==='cobradas'?' — só cobradas':'')+')</td><td></td><td></td><td></td><td></td><td>'+iprodFmt(totHhEsperado)+'</td><td style="color:#7c3aed">'+(totHhSinapi?iprodFmt(totHhSinapi):'—')+'</td><td>'+iprodFmt(totHhEmpresaMatched)+'</td><td>'+iprodFmt(totHhEmpresaMatched-totHhEsperado)+'</td><td>'+(totDifPct!=null?totDifPct.toFixed(1).replace('.',',')+'%':'—')+'</td><td></td></tr>';
       html+='</tbody></table></div>';
 
       var idxExcluidos=Object.keys(IPROD_LINHAS_EXCLUIDAS).filter(function(i){return IPROD_LINHAS_EXCLUIDAS[i]&&IPROD_PROJETO.pq[i];});
