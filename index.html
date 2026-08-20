@@ -16643,8 +16643,12 @@ function iprodRenderShell(){
     html+='<div style="font-size:11.5px;color:var(--muted)">Carregando base de índices...</div>';
   } else if(IPROD_COMPARAR_INDICES){
     var cmp=IPROD_COMPARAR_INDICES;
-    var linhasVale=iprodGetIndiceRowsFlat('vale').filter(function(r){return r.codCliente===cmp.codVale;});
-    var linhasSinapi=IPROD_INDICE_SINAPI?iprodGetIndiceRowsFlat('sinapi').filter(function(r){return r.codCliente===cmp.codSinapi;}):[];
+    // Só tipo 'M' (mão de obra) — a nota já diz "só mão de obra", mas o filtro de fato tinha
+    // ficado de fora (bug real: estava somando material/equipamento junto, ex. "CIMENTO 200,00"
+    // entrando no "índice" de HH/unidade). SINAPI já só tem M no data/indice-sinapi.json, mas
+    // filtra igual pra não depender disso silenciosamente.
+    var linhasVale=iprodGetIndiceRowsFlat('vale').filter(function(r){return r.codCliente===cmp.codVale&&r.tipo==='M';});
+    var linhasSinapi=IPROD_INDICE_SINAPI?iprodGetIndiceRowsFlat('sinapi').filter(function(r){return r.codCliente===cmp.codSinapi&&r.tipo==='M';}):[];
     var totVale=linhasVale.reduce(function(s,r){return s+(Number(r.indice)||0);},0);
     var totSinapi=linhasSinapi.reduce(function(s,r){return s+(Number(r.indice)||0);},0);
     html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
