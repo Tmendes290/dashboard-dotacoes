@@ -16199,6 +16199,16 @@ function iprodRenderShell(){
     +'.iprod-hist-actions{display:flex;gap:8px}'
     +'.iprod-hist-link{background:none;border:none;color:#2563eb;font-size:11px;font-weight:700;cursor:pointer;padding:0}'
     +'.iprod-hist-del{background:none;border:none;color:#dc2626;font-size:11px;font-weight:700;cursor:pointer;padding:0}'
+    // PDF/impressão: só o nome do projeto (seção 1) e os cards/tabelas do resultado ficam no
+    // relatório — nada de nome de arquivo enviado, botão ou controle de tela (pedido explícito do
+    // usuário: "não quero que saia essa parte do item com os nomes do arquivo"). .iprod-print-hide
+    // marca os painéis inteiros a esconder (seção 2 e o FAQ); o resto são controles pontuais.
+    +'@media print{'
+      +'.iprod-print-hide,.iprod-tabbar,.iprod-hist-link,.iprod-btn,.iprod-tr-expand input[type="checkbox"],#iprod-busca-3,#iprod-busca-pq,#iprod-busca-idx{display:none !important}'
+      +'.iprod-text-input,.iprod-prat-input{border:none !important;background:transparent !important;padding:2px 0 !important;font-weight:700 !important}'
+      +'.iprod-panel{box-shadow:none !important;break-inside:avoid;page-break-inside:avoid}'
+      +'.iprod-tr-expand{cursor:default !important}'
+    +'}'
     +'</style>';
 
   html+='<div class="iprod-wrap">';
@@ -16235,7 +16245,7 @@ function iprodRenderShell(){
       ['Sem contratada, dá pra usar essa aba mesmo assim?',
        'Dá — suba só a "PQ do Projeto" e clique em Processar. O sistema calcula o HH com CPU pelo índice oficial da Vale pra cada atividade (KPI "HH com CPU Total"), sem comparar com nenhuma cobrança — útil pra estimar HH antes mesmo de ter uma cotação da contratada.']
     ];
-    html+='<div class="iprod-panel" style="border-color:#93c5fd;background:#f8fafc">'
+    html+='<div class="iprod-panel iprod-print-hide" style="border-color:#93c5fd;background:#f8fafc">'
       +'<div class="iprod-panel-title">❓ Dúvidas frequentes</div>'
       +'<div class="iprod-panel-note" style="margin-bottom:10px">Respostas rápidas pras perguntas mais comuns sobre como essa aba calcula os números. Clique numa pergunta pra abrir.</div>'
       +faq.map(function(f){
@@ -16287,7 +16297,7 @@ function iprodRenderShell(){
       +'<button class="iprod-btn" style="margin-top:0;flex-shrink:0" onclick="iprodNovaAnalise()">🔄 Fazer nova análise</button></div>';
   }
 
-  html+='<div class="iprod-panel">'
+  html+='<div class="iprod-panel iprod-print-hide">'
     +'<div class="iprod-panel-title">2. Importar dados para o comparativo</div>'
     +'<div class="iprod-panel-note">A contratada se baseia tanto no projeto quanto na PQ dela pra executar o serviço — por isso as quantidades das duas PQs entram lado a lado. Uma divergência não significa automaticamente que a contratada errou: pode ser a engenharia do projeto que precisa revisar o quantitativo. Também dá pra processar só com a PQ do Projeto (sem arquivo da contratada) pra ver o HH com CPU pelo índice antes de ter uma cotação.</div>'
     +'<div class="iprod-upload-grid">'
