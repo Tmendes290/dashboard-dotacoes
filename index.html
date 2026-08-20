@@ -16724,7 +16724,7 @@ function iprodRenderShell(){
     }
 
     if(r.semIndice.length){
-      html+='<div class="iprod-panel"><div class="iprod-panel-title">⚠️ Atividades sem correspondência na base de índices</div><div class="iprod-panel-note">Não achei código de cliente nem descrição parecida na base de produtividade pra essas atividades da PQ da contratada — confere manualmente.</div>'
+      html+='<div class="iprod-panel iprod-print-hide"><div class="iprod-panel-title">⚠️ Atividades sem correspondência na base de índices</div><div class="iprod-panel-note">Não achei código de cliente nem descrição parecida na base de produtividade pra essas atividades da PQ da contratada — confere manualmente.</div>'
         +'<table class="iprod-tbl"><thead><tr><th>Descrição</th><th>Código</th><th>Unid.</th><th>Quantidade</th></tr></thead><tbody>';
       r.semIndice.forEach(function(s){ html+='<tr><td>'+s.desc+'</td><td>'+(s.codCliente||'—')+'</td><td>'+s.unidade+'</td><td>'+iprodFmt(s.quantidade)+'</td></tr>'; });
       html+='</tbody></table></div>';
