@@ -14156,6 +14156,12 @@ function iprodSetQtdCompFiltro(v){ IPROD_QTDCOMP_FILTRO=v; iprodRenderShell(); }
 var IPROD_INDICE_OVERRIDES={};
 var IPROD_SHOW_AJUDA=false;
 function iprodToggleAjuda(){ IPROD_SHOW_AJUDA=!IPROD_SHOW_AJUDA; iprodRenderShell(); }
+// Card "% de Custo Indireto" — pediram pra tirar, mas o usuário quer manter e só ocultar quando
+// quiser (ex.: antes de exportar um PDF pra alguém que não deveria ver esse número). Ocultar aqui
+// tira o card da tela E do PDF (não usa .iprod-print-hide, que só esconde na impressão mantendo
+// visível na tela — aqui o pedido é o oposto: some dos dois quando ocultado).
+var IPROD_OCULTAR_INDIRETO=false;
+function iprodToggleCustoIndireto(){ IPROD_OCULTAR_INDIRETO=!IPROD_OCULTAR_INDIRETO; iprodRenderShell(); }
 // Atividades da PQ do Projeto excluídas manualmente da análise (seção 3) — chave é o idxProjeto,
 // mesma indexação de IPROD_INDICE_OVERRIDES. A linha excluída não entra em NENHUM cálculo (HH
 // Esperado, seção 4 por função, KPIs) — é tratada como se nunca tivesse existido na PQ, não só
@@ -16437,6 +16443,9 @@ function iprodRenderShell(){
     // Equipamentos) ÷ Valor Total Aprovado da PQ — não tem nada a ver com HH, é só sobre R$.
     var indiretosMP=IPROD_CONTRATADA&&IPROD_CONTRATADA.indiretos;
     var pctIndireto=indiretosMP?((indiretosMP.maoObraIndireta+indiretosMP.equipamentos)/indiretosMP.valorTotalAprovado):null;
+    // Pediram pra tirar o card de vez, mas o usuário quer só poder ocultar/mostrar na hora (ex.:
+    // antes de gerar um PDF pra alguém que não deveria ver esse número) — ver IPROD_OCULTAR_INDIRETO.
+    var mostrarIndireto=pctIndireto!=null&&!IPROD_OCULTAR_INDIRETO;
 
     // Resumo executivo — só no PDF (.iprod-print-only), pedido do usuário: "o gerente não vai
     // querer ler isso tudo" — um veredito em uma frase antes de qualquer tabela. Mesmo critério
@@ -16456,12 +16465,17 @@ function iprodRenderShell(){
         +'</div></div>';
     }
 
-    html+='<div class="iprod-kpis"'+(pctIndireto!=null?' style="grid-template-columns:repeat(5,1fr)"':'')+'>'
+    if(pctIndireto!=null){
+      html+='<div class="iprod-print-hide" style="text-align:right;margin:-6px 0 8px">'
+        +'<button class="iprod-hist-link" onclick="iprodToggleCustoIndireto()" title="Some da tela e do PDF quando ocultado">'+(IPROD_OCULTAR_INDIRETO?'🙈 Custo Indireto oculto — clique pra mostrar':'👁️ Ocultar card de Custo Indireto')+'</button>'
+        +'</div>';
+    }
+    html+='<div class="iprod-kpis"'+(mostrarIndireto?' style="grid-template-columns:repeat(5,1fr)"':'')+'>'
       +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Orçado: Empresa</div><div class="iprod-kpi-sub">'+(temQtdComp?('Soma do HH Orçado nas atividades reconciliadas do recorte atual'+(recorteAberto&&gapSemProjeto>0.5?' — '+iprodFmt(gapSemProjeto)+' HH excluídos manualmente da análise (ver alerta abaixo)':'')):(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(kpiRef)+'</div><div class="iprod-kpi-lbl">HH com CPU</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(kpiDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div>'+(temRS?'<div class="iprod-kpi-money" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">≈ '+iprodFmtRS(r.valorDif)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiAderencia*100)+'%</div><div class="iprod-kpi-lbl">Aderência</div><div class="iprod-kpi-sub">HH Orçado: Empresa ÷ HH com CPU</div></div>'
-      +(pctIndireto!=null?'<div class="iprod-kpi" style="border-top-color:#7c3aed"><div class="iprod-kpi-val" style="color:#7c3aed">'+Math.round(pctIndireto*100)+'%</div><div class="iprod-kpi-lbl">% de Custo Indireto</div><div class="iprod-kpi-sub">(Mão de Obra Indireta '+iprodFmtRS(indiretosMP.maoObraIndireta)+' + Equipamentos '+iprodFmtRS(indiretosMP.equipamentos)+') ÷ Valor Total Aprovado '+iprodFmtRS(indiretosMP.valorTotalAprovado)+' — da PQ da MILPLAN (aba 12.0 PQ)</div></div>':'')
+      +(mostrarIndireto?'<div class="iprod-kpi" style="border-top-color:#7c3aed"><div class="iprod-kpi-val" style="color:#7c3aed">'+Math.round(pctIndireto*100)+'%</div><div class="iprod-kpi-lbl">% de Custo Indireto</div><div class="iprod-kpi-sub">(Mão de Obra Indireta '+iprodFmtRS(indiretosMP.maoObraIndireta)+' + Equipamentos '+iprodFmtRS(indiretosMP.equipamentos)+') ÷ Valor Total Aprovado '+iprodFmtRS(indiretosMP.valorTotalAprovado)+' — da PQ da MILPLAN (aba 12.0 PQ)</div></div>':'')
       +'</div>';
 
     // "Onde focar primeiro" — só no PDF, top 3 funções mais divergentes (mesmo critério de
