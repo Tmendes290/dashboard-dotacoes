@@ -16422,10 +16422,10 @@ function iprodRenderShell(){
     var kpiCobradoReconciliado=kpiCobrado;
     kpiDif=kpiCobrado-kpiRef;
     kpiImprod=kpiCobrado>0?(kpiDif/kpiCobrado):0;
-    // Aderência = HH Referência ÷ HH Orçado (Empresa) — o quanto do que a empresa orçou realmente
-    // corresponde ao HH de referência (o inverso de %Improdutivas: 100% − %Improd, ex.: 11% de
-    // improdutividade = 89% de aderência).
-    var kpiAderencia=kpiCobrado>0?(kpiRef/kpiCobrado):0;
+    // Aderência = HH Orçado (Empresa) ÷ HH com CPU — o quanto do HH de referência (índice ×
+    // praticabilidade) o orçamento da empresa efetivamente cobre. Denominador é o HH com CPU
+    // (a referência), não o cobrado — invertido antes, pedido do usuário pra corrigir.
+    var kpiAderencia=kpiRef>0?(kpiCobrado/kpiRef):0;
     var recorteLbl=(IPROD_QTDCOMP_FILTRO==='cobradas'?'Só cobradas':'Todas')+(IPROD_FILTRO_STATUS!=='todos'?' + '+({'bate':'Bate','divergente':'Divergente','medida-diferente':'Medida diferente','faltando-empresa':'Faltando'}[IPROD_FILTRO_STATUS]||IPROD_FILTRO_STATUS):'');
     if(temQtdComp){
       html+='<div class="iprod-panel-note" style="margin:-4px 0 10px">🔎 Cards abaixo = subtotal do recorte ativo na seção 3 ("'+recorteLbl+'") — muda junto com os filtros lá embaixo.</div>';
@@ -16460,7 +16460,7 @@ function iprodRenderShell(){
       +'<div class="iprod-kpi" style="border-top-color:#2563eb"><div class="iprod-kpi-val" style="color:#2563eb">'+iprodFmt(kpiCobrado)+'</div><div class="iprod-kpi-lbl">HH Orçado: Empresa</div><div class="iprod-kpi-sub">'+(temQtdComp?('Soma do HH Orçado nas atividades reconciliadas do recorte atual'+(recorteAberto&&gapSemProjeto>0.5?' — '+iprodFmt(gapSemProjeto)+' HH excluídos manualmente da análise (ver alerta abaixo)':'')):(r.semHistogramaPorFuncao?'Soma do HH declarado na PQ da contratada':'Soma de todas as funções apontadas no histograma'))+'</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#2563eb">≈ '+iprodFmtRS(r.valorCobrado)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(kpiRef)+'</div><div class="iprod-kpi-lbl">HH com CPU</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(kpiDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div>'+(temRS?'<div class="iprod-kpi-money" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">≈ '+iprodFmtRS(r.valorDif)+'</div>':'')+'</div>'
-      +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiAderencia*100)+'%</div><div class="iprod-kpi-lbl">Aderência</div><div class="iprod-kpi-sub">HH com CPU ÷ HH Orçado: Empresa</div></div>'
+      +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiAderencia*100)+'%</div><div class="iprod-kpi-lbl">Aderência</div><div class="iprod-kpi-sub">HH Orçado: Empresa ÷ HH com CPU</div></div>'
       +(pctIndireto!=null?'<div class="iprod-kpi" style="border-top-color:#7c3aed"><div class="iprod-kpi-val" style="color:#7c3aed">'+Math.round(pctIndireto*100)+'%</div><div class="iprod-kpi-lbl">% de Custo Indireto</div><div class="iprod-kpi-sub">(Mão de Obra Indireta '+iprodFmtRS(indiretosMP.maoObraIndireta)+' + Equipamentos '+iprodFmtRS(indiretosMP.equipamentos)+') ÷ Valor Total Aprovado '+iprodFmtRS(indiretosMP.valorTotalAprovado)+' — da PQ da MILPLAN (aba 12.0 PQ)</div></div>':'')
       +'</div>';
 
