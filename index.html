@@ -10656,6 +10656,12 @@ var RAC_CATALOGO = [
   {cod:'RAC 13', nome:'Abertura de Linhas e Equipamentos', kw:['abertura de linha','flange','tubulacao pressurizada','vaso de pressao','raquete de bloqueio']}
 ];
 var RAC_KW_GRAVE = ['queda','esmagamento','atropelamento','choque eletrico','explosao','soterramento','afogamento','prensamento','colisao','capotamento','arco eletrico','asfixia','eletrocussao','fatalidade','tombamento'];
+// Sinais de falha/defeito em equipamento crítico de sustentação de carga, proteção contra queda
+// ou estrutura — o VBM-PNR-000070 trata "energia perigosa presente" (ex.: carga suspensa por uma
+// cinta comprometida, potencial de queda por EPI comprometido) como suficiente pra ser pSIF, mesmo
+// sem ninguém ter se machucado. Ex. real que motivou isso: RAC 05, cinta de içamento com corte na
+// estrutura, atividade interditada — RAC_KW_GRAVE não pegava porque não é uma palavra de lesão.
+var RAC_KW_DEFEITO_CRITICO = ['cinta danificada','cinta rompida','cinta cortada','corte na cinta','corte na estrutura','trinca','trincado','trincada','fissura','rompimento','cabo rompido','cabo de aço rompido','corrente rompida','ruptura','desgaste excessivo','sobrecarga','sobrecarregado','sobrecarregada','gancho deformado','gancho trincado','corrosao severa','comprometendo a integridade','comprometida a integridade','falha estrutural','estrutura comprometida','sem certificacao de carga','acima da capacidade nominal'];
 // PDFs reais das normas, servidos como arquivo estático (express.static na raiz do repo) —
 // #page=N abre o PDF direto na página certa no visualizador nativo do navegador.
 var RAC_PDF_PNR = '/docs/rac/PNR-000069.pdf';
@@ -10715,6 +10721,7 @@ function racClassificar(textoOriginal){
 // Pedido do usuário: "não deveria usar só esse parâmetro [RAC], tem que olhar a observação também."
 function racClassificarSeveridade(textoNormalizado){
   for(var i=0;i<RAC_KW_GRAVE.length;i++){ if(textoNormalizado.indexOf(RAC_KW_GRAVE[i])>=0) return 'pSIF'; }
+  for(var j=0;j<RAC_KW_DEFEITO_CRITICO.length;j++){ if(textoNormalizado.indexOf(RAC_KW_DEFEITO_CRITICO[j])>=0) return 'pSIF'; }
   return 'baixo';
 }
 // Explica de onde veio a sugestão de gravidade (pra tirar a dúvida de "por que você acha que é
@@ -10741,6 +10748,16 @@ function racMotivoSeveridade(row){
       return {
         texto:'Potencial alto porque a observação cita "'+kw+'", um dos exemplos de evento com potencial de lesão grave/fatalidade (pSIF) do VBM-PNR-000070.',
         links:[vbmLinkKw].concat(racLink?[racLink]:[])
+      };
+    }
+  }
+  for(var k=0;k<RAC_KW_DEFEITO_CRITICO.length;k++){
+    if(texto.indexOf(RAC_KW_DEFEITO_CRITICO[k])>=0){
+      var kwd = RAC_KW_DEFEITO_CRITICO[k];
+      var vbmLinkKwd = {label:'📄 Ver critério de "energia perigosa presente" no VBM-PNR-000070 — Anexo 01 (pág. '+RAC_PDF_VBM_PAGINA_CRITERIO+')', url:racPdfLink(RAC_PDF_VBM, RAC_PDF_VBM_PAGINA_CRITERIO, 'energia perigosa')};
+      return {
+        texto:'Potencial alto porque a observação cita "'+kwd+'" — um defeito/falha em equipamento crítico (sustentação de carga, proteção contra queda ou estrutura). O VBM-PNR-000070 considera isso "energia perigosa presente" (ex.: carga suspensa por um componente comprometido), suficiente pra ser pSIF mesmo sem lesão real.',
+        links:[vbmLinkKwd].concat(racLink?[racLink]:[])
       };
     }
   }
