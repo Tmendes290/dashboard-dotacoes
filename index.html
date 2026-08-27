@@ -10678,29 +10678,33 @@ function racClassificar(textoOriginal){
   }
   return null;
 }
-function racClassificarSeveridade(textoNormalizado, racCod){
+// A categoria do RAC (RAC_COD_ALTO_POTENCIAL) sozinha NÃO classifica como potencial alto —
+// ela só entra como contexto informativo (ver racMotivoSeveridade). O gatilho automático de
+// pSIF é sempre a observação real: só quando o texto cita uma palavra-chave de risco grave.
+// Pedido do usuário: "não deveria usar só esse parâmetro [RAC], tem que olhar a observação também."
+function racClassificarSeveridade(textoNormalizado){
   for(var i=0;i<RAC_KW_GRAVE.length;i++){ if(textoNormalizado.indexOf(RAC_KW_GRAVE[i])>=0) return 'pSIF'; }
-  if(racCod && RAC_COD_ALTO_POTENCIAL.indexOf(racCod)>=0) return 'pSIF';
   return 'baixo';
 }
 // Explica de onde veio a sugestão de gravidade (pra tirar a dúvida de "por que você acha que é
 // potencial alto?") — recalcula em cima do mesmo texto/regra usada no upload, sem precisar
 // guardar o motivo no banco.
 function racMotivoSeveridade(row){
-  var texto = racNormalizar((row.titulo||'')+' '+(row.pergunta||'')+' '+(row.observacao||''));
-  for(var i=0;i<RAC_KW_GRAVE.length;i++){
-    if(texto.indexOf(RAC_KW_GRAVE[i])>=0){
-      return 'Potencial alto porque o texto cita "'+RAC_KW_GRAVE[i]+'", palavra-chave de risco grave (critério de gravidade do VBM-PNR-000070).';
-    }
-  }
-  var racCod = racFinalRac(row);
-  if(racCod && RAC_COD_ALTO_POTENCIAL.indexOf(racCod)>=0){
-    return 'Potencial alto porque foi classificado como '+racCod+', RAC que consta na lista de potencial alto do VBM-PNR-000070 (Anexo 01).';
-  }
   if(row.severidade_manual){
     return 'Classificação definida manualmente por '+(row.revisado_por||'um revisor')+', sem regra automática associada.';
   }
-  return 'Baixo potencial: nenhuma palavra-chave de risco grave nem RAC de potencial alto foi identificado no texto.';
+  var texto = racNormalizar((row.titulo||'')+' '+(row.pergunta||'')+' '+(row.observacao||''));
+  for(var i=0;i<RAC_KW_GRAVE.length;i++){
+    if(texto.indexOf(RAC_KW_GRAVE[i])>=0){
+      return 'Potencial alto porque a observação cita "'+RAC_KW_GRAVE[i]+'", palavra-chave de risco grave (critério de gravidade do VBM-PNR-000070).';
+    }
+  }
+  // A categoria do RAC não decide sozinha — é só um contexto pra ajudar na revisão manual.
+  var racCod = racFinalRac(row);
+  if(racCod && RAC_COD_ALTO_POTENCIAL.indexOf(racCod)>=0){
+    return 'Baixo potencial pela leitura automática — a observação não cita nenhuma palavra-chave de risco grave. Atenção: '+racCod+' está na lista de categorias de potencial alto do VBM-PNR-000070, mas isso sozinho não basta pra classificar como grave; vale conferir manualmente.';
+  }
+  return 'Baixo potencial: a observação não cita nenhuma palavra-chave de risco grave, nem o RAC está na lista de categorias de potencial alto do VBM-PNR-000070.';
 }
 // Quando a "Empresa" preenchida é uma fiscalizadora (Progen/AEL), o campo normalmente não é a
 // contratada que cometeu o desvio — o nome dela costuma aparecer citado dentro da observação.
@@ -10806,7 +10810,7 @@ async function racHandleUpload(file){
             tipo_achado: String(g(row,'Tipo')||'').trim(),
             observacao: observacao,
             rac_auto: racAuto,
-            severidade_auto: racClassificarSeveridade(textoNorm, racAuto)
+            severidade_auto: racClassificarSeveridade(textoNorm)
           });
         }
       });
@@ -10828,7 +10832,14 @@ async function racHandleUpload(file){
   reader.readAsArrayBuffer(file);
 }
 function racFinalRac(row){ return row.rac_manual || row.rac_auto || 'Não classificado'; }
-function racFinalSeveridade(row){ return row.severidade_manual || row.severidade_auto || 'baixo'; }
+// Recalcula a gravidade automática sempre em cima do texto atual (em vez de confiar no
+// severidade_auto gravado no upload) — assim, se a regra de classificação mudar, o efeito é
+// imediato pra tudo que já está na base, sem precisar reimportar a planilha.
+function racSeveridadeAuto(row){
+  var texto = racNormalizar((row.titulo||'')+' '+(row.pergunta||'')+' '+(row.observacao||''));
+  return racClassificarSeveridade(texto);
+}
+function racFinalSeveridade(row){ return row.severidade_manual || racSeveridadeAuto(row); }
 function racSituacao(row){
   var p = racNormalizar(row.pergunta), r = racNormalizar(row.resposta);
   if(p.indexOf('interditad')>=0){
@@ -10995,7 +11006,7 @@ function renderRac(){
       + '<option value="Não classificado"'+(r.rac_manual==='Não classificado'?' selected':'')+'>Não classificado</option>'
       + '</select>';
     var sevSel = '<select onchange="racSetManual(\''+r.chave+'\',\'severidade_manual\',this.value||null)" style="font-size:10.5px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px">'
-      + '<option value=""'+(!r.severidade_manual?' selected':'')+'>Sugerido: '+(r.severidade_auto==='pSIF'?'Potencial alto':'Baixo')+'</option>'
+      + '<option value=""'+(!r.severidade_manual?' selected':'')+'>Sugerido: '+(racSeveridadeAuto(r)==='pSIF'?'Potencial alto':'Baixo')+'</option>'
       + '<option value="pSIF"'+(r.severidade_manual==='pSIF'?' selected':'')+'>Potencial alto (pSIF)</option>'
       + '<option value="baixo"'+(r.severidade_manual==='baixo'?' selected':'')+'>Baixo potencial</option>'
       + '</select>';
