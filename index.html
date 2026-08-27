@@ -1603,7 +1603,7 @@ var FPA_FILTERS = {projeto:[], squad:[], lider:[], planejador:[]};
 var FPA_ANO = new Date().getFullYear();
 var FPA_PAGE = 1; // tabela paginada — cada projeto já é 4 linhas, renderizar tudo de uma vez travava o navegador
 var RAC_DATA = []; // linhas cruas da tabela rac_interdicoes
-var RAC_FILTERS = {mes:[], empresa:[], rac:[], severidade:[], revisao:[], gerencia:[], inspetor:[]};
+var RAC_FILTERS = {mes:[], hora:[], empresa:[], rac:[], severidade:[], revisao:[], gerencia:[], inspetor:[]};
 var RAC_PAGE = 1;
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
@@ -10779,6 +10779,38 @@ function racNomeCurto(nomeCompleto){
   var partes = String(nomeCompleto||'').trim().split(/\s+/).filter(function(p){ return RAC_NOME_CONECTORES.indexOf(p.toLowerCase())<0; });
   return partes.slice(0,2).join(' ') || nomeCompleto;
 }
+// Chave pra agrupar grafias diferentes do mesmo fiscal (ex.: "Josilene da Silva Guedes" e
+// "JOSILENE GUEDES" viram a mesma chave "josilene|guedes") — primeiro + último nome, sem
+// conectores nem sufixo tipo "_CONTR", tudo normalizado (minúsculo, sem acento).
+function racInspetorCanonico(nome){
+  var partes = String(nome||'').trim().split(/\s+/).map(function(p){ return p.replace(/_.*/,''); }).filter(function(p){ return p && RAC_NOME_CONECTORES.indexOf(racNormalizar(p))<0; });
+  if(!partes.length) return '';
+  return racNormalizar(partes[0])+'|'+racNormalizar(partes[partes.length-1]);
+}
+// Agrupa por chave canônica e escolhe, pra cada grupo, a grafia mais usada (empate: a mais
+// longa/completa) como nome de exibição — usado no gráfico/filtro de fiscal; a tabela continua
+// mostrando o valor bruto de cada linha, sem mexer no dado original.
+function racInspetorGrupos(){
+  var porChave = {};
+  RAC_DATA.forEach(function(r){
+    var nome = r.inspetor;
+    if(!nome) return;
+    var chave = racInspetorCanonico(nome);
+    if(!chave) return;
+    if(!porChave[chave]) porChave[chave] = {contagemPorNome:{}};
+    porChave[chave].contagemPorNome[nome] = (porChave[chave].contagemPorNome[nome]||0)+1;
+  });
+  Object.keys(porChave).forEach(function(chave){
+    var cont = porChave[chave].contagemPorNome;
+    porChave[chave].display = Object.keys(cont).sort(function(a,b){ return cont[b]-cont[a] || b.length-a.length; })[0];
+  });
+  return porChave;
+}
+function racInspetorDisplay(nomeRaw, grupos){
+  var chave = racInspetorCanonico(nomeRaw);
+  var g = chave && grupos[chave];
+  return g ? g.display : (nomeRaw || '—');
+}
 // Quando a "Empresa" preenchida é uma gerenciadora (Vale/Lyon/Progen), o campo normalmente não é
 // a contratada que cometeu o desvio — o nome dela costuma aparecer citado dentro da observação.
 // Isso é só uma sugestão pra os gráficos de "quem mais aparece"; não altera o dado bruto.
@@ -10959,8 +10991,13 @@ async function racMarcarRevisado(chave, val){
 }
 function racFilteredData(){
   var empresasRaw = racEmpresasRawList();
+  var inspGrupos = racInspetorGrupos();
   return RAC_DATA.filter(function(r){
     if(RAC_FILTERS.mes.length && RAC_FILTERS.mes.indexOf(racMesLabel(r.data_ocorrencia))<0) return false;
+    if(RAC_FILTERS.hora.length){
+      var h = r.hora_ocorrencia ? parseInt(r.hora_ocorrencia.split(':')[0],10) : null;
+      if(h===null || isNaN(h) || RAC_FILTERS.hora.indexOf(h)<0) return false;
+    }
     if(RAC_FILTERS.empresa.length && RAC_FILTERS.empresa.indexOf(racEmpresaSugerida(r,empresasRaw))<0) return false;
     if(RAC_FILTERS.rac.length && RAC_FILTERS.rac.indexOf(racFinalRac(r))<0) return false;
     if(RAC_FILTERS.severidade.length){
@@ -10972,12 +11009,12 @@ function racFilteredData(){
       if(RAC_FILTERS.revisao.indexOf(st)<0) return false;
     }
     if(RAC_FILTERS.gerencia.length && RAC_FILTERS.gerencia.indexOf(r.unidade_organizacional||'—')<0) return false;
-    if(RAC_FILTERS.inspetor.length && RAC_FILTERS.inspetor.indexOf(r.inspetor||'—')<0) return false;
+    if(RAC_FILTERS.inspetor.length && RAC_FILTERS.inspetor.indexOf(racInspetorDisplay(r.inspetor,inspGrupos))<0) return false;
     return true;
   });
 }
 function racLimparFiltros(){
-  RAC_FILTERS = {mes:[], empresa:[], rac:[], severidade:[], revisao:[], gerencia:[], inspetor:[]};
+  RAC_FILTERS = {mes:[], hora:[], empresa:[], rac:[], severidade:[], revisao:[], gerencia:[], inspetor:[]};
   RAC_PAGE = 1;
   renderRac();
 }
@@ -11026,7 +11063,8 @@ function renderRac(){
   var empresaOptsRaw = racEmpresasRawList();
   var empresaOpts = Array.from(new Set(RAC_DATA.map(function(r){return racEmpresaSugerida(r,empresaOptsRaw);}))).sort();
   var gerenciaOpts = Array.from(new Set(RAC_DATA.map(function(r){return r.unidade_organizacional||'—';}))).filter(Boolean).sort();
-  var inspetorOpts = Array.from(new Set(RAC_DATA.map(function(r){return r.inspetor||'—';}))).filter(Boolean).sort();
+  var inspGrupos = racInspetorGrupos();
+  var inspetorOpts = Array.from(new Set(RAC_DATA.map(function(r){return racInspetorDisplay(r.inspetor,inspGrupos);}))).filter(Boolean).sort();
   var racOptsCod = RAC_CATALOGO.map(function(c){return c.cod;}).concat(['Não classificado']);
 
   var html = '';
@@ -11074,28 +11112,46 @@ function renderRac(){
   function th(t){ return '<th style="padding:9px 10px;text-align:left;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+t+'</th>'; }
   var rowsHtml = pageRows.map(function(r){
     var sev = racFinalSeveridade(r);
-    var sevBadge = '<span onclick="racAbrirMotivo(\''+r.chave+'\')" title="Clique pra ver o porquê, com link pra norma" style="cursor:pointer;font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:9px;text-decoration:underline dotted;text-underline-offset:2px;'
-      + (sev==='pSIF' ? 'background:#fef2f2;color:#dc2626">⚠ Potencial alto' : 'background:#f1f5f9;color:#64748b">Baixo')
-      + '</span>';
     var situ = racSituacao(r);
     var situColor = situ==='Interditado' ? '#dc2626' : (situ.indexOf('não interditado')>=0 ? '#94a3b8' : '#d97706');
-    var racSel = '<select onchange="racSetManual(\''+r.chave+'\',\'rac_manual\',this.value||null)" style="font-size:10.5px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;max-width:230px">'
-      + '<option value=""'+(!r.rac_manual?' selected':'')+'>Sugerido: '+(r.rac_auto||'— nenhum —')+'</option>'
-      + RAC_CATALOGO.map(function(c){ return '<option value="'+c.cod+'"'+(r.rac_manual===c.cod?' selected':'')+'>'+c.cod+' - '+c.nome+'</option>'; }).join('')
+
+    // RAC: select estilizado (não mais o dropdown cru mono-espaçado) + legenda discreta dizendo
+    // se é sugestão automática ou já foi confirmado por alguém — pensado pra apresentação gerencial.
+    var racConfirmado = !!r.rac_manual;
+    var racAutoInfo = RAC_CATALOGO.filter(function(c){return c.cod===r.rac_auto;})[0];
+    var racAutoLabel = r.rac_auto ? (r.rac_auto+' · '+(racAutoInfo?racAutoInfo.nome:'')) : 'Não classificado';
+    var racSelStyle = 'font-size:11.5px;font-weight:600;color:#0f172a;padding:6px 8px;border:1px solid #dbe2ea;border-radius:7px;background:#fff;cursor:pointer;max-width:236px;min-width:190px;display:block';
+    var racSel = '<select onchange="racSetManual(\''+r.chave+'\',\'rac_manual\',this.value||null)" style="'+racSelStyle+'">'
+      + '<option value=""'+(!racConfirmado?' selected':'')+'>'+escHtml(racAutoLabel)+'</option>'
+      + RAC_CATALOGO.map(function(c){ return '<option value="'+c.cod+'"'+(r.rac_manual===c.cod?' selected':'')+'>'+c.cod+' · '+c.nome+'</option>'; }).join('')
       + '<option value="Não classificado"'+(r.rac_manual==='Não classificado'?' selected':'')+'>Não classificado</option>'
-      + '</select>';
-    var sevSel = '<select onchange="racSetManual(\''+r.chave+'\',\'severidade_manual\',this.value||null)" style="font-size:10.5px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px">'
-      + '<option value=""'+(!r.severidade_manual?' selected':'')+'>Sugerido: '+(racSeveridadeAuto(r)==='pSIF'?'Potencial alto':'Baixo')+'</option>'
-      + '<option value="pSIF"'+(r.severidade_manual==='pSIF'?' selected':'')+'>Potencial alto (pSIF)</option>'
+      + '</select>'
+      + '<div style="margin-top:3px;font-size:9px;font-weight:600;letter-spacing:.2px;color:'+(racConfirmado?'#16a34a':'#94a3b8')+'">'+(racConfirmado?'✓ confirmado manualmente':'● sugestão automática')+'</div>';
+
+    // Gravidade: o select vira o próprio badge colorido (sem duplicar select + texto separado),
+    // com um botão "i" discreto pro motivo/link da norma, em vez do texto sublinhado que ficava
+    // grudado no select.
+    var sevConfirmado = !!r.severidade_manual;
+    var sevAutoTxt = racSeveridadeAuto(r)==='pSIF' ? '⚠ Potencial alto' : 'Baixo potencial';
+    var sevBg = sev==='pSIF' ? '#fef2f2' : '#f1f5f9';
+    var sevColor = sev==='pSIF' ? '#b91c1c' : '#475569';
+    var sevBorder = sev==='pSIF' ? '#fecaca' : '#e2e8f0';
+    var sevSelStyle = 'font-size:11.5px;font-weight:700;color:'+sevColor+';padding:6px 8px;border:1px solid '+sevBorder+';border-radius:7px;background:'+sevBg+';cursor:pointer;min-width:150px';
+    var sevSel = '<select onchange="racSetManual(\''+r.chave+'\',\'severidade_manual\',this.value||null)" style="'+sevSelStyle+'">'
+      + '<option value=""'+(!sevConfirmado?' selected':'')+'>'+sevAutoTxt+'</option>'
+      + '<option value="pSIF"'+(r.severidade_manual==='pSIF'?' selected':'')+'>⚠ Potencial alto (pSIF)</option>'
       + '<option value="baixo"'+(r.severidade_manual==='baixo'?' selected':'')+'>Baixo potencial</option>'
       + '</select>';
+    var sevInfoBtn = '<button onclick="racAbrirMotivo(\''+r.chave+'\')" title="Ver o motivo, com link pra norma" style="margin-left:6px;width:21px;height:21px;border-radius:50%;border:1px solid #cbd5e1;background:#fff;color:#64748b;font-size:11px;font-weight:800;font-style:italic;cursor:pointer;line-height:1;vertical-align:middle">i</button>';
+    var sevCaption = '<div style="margin-top:3px;font-size:9px;font-weight:600;letter-spacing:.2px;color:'+(sevConfirmado?'#16a34a':'#94a3b8')+'">'+(sevConfirmado?'✓ confirmado manualmente':'● sugestão automática')+'</div>';
+
     return '<tr style="border-top:1px solid #f1f5f9">'
       + '<td style="padding:8px 10px;font-size:11px;white-space:nowrap;font-family:\'Share Tech Mono\',monospace">'+(r.data_ocorrencia?r.data_ocorrencia.split('-').reverse().join('/'):'—')+' '+(r.hora_ocorrencia||'')+'</td>'
       + '<td style="padding:8px 10px;font-size:11px">'+escHtml(r.empresa||'—')+'</td>'
       + '<td style="padding:8px 10px;font-size:11px;color:#64748b">'+escHtml(r.inspetor||'—')+'</td>'
       + '<td style="padding:8px 10px;font-size:11px;color:#64748b">'+escHtml(r.localizacao||'—')+'</td>'
       + '<td style="padding:8px 10px">'+racSel+'</td>'
-      + '<td style="padding:8px 10px">'+sevSel+' '+sevBadge+'</td>'
+      + '<td style="padding:8px 10px">'+sevSel+sevInfoBtn+sevCaption+'</td>'
       + '<td style="padding:8px 10px;font-size:10.5px;color:#334155;max-width:220px">'+escHtml(r.pergunta||'—')+'</td>'
       + '<td style="padding:8px 10px;font-size:10.5px;font-weight:700;color:'+situColor+'">'+situ+'</td>'
       + '<td style="padding:8px 10px;font-size:10.5px;color:#334155;max-width:320px">'+escHtml(r.observacao||'—')+'</td>'
@@ -11170,7 +11226,11 @@ function renderRac(){
       }]},
       options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:20}},
         plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ' '+ctx.parsed.y+' ocorrência(s)';}}}},
-        scales:{x:{ticks:{font:{size:10}},grid:{display:false}},y:{display:false,beginAtZero:true}}
+        scales:{x:{ticks:{font:{size:10}},grid:{display:false}},y:{display:false,beginAtZero:true}},
+        onClick:function(evt,elements){
+          if(!elements.length) return;
+          RAC_FILTERS.hora=[elements[0].index]; RAC_PAGE=1; renderRac();
+        }
       }
     });
   }
@@ -11260,10 +11320,15 @@ function renderRac(){
     });
   }
 
-  // Gráfico 5 — por fiscal (quem mais inspeciona)
+  // Gráfico 5 — por fiscal (quem mais inspeciona) — agrupa grafias diferentes da mesma pessoa
+  // (ver racInspetorGrupos) antes de contar, senão o mesmo fiscal aparece em barras separadas.
   var inspetorCount = {};
-  filtered.forEach(function(r){ var i = r.inspetor || '—'; inspetorCount[i] = (inspetorCount[i]||0) + 1; });
-  var inspetorSorted = Object.keys(inspetorCount).filter(function(i){return i!=='—';}).sort(function(a,b){
+  filtered.forEach(function(r){
+    var i = racInspetorDisplay(r.inspetor, inspGrupos);
+    if(i==='—') return;
+    inspetorCount[i] = (inspetorCount[i]||0) + 1;
+  });
+  var inspetorSorted = Object.keys(inspetorCount).sort(function(a,b){
     return inspetorCount[b]-inspetorCount[a];
   }).slice(0,12);
   var inspetorLabelsCurto = inspetorSorted.map(racNomeCurto);
