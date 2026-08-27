@@ -17352,18 +17352,20 @@ function iprodRenderShell(){
       +(mostrarIndireto?'<div class="iprod-kpi" style="border-top-color:#7c3aed"><div class="iprod-kpi-val" style="color:#7c3aed">'+Math.round(pctIndireto*100)+'%</div><div class="iprod-kpi-lbl">% de Custo Indireto</div><div class="iprod-kpi-sub">(Mão de Obra Indireta '+iprodFmtRS(indiretosMP.maoObraIndireta)+' + Equipamentos '+iprodFmtRS(indiretosMP.equipamentos)+') ÷ Valor Total Aprovado '+iprodFmtRS(indiretosMP.valorTotalAprovado)+' — da PQ da MILPLAN (aba 12.0 PQ)</div></div>':'')
       +'</div>';
 
-    // "Onde focar primeiro" — só no PDF, top 3 FAMÍLIAS DE OFÍCIO mais divergentes (não função
-    // crua: nome de função explode em divergência falsa toda vez que a Vale e a contratada usam
-    // vocabulário diferente pro mesmo ofício — ver iprodFamiliaDe — família é o corte que resiste
-    // a isso e por isso é o mais confiável pra apontar onde focar primeiro).
+    // "Onde focar primeiro" — só no PDF, top 3 funções mais divergentes (mesmo critério de
+    // severidade do resumo executivo acima). Complementa o veredito com o próximo passo prático.
+    // Nota: uma função isolada pode divergir muito só por vocabulário diferente entre a Vale e a
+    // contratada pro mesmo ofício (ver iprodFamiliaDe e o detalhamento "Família de ofício" que
+    // aparece ao clicar na linha, seção 4) — o "🔎 Conferir família" ali ajuda a distinguir isso
+    // de um desvio de produtividade de verdade antes de sair cobrando a contratada.
     if(temQtdComp){
-      var focoPrint=(r.linhasFamilia||[]).filter(function(l){return l.status==='vermelho'||l.status==='amarelo';}).slice().sort(function(a,b){return (b.dif||0)-(a.dif||0);}).slice(0,3);
+      var focoPrint=r.linhas.filter(function(l){return l.status==='vermelho'||l.status==='amarelo';}).slice().sort(function(a,b){return (b.dif||0)-(a.dif||0);}).slice(0,3);
       if(focoPrint.length){
         html+='<div class="iprod-panel iprod-print-only">'
           +'<div class="iprod-panel-title">Onde focar primeiro</div>'
-          +'<div class="iprod-panel-note">As '+focoPrint.length+' família(s) de ofício com maior divergência — por aqui que a conferência com a contratada deveria começar. (Agrupado por família, não por nome exato de função — evita apontar "divergência" que na real é só as duas empresas chamando o mesmo ofício de nomes diferentes.)</div>'
-          +'<table class="iprod-tbl"><thead><tr><th>#</th><th>Família de ofício</th><th>HH Orçado</th><th>HH CPU (Vale)</th><th>Diferença</th><th>Status</th></tr></thead><tbody>'
-          +focoPrint.map(function(l,i){return '<tr><td>'+(i+1)+'</td><td>'+l.familia+'</td><td>'+iprodFmt(l.hhCobrado)+'</td><td>'+(l.hhRef>0?iprodFmt(l.hhAjust):'—')+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';}).join('')
+          +'<div class="iprod-panel-note">As '+focoPrint.length+' função(ões) com maior divergência — por aqui que a conferência com a contratada deveria começar.</div>'
+          +'<table class="iprod-tbl"><thead><tr><th>#</th><th>Função</th><th>HH Orçado</th><th>HH CPU (Vale)</th><th>Diferença</th><th>Status</th></tr></thead><tbody>'
+          +focoPrint.map(function(l,i){return '<tr><td>'+(i+1)+'</td><td>'+l.funcao+'</td><td>'+iprodFmt(l.hhCobrado)+'</td><td>'+(l.hhRef>0?iprodFmt(l.hhAjust):'—')+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';}).join('')
           +'</tbody></table></div>';
       }
     }
