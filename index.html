@@ -10987,12 +10987,9 @@ function renderRac(){
       +'<span style="color:var(--muted);font-size:10px">▾</span></div>'
       +'<div class="ms-drop" id="'+id+'-drop" style="display:none"></div></div></div>';
   }
-  function racKpi(lbl,ico,icoBg,val,valColor,sub){
+  function racKpi(lbl,val,valColor,sub){
     return '<div class="kpi-card" style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:4px">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between">'
-        +'<span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b">'+lbl+'</span>'
-        +'<div style="width:28px;height:28px;border-radius:8px;background:'+icoBg+';display:flex;align-items:center;justify-content:center;font-size:14px">'+ico+'</div>'
-      +'</div>'
+      +'<span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b">'+lbl+'</span>'
       +'<div style="font-size:22px;font-weight:900;line-height:1.1;letter-spacing:-1px;font-family:\'Share Tech Mono\',monospace;color:'+valColor+'">'+val+'</div>'
       +'<div style="font-size:10px;color:#64748b">'+sub+'</div>'
       +'</div>';
@@ -11047,11 +11044,11 @@ function renderRac(){
     + '</div>';
 
   html += '<div class="g5" style="gap:10px;margin-bottom:16px">'
-    + racKpi('Ocorrências no período','📋','#e0f2fe',total.toLocaleString('pt-BR'),'#002F6C',mesOpts.length+' meses na base')
-    + racKpi('Interdições efetivas','🚧','#fef2f2',nInterditado.toLocaleString('pt-BR'),'#dc2626',total?Math.round(nInterditado/total*100)+'% do período':'—')
-    + racKpi('Potencial alto (pSIF)','⚠️','#fff7ed',nAlto.toLocaleString('pt-BR'),'#d97706',total?Math.round(nAlto/total*100)+'% sugerido pelo VBM-PNR-000070':'—')
-    + racKpi('Pendentes de revisão','🔍','#f5f3ff',nPendente.toLocaleString('pt-BR'),'#7c3aed',total?Math.round(nPendente/total*100)+'% ainda não confirmado':'—')
-    + racKpi('RAC mais recorrente','🦺','#f0fdf4',racTop||'—','#16a34a',racTop?racCount[racTop]+' ocorrência(s)':'sem classificação')
+    + racKpi('Ocorrências no período',total.toLocaleString('pt-BR'),'#002F6C',mesOpts.length+' meses na base')
+    + racKpi('Interdições efetivas',nInterditado.toLocaleString('pt-BR'),'#dc2626',total?Math.round(nInterditado/total*100)+'% do período':'—')
+    + racKpi('Potencial alto (pSIF)',nAlto.toLocaleString('pt-BR'),'#d97706',total?Math.round(nAlto/total*100)+'% sugerido pelo VBM-PNR-000070':'—')
+    + racKpi('Pendentes de revisão',nPendente.toLocaleString('pt-BR'),'#7c3aed',total?Math.round(nPendente/total*100)+'% ainda não confirmado':'—')
+    + racKpi('RAC mais recorrente',racTop||'—','#16a34a',racTop?racCount[racTop]+' ocorrência(s)':'sem classificação')
     + '</div>';
 
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">'
@@ -11141,7 +11138,7 @@ function renderRac(){
   function racDl(anchor, align, extra){
     return Object.assign({
       display:function(ctx){ return (ctx.dataset.data[ctx.dataIndex]||0) > 0; },
-      anchor:anchor, align:align, offset:4,
+      anchor:anchor, align:align, offset:4, clamp:true,
       color:'#1e293b', backgroundColor:'rgba(255,255,255,.88)', borderRadius:3,
       padding:{top:2,bottom:2,left:4,right:4}, font:{size:9,weight:'700'},
       formatter:function(v){ return v; }
@@ -11242,8 +11239,8 @@ function renderRac(){
     _racCharts.empresa = new Chart(cEmp.getContext('2d'),{
       type:'bar',
       data:{labels:empresaSorted, datasets:[
-        {label:'Classificado em RAC',data:empresaSorted.map(function(e){return empresaStats[e].rac;}),backgroundColor:'rgba(0,126,121,.75)',borderRadius:4,barPercentage:.6,categoryPercentage:.7,datalabels:racDl('center','center')},
-        {label:'Não classificado',data:empresaSorted.map(function(e){return empresaStats[e].semRac;}),backgroundColor:'rgba(175,171,171,.55)',borderRadius:4,barPercentage:.6,categoryPercentage:.7,datalabels:racDl('center','center')}
+        {label:'Classificado em RAC',data:empresaSorted.map(function(e){return empresaStats[e].rac;}),backgroundColor:'rgba(0,126,121,.75)',borderRadius:4,barPercentage:.6,categoryPercentage:.7,datalabels:racDl('start','right')},
+        {label:'Não classificado',data:empresaSorted.map(function(e){return empresaStats[e].semRac;}),backgroundColor:'rgba(175,171,171,.55)',borderRadius:4,barPercentage:.6,categoryPercentage:.7,datalabels:racDl('end','left')}
       ]},
       options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,layout:{padding:{right:30}},
         plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12,usePointStyle:true,pointStyle:'circle'}}},
