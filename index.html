@@ -1444,6 +1444,12 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="modal-milplan-body"></div>
   </div>
 </div>
+<!-- MODAL RAC — por que essa gravidade foi sugerida, com link direto pra página da norma -->
+<div class="modal-overlay hidden" id="modal-rac-motivo">
+  <div class="modal" style="max-width:520px;width:92vw">
+    <div id="modal-rac-motivo-body"></div>
+  </div>
+</div>
 <!-- MODAL PREVIEW DE PDF (Milplan) -->
 <div class="modal-overlay hidden" id="modal-milplan-pdf" style="z-index:1100">
   <div class="modal" style="max-width:920px;width:95vw;height:92vh;padding:14px;display:flex;flex-direction:column">
@@ -10650,6 +10656,15 @@ var RAC_CATALOGO = [
   {cod:'RAC 13', nome:'Abertura de Linhas e Equipamentos', kw:['abertura de linha','flange','tubulacao pressurizada','vaso de pressao','raquete de bloqueio']}
 ];
 var RAC_KW_GRAVE = ['queda','esmagamento','atropelamento','choque eletrico','explosao','soterramento','afogamento','prensamento','colisao','capotamento','arco eletrico','asfixia','eletrocussao','fatalidade','tombamento'];
+// PDFs reais das normas, servidos como arquivo estático (express.static na raiz do repo) —
+// #page=N abre o PDF direto na página certa no visualizador nativo do navegador.
+var RAC_PDF_PNR = '/docs/rac/PNR-000069.pdf';
+var RAC_PDF_VBM = '/docs/rac/VBM-PNR-000070-Anexo01.pdf';
+// Página de cada RAC dentro do PNR-000069 Rev10 (conferido pelo rodapé "X de 85" do próprio PDF).
+var RAC_PDF_PAGINAS = {'RAC 01':5,'RAC 02':13,'RAC 03':19,'RAC 04':28,'RAC 05':34,'RAC 06':39,'RAC 07':44,'RAC 08':50,'RAC 09':57,'RAC 10':64,'RAC 11':71,'RAC 12':75,'RAC 13':79};
+// Item 1.3/1.3.1 do VBM-PNR-000070 Anexo 01 — lógica de decisão e exemplos usados pra definir
+// se um evento tem potencial de lesão grave/fatalidade (pSIF). É daqui que vem RAC_KW_GRAVE.
+var RAC_PDF_VBM_PAGINA_CRITERIO = 4;
 var RAC_COD_ALTO_POTENCIAL = ['RAC 01','RAC 03','RAC 04','RAC 05','RAC 06','RAC 09','RAC 10','RAC 11'];
 // Empresas fiscalizadoras (auditam as outras contratadas) — às vezes quem preenche a planilha
 // deixa o campo "Empresa" com o nome da fiscalizadora em vez da empresa realmente inspecionada,
@@ -10689,23 +10704,53 @@ function racClassificarSeveridade(textoNormalizado){
 // Explica de onde veio a sugestão de gravidade (pra tirar a dúvida de "por que você acha que é
 // potencial alto?") — recalcula em cima do mesmo texto/regra usada no upload, sem precisar
 // guardar o motivo no banco.
+// Retorna {texto, links:[{label,url}]} — o texto explica a sugestão, os links apontam direto
+// pra página do PDF real (PNR-000069 pro RAC, VBM-PNR-000070 Anexo 01 pro critério de gravidade).
 function racMotivoSeveridade(row){
+  var vbmLink = {label:'📄 Ver critério de gravidade no VBM-PNR-000070 — Anexo 01 (pág. '+RAC_PDF_VBM_PAGINA_CRITERIO+')', url:RAC_PDF_VBM+'#page='+RAC_PDF_VBM_PAGINA_CRITERIO};
+  var racCod = racFinalRac(row);
+  var racLink = (racCod && RAC_PDF_PAGINAS[racCod]) ? {label:'📄 Ver '+racCod+' no PNR-000069 (pág. '+RAC_PDF_PAGINAS[racCod]+')', url:RAC_PDF_PNR+'#page='+RAC_PDF_PAGINAS[racCod]} : null;
+
   if(row.severidade_manual){
-    return 'Classificação definida manualmente por '+(row.revisado_por||'um revisor')+', sem regra automática associada.';
+    return {texto:'Classificação definida manualmente por '+(row.revisado_por||'um revisor')+', sem regra automática associada.', links: racLink ? [racLink] : []};
   }
   var texto = racNormalizar((row.titulo||'')+' '+(row.pergunta||'')+' '+(row.observacao||''));
   for(var i=0;i<RAC_KW_GRAVE.length;i++){
     if(texto.indexOf(RAC_KW_GRAVE[i])>=0){
-      return 'Potencial alto porque a observação cita "'+RAC_KW_GRAVE[i]+'", palavra-chave de risco grave (critério de gravidade do VBM-PNR-000070).';
+      return {
+        texto:'Potencial alto porque a observação cita "'+RAC_KW_GRAVE[i]+'", um dos exemplos de evento com potencial de lesão grave/fatalidade (pSIF) do VBM-PNR-000070.',
+        links:[vbmLink].concat(racLink?[racLink]:[])
+      };
     }
   }
   // A categoria do RAC não decide sozinha — é só um contexto pra ajudar na revisão manual.
-  var racCod = racFinalRac(row);
   if(racCod && RAC_COD_ALTO_POTENCIAL.indexOf(racCod)>=0){
-    return 'Baixo potencial pela leitura automática — a observação não cita nenhuma palavra-chave de risco grave. Atenção: '+racCod+' está na lista de categorias de potencial alto do VBM-PNR-000070, mas isso sozinho não basta pra classificar como grave; vale conferir manualmente.';
+    return {
+      texto:'Baixo potencial pela leitura automática — a observação não cita nenhuma palavra-chave de risco grave. Atenção: '+racCod+' está na lista de categorias de potencial alto do VBM-PNR-000070, mas isso sozinho não basta pra classificar como grave; vale conferir manualmente.',
+      links: (racLink?[racLink]:[]).concat([vbmLink])
+    };
   }
-  return 'Baixo potencial: a observação não cita nenhuma palavra-chave de risco grave, nem o RAC está na lista de categorias de potencial alto do VBM-PNR-000070.';
+  return {
+    texto:'Baixo potencial: a observação não cita nenhuma palavra-chave de risco grave, nem o RAC está na lista de categorias de potencial alto do VBM-PNR-000070.',
+    links: racLink ? [racLink] : []
+  };
 }
+function racAbrirMotivo(chave){
+  var r = RAC_DATA.filter(function(x){return x.chave===chave;})[0];
+  if(!r) return;
+  var sev = racFinalSeveridade(r);
+  var m = racMotivoSeveridade(r);
+  var html = '<h3 style="margin-bottom:6px">'+(sev==='pSIF'?'⚠️ Por que Potencial alto (pSIF)?':'Por que Baixo potencial?')+'</h3>'
+    + '<div style="font-size:10.5px;color:#94a3b8;margin-bottom:10px">'+escHtml(racFinalRac(r))+' · '+escHtml(r.empresa||'—')+' · '+(r.data_ocorrencia?r.data_ocorrencia.split('-').reverse().join('/'):'—')+'</div>'
+    + '<p style="font-size:13px;color:#334155;line-height:1.55;margin-bottom:14px">'+escHtml(m.texto)+'</p>'
+    + (m.links.length ? '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">'+m.links.map(function(l){
+        return '<a href="'+l.url+'" target="_blank" rel="noopener" style="font-size:12px;font-weight:700;color:#002F6C;text-decoration:none;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;display:block">'+l.label+' ↗</a>';
+      }).join('')+'</div>' : '')
+    + '<div class="modal-actions"><button class="btn btn-outline" onclick="racFecharMotivo()">Fechar</button></div>';
+  document.getElementById('modal-rac-motivo-body').innerHTML = html;
+  document.getElementById('modal-rac-motivo').classList.remove('hidden');
+}
+function racFecharMotivo(){ document.getElementById('modal-rac-motivo').classList.add('hidden'); }
 // Quando a "Empresa" preenchida é uma fiscalizadora (Progen/AEL), o campo normalmente não é a
 // contratada que cometeu o desvio — o nome dela costuma aparecer citado dentro da observação.
 // Isso é só uma sugestão pra os gráficos de "quem mais aparece"; não altera o dado bruto.
@@ -10994,10 +11039,9 @@ function renderRac(){
   function th(t){ return '<th style="padding:9px 10px;text-align:left;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+t+'</th>'; }
   var rowsHtml = pageRows.map(function(r){
     var sev = racFinalSeveridade(r);
-    var sevMotivo = escHtml(racMotivoSeveridade(r));
-    var sevBadge = sev==='pSIF'
-      ? '<span title="'+sevMotivo+'" style="cursor:help;font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:9px;background:#fef2f2;color:#dc2626">⚠ Potencial alto</span>'
-      : '<span title="'+sevMotivo+'" style="cursor:help;font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:9px;background:#f1f5f9;color:#64748b">Baixo</span>';
+    var sevBadge = '<span onclick="racAbrirMotivo(\''+r.chave+'\')" title="Clique pra ver o porquê, com link pra norma" style="cursor:pointer;font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:9px;text-decoration:underline dotted;text-underline-offset:2px;'
+      + (sev==='pSIF' ? 'background:#fef2f2;color:#dc2626">⚠ Potencial alto' : 'background:#f1f5f9;color:#64748b">Baixo')
+      + '</span>';
     var situ = racSituacao(r);
     var situColor = situ==='Interditado' ? '#dc2626' : (situ.indexOf('não interditado')>=0 ? '#94a3b8' : '#d97706');
     var racSel = '<select onchange="racSetManual(\''+r.chave+'\',\'rac_manual\',this.value||null)" style="font-size:10.5px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;max-width:230px">'
