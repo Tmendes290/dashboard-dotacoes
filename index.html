@@ -10678,7 +10678,8 @@ var RAC_COD_ALTO_POTENCIAL = ['RAC 01','RAC 03','RAC 04','RAC 05','RAC 06','RAC 
 // Empresas fiscalizadoras (auditam as outras contratadas) — às vezes quem preenche a planilha
 // deixa o campo "Empresa" com o nome da fiscalizadora em vez da empresa realmente inspecionada,
 // que aparece citada no texto da observação/pergunta. Ver racEmpresaSugerida().
-var RAC_EMPRESAS_FISCALIZADORAS = ['PROGEN','AEL SERVICOS DE ENGENHARIA E SEGURANCA DO TRABALHO LTDA','AEL SERVICOS DE ENGENHARIA E SEGURANCA DO TRABALHO','AEL','VALE'];
+// Só existem 3 empresas gerenciadoras/fiscalizadoras (confirmado pelo usuário): Vale, Lyon e Progen.
+var RAC_EMPRESAS_FISCALIZADORAS = ['VALE','LYON','PROGEN'];
 // Palavras genéricas demais pra usar sozinhas na hora de achar o nome da empresa citado na
 // observação (ex.: em "REDE MONTAGENS" só "REDE" é distintivo; "MONTAGENS" sozinho daria falso positivo).
 var RAC_EMPRESA_STOPWORDS = ['construtora','engenharia','servicos','servico','ltda','e','de','do','da','dos','das','manutencao','locacoes','seguranca','trabalho','comercio','industria','sa','montagens','equipamentos','participacoes','brasil','solucoes'];
@@ -10771,8 +10772,8 @@ function racAbrirMotivo(chave){
   document.getElementById('modal-rac-motivo').classList.remove('hidden');
 }
 function racFecharMotivo(){ document.getElementById('modal-rac-motivo').classList.add('hidden'); }
-// Quando a "Empresa" preenchida é uma fiscalizadora (Progen/AEL), o campo normalmente não é a
-// contratada que cometeu o desvio — o nome dela costuma aparecer citado dentro da observação.
+// Quando a "Empresa" preenchida é uma gerenciadora (Vale/Lyon/Progen), o campo normalmente não é
+// a contratada que cometeu o desvio — o nome dela costuma aparecer citado dentro da observação.
 // Isso é só uma sugestão pra os gráficos de "quem mais aparece"; não altera o dado bruto.
 function racEmpresaEhFiscalizadora(empresa){
   var n = racNormalizar(empresa);
@@ -11223,8 +11224,8 @@ function renderRac(){
   }
 
   // Gráfico 4 — por empresa (quem mais aparece / quem mais pega RAC classificado)
-  // Usa a empresa "efetiva" (racEmpresaSugerida): quando o campo Empresa é uma fiscalizadora
-  // (Progen/AEL), tenta atribuir à contratada realmente citada na observação.
+  // Usa a empresa "efetiva" (racEmpresaSugerida): quando o campo Empresa é uma gerenciadora
+  // (Vale/Lyon/Progen), tenta atribuir à contratada realmente citada na observação.
   var empresaStats = {};
   filtered.forEach(function(r){
     var emp = racEmpresaSugerida(r, empresaOptsRaw);
