@@ -1597,7 +1597,7 @@ var FPA_FILTERS = {projeto:[], squad:[], lider:[], planejador:[]};
 var FPA_ANO = new Date().getFullYear();
 var FPA_PAGE = 1; // tabela paginada — cada projeto já é 4 linhas, renderizar tudo de uma vez travava o navegador
 var RAC_DATA = []; // linhas cruas da tabela rac_interdicoes
-var RAC_FILTERS = {mes:[], empresa:[], rac:[], severidade:[], revisao:[], gerencia:[]};
+var RAC_FILTERS = {mes:[], empresa:[], rac:[], severidade:[], revisao:[], gerencia:[], inspetor:[]};
 var RAC_PAGE = 1;
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
@@ -10651,6 +10651,10 @@ var RAC_CATALOGO = [
 ];
 var RAC_KW_GRAVE = ['queda','esmagamento','atropelamento','choque eletrico','explosao','soterramento','afogamento','prensamento','colisao','capotamento','arco eletrico','asfixia','eletrocussao','fatalidade','tombamento'];
 var RAC_COD_ALTO_POTENCIAL = ['RAC 01','RAC 03','RAC 04','RAC 05','RAC 06','RAC 09','RAC 10','RAC 11'];
+// Empresas fiscalizadoras (auditam as outras contratadas) — às vezes quem preenche a planilha
+// deixa o campo "Empresa" com o nome da fiscalizadora em vez da empresa realmente inspecionada,
+// que aparece citada no texto da observação/pergunta. Ver racEmpresaSugerida().
+var RAC_EMPRESAS_FISCALIZADORAS = ['PROGEN','AEL SERVICOS DE ENGENHARIA E SEGURANCA DO TRABALHO LTDA','AEL SERVICOS DE ENGENHARIA E SEGURANCA DO TRABALHO','AEL'];
 
 function racNormalizar(txt){
   return String(txt||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
@@ -10678,6 +10682,47 @@ function racClassificarSeveridade(textoNormalizado, racCod){
   for(var i=0;i<RAC_KW_GRAVE.length;i++){ if(textoNormalizado.indexOf(RAC_KW_GRAVE[i])>=0) return 'pSIF'; }
   if(racCod && RAC_COD_ALTO_POTENCIAL.indexOf(racCod)>=0) return 'pSIF';
   return 'baixo';
+}
+// Explica de onde veio a sugestão de gravidade (pra tirar a dúvida de "por que você acha que é
+// potencial alto?") — recalcula em cima do mesmo texto/regra usada no upload, sem precisar
+// guardar o motivo no banco.
+function racMotivoSeveridade(row){
+  var texto = racNormalizar((row.titulo||'')+' '+(row.pergunta||'')+' '+(row.observacao||''));
+  for(var i=0;i<RAC_KW_GRAVE.length;i++){
+    if(texto.indexOf(RAC_KW_GRAVE[i])>=0){
+      return 'Potencial alto porque o texto cita "'+RAC_KW_GRAVE[i]+'", palavra-chave de risco grave (critério de gravidade do VBM-PNR-000070).';
+    }
+  }
+  var racCod = racFinalRac(row);
+  if(racCod && RAC_COD_ALTO_POTENCIAL.indexOf(racCod)>=0){
+    return 'Potencial alto porque foi classificado como '+racCod+', RAC que consta na lista de potencial alto do VBM-PNR-000070 (Anexo 01).';
+  }
+  if(row.severidade_manual){
+    return 'Classificação definida manualmente por '+(row.revisado_por||'um revisor')+', sem regra automática associada.';
+  }
+  return 'Baixo potencial: nenhuma palavra-chave de risco grave nem RAC de potencial alto foi identificado no texto.';
+}
+// Quando a "Empresa" preenchida é uma fiscalizadora (Progen/AEL), o campo normalmente não é a
+// contratada que cometeu o desvio — o nome dela costuma aparecer citado dentro da observação.
+// Isso é só uma sugestão pra os gráficos de "quem mais aparece"; não altera o dado bruto.
+function racEmpresaEhFiscalizadora(empresa){
+  var n = racNormalizar(empresa);
+  if(!n) return false;
+  return RAC_EMPRESAS_FISCALIZADORAS.some(function(f){ return n.indexOf(racNormalizar(f))>=0; });
+}
+function racEmpresasRawList(){
+  return Array.from(new Set(RAC_DATA.map(function(r){return r.empresa||'';}))).filter(Boolean);
+}
+function racEmpresaSugerida(row, empresaOptsRaw){
+  if(!racEmpresaEhFiscalizadora(row.empresa)) return row.empresa || '—';
+  var texto = racNormalizar((row.observacao||'')+' '+(row.pergunta||'')+' '+(row.titulo||''));
+  var opts = empresaOptsRaw || racEmpresasRawList();
+  var achou = opts.filter(function(e){
+    if(!e || racEmpresaEhFiscalizadora(e)) return false;
+    var en = racNormalizar(e);
+    return en.length>3 && texto.indexOf(en)>=0;
+  }).sort(function(a,b){ return racNormalizar(b).length - racNormalizar(a).length; })[0];
+  return achou || row.empresa || '—';
 }
 // Colunas "Hora" do SESuite guardam o dia inteiro como serial fixo (1970-01-01 = 25569)
 // e só a fração decimal importa — é essa fração que vira HH:MM.
@@ -10819,9 +10864,10 @@ async function racMarcarRevisado(chave, val){
   renderRac();
 }
 function racFilteredData(){
+  var empresasRaw = racEmpresasRawList();
   return RAC_DATA.filter(function(r){
     if(RAC_FILTERS.mes.length && RAC_FILTERS.mes.indexOf(racMesLabel(r.data_ocorrencia))<0) return false;
-    if(RAC_FILTERS.empresa.length && RAC_FILTERS.empresa.indexOf(r.empresa||'—')<0) return false;
+    if(RAC_FILTERS.empresa.length && RAC_FILTERS.empresa.indexOf(racEmpresaSugerida(r,empresasRaw))<0) return false;
     if(RAC_FILTERS.rac.length && RAC_FILTERS.rac.indexOf(racFinalRac(r))<0) return false;
     if(RAC_FILTERS.severidade.length){
       var sev = racFinalSeveridade(r)==='pSIF' ? 'Potencial alto (pSIF)' : 'Baixo potencial';
@@ -10832,11 +10878,12 @@ function racFilteredData(){
       if(RAC_FILTERS.revisao.indexOf(st)<0) return false;
     }
     if(RAC_FILTERS.gerencia.length && RAC_FILTERS.gerencia.indexOf(r.unidade_organizacional||'—')<0) return false;
+    if(RAC_FILTERS.inspetor.length && RAC_FILTERS.inspetor.indexOf(r.inspetor||'—')<0) return false;
     return true;
   });
 }
 function racLimparFiltros(){
-  RAC_FILTERS = {mes:[], empresa:[], rac:[], severidade:[], revisao:[], gerencia:[]};
+  RAC_FILTERS = {mes:[], empresa:[], rac:[], severidade:[], revisao:[], gerencia:[], inspetor:[]};
   RAC_PAGE = 1;
   renderRac();
 }
@@ -10885,8 +10932,10 @@ function renderRac(){
     var meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
     return (parseInt(pa[1])*12+meses.indexOf(pa[0])) - (parseInt(pb[1])*12+meses.indexOf(pb[0]));
   });
-  var empresaOpts = Array.from(new Set(RAC_DATA.map(function(r){return r.empresa||'—';}))).sort();
+  var empresaOptsRaw = racEmpresasRawList();
+  var empresaOpts = Array.from(new Set(RAC_DATA.map(function(r){return racEmpresaSugerida(r,empresaOptsRaw);}))).sort();
   var gerenciaOpts = Array.from(new Set(RAC_DATA.map(function(r){return r.unidade_organizacional||'—';}))).filter(Boolean).sort();
+  var inspetorOpts = Array.from(new Set(RAC_DATA.map(function(r){return r.inspetor||'—';}))).filter(Boolean).sort();
   var racOptsCod = RAC_CATALOGO.map(function(c){return c.cod;}).concat(['Não classificado']);
 
   var html = '';
@@ -10906,6 +10955,7 @@ function renderRac(){
     + racMsWrap('ms-rac-rac','RAC',220)
     + racMsWrap('ms-rac-severidade','Gravidade sugerida',170)
     + racMsWrap('ms-rac-revisao','Revisão',130)
+    + racMsWrap('ms-rac-inspetor','Fiscal',180)
     + '<button onclick="racLimparFiltros()" style="padding:8px 14px;border-radius:7px;border:1px solid #cbd5e1;background:#f8fafc;font-size:11.5px;font-weight:700;cursor:pointer;color:#64748b;height:34px">✕ Limpar filtros</button>'
     + '</div>';
 
@@ -10923,6 +10973,7 @@ function renderRac(){
     + '</div>';
   html += '<div style="margin-bottom:16px">' + racChartCard('rac-chart-mes','Evolução mensal por gravidade sugerida',240) + '</div>';
   html += '<div style="margin-bottom:16px">' + racChartCard('rac-chart-empresa','Ocorrências por empresa — quem mais aparece em RAC',280) + '</div>';
+  html += '<div style="margin-bottom:16px">' + racChartCard('rac-chart-inspetor','Ocorrências por fiscal — quem mais inspeciona',280) + '</div>';
 
   // ── Tabela ──
   var PAGE_SIZE = 15;
@@ -10932,9 +10983,10 @@ function renderRac(){
   function th(t){ return '<th style="padding:9px 10px;text-align:left;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+t+'</th>'; }
   var rowsHtml = pageRows.map(function(r){
     var sev = racFinalSeveridade(r);
+    var sevMotivo = escHtml(racMotivoSeveridade(r));
     var sevBadge = sev==='pSIF'
-      ? '<span style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:9px;background:#fef2f2;color:#dc2626">⚠ Potencial alto</span>'
-      : '<span style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:9px;background:#f1f5f9;color:#64748b">Baixo</span>';
+      ? '<span title="'+sevMotivo+'" style="cursor:help;font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:9px;background:#fef2f2;color:#dc2626">⚠ Potencial alto</span>'
+      : '<span title="'+sevMotivo+'" style="cursor:help;font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:9px;background:#f1f5f9;color:#64748b">Baixo</span>';
     var situ = racSituacao(r);
     var situColor = situ==='Interditado' ? '#dc2626' : (situ.indexOf('não interditado')>=0 ? '#94a3b8' : '#d97706');
     var racSel = '<select onchange="racSetManual(\''+r.chave+'\',\'rac_manual\',this.value||null)" style="font-size:10.5px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;max-width:230px">'
@@ -10950,6 +11002,7 @@ function renderRac(){
     return '<tr style="border-top:1px solid #f1f5f9">'
       + '<td style="padding:8px 10px;font-size:11px;white-space:nowrap;font-family:\'Share Tech Mono\',monospace">'+(r.data_ocorrencia?r.data_ocorrencia.split('-').reverse().join('/'):'—')+' '+(r.hora_ocorrencia||'')+'</td>'
       + '<td style="padding:8px 10px;font-size:11px">'+escHtml(r.empresa||'—')+'</td>'
+      + '<td style="padding:8px 10px;font-size:11px;color:#64748b">'+escHtml(r.inspetor||'—')+'</td>'
       + '<td style="padding:8px 10px;font-size:11px;color:#64748b">'+escHtml(r.localizacao||'—')+'</td>'
       + '<td style="padding:8px 10px">'+racSel+'</td>'
       + '<td style="padding:8px 10px">'+sevSel+' '+sevBadge+'</td>'
@@ -10963,11 +11016,11 @@ function renderRac(){
 
   html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04)">'
     + '<div style="overflow-x:auto">'
-    + '<table style="width:100%;border-collapse:collapse;min-width:920px">'
+    + '<table style="width:100%;border-collapse:collapse;min-width:1060px">'
     + '<thead><tr style="background:#f8fafc">'
-      + th('Data / Hora') + th('Empresa') + th('Localização') + th('RAC') + th('Gravidade sugerida') + th('Situação') + th('Observação') + th('Revisado')
+      + th('Data / Hora') + th('Empresa') + th('Fiscal') + th('Localização') + th('RAC') + th('Gravidade sugerida') + th('Situação') + th('Observação') + th('Revisado')
     + '</tr></thead>'
-    + '<tbody>'+(rowsHtml||'<tr><td colspan="8" style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">Nenhum registro para os filtros atuais.</td></tr>')+'</tbody>'
+    + '<tbody>'+(rowsHtml||'<tr><td colspan="9" style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">Nenhum registro para os filtros atuais.</td></tr>')+'</tbody>'
     + '</table></div>'
     + '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-top:1px solid #f1f5f9;font-size:11px;color:#64748b">'
       + '<span>'+filtered.length+' registro(s) · página '+RAC_PAGE+' de '+totalPages+'</span>'
@@ -10986,12 +11039,14 @@ function renderRac(){
   buildMsDrop('ms-rac-rac', racOptsCod, RAC_FILTERS.rac, null);
   buildMsDrop('ms-rac-severidade', ['Potencial alto (pSIF)','Baixo potencial'], RAC_FILTERS.severidade, null);
   buildMsDrop('ms-rac-revisao', ['Revisado','Pendente'], RAC_FILTERS.revisao, null);
+  buildMsDrop('ms-rac-inspetor', inspetorOpts, RAC_FILTERS.inspetor, null);
   updateMsLabel('ms-rac-mes', RAC_FILTERS.mes);
   updateMsLabel('ms-rac-gerencia', RAC_FILTERS.gerencia);
   updateMsLabel('ms-rac-empresa', RAC_FILTERS.empresa);
   updateMsLabel('ms-rac-rac', RAC_FILTERS.rac);
   updateMsLabel('ms-rac-severidade', RAC_FILTERS.severidade);
   updateMsLabel('ms-rac-revisao', RAC_FILTERS.revisao);
+  updateMsLabel('ms-rac-inspetor', RAC_FILTERS.inspetor);
 
   // Mesma paleta e o mesmo estilo de rótulo (pill branco via chartjs-plugin-datalabels,
   // já registrado globalmente) da Curva S do FP&A — teal / azul / cinza, sem vermelho
@@ -11032,7 +11087,9 @@ function renderRac(){
   // Gráfico 2 — por RAC
   var cRac = document.getElementById('rac-chart-rac');
   if(cRac){
-    var racLabels = racOptsCod;
+    // só entram códigos com pelo menos 1 ocorrência no período filtrado — RAC sem nenhum
+    // registro só polui o gráfico (pedido do usuário). O filtro/dropdown continua com a lista cheia.
+    var racLabels = racOptsCod.filter(function(cod){ return (racCount[cod]||0) > 0; });
     var racVals = racLabels.map(function(cod){return racCount[cod]||0;});
     if(_racCharts.rac) _racCharts.rac.destroy();
     _racCharts.rac = new Chart(cRac.getContext('2d'),{
@@ -11067,15 +11124,24 @@ function renderRac(){
       ]},
       options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},
         plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12,usePointStyle:true,pointStyle:'circle'}}},
-        scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:11}}},y:{stacked:true,display:false,beginAtZero:true}}
+        scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:11}}},y:{stacked:true,display:false,beginAtZero:true}},
+        onClick:function(evt,elements){
+          if(!elements.length) return;
+          var el = elements[0];
+          RAC_FILTERS.mes = [mesesUnicos[el.index]];
+          RAC_FILTERS.severidade = [el.datasetIndex===0 ? 'Potencial alto (pSIF)' : 'Baixo potencial'];
+          RAC_PAGE = 1; renderRac();
+        }
       }
     });
   }
 
   // Gráfico 4 — por empresa (quem mais aparece / quem mais pega RAC classificado)
+  // Usa a empresa "efetiva" (racEmpresaSugerida): quando o campo Empresa é uma fiscalizadora
+  // (Progen/AEL), tenta atribuir à contratada realmente citada na observação.
   var empresaStats = {};
   filtered.forEach(function(r){
-    var emp = r.empresa || '—';
+    var emp = racEmpresaSugerida(r, empresaOptsRaw);
     if(!empresaStats[emp]) empresaStats[emp] = {rac:0, semRac:0};
     if(racFinalRac(r)!=='Não classificado') empresaStats[emp].rac++; else empresaStats[emp].semRac++;
   });
@@ -11098,6 +11164,31 @@ function renderRac(){
         onClick:function(evt,elements){
           if(!elements.length) return;
           RAC_FILTERS.empresa=[empresaSorted[elements[0].index]]; RAC_PAGE=1; renderRac();
+        }
+      }
+    });
+  }
+
+  // Gráfico 5 — por fiscal (quem mais inspeciona)
+  var inspetorCount = {};
+  filtered.forEach(function(r){ var i = r.inspetor || '—'; inspetorCount[i] = (inspetorCount[i]||0) + 1; });
+  var inspetorSorted = Object.keys(inspetorCount).filter(function(i){return i!=='—';}).sort(function(a,b){
+    return inspetorCount[b]-inspetorCount[a];
+  }).slice(0,12);
+  var cInsp = document.getElementById('rac-chart-inspetor');
+  if(cInsp){
+    if(_racCharts.inspetor) _racCharts.inspetor.destroy();
+    _racCharts.inspetor = new Chart(cInsp.getContext('2d'),{
+      type:'bar',
+      data:{labels:inspetorSorted, datasets:[
+        {label:'Ocorrências registradas',data:inspetorSorted.map(function(i){return inspetorCount[i];}),backgroundColor:'rgba(0,47,108,.65)',borderRadius:4,barPercentage:.6,categoryPercentage:.7,datalabels:racDl('end','right')}
+      ]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,layout:{padding:{right:30}},
+        plugins:{legend:{display:false}},
+        scales:{x:{display:false,beginAtZero:true},y:{ticks:{font:{size:10.5}},grid:{display:false}}},
+        onClick:function(evt,elements){
+          if(!elements.length) return;
+          RAC_FILTERS.inspetor=[inspetorSorted[elements[0].index]]; RAC_PAGE=1; renderRac();
         }
       }
     });
