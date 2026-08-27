@@ -10665,11 +10665,26 @@ var RAC_PDF_PAGINAS = {'RAC 01':5,'RAC 02':13,'RAC 03':19,'RAC 04':28,'RAC 05':3
 // Item 1.3/1.3.1 do VBM-PNR-000070 Anexo 01 — lógica de decisão e exemplos usados pra definir
 // se um evento tem potencial de lesão grave/fatalidade (pSIF). É daqui que vem RAC_KW_GRAVE.
 var RAC_PDF_VBM_PAGINA_CRITERIO = 4;
+// Visualizador pdf.js embutido no site (docs/rac/pdfjs) — ao contrário do leitor nativo do
+// navegador, ele aceita abrir já com uma palavra buscada e grifada em amarelo na página
+// (#page=N&search=palavra&phrase=true), tipo um Ctrl+F automático.
+var RAC_PDF_VIEWER = '/docs/rac/pdfjs/web/viewer.html';
+function racPdfLink(fileUrl, page, searchTerm){
+  var hash = 'page='+page;
+  if(searchTerm){ hash += '&search='+encodeURIComponent(searchTerm)+'&phrase=true'; }
+  return RAC_PDF_VIEWER+'?file='+encodeURIComponent(fileUrl)+'#'+hash;
+}
 var RAC_COD_ALTO_POTENCIAL = ['RAC 01','RAC 03','RAC 04','RAC 05','RAC 06','RAC 09','RAC 10','RAC 11'];
 // Empresas fiscalizadoras (auditam as outras contratadas) — às vezes quem preenche a planilha
 // deixa o campo "Empresa" com o nome da fiscalizadora em vez da empresa realmente inspecionada,
 // que aparece citada no texto da observação/pergunta. Ver racEmpresaSugerida().
-var RAC_EMPRESAS_FISCALIZADORAS = ['PROGEN','AEL SERVICOS DE ENGENHARIA E SEGURANCA DO TRABALHO LTDA','AEL SERVICOS DE ENGENHARIA E SEGURANCA DO TRABALHO','AEL'];
+var RAC_EMPRESAS_FISCALIZADORAS = ['PROGEN','AEL SERVICOS DE ENGENHARIA E SEGURANCA DO TRABALHO LTDA','AEL SERVICOS DE ENGENHARIA E SEGURANCA DO TRABALHO','AEL','VALE'];
+// Palavras genéricas demais pra usar sozinhas na hora de achar o nome da empresa citado na
+// observação (ex.: em "REDE MONTAGENS" só "REDE" é distintivo; "MONTAGENS" sozinho daria falso positivo).
+var RAC_EMPRESA_STOPWORDS = ['construtora','engenharia','servicos','servico','ltda','e','de','do','da','dos','das','manutencao','locacoes','seguranca','trabalho','comercio','industria','sa','montagens','equipamentos','participacoes','brasil','solucoes'];
+function racEmpresaTokens(nomeEmpresa){
+  return racNormalizar(nomeEmpresa).split(' ').filter(function(w){ return w.length>=3 && RAC_EMPRESA_STOPWORDS.indexOf(w)<0; });
+}
 
 function racNormalizar(txt){
   return String(txt||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
@@ -10707,9 +10722,12 @@ function racClassificarSeveridade(textoNormalizado){
 // Retorna {texto, links:[{label,url}]} — o texto explica a sugestão, os links apontam direto
 // pra página do PDF real (PNR-000069 pro RAC, VBM-PNR-000070 Anexo 01 pro critério de gravidade).
 function racMotivoSeveridade(row){
-  var vbmLink = {label:'📄 Ver critério de gravidade no VBM-PNR-000070 — Anexo 01 (pág. '+RAC_PDF_VBM_PAGINA_CRITERIO+')', url:RAC_PDF_VBM+'#page='+RAC_PDF_VBM_PAGINA_CRITERIO};
   var racCod = racFinalRac(row);
-  var racLink = (racCod && RAC_PDF_PAGINAS[racCod]) ? {label:'📄 Ver '+racCod+' no PNR-000069 (pág. '+RAC_PDF_PAGINAS[racCod]+')', url:RAC_PDF_PNR+'#page='+RAC_PDF_PAGINAS[racCod]} : null;
+  // Link pro RAC: busca o próprio código ("RAC 01") na página, grifando o título da seção.
+  var racLink = (racCod && RAC_PDF_PAGINAS[racCod]) ? {label:'📄 Ver '+racCod+' grifado no PNR-000069 (pág. '+RAC_PDF_PAGINAS[racCod]+')', url:racPdfLink(RAC_PDF_PNR, RAC_PDF_PAGINAS[racCod], racCod)} : null;
+  // Link pro critério de gravidade — sem palavra-chave específica ainda, grifa "SIF" (o termo
+  // central do critério de potencial de lesão grave/fatalidade).
+  var vbmLinkGenerico = {label:'📄 Ver critério de gravidade no VBM-PNR-000070 — Anexo 01 (pág. '+RAC_PDF_VBM_PAGINA_CRITERIO+')', url:racPdfLink(RAC_PDF_VBM, RAC_PDF_VBM_PAGINA_CRITERIO, 'SIF')};
 
   if(row.severidade_manual){
     return {texto:'Classificação definida manualmente por '+(row.revisado_por||'um revisor')+', sem regra automática associada.', links: racLink ? [racLink] : []};
@@ -10717,9 +10735,11 @@ function racMotivoSeveridade(row){
   var texto = racNormalizar((row.titulo||'')+' '+(row.pergunta||'')+' '+(row.observacao||''));
   for(var i=0;i<RAC_KW_GRAVE.length;i++){
     if(texto.indexOf(RAC_KW_GRAVE[i])>=0){
+      var kw = RAC_KW_GRAVE[i];
+      var vbmLinkKw = {label:'📄 Ver "'+kw+'" grifado no VBM-PNR-000070 — Anexo 01 (pág. '+RAC_PDF_VBM_PAGINA_CRITERIO+')', url:racPdfLink(RAC_PDF_VBM, RAC_PDF_VBM_PAGINA_CRITERIO, kw)};
       return {
-        texto:'Potencial alto porque a observação cita "'+RAC_KW_GRAVE[i]+'", um dos exemplos de evento com potencial de lesão grave/fatalidade (pSIF) do VBM-PNR-000070.',
-        links:[vbmLink].concat(racLink?[racLink]:[])
+        texto:'Potencial alto porque a observação cita "'+kw+'", um dos exemplos de evento com potencial de lesão grave/fatalidade (pSIF) do VBM-PNR-000070.',
+        links:[vbmLinkKw].concat(racLink?[racLink]:[])
       };
     }
   }
@@ -10727,7 +10747,7 @@ function racMotivoSeveridade(row){
   if(racCod && RAC_COD_ALTO_POTENCIAL.indexOf(racCod)>=0){
     return {
       texto:'Baixo potencial pela leitura automática — a observação não cita nenhuma palavra-chave de risco grave. Atenção: '+racCod+' está na lista de categorias de potencial alto do VBM-PNR-000070, mas isso sozinho não basta pra classificar como grave; vale conferir manualmente.',
-      links: (racLink?[racLink]:[]).concat([vbmLink])
+      links: (racLink?[racLink]:[]).concat([vbmLinkGenerico])
     };
   }
   return {
@@ -10765,13 +10785,23 @@ function racEmpresasRawList(){
 function racEmpresaSugerida(row, empresaOptsRaw){
   if(!racEmpresaEhFiscalizadora(row.empresa)) return row.empresa || '—';
   var texto = racNormalizar((row.observacao||'')+' '+(row.pergunta||'')+' '+(row.titulo||''));
-  var opts = empresaOptsRaw || racEmpresasRawList();
-  var achou = opts.filter(function(e){
-    if(!e || racEmpresaEhFiscalizadora(e)) return false;
+  var opts = (empresaOptsRaw || racEmpresasRawList()).filter(function(e){ return e && !racEmpresaEhFiscalizadora(e); });
+  // 1) nome completo da empresa citado no texto (mais confiável)
+  var porNomeCompleto = opts.filter(function(e){
     var en = racNormalizar(e);
     return en.length>3 && texto.indexOf(en)>=0;
   }).sort(function(a,b){ return racNormalizar(b).length - racNormalizar(a).length; })[0];
-  return achou || row.empresa || '—';
+  if(porNomeCompleto) return porNomeCompleto;
+  // 2) planilha às vezes só cita a forma curta ("a Rede" em vez de "Rede Montagens Ltda") —
+  // procura um token distintivo do nome como palavra inteira no texto.
+  var porToken = null, melhorTokenLen = 0;
+  opts.forEach(function(e){
+    racEmpresaTokens(e).forEach(function(tok){
+      var re = new RegExp('\\b'+tok.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b');
+      if(tok.length>melhorTokenLen && re.test(texto)){ porToken = e; melhorTokenLen = tok.length; }
+    });
+  });
+  return porToken || row.empresa || '—';
 }
 // Colunas "Hora" do SESuite guardam o dia inteiro como serial fixo (1970-01-01 = 25569)
 // e só a fração decimal importa — é essa fração que vira HH:MM.
@@ -11061,8 +11091,9 @@ function renderRac(){
       + '<td style="padding:8px 10px;font-size:11px;color:#64748b">'+escHtml(r.localizacao||'—')+'</td>'
       + '<td style="padding:8px 10px">'+racSel+'</td>'
       + '<td style="padding:8px 10px">'+sevSel+' '+sevBadge+'</td>'
+      + '<td style="padding:8px 10px;font-size:10.5px;color:#334155;max-width:220px">'+escHtml(r.pergunta||'—')+'</td>'
       + '<td style="padding:8px 10px;font-size:10.5px;font-weight:700;color:'+situColor+'">'+situ+'</td>'
-      + '<td style="padding:8px 10px;font-size:10.5px;color:#334155;max-width:320px">'+escHtml(r.observacao||r.pergunta||'—')+'</td>'
+      + '<td style="padding:8px 10px;font-size:10.5px;color:#334155;max-width:320px">'+escHtml(r.observacao||'—')+'</td>'
       + '<td style="padding:8px 10px;text-align:center">'
         + '<input type="checkbox" '+(r.revisado?'checked':'')+' onchange="racMarcarRevisado(\''+r.chave+'\',this.checked)" style="accent-color:#16a34a;cursor:pointer" title="Marcar como revisado por uma pessoa">'
       + '</td>'
@@ -11071,11 +11102,11 @@ function renderRac(){
 
   html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04)">'
     + '<div style="overflow-x:auto">'
-    + '<table style="width:100%;border-collapse:collapse;min-width:1060px">'
+    + '<table style="width:100%;border-collapse:collapse;min-width:1220px">'
     + '<thead><tr style="background:#f8fafc">'
-      + th('Data / Hora') + th('Empresa') + th('Fiscal') + th('Localização') + th('RAC') + th('Gravidade sugerida') + th('Situação') + th('Observação') + th('Revisado')
+      + th('Data / Hora') + th('Empresa') + th('Fiscal') + th('Localização') + th('RAC') + th('Gravidade sugerida') + th('Pergunta') + th('Situação') + th('Observação') + th('Revisado')
     + '</tr></thead>'
-    + '<tbody>'+(rowsHtml||'<tr><td colspan="9" style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">Nenhum registro para os filtros atuais.</td></tr>')+'</tbody>'
+    + '<tbody>'+(rowsHtml||'<tr><td colspan="10" style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">Nenhum registro para os filtros atuais.</td></tr>')+'</tbody>'
     + '</table></div>'
     + '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-top:1px solid #f1f5f9;font-size:11px;color:#64748b">'
       + '<span>'+filtered.length+' registro(s) · página '+RAC_PAGE+' de '+totalPages+'</span>'
