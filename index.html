@@ -1078,6 +1078,9 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div class="sb-nav-sec">Fiscalização</div>
     <div class="sb-item" data-view="improdutividade" data-label="Improdutividade"><span class="ico">⏱</span><span class="sb-label">Produtividade</span></div>
     <div class="sb-item" data-view="indice-produtividade" data-label="Índice de Produtividade"><span class="ico">📐</span><span class="sb-label">Índice de Produtividade</span></div>
+    <!-- SEGURANÇA -->
+    <div class="sb-nav-sec">Segurança</div>
+    <div class="sb-item" data-view="rac" data-label="Interdições RAC"><span class="ico">🦺</span><span class="sb-label">Interdições RAC</span></div>
     <!-- PLANEJAMENTO (admin only) -->
     <div class="sb-nav-sec">Planejamento</div>
     <div class="sb-item" data-view="histograma" data-label="Histograma CTT"><span class="ico">📈</span><span class="sb-label">Histograma CTT</span></div>
@@ -1389,6 +1392,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="v-milplan" class="hidden"></div>
     <div id="v-pipe" class="hidden"></div>
     <div id="v-fpa" class="hidden"></div>
+    <div id="v-rac" class="hidden"></div>
     <div id="v-improdutividade" class="hidden"></div>
     <div id="v-indice-produtividade" class="hidden"></div>
     <div id="v-produtividade-rev2" class="hidden"></div>
@@ -1592,6 +1596,9 @@ var FPA_OBS = {}; // pep -> {texto, atualizado_por, atualizado_em} (carregado do
 var FPA_FILTERS = {projeto:[], squad:[], lider:[], planejador:[]};
 var FPA_ANO = new Date().getFullYear();
 var FPA_PAGE = 1; // tabela paginada — cada projeto já é 4 linhas, renderizar tudo de uma vez travava o navegador
+var RAC_DATA = []; // linhas cruas da tabela rac_interdicoes
+var RAC_FILTERS = {mes:[], empresa:[], rac:[], severidade:[], revisao:[]};
+var RAC_PAGE = 1;
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
 var MAT_PAGE = 1;
@@ -1737,6 +1744,13 @@ async function loadFromSupabase(){
         const {data:fobs,error:e8b}=await supa.from('fpa_observacoes').select('*');
         if(!e8b&&fobs){FPA_OBS={};fobs.forEach(function(r){FPA_OBS[r.pep]={texto:r.texto||'',atualizado_por:r.atualizado_por||'',atualizado_em:r.atualizado_em||''};});}
       } catch(e8c){console.warn('[Sync] fpa_observacoes:',e8c);}
+    })(),
+
+    // RAC / Interdições
+    (async function(){
+      try {
+        RAC_DATA = await racLoadAll();
+      } catch(e8d){console.warn('[Sync] rac_interdicoes:',e8d);}
     })(),
 
     // CJI3
@@ -2447,7 +2461,8 @@ const VIEW_META={
   'produtividade-rev2':{title:'Produtividade REV 02',sub:'Visual em teste (admin) — mesmo dado, novo design'},
   usuarios:{title:'Usuários',sub:'Gestão de acesso e permissões da equipe'},
   milplan:{title:'SS Milplan',sub:'Solicitações de Serviço enviadas à Milplan Engenharia'},
-  pipe:{title:'Pipeline de Materiais',sub:'Engenharia → Cotação → RC → Aprovação → Pedido'}
+  pipe:{title:'Pipeline de Materiais',sub:'Engenharia → Cotação → RC → Aprovação → Pedido'},
+  rac:{title:'Interdições RAC',sub:'Interdições e desvios de segurança — horário, RAC (PNR-000069) e gravidade (VBM-PNR-000070)'}
 };
 function pdfAction(){
   if(currentView==='velocidade'){
@@ -2475,14 +2490,14 @@ function _syncBnav(id){
 function setView(id){
   currentView=id;
   _syncBnav(id);
-  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-fpa','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma','v-milplan','v-pipe'].forEach(v=>document.getElementById(v).classList.add('hidden'));
+  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-fpa','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma','v-milplan','v-pipe','v-rac'].forEach(v=>document.getElementById(v).classList.add('hidden'));
   document.getElementById('v-'+id).classList.remove('hidden');
   // Lazy-load histograma iframe on first visit
   if(id==='histograma'){
     const fr=document.getElementById('histograma-frame');
     if(!fr.src||fr.src==='about:blank')fr.src='/histograma-eletro.html?embed=1';
   }
-  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','fpa','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios','milplan','pipe'].includes(id));
+  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','fpa','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios','milplan','pipe','rac'].includes(id));
   if(id==='produtividade-rev2'){
     var _mRev2=VIEW_META['produtividade-rev2'];
     var _ptRev2=document.getElementById('page-title');if(_ptRev2)_ptRev2.textContent=_mRev2.title;
@@ -2552,6 +2567,7 @@ function _renderNow(){
   if(currentView==='milplan') renderMilplan();
   if(currentView==='pipe') renderPipe();
   if(currentView==='cji3') renderCji3();
+  if(currentView==='rac') renderRac();
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -4541,7 +4557,7 @@ function updateUserBadge(){
   document.body.classList.toggle("is-lider", isLider);
   var _perms = (CURRENT_PERFIL.permissoes && CURRENT_PERFIL.permissoes.length) ? CURRENT_PERFIL.permissoes : ['overview'];
   if(!isAdmin){
-    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','fpa','velocidade','cji3','improdutividade','indice-produtividade','histograma','milplan','pipe'];
+    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','fpa','velocidade','cji3','improdutividade','indice-produtividade','histograma','milplan','pipe','rac'];
     document.querySelectorAll('.sb-nav .sb-item').forEach(function(item){
       if(item.classList.contains('admin-only')) return;
       var v=item.dataset.view; if(!v||_permViews.indexOf(v)<0) return;
@@ -4884,6 +4900,13 @@ function onMsChange(id){
     FPA_FILTERS[fpaKey] = selected;
     FPA_PAGE = 1;
     if(currentView === 'fpa') renderFpa();
+    return;
+  }
+  if(id.startsWith('ms-rac-')){
+    var racKey = id.replace('ms-rac-','');
+    RAC_FILTERS[racKey] = selected;
+    RAC_PAGE = 1;
+    if(currentView === 'rac') renderRac();
     return;
   }
   if(id.startsWith('ms-usr-')){
@@ -6591,7 +6614,8 @@ function renderUsuariosHTML(el, usuarios, bloqueados){
         {v:'fpa',l:'FP&A'},
         {v:'improdutividade',l:'Produtividade'},{v:'indice-produtividade',l:'Índice de Produtividade'},
         {v:'velocidade',l:'Telemetria'},{v:'cji3',l:'CJI3 Tabela'},{v:'histograma',l:'Histograma CTT'},
-        {v:'milplan',l:'SS Milplan'},{v:'pipe',l:'Pipeline de Materiais'}
+        {v:'milplan',l:'SS Milplan'},{v:'pipe',l:'Pipeline de Materiais'},
+        {v:'rac',l:'Interdições RAC'}
       ];
       var _uPerms = u.permissoes || ['overview'];
       html += '<div style="margin-top:10px;border-top:1px solid #f1f5f9;padding-top:10px">';
@@ -10601,6 +10625,421 @@ function _matInitTopScroll(){
   var syncing = false;
   top.onscroll = function(){ if(syncing) return; syncing=true; main.scrollLeft = top.scrollLeft; syncing=false; };
   main.onscroll = function(){ if(syncing) return; syncing=true; top.scrollLeft = main.scrollLeft; syncing=false; };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RAC / INTERDIÇÕES — classificação por RAC (PNR-000069) e gravidade
+// (VBM-PNR-000070 Anexo 01), a partir da planilha "Interações" do SESuite.
+// A classificação automática é só uma sugestão por palavra-chave — sempre
+// fica sujeita a confirmação/override manual (rac_manual/severidade_manual
+// nunca são sobrescritas por um novo upload, ver _sql_rac_interdicoes.sql).
+// ══════════════════════════════════════════════════════════════════
+var RAC_CATALOGO = [
+  {cod:'RAC 01', nome:'Trabalhos em Altura', kw:['altura','andaime','cinturao de seguranca','cinto de seguranca tipo paraquedista','paraquedista','cesto aereo','cesto acoplado','cesto suspenso','plataforma de trabalho aereo','guarda-corpo','guarda corpo','trava queda','talabarte','ponto de ancoragem','linha de vida','queda de altura','vao aberto','vaos abertos','alcapao','passadico']},
+  {cod:'RAC 02', nome:'Veículos Automotores Leves', kw:['microonibus','micro-onibus','onibus','carta de sessao','carta de cessao','veiculo leve','veiculos leves','pick-up','picape','minivan','cinto de seguranca 3 pontos']},
+  {cod:'RAC 03', nome:'Operação de Equipamentos Móveis', kw:['equipamento movel','caminhao','caminhoes','trator','tratores','escavadeira','pa carregadeira','motonivelador','rolo compactador','retroescavadeira','perfuratriz','carreta prancha','manipulador de pneus','munck','caminhao pipa','mini carregadeira','operador de maquina','freio motor','caixa de cambio']},
+  {cod:'RAC 04', nome:'Bloqueio, Identificação e Zero Energia', kw:['bloqueio de energia','cadeado de bloqueio','etiqueta de bloqueio','energia zero','loto ','desenergiza','matriz de bloqueio']},
+  {cod:'RAC 05', nome:'Içamento de Carga', kw:['icamento','guindaste','ponte rolante','talha eletrica','cinta de icamento','manilha','guindauto','rigging','monovia','porta-carga','plano de rigging']},
+  {cod:'RAC 06', nome:'Espaço Confinado', kw:['espaco confinado','atmosfera perigosa','entrada em espaco confinado','oxi explosimetro','atmosfera ipvs']},
+  {cod:'RAC 07', nome:'Proteção de Máquinas', kw:['protecao de maquina','sem protecao mecanica','partes moveis desprotegidas','engrenagem exposta','guarda de maquina']},
+  {cod:'RAC 08', nome:'Atividades no Terreno', kw:['talude','escavacao','geotecnia','estabilidade do solo','desmonte de rocha','ruptura de terreno','trincheira']},
+  {cod:'RAC 09', nome:'Explosivos', kw:['explosivo','detonacao','paiol','fogo falhado','anfo ','desmonte com explosivo']},
+  {cod:'RAC 10', nome:'Trabalhos em Eletricidade', kw:['eletric','painel eletrico','quadro eletrico','choque eletrico','energizado','subestacao','cubiculo']},
+  {cod:'RAC 11', nome:'Metal Líquido', kw:['metal liquido','escoria liquida','convertedor','granulador de escoria']},
+  {cod:'RAC 12', nome:'Trabalho a Quente', kw:['trabalho a quente','solda ','soldagem','oxicorte','esmerilhamento','goivagem','macarico','maçarico']},
+  {cod:'RAC 13', nome:'Abertura de Linhas e Equipamentos', kw:['abertura de linha','flange','tubulacao pressurizada','vaso de pressao','raquete de bloqueio']}
+];
+var RAC_KW_GRAVE = ['queda','esmagamento','atropelamento','choque eletrico','explosao','soterramento','afogamento','prensamento','colisao','capotamento','arco eletrico','asfixia','eletrocussao','fatalidade','tombamento'];
+var RAC_COD_ALTO_POTENCIAL = ['RAC 01','RAC 03','RAC 04','RAC 05','RAC 06','RAC 09','RAC 10','RAC 11'];
+
+function racNormalizar(txt){
+  return String(txt||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
+}
+function racClassificar(textoOriginal){
+  var t = racNormalizar(textoOriginal);
+  var m = t.match(/\brac\s*-?\s*0?(\d{1,2})\b/);
+  if(m){
+    var n = parseInt(m[1],10);
+    if(n>=1 && n<=13){
+      var cod = 'RAC '+(n<10?'0'+n:n);
+      var cat0 = RAC_CATALOGO.filter(function(c){return c.cod===cod;})[0];
+      return {cod:cod, nome:cat0?cat0.nome:'', conf:'alta'};
+    }
+  }
+  for(var i=0;i<RAC_CATALOGO.length;i++){
+    var cat = RAC_CATALOGO[i];
+    for(var j=0;j<cat.kw.length;j++){
+      if(t.indexOf(cat.kw[j])>=0) return {cod:cat.cod, nome:cat.nome, conf:'media'};
+    }
+  }
+  return null;
+}
+function racClassificarSeveridade(textoNormalizado, racCod){
+  for(var i=0;i<RAC_KW_GRAVE.length;i++){ if(textoNormalizado.indexOf(RAC_KW_GRAVE[i])>=0) return 'pSIF'; }
+  if(racCod && RAC_COD_ALTO_POTENCIAL.indexOf(racCod)>=0) return 'pSIF';
+  return 'baixo';
+}
+// Colunas "Hora" do SESuite guardam o dia inteiro como serial fixo (1970-01-01 = 25569)
+// e só a fração decimal importa — é essa fração que vira HH:MM.
+function racExcelTimeToHHMM(value){
+  var n = Number(value);
+  if(isNaN(n)) return '';
+  var frac = n - Math.floor(n);
+  var totalMin = Math.round(frac*24*60);
+  var hh = Math.floor(totalMin/60)%24, mm = totalMin%60;
+  return (hh<10?'0'+hh:hh)+':'+(mm<10?'0'+mm:mm);
+}
+function racExcelDateToISO(serial){
+  var n = Number(serial);
+  if(isNaN(n) || n<=0) return null;
+  var d = new Date(Math.round((n-25569)*86400*1000));
+  if(isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0,10);
+}
+async function racLoadAll(){
+  var data=[], PAGE=1000, from=0;
+  while(true){
+    var page = await supa.from('rac_interdicoes').select('*').order('data_ocorrencia',{ascending:true}).range(from, from+PAGE-1);
+    if(page.error){ console.warn('[racLoadAll]', page.error); break; }
+    if(!page.data || !page.data.length) break;
+    data = data.concat(page.data);
+    if(page.data.length < PAGE) break;
+    from += PAGE;
+  }
+  return data;
+}
+function racHeaderIdx(header){
+  var idx={};
+  (header||[]).forEach(function(h,i){ idx[String(h||'').trim()] = i; });
+  return idx;
+}
+async function racHandleUpload(file){
+  if(!file) return;
+  if(typeof XLSX==='undefined'){ toast('Aguardando biblioteca XLSX carregar...','red'); return; }
+  var reader = new FileReader();
+  reader.onload = async function(e){
+    try{
+      var wb = XLSX.read(e.target.result,{type:'array'});
+      var allRows = [];
+      wb.SheetNames.forEach(function(sheetName){
+        var sheet = wb.Sheets[sheetName];
+        if(!sheet) return;
+        var data = XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true});
+        if(!data.length) return;
+        var idx = racHeaderIdx(data[0]);
+        if(idx['Número da Inspeção / Auditoria']===undefined) return; // aba fora do formato esperado
+        var g = function(row,name){ var i=idx[name]; return (i===undefined)?'':row[i]; };
+        for(var r=1;r<data.length;r++){
+          var row = data[r];
+          if(!row || !row.length) continue;
+          var numInsp = String(g(row,'Número da Inspeção / Auditoria')||'').trim();
+          var numPerg = String(g(row,'Número da Pergunta')||'').trim();
+          if(!numInsp || !numPerg) continue;
+          var titulo = String(g(row,'Título da Inspeção / Auditoria')||'').trim();
+          var pergunta = String(g(row,'Pergunta')||'').trim();
+          var observacao = String(g(row,'Observação')||'').trim();
+          var textoCompleto = titulo+' '+pergunta+' '+observacao;
+          var textoNorm = racNormalizar(textoCompleto);
+          var classif = racClassificar(textoCompleto);
+          var racAuto = classif ? classif.cod : null;
+          allRows.push({
+            chave: numInsp+'|'+numPerg,
+            numero_inspecao: numInsp,
+            numero_pergunta: numPerg,
+            data_registro: racExcelDateToISO(g(row,'Data do Registro Inicial')),
+            hora_registro: racExcelTimeToHHMM(g(row,'Hora do Registro Inicial')),
+            data_ocorrencia: racExcelDateToISO(g(row,'Data')),
+            hora_ocorrencia: racExcelTimeToHHMM(g(row,'Hora')),
+            unidade_organizacional: String(g(row,'Unid. Org. da Ocorrência')||'').trim(),
+            titulo: titulo,
+            tipo_inspecao: String(g(row,'Tipo da Inspeção / Auditoria')||'').trim(),
+            localizacao: String(g(row,'Localização')||'').trim(),
+            empresa: String(g(row,'Empresa')||'').trim(),
+            inspetor: String(g(row,'Inspetor / Auditor')||'').trim(),
+            pergunta: pergunta,
+            resposta: String(g(row,'Resposta')||'').trim(),
+            tipo_achado: String(g(row,'Tipo')||'').trim(),
+            observacao: observacao,
+            rac_auto: racAuto,
+            severidade_auto: racClassificarSeveridade(textoNorm, racAuto)
+          });
+        }
+      });
+      if(!allRows.length){ toast('Nenhuma linha reconhecida (esperado as colunas da planilha "Interações")','red'); return; }
+      toast('Importando '+allRows.length+' registros...','blue');
+      for(var bi=0; bi<allRows.length; bi+=300){
+        var up = await supa.from('rac_interdicoes').upsert(allRows.slice(bi,bi+300), {onConflict:'chave'});
+        if(up.error){ toast('Erro ao salvar: '+up.error.message,'red'); return; }
+      }
+      RAC_DATA = await racLoadAll();
+      RAC_PAGE = 1;
+      toast('✔ '+allRows.length+' registros importados/atualizados!','green');
+      renderRac();
+    }catch(err){
+      console.error('[racHandleUpload]',err);
+      toast('Erro ao importar: '+err.message,'red');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function racFinalRac(row){ return row.rac_manual || row.rac_auto || 'Não classificado'; }
+function racFinalSeveridade(row){ return row.severidade_manual || row.severidade_auto || 'baixo'; }
+function racSituacao(row){
+  var p = racNormalizar(row.pergunta), r = racNormalizar(row.resposta);
+  if(p.indexOf('interditad')>=0){
+    if(r==='sim') return 'Interditado';
+    if(r==='nao') return 'Desvio (não interditado)';
+  }
+  return 'Desvio identificado';
+}
+function racMesLabel(dataStr){
+  if(!dataStr) return 'Sem data';
+  var partes = String(dataStr).split('-');
+  var meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  var y=partes[0], m=parseInt(partes[1],10)-1;
+  if(m<0||m>11||!y) return 'Sem data';
+  return meses[m]+'/'+y;
+}
+async function racSetManual(chave, campo, valor){
+  var payload = {chave:chave, revisado:true, revisado_por:(CURRENT_PERFIL&&CURRENT_PERFIL.nome)||'—', revisado_em:new Date().toISOString()};
+  payload[campo] = valor||null;
+  var up = await supa.from('rac_interdicoes').upsert(payload, {onConflict:'chave'});
+  if(up.error){ toast('Erro ao salvar: '+up.error.message,'red'); return; }
+  var idx = RAC_DATA.findIndex(function(r){return r.chave===chave;});
+  if(idx>=0){ RAC_DATA[idx][campo]=payload[campo]; RAC_DATA[idx].revisado=true; RAC_DATA[idx].revisado_por=payload.revisado_por; RAC_DATA[idx].revisado_em=payload.revisado_em; }
+  toast('Classificação atualizada','green');
+  renderRac();
+}
+async function racMarcarRevisado(chave, val){
+  var payload = {chave:chave, revisado:val, revisado_por:(CURRENT_PERFIL&&CURRENT_PERFIL.nome)||'—', revisado_em:new Date().toISOString()};
+  var up = await supa.from('rac_interdicoes').upsert(payload, {onConflict:'chave'});
+  if(up.error){ toast('Erro ao salvar: '+up.error.message,'red'); return; }
+  var idx = RAC_DATA.findIndex(function(r){return r.chave===chave;});
+  if(idx>=0){ RAC_DATA[idx].revisado=val; RAC_DATA[idx].revisado_por=payload.revisado_por; RAC_DATA[idx].revisado_em=payload.revisado_em; }
+  renderRac();
+}
+function racFilteredData(){
+  return RAC_DATA.filter(function(r){
+    if(RAC_FILTERS.mes.length && RAC_FILTERS.mes.indexOf(racMesLabel(r.data_ocorrencia))<0) return false;
+    if(RAC_FILTERS.empresa.length && RAC_FILTERS.empresa.indexOf(r.empresa||'—')<0) return false;
+    if(RAC_FILTERS.rac.length && RAC_FILTERS.rac.indexOf(racFinalRac(r))<0) return false;
+    if(RAC_FILTERS.severidade.length){
+      var sev = racFinalSeveridade(r)==='pSIF' ? 'Potencial alto (pSIF)' : 'Baixo potencial';
+      if(RAC_FILTERS.severidade.indexOf(sev)<0) return false;
+    }
+    if(RAC_FILTERS.revisao.length){
+      var st = r.revisado ? 'Revisado' : 'Pendente';
+      if(RAC_FILTERS.revisao.indexOf(st)<0) return false;
+    }
+    return true;
+  });
+}
+var _racCharts = {};
+function racGoPage(p){ RAC_PAGE = p; renderRac(); }
+function renderRac(){
+  var el = document.getElementById('v-rac');
+  if(!el) return;
+
+  function racMsWrap(id, label, minW){
+    return '<div class="fg" style="min-width:'+(minW||150)+'px"><label>'+label+'</label>'
+      +'<div class="ms-wrap" id="'+id+'"><div class="ms-input" onclick="toggleMs(\''+id+'\')">'
+      +'<span class="ms-label" id="'+id+'-label">Todos</span>'
+      +'<span style="color:var(--muted);font-size:10px">▾</span></div>'
+      +'<div class="ms-drop" id="'+id+'-drop" style="display:none"></div></div></div>';
+  }
+  function racKpi(lbl,ico,icoBg,val,valColor,sub){
+    return '<div class="kpi-card" style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:4px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between">'
+        +'<span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b">'+lbl+'</span>'
+        +'<div style="width:28px;height:28px;border-radius:8px;background:'+icoBg+';display:flex;align-items:center;justify-content:center;font-size:14px">'+ico+'</div>'
+      +'</div>'
+      +'<div style="font-size:22px;font-weight:900;line-height:1.1;letter-spacing:-1px;font-family:\'Share Tech Mono\',monospace;color:'+valColor+'">'+val+'</div>'
+      +'<div style="font-size:10px;color:#64748b">'+sub+'</div>'
+      +'</div>';
+  }
+  function racChartCard(id,title,height){
+    return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.04)">'
+      +'<div style="font-size:11.5px;font-weight:700;color:#0f172a;margin-bottom:14px">'+title+'</div>'
+      +'<div style="position:relative;height:'+height+'px"><canvas id="'+id+'"></canvas></div>'
+      +'</div>';
+  }
+
+  var filtered = racFilteredData();
+  var total = filtered.length;
+  var nInterditado = filtered.filter(function(r){return racSituacao(r)==='Interditado';}).length;
+  var nAlto = filtered.filter(function(r){return racFinalSeveridade(r)==='pSIF';}).length;
+  var nPendente = filtered.filter(function(r){return !r.revisado;}).length;
+  var racCount = {};
+  filtered.forEach(function(r){ var c=racFinalRac(r); racCount[c]=(racCount[c]||0)+1; });
+  var racTop = Object.keys(racCount).sort(function(a,b){return racCount[b]-racCount[a];})[0];
+
+  var mesOpts = Array.from(new Set(RAC_DATA.map(function(r){return racMesLabel(r.data_ocorrencia);}))).sort(function(a,b){
+    if(a==='Sem data') return 1; if(b==='Sem data') return -1;
+    var pa=a.split('/'), pb=b.split('/');
+    var meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    return (parseInt(pa[1])*12+meses.indexOf(pa[0])) - (parseInt(pb[1])*12+meses.indexOf(pb[0]));
+  });
+  var empresaOpts = Array.from(new Set(RAC_DATA.map(function(r){return r.empresa||'—';}))).sort();
+  var racOptsCod = RAC_CATALOGO.map(function(c){return c.cod;}).concat(['Não classificado']);
+
+  var html = '';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px">'
+    + '<input type="file" id="rac-upload-input" accept=".xlsx,.xls" style="display:none" onchange="racHandleUpload(this.files[0])">'
+    + '<button onclick="document.getElementById(\'rac-upload-input\').click()" style="padding:8px 14px;border-radius:7px;border:1px solid #cbd5e1;background:#fff;font-size:12px;font-weight:700;cursor:pointer">⬆ Importar planilha de Interações</button>'
+    + '<span style="font-size:11px;color:#94a3b8">Aceita qualquer planilha no formato do SESuite (uma aba por mês) — meses novos só precisam ser importados aqui.</span>'
+    + '</div>';
+  if(!RAC_DATA.length){
+    html += '<div style="background:#fff8e1;border:1px solid #fbbf24;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#92400e">Nenhuma interdição importada ainda. Use o botão acima pra importar a planilha "Interações" (SESuite).</div>';
+  }
+
+  html += '<div class="filters" style="margin-bottom:16px;flex-wrap:wrap;gap:8px;align-items:flex-end">'
+    + racMsWrap('ms-rac-mes','Mês',120)
+    + racMsWrap('ms-rac-empresa','Empresa',180)
+    + racMsWrap('ms-rac-rac','RAC',220)
+    + racMsWrap('ms-rac-severidade','Gravidade sugerida',170)
+    + racMsWrap('ms-rac-revisao','Revisão',130)
+    + '</div>';
+
+  html += '<div class="g5" style="gap:10px;margin-bottom:16px">'
+    + racKpi('Ocorrências no período','📋','#e0f2fe',total.toLocaleString('pt-BR'),'#002F6C',mesOpts.length+' meses na base')
+    + racKpi('Interdições efetivas','🚧','#fef2f2',nInterditado.toLocaleString('pt-BR'),'#dc2626',total?Math.round(nInterditado/total*100)+'% do período':'—')
+    + racKpi('Potencial alto (pSIF)','⚠️','#fff7ed',nAlto.toLocaleString('pt-BR'),'#d97706',total?Math.round(nAlto/total*100)+'% sugerido pelo VBM-PNR-000070':'—')
+    + racKpi('Pendentes de revisão','🔍','#f5f3ff',nPendente.toLocaleString('pt-BR'),'#7c3aed',total?Math.round(nPendente/total*100)+'% ainda não confirmado':'—')
+    + racKpi('RAC mais recorrente','🦺','#f0fdf4',racTop||'—','#16a34a',racTop?racCount[racTop]+' ocorrência(s)':'sem classificação')
+    + '</div>';
+
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">'
+    + racChartCard('rac-chart-hora','Horário das interdições (por hora do dia)',260)
+    + racChartCard('rac-chart-rac','Ocorrências por RAC (PNR-000069)',260)
+    + '</div>';
+  html += '<div style="margin-bottom:16px">' + racChartCard('rac-chart-mes','Evolução mensal por gravidade sugerida',240) + '</div>';
+
+  // ── Tabela ──
+  var PAGE_SIZE = 15;
+  var totalPages = Math.max(1, Math.ceil(filtered.length/PAGE_SIZE));
+  if(RAC_PAGE>totalPages) RAC_PAGE=totalPages;
+  var pageRows = filtered.slice((RAC_PAGE-1)*PAGE_SIZE, RAC_PAGE*PAGE_SIZE);
+  function th(t){ return '<th style="padding:9px 10px;text-align:left;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+t+'</th>'; }
+  var rowsHtml = pageRows.map(function(r){
+    var sev = racFinalSeveridade(r);
+    var sevBadge = sev==='pSIF'
+      ? '<span style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:9px;background:#fef2f2;color:#dc2626">⚠ Potencial alto</span>'
+      : '<span style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:9px;background:#f1f5f9;color:#64748b">Baixo</span>';
+    var situ = racSituacao(r);
+    var situColor = situ==='Interditado' ? '#dc2626' : (situ.indexOf('não interditado')>=0 ? '#94a3b8' : '#d97706');
+    var racSel = '<select onchange="racSetManual(\''+r.chave+'\',\'rac_manual\',this.value||null)" style="font-size:10.5px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;max-width:230px">'
+      + '<option value=""'+(!r.rac_manual?' selected':'')+'>Sugerido: '+(r.rac_auto||'— nenhum —')+'</option>'
+      + RAC_CATALOGO.map(function(c){ return '<option value="'+c.cod+'"'+(r.rac_manual===c.cod?' selected':'')+'>'+c.cod+' - '+c.nome+'</option>'; }).join('')
+      + '<option value="Não classificado"'+(r.rac_manual==='Não classificado'?' selected':'')+'>Não classificado</option>'
+      + '</select>';
+    var sevSel = '<select onchange="racSetManual(\''+r.chave+'\',\'severidade_manual\',this.value||null)" style="font-size:10.5px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px">'
+      + '<option value=""'+(!r.severidade_manual?' selected':'')+'>Sugerido: '+(r.severidade_auto==='pSIF'?'Potencial alto':'Baixo')+'</option>'
+      + '<option value="pSIF"'+(r.severidade_manual==='pSIF'?' selected':'')+'>Potencial alto (pSIF)</option>'
+      + '<option value="baixo"'+(r.severidade_manual==='baixo'?' selected':'')+'>Baixo potencial</option>'
+      + '</select>';
+    return '<tr style="border-top:1px solid #f1f5f9">'
+      + '<td style="padding:8px 10px;font-size:11px;white-space:nowrap;font-family:\'Share Tech Mono\',monospace">'+(r.data_ocorrencia?r.data_ocorrencia.split('-').reverse().join('/'):'—')+' '+(r.hora_ocorrencia||'')+'</td>'
+      + '<td style="padding:8px 10px;font-size:11px">'+escHtml(r.empresa||'—')+'</td>'
+      + '<td style="padding:8px 10px;font-size:11px;color:#64748b">'+escHtml(r.localizacao||'—')+'</td>'
+      + '<td style="padding:8px 10px">'+racSel+'</td>'
+      + '<td style="padding:8px 10px">'+sevSel+' '+sevBadge+'</td>'
+      + '<td style="padding:8px 10px;font-size:10.5px;font-weight:700;color:'+situColor+'">'+situ+'</td>'
+      + '<td style="padding:8px 10px;font-size:10.5px;color:#334155;max-width:320px">'+escHtml(r.observacao||r.pergunta||'—')+'</td>'
+      + '<td style="padding:8px 10px;text-align:center">'
+        + '<input type="checkbox" '+(r.revisado?'checked':'')+' onchange="racMarcarRevisado(\''+r.chave+'\',this.checked)" style="accent-color:#16a34a;cursor:pointer" title="Marcar como revisado por uma pessoa">'
+      + '</td>'
+      + '</tr>';
+  }).join('');
+
+  html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:13px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04)">'
+    + '<div style="overflow-x:auto">'
+    + '<table style="width:100%;border-collapse:collapse;min-width:920px">'
+    + '<thead><tr style="background:#f8fafc">'
+      + th('Data / Hora') + th('Empresa') + th('Localização') + th('RAC') + th('Gravidade sugerida') + th('Situação') + th('Observação') + th('Revisado')
+    + '</tr></thead>'
+    + '<tbody>'+(rowsHtml||'<tr><td colspan="8" style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">Nenhum registro para os filtros atuais.</td></tr>')+'</tbody>'
+    + '</table></div>'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-top:1px solid #f1f5f9;font-size:11px;color:#64748b">'
+      + '<span>'+filtered.length+' registro(s) · página '+RAC_PAGE+' de '+totalPages+'</span>'
+      + '<div style="display:flex;gap:6px">'
+        + '<button onclick="racGoPage('+Math.max(1,RAC_PAGE-1)+')" style="padding:5px 10px;border-radius:6px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;font-size:11px">‹ Anterior</button>'
+        + '<button onclick="racGoPage('+Math.min(totalPages,RAC_PAGE+1)+')" style="padding:5px 10px;border-radius:6px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;font-size:11px">Próxima ›</button>'
+      + '</div>'
+    + '</div>'
+    + '</div>';
+
+  el.innerHTML = html;
+
+  buildMsDrop('ms-rac-mes', mesOpts, RAC_FILTERS.mes, null);
+  buildMsDrop('ms-rac-empresa', empresaOpts, RAC_FILTERS.empresa, null);
+  buildMsDrop('ms-rac-rac', racOptsCod, RAC_FILTERS.rac, null);
+  buildMsDrop('ms-rac-severidade', ['Potencial alto (pSIF)','Baixo potencial'], RAC_FILTERS.severidade, null);
+  buildMsDrop('ms-rac-revisao', ['Revisado','Pendente'], RAC_FILTERS.revisao, null);
+  updateMsLabel('ms-rac-mes', RAC_FILTERS.mes);
+  updateMsLabel('ms-rac-empresa', RAC_FILTERS.empresa);
+  updateMsLabel('ms-rac-rac', RAC_FILTERS.rac);
+  updateMsLabel('ms-rac-severidade', RAC_FILTERS.severidade);
+  updateMsLabel('ms-rac-revisao', RAC_FILTERS.revisao);
+
+  // Gráfico 1 — horário das interdições
+  var horaCount = new Array(24).fill(0);
+  filtered.forEach(function(r){
+    if(!r.hora_ocorrencia) return;
+    var h = parseInt(r.hora_ocorrencia.split(':')[0],10);
+    if(!isNaN(h) && h>=0 && h<24) horaCount[h]++;
+  });
+  var cHora = document.getElementById('rac-chart-hora');
+  if(cHora){
+    if(_racCharts.hora) _racCharts.hora.destroy();
+    _racCharts.hora = new Chart(cHora.getContext('2d'),{
+      type:'bar',
+      data:{labels:horaCount.map(function(_,i){return (i<10?'0'+i:i)+'h';}), datasets:[{label:'Ocorrências',data:horaCount,backgroundColor:'#dc262699',borderColor:'#dc2626',borderWidth:1}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ' '+ctx.parsed.y+' ocorrência(s)';}}}},
+        scales:{x:{ticks:{font:{size:10}},grid:{display:false}},y:{beginAtZero:true,ticks:{precision:0,font:{size:11}}}}
+      }
+    });
+  }
+
+  // Gráfico 2 — por RAC
+  var cRac = document.getElementById('rac-chart-rac');
+  if(cRac){
+    var racLabels = racOptsCod;
+    var racVals = racLabels.map(function(cod){return racCount[cod]||0;});
+    if(_racCharts.rac) _racCharts.rac.destroy();
+    _racCharts.rac = new Chart(cRac.getContext('2d'),{
+      type:'bar',
+      data:{labels:racLabels, datasets:[{label:'Ocorrências',data:racVals,backgroundColor:'#002F6C99',borderColor:'#002F6C',borderWidth:1}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{x:{beginAtZero:true,ticks:{precision:0,font:{size:10}},grid:{display:false}},y:{ticks:{font:{size:10}}}},
+        onClick:function(evt,elements){
+          if(!elements.length) return;
+          RAC_FILTERS.rac=[racLabels[elements[0].index]]; RAC_PAGE=1; renderRac();
+        }
+      }
+    });
+  }
+
+  // Gráfico 3 — evolução mensal por gravidade
+  var mesesUnicos = mesOpts.filter(function(m){return m!=='Sem data';});
+  var mPsif = mesesUnicos.map(function(m){ return filtered.filter(function(r){return racMesLabel(r.data_ocorrencia)===m && racFinalSeveridade(r)==='pSIF';}).length; });
+  var mBaixo = mesesUnicos.map(function(m){ return filtered.filter(function(r){return racMesLabel(r.data_ocorrencia)===m && racFinalSeveridade(r)!=='pSIF';}).length; });
+  var cMes = document.getElementById('rac-chart-mes');
+  if(cMes){
+    if(_racCharts.mes) _racCharts.mes.destroy();
+    _racCharts.mes = new Chart(cMes.getContext('2d'),{
+      type:'bar',
+      data:{labels:mesesUnicos, datasets:[
+        {label:'Potencial alto (pSIF)',data:mPsif,backgroundColor:'#dc2626'},
+        {label:'Baixo potencial',data:mBaixo,backgroundColor:'#94a3b8'}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12}}},
+        scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:11}}},y:{stacked:true,beginAtZero:true,ticks:{precision:0,font:{size:11}}}}
+      }
+    });
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
