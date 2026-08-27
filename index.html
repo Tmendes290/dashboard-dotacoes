@@ -10772,6 +10772,13 @@ function racAbrirMotivo(chave){
   document.getElementById('modal-rac-motivo').classList.remove('hidden');
 }
 function racFecharMotivo(){ document.getElementById('modal-rac-motivo').classList.add('hidden'); }
+// Primeiro + segundo nome (pulando conectores como "da"/"de") — só pra encurtar o rótulo no
+// gráfico de fiscais; o filtro/tabela continuam usando o nome completo original.
+var RAC_NOME_CONECTORES = ['da','de','do','dos','das','e'];
+function racNomeCurto(nomeCompleto){
+  var partes = String(nomeCompleto||'').trim().split(/\s+/).filter(function(p){ return RAC_NOME_CONECTORES.indexOf(p.toLowerCase())<0; });
+  return partes.slice(0,2).join(' ') || nomeCompleto;
+}
 // Quando a "Empresa" preenchida é uma gerenciadora (Vale/Lyon/Progen), o campo normalmente não é
 // a contratada que cometeu o desvio — o nome dela costuma aparecer citado dentro da observação.
 // Isso é só uma sugestão pra os gráficos de "quem mais aparece"; não altera o dado bruto.
@@ -11259,13 +11266,14 @@ function renderRac(){
   var inspetorSorted = Object.keys(inspetorCount).filter(function(i){return i!=='—';}).sort(function(a,b){
     return inspetorCount[b]-inspetorCount[a];
   }).slice(0,12);
+  var inspetorLabelsCurto = inspetorSorted.map(racNomeCurto);
   var cInsp = document.getElementById('rac-chart-inspetor');
   if(cInsp){
     if(_racCharts.inspetor) _racCharts.inspetor.destroy();
     _racCharts.inspetor = new Chart(cInsp.getContext('2d'),{
       type:'bar',
-      data:{labels:inspetorSorted, datasets:[
-        {label:'Ocorrências registradas',data:inspetorSorted.map(function(i){return inspetorCount[i];}),backgroundColor:'rgba(0,47,108,.65)',borderRadius:4,barPercentage:.6,categoryPercentage:.7,datalabels:racDl('end','right')}
+      data:{labels:inspetorLabelsCurto, datasets:[
+        {label:'Ocorrências registradas',data:inspetorSorted.map(function(i){return inspetorCount[i];}),backgroundColor:'rgba(0,126,121,.65)',borderRadius:4,barPercentage:.6,categoryPercentage:.7,datalabels:racDl('end','right')}
       ]},
       options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,layout:{padding:{right:30}},
         plugins:{legend:{display:false}},
