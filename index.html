@@ -1597,7 +1597,7 @@ var FPA_FILTERS = {projeto:[], squad:[], lider:[], planejador:[]};
 var FPA_ANO = new Date().getFullYear();
 var FPA_PAGE = 1; // tabela paginada — cada projeto já é 4 linhas, renderizar tudo de uma vez travava o navegador
 var RAC_DATA = []; // linhas cruas da tabela rac_interdicoes
-var RAC_FILTERS = {mes:[], empresa:[], rac:[], severidade:[], revisao:[]};
+var RAC_FILTERS = {mes:[], empresa:[], rac:[], severidade:[], revisao:[], gerencia:[]};
 var RAC_PAGE = 1;
 var MAT_TAB = 'dashboard';
 var MAT_VALORES_VISIVEIS = true;
@@ -10831,8 +10831,14 @@ function racFilteredData(){
       var st = r.revisado ? 'Revisado' : 'Pendente';
       if(RAC_FILTERS.revisao.indexOf(st)<0) return false;
     }
+    if(RAC_FILTERS.gerencia.length && RAC_FILTERS.gerencia.indexOf(r.unidade_organizacional||'—')<0) return false;
     return true;
   });
+}
+function racLimparFiltros(){
+  RAC_FILTERS = {mes:[], empresa:[], rac:[], severidade:[], revisao:[], gerencia:[]};
+  RAC_PAGE = 1;
+  renderRac();
 }
 var _racCharts = {};
 function racGoPage(p){ RAC_PAGE = p; renderRac(); }
@@ -10880,6 +10886,7 @@ function renderRac(){
     return (parseInt(pa[1])*12+meses.indexOf(pa[0])) - (parseInt(pb[1])*12+meses.indexOf(pb[0]));
   });
   var empresaOpts = Array.from(new Set(RAC_DATA.map(function(r){return r.empresa||'—';}))).sort();
+  var gerenciaOpts = Array.from(new Set(RAC_DATA.map(function(r){return r.unidade_organizacional||'—';}))).filter(Boolean).sort();
   var racOptsCod = RAC_CATALOGO.map(function(c){return c.cod;}).concat(['Não classificado']);
 
   var html = '';
@@ -10894,10 +10901,12 @@ function renderRac(){
 
   html += '<div class="filters" style="margin-bottom:16px;flex-wrap:wrap;gap:8px;align-items:flex-end">'
     + racMsWrap('ms-rac-mes','Mês',120)
+    + racMsWrap('ms-rac-gerencia','Gerência',200)
     + racMsWrap('ms-rac-empresa','Empresa',180)
     + racMsWrap('ms-rac-rac','RAC',220)
     + racMsWrap('ms-rac-severidade','Gravidade sugerida',170)
     + racMsWrap('ms-rac-revisao','Revisão',130)
+    + '<button onclick="racLimparFiltros()" style="padding:8px 14px;border-radius:7px;border:1px solid #cbd5e1;background:#f8fafc;font-size:11.5px;font-weight:700;cursor:pointer;color:#64748b;height:34px">✕ Limpar filtros</button>'
     + '</div>';
 
   html += '<div class="g5" style="gap:10px;margin-bottom:16px">'
@@ -10913,6 +10922,7 @@ function renderRac(){
     + racChartCard('rac-chart-rac','Ocorrências por RAC (PNR-000069)',260)
     + '</div>';
   html += '<div style="margin-bottom:16px">' + racChartCard('rac-chart-mes','Evolução mensal por gravidade sugerida',240) + '</div>';
+  html += '<div style="margin-bottom:16px">' + racChartCard('rac-chart-empresa','Ocorrências por empresa — quem mais aparece em RAC',280) + '</div>';
 
   // ── Tabela ──
   var PAGE_SIZE = 15;
@@ -10971,15 +10981,30 @@ function renderRac(){
   el.innerHTML = html;
 
   buildMsDrop('ms-rac-mes', mesOpts, RAC_FILTERS.mes, null);
+  buildMsDrop('ms-rac-gerencia', gerenciaOpts, RAC_FILTERS.gerencia, null);
   buildMsDrop('ms-rac-empresa', empresaOpts, RAC_FILTERS.empresa, null);
   buildMsDrop('ms-rac-rac', racOptsCod, RAC_FILTERS.rac, null);
   buildMsDrop('ms-rac-severidade', ['Potencial alto (pSIF)','Baixo potencial'], RAC_FILTERS.severidade, null);
   buildMsDrop('ms-rac-revisao', ['Revisado','Pendente'], RAC_FILTERS.revisao, null);
   updateMsLabel('ms-rac-mes', RAC_FILTERS.mes);
+  updateMsLabel('ms-rac-gerencia', RAC_FILTERS.gerencia);
   updateMsLabel('ms-rac-empresa', RAC_FILTERS.empresa);
   updateMsLabel('ms-rac-rac', RAC_FILTERS.rac);
   updateMsLabel('ms-rac-severidade', RAC_FILTERS.severidade);
   updateMsLabel('ms-rac-revisao', RAC_FILTERS.revisao);
+
+  // Mesma paleta e o mesmo estilo de rótulo (pill branco via chartjs-plugin-datalabels,
+  // já registrado globalmente) da Curva S do FP&A — teal / azul / cinza, sem vermelho
+  // "gritando": teal marca o que precisa de atenção, cinza é o resto.
+  function racDl(anchor, align, extra){
+    return Object.assign({
+      display:function(ctx){ return (ctx.dataset.data[ctx.dataIndex]||0) > 0; },
+      anchor:anchor, align:align, offset:4,
+      color:'#1e293b', backgroundColor:'rgba(255,255,255,.88)', borderRadius:3,
+      padding:{top:2,bottom:2,left:4,right:4}, font:{size:9,weight:'700'},
+      formatter:function(v){ return v; }
+    }, extra||{});
+  }
 
   // Gráfico 1 — horário das interdições
   var horaCount = new Array(24).fill(0);
@@ -10993,10 +11018,13 @@ function renderRac(){
     if(_racCharts.hora) _racCharts.hora.destroy();
     _racCharts.hora = new Chart(cHora.getContext('2d'),{
       type:'bar',
-      data:{labels:horaCount.map(function(_,i){return (i<10?'0'+i:i)+'h';}), datasets:[{label:'Ocorrências',data:horaCount,backgroundColor:'#dc262699',borderColor:'#dc2626',borderWidth:1}]},
-      options:{responsive:true,maintainAspectRatio:false,
+      data:{labels:horaCount.map(function(_,i){return (i<10?'0'+i:i)+'h';}), datasets:[{
+        label:'Ocorrências', data:horaCount, backgroundColor:'rgba(0,126,121,.55)', borderRadius:4,
+        barPercentage:.7, categoryPercentage:.8, datalabels:racDl('end','top')
+      }]},
+      options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:20}},
         plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ' '+ctx.parsed.y+' ocorrência(s)';}}}},
-        scales:{x:{ticks:{font:{size:10}},grid:{display:false}},y:{beginAtZero:true,ticks:{precision:0,font:{size:11}}}}
+        scales:{x:{ticks:{font:{size:10}},grid:{display:false}},y:{display:false,beginAtZero:true}}
       }
     });
   }
@@ -11009,10 +11037,13 @@ function renderRac(){
     if(_racCharts.rac) _racCharts.rac.destroy();
     _racCharts.rac = new Chart(cRac.getContext('2d'),{
       type:'bar',
-      data:{labels:racLabels, datasets:[{label:'Ocorrências',data:racVals,backgroundColor:'#002F6C99',borderColor:'#002F6C',borderWidth:1}]},
-      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      data:{labels:racLabels, datasets:[{
+        label:'Ocorrências', data:racVals, backgroundColor:'rgba(0,126,121,.55)', borderRadius:4,
+        barPercentage:.65, categoryPercentage:.75, datalabels:racDl('end','right')
+      }]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,layout:{padding:{right:30}},
         plugins:{legend:{display:false}},
-        scales:{x:{beginAtZero:true,ticks:{precision:0,font:{size:10}},grid:{display:false}},y:{ticks:{font:{size:10}}}},
+        scales:{x:{display:false,beginAtZero:true},y:{ticks:{font:{size:10}},grid:{display:false}}},
         onClick:function(evt,elements){
           if(!elements.length) return;
           RAC_FILTERS.rac=[racLabels[elements[0].index]]; RAC_PAGE=1; renderRac();
@@ -11031,12 +11062,43 @@ function renderRac(){
     _racCharts.mes = new Chart(cMes.getContext('2d'),{
       type:'bar',
       data:{labels:mesesUnicos, datasets:[
-        {label:'Potencial alto (pSIF)',data:mPsif,backgroundColor:'#dc2626'},
-        {label:'Baixo potencial',data:mBaixo,backgroundColor:'#94a3b8'}
+        {label:'Potencial alto (pSIF)',data:mPsif,backgroundColor:'rgba(0,126,121,.75)',borderRadius:4,barPercentage:.55,categoryPercentage:.6,datalabels:racDl('center','center')},
+        {label:'Baixo potencial',data:mBaixo,backgroundColor:'rgba(175,171,171,.55)',borderRadius:4,barPercentage:.55,categoryPercentage:.6,datalabels:racDl('center','center')}
       ]},
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12}}},
-        scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:11}}},y:{stacked:true,beginAtZero:true,ticks:{precision:0,font:{size:11}}}}
+      options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},
+        plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12,usePointStyle:true,pointStyle:'circle'}}},
+        scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:11}}},y:{stacked:true,display:false,beginAtZero:true}}
+      }
+    });
+  }
+
+  // Gráfico 4 — por empresa (quem mais aparece / quem mais pega RAC classificado)
+  var empresaStats = {};
+  filtered.forEach(function(r){
+    var emp = r.empresa || '—';
+    if(!empresaStats[emp]) empresaStats[emp] = {rac:0, semRac:0};
+    if(racFinalRac(r)!=='Não classificado') empresaStats[emp].rac++; else empresaStats[emp].semRac++;
+  });
+  var empresaSorted = Object.keys(empresaStats).sort(function(a,b){
+    var ta=empresaStats[a].rac+empresaStats[a].semRac, tb=empresaStats[b].rac+empresaStats[b].semRac;
+    return tb-ta;
+  }).slice(0,12);
+  var cEmp = document.getElementById('rac-chart-empresa');
+  if(cEmp){
+    if(_racCharts.empresa) _racCharts.empresa.destroy();
+    _racCharts.empresa = new Chart(cEmp.getContext('2d'),{
+      type:'bar',
+      data:{labels:empresaSorted, datasets:[
+        {label:'Classificado em RAC',data:empresaSorted.map(function(e){return empresaStats[e].rac;}),backgroundColor:'rgba(0,126,121,.75)',borderRadius:4,barPercentage:.6,categoryPercentage:.7,datalabels:racDl('center','center')},
+        {label:'Não classificado',data:empresaSorted.map(function(e){return empresaStats[e].semRac;}),backgroundColor:'rgba(175,171,171,.55)',borderRadius:4,barPercentage:.6,categoryPercentage:.7,datalabels:racDl('center','center')}
+      ]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,layout:{padding:{right:30}},
+        plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12,usePointStyle:true,pointStyle:'circle'}}},
+        scales:{x:{stacked:true,display:false,beginAtZero:true},y:{stacked:true,ticks:{font:{size:10.5}},grid:{display:false}}},
+        onClick:function(evt,elements){
+          if(!elements.length) return;
+          RAC_FILTERS.empresa=[empresaSorted[elements[0].index]]; RAC_PAGE=1; renderRac();
+        }
       }
     });
   }
