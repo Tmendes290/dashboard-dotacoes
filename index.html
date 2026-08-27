@@ -15124,6 +15124,68 @@ function iprodIndiceSoSupervisao(rows){
   });
 }
 
+// Comparativo "por função" (função exata) explode em divergências falsas sempre que a base da
+// Vale e a contratada usam VOCABULÁRIOS diferentes pro mesmo ofício — confirmado com dado real
+// (SLB III Recirculação, 26/08): a Vale cadastra a mão de obra de tubulação como "MONTADOR" +
+// "ENCANADOR INDUSTRIAL" + "AJUDANTE DE TUBULAÇÃO", enquanto a MILPLAN organiza a MESMA equipe
+// (ela chama de "EQUIPE DE MECÂNICA" no próprio histograma, um só bloco cobrindo TUB+MEQ+solda)
+// como "Mecânico Montador" + "Mecânico Ajustador" + "Caldeireiro / Encanador" + "Ajudante de
+// montagem eletromecânica". Isso fazia "MECÂNICO MONTADOR" aparecer 16x maior no HH Orçado do que
+// no HH CPU (Vale) — não é desvio de produtividade, é etiqueta diferente pro mesmo trabalho. Em
+// ELÉTRICA o vocabulário já bate entre as duas bases (daí a divergência ali ser bem menor) — o
+// problema é concentrado em Mecânica/Tubulação/Solda/Andaime.
+// Família agrupa os rótulos das DUAS bases (Vale + o que já apareceu nos históricos reais da
+// MILPLAN) pelas fronteiras de equipe que a própria contratada usa (EQUIPE DE ANDAIME/ELÉTRICA/
+// MECÂNICA/CIVIL...) — não por "contém a mesma palavra": essa abordagem mais solta já foi tentada
+// e quebrou de verdade (confirmado 19/08: "Ajudante de Andaime" x "Ajudante de Montagem
+// Eletromecânica" caindo os dois em "SERVENTE" só por conter "AJUDANTE", "Montador Andaime" x
+// "Mecânico Montador" caindo em "MONTADOR" só por conter a palavra — cargos genuinamente
+// diferentes). Por isso aqui é uma lista fechada, curada rótulo a rótulo, igual ao rigor já usado
+// em IPROD_SINONIMOS.
+var IPROD_FAMILIA_SEM_CLASSIFICACAO='⚠️ Outras / não classificada';
+var IPROD_FAMILIA_FUNCAO={};
+(function(){
+  var GRUPOS={
+    'Andaime':['MONTADOR ANDAIME','AJUDANTE DE ANDAIME','MONTADOR DE ANDAIME LIDER','ENCARREGADO ANDAIME','MONTADOR PARA CIMBRAMENTO'],
+    'Elétrica / Instrumentação':['ELETRICISTA MONTADOR','ELETRICISTA F / C','ELETRICISTA','AJUDANTE DE ELETRICA','MESTRE DE ELETRICA',
+      'ELETRICISTA FORCA E CONTROLE','ELETRICISTA MANUTENCAO','ENCARREGADO DE ELETRICA','MESTRE DE ELETRICA / INSTRUMENTACAO',
+      'INSTRUMENTISTA','AJUDANTE DE INSTRUMENTACAO','MESTRE DE INSTRUMENTACAO','ELETRICISTA INDUSTRIAL'],
+    'Mecânica / Tubulação / Solda':['MONTADOR','AJUDANTE DE MECANICA','MESTRE DE MONTAGEM MECANICA','MECANICO MONTADOR','MECANICO AJUSTADOR',
+      'AJUDANTE DE MONTADOR','MESTRE DE MONTAGEM','MESTRE DE MECANICA','AJUDANTE DE TUBULACAO','MESTRE DE TUBULACAO','ENCANADOR INDUSTRIAL',
+      'SOLDADOR ESTRUTURA','SOLDADOR DE TUBULACAO','SOLDADOR','SOLDADOR QUALIFICADO','CALDEIREIRO','MACARIQUEIRO',
+      'ENCARREGADO MECANICO','MESTRE DE MECANICA / TUBULACAO','CALDEIREIRO / ENCANADOR','AJUDANTE DE MONTAGEM ELETROMECANICA',
+      'SOLDADOR MIG E TIG','SOLDADOR DE CHAPA / MACARIQUEIRO','SERRALHEIRO','FUNILEIRO','LAMINISTA'],
+    'Pintura / Jateamento':['AJUDANTE DE PINTOR','PINTOR INDUSTRIAL','PINTOR','JATISTA','AJUDANTE DE PINTURA','BLASTER'],
+    'Civil':['SERVENTE','PEDREIRO','CARPINTEIRO','ARMADOR','MARTELETEIRO','MESTRE DE CIVIL','ENCARREGADO DE CIVIL',
+      'RASTELEIRO','NIVELADOR','LADRILHEIRO','VIDRACEIRO','GESSEIRO','TELHADISTA','JARDINEIRO'],
+    'Topografia':['TOPOGRAFO','AUXILIAR DE TOPOGRAFIA','TAQUEIRO'],
+    'Operação de equipamentos / Transporte':['MOTORISTA DE CAMINHAO','OPERADOR DE CARREGADEIRA','OPERADOR DE CENTRAL','OPERADOR DE GUINDAUTO',
+      'OPERADOR DE GUINDASTE HIDRAULICO ATE 40 TON','OPERADOR DE GUINDASTE HIDRAULICO 45 A 90 TON','OPERADOR DE GUINDASTE HIDRAULICO 120 A 200 TON',
+      'OPERADOR DE GUINDASTE HIDRAULICO 210 A 400 TON','OPERADOR DE GUINDASTE HIDRAULICO ACIMA DE 400 TON',
+      'OPERADOR DE RETROESCAVADEIRA','OPERADOR DE ESCAVADEIRA','OPERADOR DE TRATOR','OPERADOR DE TRATOR AGRICOLA','OPERADOR DE ROLO COMPACTADOR',
+      'OPERADOR DE ROLO LISO VIBRATORIO','OPERADOR DE ROLO DE PNEU','OPERADOR DE MOTONIVELADORA','OPERADOR DE ALISADOR','OPERADOR DE USINA',
+      'OPERADOR DE SONDA ROTATIVA','OPERADOR DE PERFURATRIZ','OPERADOR DE BOMBA INJETORA','OPERADOR DE CAMINHAO ESPARGIDOR','OPERADOR DE CARRETA',
+      'OFICIAL DE MOTO-SERRA','GREIDISTA','BOMBEIRO','AJUDANTE DE BOMBEIRO','MOTORISTA ONIBUS',
+      'OPERADOR DE CAMINHAO MUNCK','OPERADOR DE GUINDASTE','SINALEIRO','MOTORISTA CARRETEIRO (INSERIR NA PQ)','RIGGER (INSERIR NA PQ)'],
+    'Linha de transmissão':['OFICIAL DE LINHA','AJUDANTE DE LINHA'],
+    'Gestão / Supervisão geral':['ENCARREGADO','MESTRE','SUPERVISOR','APONTADOR','TECNICO DE SEGURANCA','ENGENHEIRO SENIOR',
+      'ENGENHEIRO JUNIOR / PROJETISTA','ENGENHEIRO MASTER','TECNICO','DESENHISTA CADISTA','INSPETOR QUALIDADE','ENCARREGADO MATERIAIS',
+      'TECNICO DE SEGURANCA DO TRABALHO']
+  };
+  Object.keys(GRUPOS).forEach(function(familia){
+    GRUPOS[familia].forEach(function(rotulo){ IPROD_FAMILIA_FUNCAO[rotulo]=familia; });
+  });
+})();
+function iprodFamiliaDe(nomeFuncao){
+  // Colapsa espaço duplo (real na planilha da MILPLAN: "Soldador  MIG e TIG") — só espaçamento,
+  // não risca palavra nenhuma, então não reintroduz o bug de "contém texto" que uniu cargos
+  // diferentes por engano (ver comentário acima de IPROD_FAMILIA_FUNCAO).
+  var n=iprodNorm(nomeFuncao).replace(/\s+/g,' ');
+  var base=n.indexOf(' - ')>=0?n.split(' - ')[0].trim():n;
+  return IPROD_FAMILIA_FUNCAO[base]||null;
+}
+function iprodFamiliaOuFallback(nomeFuncao){ return iprodFamiliaDe(nomeFuncao)||IPROD_FAMILIA_SEM_CLASSIFICACAO; }
+
 function iprodTokens(s){
   var n=iprodNorm(s);
   // Fração escrita por extenso — mista "2.1/2" (bitola "2 e 1/2 polegadas") ou solta "1/2" — TEM
@@ -16177,6 +16239,14 @@ async function iprodProcessar(){
   if(!IPROD_INDICE){ toast('Base de índices de produtividade indisponível','red'); return; }
 
   var porFuncao={}, porMaterial={}, semIndice=[], porAtividade=[];
+  // porFamilia/porFamiliaProjeto: mesma acumulação de porFuncao/porFuncaoProjeto, só que pela
+  // família de ofício (ver iprodFamiliaDe) em vez do rótulo exato — alimenta o "Comparativo por
+  // família", que não quebra quando a Vale e a contratada nomeiam o mesmo ofício diferente.
+  var porFamilia={}, porFamiliaProjeto={};
+  function iprodAcumFamilia(mapa,nomeFuncao,hh){
+    var fam=iprodFamiliaOuFallback(nomeFuncao);
+    mapa[fam]=(mapa[fam]||0)+hh;
+  }
   // porFuncaoProjeto: mesma forma de porFuncao, mas acumulado pela quantidade OFICIAL do projeto
   // (ver comentário mais abaixo, dentro do loop de qtdComp) — usado como base da seção 4 quando
   // há PQ do Projeto, pra reconciliar com o HH com CPU da seção 3.
@@ -16350,6 +16420,7 @@ async function iprodProcessar(){
         if(!porFuncaoProjeto[keyManual]) porFuncaoProjeto[keyManual]={hhRef:0,atividades:[]};
         porFuncaoProjeto[keyManual].hhRef+=qtdNecManual;
         porFuncaoProjeto[keyManual].atividades.push({desc:pItem.desc,qtd:pItem.quantidade,unidade:pItem.unidade,indice:indiceManual,hh:qtdNecManual,matchTipo:'ajuste manual',matchCod:null,matchDesc:null,insumo:null,descIns:keyManual});
+        iprodAcumFamilia(porFamiliaProjeto,keyManual,qtdNecManual);
       } else if(achouIndice) achouIndice.rows.forEach(function(r){
         if(r.tipo!=='M') return;
         indiceTotal+=Number(r.indice)||0;
@@ -16364,6 +16435,7 @@ async function iprodProcessar(){
         if(!porFuncaoProjeto[keyProjeto]) porFuncaoProjeto[keyProjeto]={hhRef:0,atividades:[]};
         porFuncaoProjeto[keyProjeto].hhRef+=qtdNecProjeto;
         porFuncaoProjeto[keyProjeto].atividades.push({desc:pItem.desc,qtd:pItem.quantidade,unidade:pItem.unidade,indice:r.indice,hh:qtdNecProjeto,matchTipo:achouIndice.matchTipo,matchCod:achouIndice.matchCod,matchDesc:achouIndice.matchDesc,insumo:r.insumo,descIns:r.descIns});
+        iprodAcumFamilia(porFamiliaProjeto,keyProjeto,qtdNecProjeto);
       });
 
       // Índice SINAPI (referência pública/nacional, separada da base da Vale) pra comparar lado a
@@ -16631,6 +16703,7 @@ async function iprodProcessar(){
         if(!porFuncao[key]) porFuncao[key]={hhRef:0,atividades:[]};
         porFuncao[key].hhRef+=qtdNec;
         porFuncao[key].atividades.push({desc:item.desc,qtd:item.quantidade,unidade:item.unidade,indice:r.indice,hh:qtdNec,matchTipo:achou.matchTipo,matchCod:achou.matchCod,matchDesc:achou.matchDesc,insumo:r.insumo,descIns:r.descIns});
+        iprodAcumFamilia(porFamilia,key,qtdNec);
       } else if(r.tipo==='X'||r.tipo==='E'){ // material (X) ou equipamento (E) — vira levantamento de quantidade
         var mkey=r.descIns||'(sem nome)';
         if(!porMaterial[mkey]) porMaterial[mkey]={tipo:r.tipo,unidade:r.unidIns,qtdNec:0,atividades:[]};
@@ -16665,6 +16738,7 @@ async function iprodProcessar(){
           if(!porFuncao[key]) porFuncao[key]={hhRef:0,atividades:[]};
           porFuncao[key].hhRef+=qtdNec;
           porFuncao[key].atividades.push({desc:item.desc,qtd:item.quantidade,unidade:item.unidade,indice:est.indiceMedio,hh:qtdNec,matchTipo:achou.matchTipo,matchCod:achou.matchCod,matchDesc:achou.matchDesc,insumo:null,descIns:est.descIns,estimado:true,baseadoEm:est.baseadoEm});
+          iprodAcumFamilia(porFamilia,key,qtdNec);
         });
       }
     }
@@ -16727,6 +16801,38 @@ async function iprodProcessar(){
   var usaBaseProjeto=temProjeto&&Object.keys(porFuncaoProjeto).length>0;
   var porFuncaoFinal=usaBaseProjeto?porFuncaoProjeto:porFuncao;
   var porFuncaoFinalSinapi=usaBaseProjeto?porFuncaoProjetoSinapi:porFuncaoSinapi;
+
+  // Comparativo por FAMÍLIA DE OFÍCIO — mesma ideia do comparativo por função logo abaixo, só que
+  // agrupado (ver iprodFamiliaDe) em vez de por rótulo exato. Ao contrário do loop por função (que
+  // exige bater o nome exato pra somar hhCobrado — ver "bate" mais abaixo), aqui soma o histograma
+  // INTEIRO por família de uma vez, sem depender de nome igual de um lado pro outro — é exatamente
+  // essa independência de nomenclatura que resolve a divergência falsa por vocabulário.
+  var porFamiliaFinal=usaBaseProjeto?porFamiliaProjeto:porFamilia;
+  var porFamiliaHistCobrado={};
+  histList.forEach(function(h){
+    var hn=iprodNorm(h.funcao);
+    var hnBase=hn.indexOf(' - ')>=0?hn.split(' - ')[0].trim():hn;
+    var fam=iprodFamiliaOuFallback(hnBase);
+    porFamiliaHistCobrado[fam]=(porFamiliaHistCobrado[fam]||0)+h.hh;
+  });
+  var linhasFamilia=[];
+  (function(){
+    var familiasTodas={};
+    Object.keys(porFamiliaFinal).forEach(function(f){familiasTodas[f]=true;});
+    Object.keys(porFamiliaHistCobrado).forEach(function(f){familiasTodas[f]=true;});
+    Object.keys(familiasTodas).forEach(function(fam){
+      var hhRef=porFamiliaFinal[fam]||0;
+      var hhCobrado=porFamiliaHistCobrado[fam]||0;
+      // Mesma fórmula de ajuste por praticabilidade e mesmo corte de severidade (>15%) usados no
+      // comparativo por função — pra ficar comparável linha a linha entre as duas seções.
+      var hhAjust=hhRef>0?hhRef*(2-IPROD_PRAT):0;
+      var dif=hhRef>0?hhCobrado-hhAjust:0;
+      var status='verde';
+      if(dif>0) status=(dif/Math.max(hhCobrado,1))>0.15?'vermelho':'amarelo';
+      linhasFamilia.push({familia:fam,hhCobrado:hhCobrado,hhRef:hhRef,hhAjust:hhAjust,dif:dif,status:status});
+    });
+    linhasFamilia.sort(function(a,b){return b.dif-a.dif;});
+  })();
   // Sinônimos comuns entre o nome do insumo na base de índices e o nome usado no histograma da contratada
   var IPROD_SINONIMOS={'SERVENTE':['AJUDANTE'],'ENCARREGADO':['ENCARREGADOS DE OBRAS','ENCARREGADO DE OBRAS'],
     'OPERADOR DE ESCAVADEIRA':['OPERADOR DE RETROESCAVADEIRA'],'MOTORISTA DE CAMINHAO':['MOTORISTA DE CAMINHAO BASCULANTE'],
@@ -16858,7 +16964,7 @@ async function iprodProcessar(){
   var valorReferencia=taxaRSporHH!=null?totRefAjust*taxaRSporHH:null;
   var valorDif=taxaRSporHH!=null?totDif*taxaRSporHH:null;
 
-  IPROD_RESULT={linhas:linhas,linhasExcluidas:linhasExcluidas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,promovidosExcluidos:promovidosExcluidos,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto,totCobradoHistograma:totCobradoHistograma,taxaRSporHH:taxaRSporHH,valorCobrado:valorCobrado,valorReferencia:valorReferencia,valorDif:valorDif};
+  IPROD_RESULT={linhas:linhas,linhasFamilia:linhasFamilia,linhasExcluidas:linhasExcluidas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,promovidosExcluidos:promovidosExcluidos,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto,totCobradoHistograma:totCobradoHistograma,taxaRSporHH:taxaRSporHH,valorCobrado:valorCobrado,valorReferencia:valorReferencia,valorDif:valorDif};
   toast(temContratada?'Comparativo calculado':'HH com CPU calculado pelo índice do projeto (sem contratada)','green');
   iprodRenderShell();
 }
@@ -17065,6 +17171,8 @@ function iprodRenderShell(){
        'A composição da base só tem cadastrado Encarregado/Mestre/Apontador (quem supervisiona), sem nenhum instalador de verdade (Servente, Pedreiro...). O índice mostrado reflete só o tempo do encarregado observando o serviço, então tende a estar SUBESTIMADO — é um sinal de alerta, não um erro pra corrigir.'],
       ['Por que a seção 3 (Atividades) e a seção 4 (Por Função) mostram números de HH diferentes?',
        '"HH com CPU (Vale)" (seção 3) e "HH CPU (Vale)" (seção 4) usam a MESMA base de cálculo (quantidade × índice × praticabilidade) e devem bater exato quando somados — inclusive o "Diferença (HH)" dos cards do topo. Funções "Sem referência" (indireto: encarregado geral, técnico SSMA, apontador...) não têm nenhuma composição na base nem atividade física pra atrelar, então entram com HH CPU (Vale) = "—" (não herdam o HH cobrado como se fosse referência) — só contam pro HH Orçado, que é a MESMA coisa nas duas seções (TODO o histograma da contratada) e também deve bater exato.'],
+      ['Por que existe um "Comparativo por família de ofício" além do "Comparativo por função"?',
+       'Porque a Vale e a contratada nem sempre chamam o mesmo ofício pelo mesmo nome — ex.: numa composição de tubulação a Vale cadastra a mão de obra como "MONTADOR" + "ENCANADOR INDUSTRIAL" + "AJUDANTE DE TUBULAÇÃO", enquanto uma contratada aponta a mesma equipe no histograma dela como "Mecânico Montador" + "Caldeireiro / Encanador" + "Ajudante de montagem eletromecânica" (caso real, confirmado no projeto SLB III Recirculação: "Mecânico Montador" chegou a aparecer 16x maior no HH Orçado do que no HH CPU da Vale, só por causa do nome). O comparativo por FUNÇÃO exige nome exatamente igual (ou um sinônimo já cadastrado) dos dois lados pra somar — então herda esse ruído de vocabulário. O comparativo por FAMÍLIA agrupa os dois lados (Elétrica/Instrumentação, Mecânica/Tubulação/Solda, Civil, Andaime, etc.) antes de comparar, então o nome diferente deixa de importar — é o corte mais confiável pra decidir onde focar a conferência primeiro. O "por função" continua existindo pra auditar nome a nome, incluindo achar sinônimos novos pra cadastrar.'],
       ['O que quer dizer cada Status na tabela de atividades?',
        '<b>Bate</b> = quantidade da contratada igual à do projeto (dentro de 0,01). <b>Divergente</b> = quantidades diferentes, vale conferir. <b>Medida diferente</b> = mesma composição, mas a contratada cotou noutra unidade/tamanho (ex.: projeto pede lona 0,2mm, ela cotou 0,8mm). <b>Faltando na PQ da empresa</b> = o projeto prevê essa atividade e a contratada nem incluiu na PQ dela. <b>Incluído pela empresa</b> = o oposto: a contratada cobrou por isso, mas não existe atividade equivalente na PQ do Projeto — sobe automaticamente como linha própria pra fechar 100% do HH cobrado (dá pra excluir da análise se não for uma atividade de verdade).'],
       ['Achei um índice ou código errado — como eu corrijo?',
@@ -17244,16 +17352,18 @@ function iprodRenderShell(){
       +(mostrarIndireto?'<div class="iprod-kpi" style="border-top-color:#7c3aed"><div class="iprod-kpi-val" style="color:#7c3aed">'+Math.round(pctIndireto*100)+'%</div><div class="iprod-kpi-lbl">% de Custo Indireto</div><div class="iprod-kpi-sub">(Mão de Obra Indireta '+iprodFmtRS(indiretosMP.maoObraIndireta)+' + Equipamentos '+iprodFmtRS(indiretosMP.equipamentos)+') ÷ Valor Total Aprovado '+iprodFmtRS(indiretosMP.valorTotalAprovado)+' — da PQ da MILPLAN (aba 12.0 PQ)</div></div>':'')
       +'</div>';
 
-    // "Onde focar primeiro" — só no PDF, top 3 funções mais divergentes (mesmo critério de
-    // severidade do resumo executivo acima). Complementa o veredito com o próximo passo prático.
+    // "Onde focar primeiro" — só no PDF, top 3 FAMÍLIAS DE OFÍCIO mais divergentes (não função
+    // crua: nome de função explode em divergência falsa toda vez que a Vale e a contratada usam
+    // vocabulário diferente pro mesmo ofício — ver iprodFamiliaDe — família é o corte que resiste
+    // a isso e por isso é o mais confiável pra apontar onde focar primeiro).
     if(temQtdComp){
-      var focoPrint=r.linhas.filter(function(l){return l.status==='vermelho'||l.status==='amarelo';}).slice().sort(function(a,b){return (b.dif||0)-(a.dif||0);}).slice(0,3);
+      var focoPrint=(r.linhasFamilia||[]).filter(function(l){return l.status==='vermelho'||l.status==='amarelo';}).slice().sort(function(a,b){return (b.dif||0)-(a.dif||0);}).slice(0,3);
       if(focoPrint.length){
         html+='<div class="iprod-panel iprod-print-only">'
           +'<div class="iprod-panel-title">Onde focar primeiro</div>'
-          +'<div class="iprod-panel-note">As '+focoPrint.length+' função(ões) com maior divergência — por aqui que a conferência com a contratada deveria começar.</div>'
-          +'<table class="iprod-tbl"><thead><tr><th>#</th><th>Função</th><th>HH Orçado</th><th>HH CPU (Vale)</th><th>Diferença</th><th>Status</th></tr></thead><tbody>'
-          +focoPrint.map(function(l,i){return '<tr><td>'+(i+1)+'</td><td>'+l.funcao+'</td><td>'+iprodFmt(l.hhCobrado)+'</td><td>'+(l.hhRef>0?iprodFmt(l.hhAjust):'—')+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';}).join('')
+          +'<div class="iprod-panel-note">As '+focoPrint.length+' família(s) de ofício com maior divergência — por aqui que a conferência com a contratada deveria começar. (Agrupado por família, não por nome exato de função — evita apontar "divergência" que na real é só as duas empresas chamando o mesmo ofício de nomes diferentes.)</div>'
+          +'<table class="iprod-tbl"><thead><tr><th>#</th><th>Família de ofício</th><th>HH Orçado</th><th>HH CPU (Vale)</th><th>Diferença</th><th>Status</th></tr></thead><tbody>'
+          +focoPrint.map(function(l,i){return '<tr><td>'+(i+1)+'</td><td>'+l.familia+'</td><td>'+iprodFmt(l.hhCobrado)+'</td><td>'+(l.hhRef>0?iprodFmt(l.hhAjust):'—')+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';}).join('')
           +'</tbody></table></div>';
       }
     }
@@ -17404,6 +17514,20 @@ function iprodRenderShell(){
           +'</div>';
       }
       html+='<div class="iprod-insight" style="margin-top:-8px;margin-bottom:16px">Σ HH Orçado (tabela acima, já inclusive itens "Incluído pela empresa") = <b>'+iprodFmt(totHhEmpresa)+'</b> — deve bater com o HH Cobrado total do histograma (seção 4), exceto pelo(s) item(ns) excluído(s) manualmente acima.</div>';
+    }
+
+    if(r.temContratada && !r.semHistogramaPorFuncao && r.linhasFamilia && r.linhasFamilia.length){
+      var linhasFamiliaOrdenado=r.linhasFamilia.slice().sort(function(a,b){return (b.hhCobrado||0)-(a.hhCobrado||0);});
+      var totCobradoFam=linhasFamiliaOrdenado.reduce(function(s,l){return s+l.hhCobrado;},0);
+      var totAjustFam=linhasFamiliaOrdenado.reduce(function(s,l){return s+l.hhAjust;},0);
+      html+='<div class="iprod-panel"><div class="iprod-panel-title">Comparativo por família de ofício <span class="iprod-badge iprod-b-azul" style="font-size:9.5px;vertical-align:middle">recomendado pra priorizar</span></div>'
+        +'<div class="iprod-panel-note">A Vale e a contratada nem sempre chamam o mesmo ofício pelo mesmo nome (ex.: a Vale cadastra "MONTADOR" + "ENCANADOR INDUSTRIAL" numa composição de tubulação, a contratada aponta a mesma equipe como "Mecânico Montador" + "Caldeireiro / Encanador" no histograma dela) — isso faz o comparativo por função exata (abaixo) explodir divergências que na real são só etiqueta diferente pro mesmo trabalho. Esta tabela agrupa os dois lados pela família de ofício (ver metodologia no link de dúvidas frequentes) antes de comparar — é o corte mais confiável pra decidir onde focar a conferência primeiro; o detalhamento por função exata continua abaixo, útil pra auditar nome a nome.</div>'
+        +'<table class="iprod-tbl"><thead><tr><th>Família de ofício</th><th>HH Orçado</th><th>HH CPU (Vale)</th><th>Diferença</th><th>Status</th></tr></thead><tbody>'
+        +linhasFamiliaOrdenado.map(function(l){
+          return '<tr><td>'+l.familia+'</td><td>'+iprodFmt(l.hhCobrado)+'</td><td>'+(l.hhRef>0?iprodFmt(l.hhAjust):'—')+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';
+        }).join('')
+        +'<tr class="iprod-tot"><td>TOTAL</td><td>'+iprodFmt(totCobradoFam)+'</td><td>'+iprodFmt(totAjustFam)+'</td><td>'+iprodFmt(totCobradoFam-totAjustFam)+'</td><td></td></tr>'
+        +'</tbody></table></div>';
     }
 
     if(!r.temContratada){
