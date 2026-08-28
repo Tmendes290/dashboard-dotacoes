@@ -15088,6 +15088,15 @@ function iprodFmt(n){
   n=Number(n)||0;
   return n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
+// Quantidade em toneladas (ou qualquer unidade com casa decimal pequena de verdade, ex.: peça de
+// 0,0006 t) some virando "0,00" nas 2 casas padrão — parece um erro/linha vazia quando na real é
+// só uma peça leve. Mostra mais casas SÓ quando o arredondamento em 2 casas já daria zero (não
+// mexe no formato normal do resto da tela, só nesse caso de borda). Pedido do usuário (28/08).
+function iprodFmtQtd(n){
+  n=Number(n)||0;
+  if(n!==0 && Math.round(n*100)/100===0) return n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:6});
+  return iprodFmt(n);
+}
 function iprodFmtRS(n){
   n=Number(n)||0;
   return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:0,maximumFractionDigits:0});
@@ -17485,7 +17494,7 @@ function iprodRenderShell(){
         var difPct=(q.diffHH!=null&&q.hhEmpresa)?(q.diffHH/q.hhEmpresa*100):null;
         html+='<tr class="iprod-tr-expand iprod-tr-chk" data-busca="'+iprodNorm(q.desc).replace(/"/g,'')+'" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')">'
           +'<td onclick="event.stopPropagation()"><input type="checkbox"'+(IPROD_ATIV_SELECIONADAS[q.idxProjeto]?' checked':'')+' onclick="event.stopPropagation();iprodToggleAtivSelecionada('+q.idxProjeto+')"></td>'
-          +'<td>'+(qi+1)+'</td><td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmt(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmt(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmt(q.diffQtd):'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td style="color:#7c3aed">'+(q.hhSinapi!=null?iprodFmt(q.hhSinapi):'—')+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+(difPct!=null?difPct.toFixed(1).replace('.',',')+'%':'—')+'</td><td>'+badge+'</td></tr>';
+          +'<td>'+(qi+1)+'</td><td>'+descCell+'</td><td>'+q.unidade+'</td><td>'+iprodFmtQtd(q.qtdProjeto)+'</td><td>'+(q.qtdEmpresa!=null?iprodFmtQtd(q.qtdEmpresa):'—')+'</td><td>'+(q.diffQtd!=null?iprodFmtQtd(q.diffQtd):'—')+'</td><td>'+iprodFmt(q.hhEsperado)+'</td><td style="color:#7c3aed">'+(q.hhSinapi!=null?iprodFmt(q.hhSinapi):'—')+'</td><td>'+(q.hhEmpresa!=null?iprodFmt(q.hhEmpresa):'—')+'</td><td>'+(q.diffHH!=null?iprodFmt(q.diffHH):'—')+'</td><td>'+(difPct!=null?difPct.toFixed(1).replace('.',',')+'%':'—')+'</td><td>'+badge+'</td></tr>';
         html+='<tr class="iprod-drill"><td colspan="13">'
           +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:6px">Detalhamento do índice (MO)</div>'
           +(q.status==='medida-diferente'?'<div class="iprod-insight" style="margin-bottom:8px">📏 A PQ do projeto pede <b>'+q.specDiff.projeto+'</b>, mas a contratada só cotou essa atividade com <b>'+q.specDiff.empresa+'</b> na PQ dela — mesma composição, medida diferente. Confira se essa troca foi aprovada antes de aceitar a quantidade/HH como equivalente.</div>':'')
@@ -17666,7 +17675,7 @@ function iprodRenderShell(){
         html+='<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">Atividades que compõem o HH de referência</div>';
         l.atividades.forEach(function(a){
           html+='<div class="iprod-drill-row" style="align-items:flex-start;flex-direction:column;gap:2px;padding:8px 0">'
-            +'<div style="display:flex;justify-content:space-between;width:100%"><span>'+a.desc+' ('+iprodFmt(a.qtd)+' '+a.unidade+(a.semIndice?'':' × '+iprodFmt(a.indice))+(a.estimado?' — média':'')+')</span><span style="font-weight:700">'+iprodFmt(a.hh)+' HH'+(a.estimado?' ≈':'')+'</span></div>'
+            +'<div style="display:flex;justify-content:space-between;width:100%"><span>'+a.desc+' ('+iprodFmtQtd(a.qtd)+' '+a.unidade+(a.semIndice?'':' × '+iprodFmt(a.indice))+(a.estimado?' — média':'')+')</span><span style="font-weight:700">'+iprodFmt(a.hh)+' HH'+(a.estimado?' ≈':'')+'</span></div>'
             +'<div style="font-size:9.5px;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
             +(a.semIndice?'<span>↳ Sem índice em nenhuma base (Vale nem SINAPI) pra essa atividade — HH considerado igual ao que a contratada alocou pra ela, sem aplicar índice próprio.</span>'
               :'<span>↳ Base de índices: <b>'+(a.matchCod||'—')+'</b> — '+(a.matchDesc||'?')+(a.estimado?' · <b>'+(a.descIns||'?')+'</b> estimado pela média de '+a.baseadoEm+' composições semelhantes (sem MO cadastrada nessa)':' · insumo '+(a.insumo||'?')+' ('+(a.descIns||'?')+') · '+(a.matchTipo==='código'?'código exato':a.matchTipo))+'</span>')
@@ -17712,7 +17721,7 @@ function iprodRenderShell(){
     if(r.semIndice.length){
       html+='<div class="iprod-panel iprod-print-hide"><div class="iprod-panel-title">⚠️ Atividades sem correspondência na base de índices</div><div class="iprod-panel-note">Não achei código de cliente nem descrição parecida na base de produtividade pra essas atividades da PQ da contratada — confere manualmente.</div>'
         +'<table class="iprod-tbl"><thead><tr><th>Descrição</th><th>Código</th><th>Unid.</th><th>Quantidade</th></tr></thead><tbody>';
-      r.semIndice.forEach(function(s){ html+='<tr><td>'+s.desc+'</td><td>'+(s.codCliente||'—')+'</td><td>'+s.unidade+'</td><td>'+iprodFmt(s.quantidade)+'</td></tr>'; });
+      r.semIndice.forEach(function(s){ html+='<tr><td>'+s.desc+'</td><td>'+(s.codCliente||'—')+'</td><td>'+s.unidade+'</td><td>'+iprodFmtQtd(s.quantidade)+'</td></tr>'; });
       html+='</tbody></table></div>';
     }
   } else {
@@ -17736,12 +17745,12 @@ function iprodRenderShell(){
       pqFiltrada.forEach(function(row){
         var temAbas=row.porAba&&row.porAba.length>0;
         html+='<tr'+(temAbas?' class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')"':'')+'>'
-          +'<td>'+(row.codCliente||'—')+'</td><td>'+row.desc+'</td><td>'+row.unidade+'</td><td>'+iprodFmt(row.quantidade)+'</td></tr>';
+          +'<td>'+(row.codCliente||'—')+'</td><td>'+row.desc+'</td><td>'+row.unidade+'</td><td>'+iprodFmtQtd(row.quantidade)+'</td></tr>';
         if(temAbas){
           html+='<tr class="iprod-drill"><td colspan="4">'
             +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">'+(row.porAba.length>1?'Somado a partir de '+row.porAba.length+' aba(s)':'Vem da aba')+'</div>';
           row.porAba.forEach(function(a){
-            html+='<div class="iprod-drill-row"><span>'+a.aba+'</span><span>'+iprodFmt(a.quantidade)+' '+row.unidade+'</span></div>';
+            html+='<div class="iprod-drill-row"><span>'+a.aba+'</span><span>'+iprodFmtQtd(a.quantidade)+' '+row.unidade+'</span></div>';
           });
           html+='</td></tr>';
         }
