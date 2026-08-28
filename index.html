@@ -14980,7 +14980,8 @@ var IPROD_FUNC_SELECIONADAS={}; // chave: funcaoNorm, valor: funcaoLabel (label 
 // Painéis de "excluída(s) dessa análise" (atividades/funções) começam RECOLHIDOS — a lista de
 // item por item com botão "Restaurar" não tem por que ficar sempre visível na tela nem, mais
 // importante, aparecer numa impressão/PDF do comparativo (display:none não imprime).
-var IPROD_MOSTRAR_EXCLUIDAS_ATIV=false, IPROD_MOSTRAR_EXCLUIDAS_FUNC=false;
+var IPROD_MOSTRAR_EXCLUIDAS_ATIV=false, IPROD_MOSTRAR_EXCLUIDAS_FUNC=false, IPROD_MOSTRAR_AJUSTE_RECONC=false;
+function iprodToggleAjusteReconc(){ IPROD_MOSTRAR_AJUSTE_RECONC=!IPROD_MOSTRAR_AJUSTE_RECONC; iprodRenderShell(); }
 function iprodToggleExcluidasAtiv(){ IPROD_MOSTRAR_EXCLUIDAS_ATIV=!IPROD_MOSTRAR_EXCLUIDAS_ATIV; iprodRenderShell(); }
 function iprodToggleExcluidasFunc(){ IPROD_MOSTRAR_EXCLUIDAS_FUNC=!IPROD_MOSTRAR_EXCLUIDAS_FUNC; iprodRenderShell(); }
 
@@ -17634,16 +17635,6 @@ function iprodRenderShell(){
         +'<div class="iprod-panel-note" style="margin:0">Essa PQ não tem histograma quebrado por função (Encarregado/Servente/Pedreiro...) — o HH já vem por atividade, não dá pra comparar por função aqui.</div></div>';
     } else {
     var linhasBase4=r.linhas.filter(function(l){return l.hhCobrado||l.hhRef||l.hhAjust||l.dif;});
-    // Reconciliação com os cards do topo: r.totCobrado (usado pelas linhas acima) é o histograma
-    // BRUTO inteiro, sem descontar nenhuma exclusão manual de atividade — os cards do topo (seção
-    // 3, kpiCobrado) já descontam. Sem essa linha, a diferença some silenciosamente e "TOTAL" aqui
-    // nunca bate com o card, apesar do texto logo abaixo prometer que bate. Não dá pra saber QUAL
-    // função perdeu esse HH (histograma e PQ da contratada são fontes independentes, sem elo por
-    // atividade), então em vez de chutar entra como um ajuste à parte, visível e rastreável — só
-    // aparece na view "Todas" (não em "Só cobradas": HH negativo nunca teria "cobrado" nela).
-    if(gapSemProjeto>0.5){
-      linhasBase4.push({funcao:'➖ HH excluído manualmente (itens sem atividade correspondente no projeto)',hhCobrado:-gapSemProjeto,hhContingencia:0,hhRef:0,hhAjust:0,hhAjustSinapi:null,dif:-gapSemProjeto,status:'cinza',atividades:[],semReferencia:false,ajusteReconciliacao:true});
-    }
     var nCobradas4=linhasBase4.filter(function(l){return l.hhCobrado>0.001;}).length;
     var linhasFiltro4=IPROD_FUNC_FILTRO==='cobradas'?linhasBase4.filter(function(l){return l.hhCobrado>0.001;}):linhasBase4;
     // Ordenado por HH Orçado, maior pro menor — mesmo critério da tabela 3.
@@ -17705,9 +17696,7 @@ function iprodRenderShell(){
       if(l.estimadoPorMedia){
         html+='<div class="iprod-insight" style="border-left-color:#2563eb;background:#eff6ff;color:#1e3a8a;margin-bottom:8px">≈ A composição que casou pra essa atividade não tem mão de obra cadastrada na planilha-fonte da Vale (lacuna real na base) — o HH Referência abaixo é uma <b>estimativa pela média</b> do índice dessa mesma função em composições parecidas (mesmo assunto e unidade), não o índice oficial daquela composição exata. Use com essa ressalva.</div>';
       }
-      if(l.ajusteReconciliacao){
-        html+='<div class="iprod-insight" style="border-left-color:#94a3b8;background:var(--bg);color:var(--muted)">Essa linha existe só pra fazer o TOTAL desta seção bater com o card "HH Orçado: Empresa" do topo — o histograma bruto (usado nas funções acima) soma <b>'+iprodFmt(r.totCobrado)+' HH</b>, mas '+iprodFmt(gapSemProjeto)+' HH deles vêm de atividade(s) que você excluiu manualmente na seção 3 (por não ter correspondência no projeto). Não dá pra saber DE QUAL função esse HH saiu — histograma (por função) e PQ da contratada (por item) são fontes independentes, sem elo entre uma linha específica da PQ e horas de uma função específica — então em vez de subtrair de uma função ao acaso, o ajuste fica separado e visível aqui.</div>';
-      } else if(l.semReferencia){
+      if(l.semReferencia){
         html+='<div class="iprod-insight" style="border-left-color:#94a3b8;background:var(--bg);color:var(--muted)">⚠️ Função apontada no histograma mas sem nenhuma composição correspondente na PQ — pode ser indireto (encarregado, técnico SSMA, apontador) ou fora do escopo mapeado.</div>';
       } else if(!l.atividades.length){
         html+='<div class="iprod-panel-note" style="margin:0">Sem atividades mapeadas.</div>';
@@ -17724,19 +17713,27 @@ function iprodRenderShell(){
             +'</div>';
         });
       }
-      if(l.semHistograma && !l.semReferencia && !l.ajusteReconciliacao){
+      if(l.semHistograma && !l.semReferencia){
         html+='<div class="iprod-insight" style="margin-top:8px">⚠️ Não encontrei essa função no histograma da contratada — HH cobrado considerado 0. Confere se o nome da função bate.</div>';
       }
-      if(!l.ajusteReconciliacao){
       html+='<div style="margin-top:10px" onclick="event.stopPropagation()">'
         +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#fef2f2;color:#dc2626" onclick="event.stopPropagation();iprodExcluirFuncao(\''+iprodNorm(l.funcao).replace(/'/g,'')+'\',\''+l.funcao.replace(/'/g,'')+'\')">🗑️ Excluir essa função da análise</button>'
         +'</div>';
-      }
       html+='</td></tr>';
     });
     var totCobradoFiltro4=linhasFiltro4.reduce(function(s,l){return s+l.hhCobrado;},0);
     var totAjustFiltro4=linhasFiltro4.reduce(function(s,l){return s+l.hhAjust;},0);
     var totAjustSinapiFiltro4=linhasFiltro4.reduce(function(s,l){return s+(l.hhAjustSinapi||0);},0);
+    // Reconciliação com os cards do topo (só na view "Todas" — "Só cobradas" já é um subtotal que
+    // não promete bater, tem nota própria pra isso): r.totCobrado (usado nas linhas acima) é o
+    // histograma BRUTO, sem descontar nenhuma exclusão manual de atividade da seção 3 — os cards
+    // do topo já descontam. Sem esse ajuste o TOTAL aqui nunca bate com o card. Não dá pra saber DE
+    // QUAL função esse HH sairia (histograma por função × PQ da contratada por item são fontes
+    // independentes, sem elo entre uma linha específica da PQ e horas de uma função específica),
+    // então em vez de uma linha própria pra isso na tabela — poluía a visão pra quem só quer ver o
+    // total, pedido do usuário 28/08 — vira só um ajuste de valor, com o detalhe recolhido abaixo.
+    var ajusteReconc=(IPROD_FUNC_FILTRO==='todos'&&gapSemProjeto>0.5)?gapSemProjeto:0;
+    totCobradoFiltro4-=ajusteReconc;
     var totDifFiltro4=totCobradoFiltro4-totAjustFiltro4;
     html+='<tr class="iprod-tot"><td></td><td>TOTAL'+(IPROD_FUNC_FILTRO==='cobradas'?' (só cobradas)':'')+'</td><td>'+iprodFmt(totCobradoFiltro4)+'</td><td>'+iprodFmt(totAjustFiltro4)+'</td><td style="color:#7c3aed">'+(totAjustSinapiFiltro4?iprodFmt(totAjustSinapiFiltro4):'—')+'</td><td>'+iprodFmt(totDifFiltro4)+'</td><td></td></tr>';
 
@@ -17753,6 +17750,18 @@ function iprodRenderShell(){
             +'<button class="iprod-btn" style="margin-top:0;padding:3px 9px;font-size:10px;background:#fff;color:#7f1d1d;border:1px solid #fecaca" onclick="iprodRestaurarFuncao(\''+iprodNorm(l.funcao).replace(/'/g,'')+'\')">↺ Restaurar</button>'
             +'</div>';
         }).join('')
+        +'</div>'
+        +'</div>';
+    }
+
+    if(ajusteReconc>0.5){
+      html+='<div class="iprod-insight" style="border-left-color:#94a3b8;background:var(--bg);color:var(--muted);margin-top:-8px;margin-bottom:16px">'
+        +'<div style="font-weight:800;cursor:pointer;display:flex;align-items:center;gap:6px" onclick="iprodToggleAjusteReconc()">'
+        +'<span style="font-size:9px">'+(IPROD_MOSTRAR_AJUSTE_RECONC?'▾':'▸')+'</span>'
+        +'<span>🔧 Ajuste de reconciliação de '+iprodFmt(ajusteReconc)+' HH aplicado ao TOTAL acima — clique pra '+(IPROD_MOSTRAR_AJUSTE_RECONC?'esconder':'ver')+' o motivo</span>'
+        +'</div>'
+        +'<div style="display:'+(IPROD_MOSTRAR_AJUSTE_RECONC?'block':'none')+';margin-top:6px">'
+        +'O histograma bruto (usado nas funções acima) soma <b>'+iprodFmt(r.totCobrado)+' HH</b>, mas <b>'+iprodFmt(ajusteReconc)+' HH</b> deles vêm de atividade(s) que você excluiu manualmente na seção 3 (por não ter correspondência no projeto). O TOTAL acima já desconta isso pra bater com o card "HH Orçado: Empresa" do topo — não dá pra saber de qual função específica esse HH sairia (histograma por função e PQ da contratada por item são fontes independentes, sem esse elo), por isso vira um ajuste de valor, não uma função na tabela.'
         +'</div>'
         +'</div>';
     }
