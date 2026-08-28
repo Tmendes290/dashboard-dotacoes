@@ -16279,6 +16279,11 @@ async function iprodProcessar(){
   // (ver comentário mais abaixo, dentro do loop de qtdComp) — usado como base da seção 4 quando
   // há PQ do Projeto, pra reconciliar com o HH com CPU da seção 3.
   var porFuncaoProjeto={}, totRefAssumidoProjeto=0;
+  // Atividades (do projeto) sem NENHUM índice em base nenhuma (nem Vale, nem SINAPI) — guardadas
+  // uma a uma pra alimentar o detalhamento da linha sintética "⚙️ HH CPU de atividades sem
+  // correspondência..." (ver totRefAssumidoProjeto abaixo). Sem isso, essa linha somava o HH mas
+  // não dizia QUAIS atividades formam esse total — pedido do usuário (27/08).
+  var atividadesSemIndiceProjeto=[];
   // *Sinapi: mesma ideia, mas acumulado pelo índice do SINAPI em vez da Vale — alimenta a coluna
   // "HH CPU (SINAPI)" da seção 4, espelhando a coluna já existente na seção 3.
   var porFuncaoSinapi={}, porFuncaoProjetoSinapi={};
@@ -16623,7 +16628,10 @@ async function iprodProcessar(){
       // Sem índice válido pra quebrar por função (base incompleta e sem taxa própria da
       // contratada) — o HH com CPU dessa atividade entra direto no total da seção 4 como "sem
       // referência por função", pra não sumir da soma (ver totRefAjust mais abaixo).
-      if(!temIndiceValido&&!temIndiceSinapi) totRefAssumidoProjeto+=hhEsperado;
+      if(!temIndiceValido&&!temIndiceSinapi){
+        totRefAssumidoProjeto+=hhEsperado;
+        atividadesSemIndiceProjeto.push({desc:pItem.desc,qtd:pItem.quantidade,unidade:pItem.unidade,hh:hhEsperado,semIndice:true});
+      }
 
       var status=!temContratada?'sem-contratada':(emp==null?'faltando-empresa':(specDiff?'medida-diferente':(Math.abs(diffQtd)<0.01?'bate':'divergente')));
       var achouSemMaoDeObra=!!achouIndice&&!temIndiceValido;
@@ -16705,7 +16713,10 @@ async function iprodProcessar(){
         hhEsperadoG=g.hhAlocado||0;
       }
       var hhSinapiG=indiceSinapiTotalG>0?g.quantidade*indiceSinapiTotalG*(2-IPROD_PRAT):null;
-      if(!temIndiceValidoG&&!temIndiceSinapiG) totRefAssumidoProjeto+=hhEsperadoG;
+      if(!temIndiceValidoG&&!temIndiceSinapiG){
+        totRefAssumidoProjeto+=hhEsperadoG;
+        atividadesSemIndiceProjeto.push({desc:g.desc,qtd:g.quantidade,unidade:g.unidade,hh:hhEsperadoG,semIndice:true});
+      }
       qtdComp.push({desc:g.desc,unidade:g.unidade,codCliente:codHintG,idxProjeto:-(pi+1),
         qtdProjeto:g.quantidade,qtdEmpresa:g.quantidade,diffQtd:0,
         indiceTotal:indiceTotalG,hhEsperado:hhEsperadoG,hhSinapi:hhSinapiG,hhEmpresa:g.hhAlocado||0,
@@ -16954,7 +16965,7 @@ async function iprodProcessar(){
     // hhCobrado fica 0 de propósito: o HH cobrado dessas atividades já está 100% contabilizado
     // nas funções normais acima (via o histograma) — contar de novo aqui somaria em dobro. Essa
     // linha só existe pra trazer o HH CPU (Vale) que faltava, sem inflar o HH Orçado.
-    linhas.push({funcao:'⚙️ HH CPU de atividades sem correspondência em nenhuma base de índices',hhCobrado:0,hhContingencia:0,hhRef:totRefAssumidoProjeto,hhAjust:totRefAssumidoProjeto,hhAjustSinapi:null,dif:-totRefAssumidoProjeto,status:'cinza',atividades:[],semReferencia:false});
+    linhas.push({funcao:'⚙️ HH CPU de atividades sem correspondência em nenhuma base de índices',hhCobrado:0,hhContingencia:0,hhRef:totRefAssumidoProjeto,hhAjust:totRefAssumidoProjeto,hhAjustSinapi:null,dif:-totRefAssumidoProjeto,status:'cinza',atividades:atividadesSemIndiceProjeto,semReferencia:false});
   }
   linhas.sort(function(a,b){return b.dif-a.dif;});
   // Tira as funções excluídas manualmente ANTES dos totais abaixo (todos via linhas.reduce) —
@@ -17574,6 +17585,16 @@ function iprodRenderShell(){
         +'<div class="iprod-panel-note" style="margin:0">Essa PQ não tem histograma quebrado por função (Encarregado/Servente/Pedreiro...) — o HH já vem por atividade, não dá pra comparar por função aqui.</div></div>';
     } else {
     var linhasBase4=r.linhas.filter(function(l){return l.hhCobrado||l.hhRef||l.hhAjust||l.dif;});
+    // Reconciliação com os cards do topo: r.totCobrado (usado pelas linhas acima) é o histograma
+    // BRUTO inteiro, sem descontar nenhuma exclusão manual de atividade — os cards do topo (seção
+    // 3, kpiCobrado) já descontam. Sem essa linha, a diferença some silenciosamente e "TOTAL" aqui
+    // nunca bate com o card, apesar do texto logo abaixo prometer que bate. Não dá pra saber QUAL
+    // função perdeu esse HH (histograma e PQ da contratada são fontes independentes, sem elo por
+    // atividade), então em vez de chutar entra como um ajuste à parte, visível e rastreável — só
+    // aparece na view "Todas" (não em "Só cobradas": HH negativo nunca teria "cobrado" nela).
+    if(gapSemProjeto>0.5){
+      linhasBase4.push({funcao:'➖ HH excluído manualmente (itens sem atividade correspondente no projeto)',hhCobrado:-gapSemProjeto,hhContingencia:0,hhRef:0,hhAjust:0,hhAjustSinapi:null,dif:-gapSemProjeto,status:'cinza',atividades:[],semReferencia:false,ajusteReconciliacao:true});
+    }
     var nCobradas4=linhasBase4.filter(function(l){return l.hhCobrado>0.001;}).length;
     var linhasFiltro4=IPROD_FUNC_FILTRO==='cobradas'?linhasBase4.filter(function(l){return l.hhCobrado>0.001;}):linhasBase4;
     // Ordenado por HH Orçado, maior pro menor — mesmo critério da tabela 3.
@@ -17635,7 +17656,9 @@ function iprodRenderShell(){
       if(l.estimadoPorMedia){
         html+='<div class="iprod-insight" style="border-left-color:#2563eb;background:#eff6ff;color:#1e3a8a;margin-bottom:8px">≈ A composição que casou pra essa atividade não tem mão de obra cadastrada na planilha-fonte da Vale (lacuna real na base) — o HH Referência abaixo é uma <b>estimativa pela média</b> do índice dessa mesma função em composições parecidas (mesmo assunto e unidade), não o índice oficial daquela composição exata. Use com essa ressalva.</div>';
       }
-      if(l.semReferencia){
+      if(l.ajusteReconciliacao){
+        html+='<div class="iprod-insight" style="border-left-color:#94a3b8;background:var(--bg);color:var(--muted)">Essa linha existe só pra fazer o TOTAL desta seção bater com o card "HH Orçado: Empresa" do topo — o histograma bruto (usado nas funções acima) soma <b>'+iprodFmt(r.totCobrado)+' HH</b>, mas '+iprodFmt(gapSemProjeto)+' HH deles vêm de atividade(s) que você excluiu manualmente na seção 3 (por não ter correspondência no projeto). Não dá pra saber DE QUAL função esse HH saiu — histograma (por função) e PQ da contratada (por item) são fontes independentes, sem elo entre uma linha específica da PQ e horas de uma função específica — então em vez de subtrair de uma função ao acaso, o ajuste fica separado e visível aqui.</div>';
+      } else if(l.semReferencia){
         html+='<div class="iprod-insight" style="border-left-color:#94a3b8;background:var(--bg);color:var(--muted)">⚠️ Função apontada no histograma mas sem nenhuma composição correspondente na PQ — pode ser indireto (encarregado, técnico SSMA, apontador) ou fora do escopo mapeado.</div>';
       } else if(!l.atividades.length){
         html+='<div class="iprod-panel-note" style="margin:0">Sem atividades mapeadas.</div>';
@@ -17643,20 +17666,23 @@ function iprodRenderShell(){
         html+='<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">Atividades que compõem o HH de referência</div>';
         l.atividades.forEach(function(a){
           html+='<div class="iprod-drill-row" style="align-items:flex-start;flex-direction:column;gap:2px;padding:8px 0">'
-            +'<div style="display:flex;justify-content:space-between;width:100%"><span>'+a.desc+' ('+iprodFmt(a.qtd)+' '+a.unidade+' × '+iprodFmt(a.indice)+(a.estimado?' — média':'')+')</span><span style="font-weight:700">'+iprodFmt(a.hh)+' HH'+(a.estimado?' ≈':'')+'</span></div>'
+            +'<div style="display:flex;justify-content:space-between;width:100%"><span>'+a.desc+' ('+iprodFmt(a.qtd)+' '+a.unidade+(a.semIndice?'':' × '+iprodFmt(a.indice))+(a.estimado?' — média':'')+')</span><span style="font-weight:700">'+iprodFmt(a.hh)+' HH'+(a.estimado?' ≈':'')+'</span></div>'
             +'<div style="font-size:9.5px;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
-            +'<span>↳ Base de índices: <b>'+(a.matchCod||'—')+'</b> — '+(a.matchDesc||'?')+(a.estimado?' · <b>'+(a.descIns||'?')+'</b> estimado pela média de '+a.baseadoEm+' composições semelhantes (sem MO cadastrada nessa)':' · insumo '+(a.insumo||'?')+' ('+(a.descIns||'?')+') · '+(a.matchTipo==='código'?'código exato':a.matchTipo))+'</span>'
+            +(a.semIndice?'<span>↳ Sem índice em nenhuma base (Vale nem SINAPI) pra essa atividade — HH considerado igual ao que a contratada alocou pra ela, sem aplicar índice próprio.</span>'
+              :'<span>↳ Base de índices: <b>'+(a.matchCod||'—')+'</b> — '+(a.matchDesc||'?')+(a.estimado?' · <b>'+(a.descIns||'?')+'</b> estimado pela média de '+a.baseadoEm+' composições semelhantes (sem MO cadastrada nessa)':' · insumo '+(a.insumo||'?')+' ('+(a.descIns||'?')+') · '+(a.matchTipo==='código'?'código exato':a.matchTipo))+'</span>')
             +(a.matchCod?'<button class="iprod-hist-link" style="font-size:9.5px" onclick="event.stopPropagation();iprodConferirIndice(\''+a.matchCod.replace(/\'/g,'')+'\',\''+(a.descIns||'').replace(/\'/g,'')+'\')">🔍 Conferir índice</button>':'')
             +'</div>'
             +'</div>';
         });
       }
-      if(l.semHistograma && !l.semReferencia){
+      if(l.semHistograma && !l.semReferencia && !l.ajusteReconciliacao){
         html+='<div class="iprod-insight" style="margin-top:8px">⚠️ Não encontrei essa função no histograma da contratada — HH cobrado considerado 0. Confere se o nome da função bate.</div>';
       }
+      if(!l.ajusteReconciliacao){
       html+='<div style="margin-top:10px" onclick="event.stopPropagation()">'
         +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#fef2f2;color:#dc2626" onclick="event.stopPropagation();iprodExcluirFuncao(\''+iprodNorm(l.funcao).replace(/'/g,'')+'\',\''+l.funcao.replace(/'/g,'')+'\')">🗑️ Excluir essa função da análise</button>'
         +'</div>';
+      }
       html+='</td></tr>';
     });
     var totCobradoFiltro4=linhasFiltro4.reduce(function(s,l){return s+l.hhCobrado;},0);
