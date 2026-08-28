@@ -16866,10 +16866,6 @@ async function iprodProcessar(){
     });
     linhasPacote.sort(function(a,b){return b.dif-a.dif;});
   })();
-  // Lookup rápido pra anexar, em cada linha de função (abaixo), o total do pacote de ofício
-  // inteiro que ela pertence — usado só no drill-down ao expandir a linha, não numa tabela própria.
-  var pacotePorNome={};
-  linhasPacote.forEach(function(lp){ pacotePorNome[lp.pacote]=lp; });
   // Sinônimos comuns entre o nome do insumo na base de índices e o nome usado no histograma da contratada
   var IPROD_SINONIMOS={'SERVENTE':['AJUDANTE'],'ENCARREGADO':['ENCARREGADOS DE OBRAS','ENCARREGADO DE OBRAS'],
     'OPERADOR DE ESCAVADEIRA':['OPERADOR DE RETROESCAVADEIRA'],'MOTORISTA DE CAMINHAO':['MOTORISTA DE CAMINHAO BASCULANTE'],
@@ -17582,6 +17578,12 @@ function iprodRenderShell(){
     var linhasFiltro4=IPROD_FUNC_FILTRO==='cobradas'?linhasBase4.filter(function(l){return l.hhCobrado>0.001;}):linhasBase4;
     // Ordenado por HH Orçado, maior pro menor — mesmo critério da tabela 3.
     linhasFiltro4=linhasFiltro4.slice().sort(function(a,b){return (b.hhCobrado||0)-(a.hhCobrado||0);});
+    // Lookup rápido pra anexar, em cada linha de função (abaixo), o total do pacote de ofício
+    // inteiro que ela pertence — usado só no drill-down ao expandir a linha, não numa tabela
+    // própria. Reconstruído aqui (não em iprodProcessar) porque essa função de render só tem
+    // acesso ao que está em IPROD_RESULT (r) — r.linhasPacote já vem pronto de lá.
+    var pacotePorNome={};
+    (r.linhasPacote||[]).forEach(function(lp){ pacotePorNome[lp.pacote]=lp; });
     html+='<div class="iprod-panel iprod-print-hide"><div class="iprod-panel-title">4. Comparativo por função</div><div class="iprod-panel-note">Clique numa linha pra abrir o detalhamento das atividades que compõem aquele HH de referência.</div>'
       +'<div class="iprod-print-hide" style="display:flex;gap:8px;margin:0 0 12px">'
       +[['todos','Todas ('+linhasBase4.length+')'],['cobradas','Só cobradas ('+nCobradas4+')']].map(function(f){
