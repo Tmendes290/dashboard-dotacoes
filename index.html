@@ -15771,10 +15771,26 @@ function iprodParsePQSheet(data){
   // Algumas PQs já vêm com o HH por atividade embutido (não separam material de mão de obra
   // numa verba à parte) — se existir essa coluna, ela é usada direto em vez do rateio proporcional.
   // "ÍNDICE .../TOTAL" é taxa por unidade, não o HH total do item — exclui explicitamente.
+  // A MILPLAN passou a trazer DUAS colunas de HH total na "PLANILHA Hh" (ex-"12.0 PQ", revisão
+  // LS03_r2, 27/08): "HH TOTAL MOD" (só Mão de Obra Direta — Encarregado/Mestre/Oficial/Ajudante)
+  // e "HH TOTAL" (MOD + MOA, incluindo Mão de Obra Direta de APOIO — Equipe Andaime/Materiais/
+  // Topografia/Pintura/Carga e Transporte/Manutenção). Usa a coluna MOD como hhDeclarado, não a
+  // combinada: conferido na base de índices da Vale que ANDAIME só aparece como insumo em 33 das
+  // 1588 composições cadastradas, e 100% delas são civil/alvenaria — nenhuma composição de
+  // equipamento/elétrica/mecânica (o tipo que a MILPLAN está rateando apoio de andaime dentro)
+  // tem esse insumo. Ou seja, o índice de referência da Vale pra essas atividades NUNCA embute
+  // apoio de andaime — comparar contra o HH combinado infla a divergência por um motivo de escopo
+  // (o que está incluído na composição), não de produtividade. A diferença (combinado − MOD) fica
+  // em hhApoioDeclarado, pra não sumir do relatório, só sair do comparativo por atividade.
+  var iHHMod=hdrC.findIndex(function(h){return (h.indexOf('HH')>=0||h.indexOf('HORA')>=0)&&h.indexOf('TOTAL')>=0&&h.indexOf('MOD')>=0;});
+  var iHHCombinado=hdrC.findIndex(function(h,hi){return hi!==iHHMod&&(h.indexOf('HH')>=0||h.indexOf('HORA')>=0)&&h.indexOf('INDICE')<0&&h.indexOf('TOTAL')>=0&&h.indexOf('MOD')<0;});
   // Aceita tanto "HH" quanto "HORAS" (ex.: "HORAS TOTAL", "HORAS DIRETAS (MOD)").
-  var iHH=hdrC.findIndex(function(h){return (h.indexOf('HH')>=0||h.indexOf('HORA')>=0)&&h.indexOf('INDICE')<0&&h.indexOf('TOTAL')>=0;});
+  var iHH=iHHMod>=0?iHHMod:hdrC.findIndex(function(h){return (h.indexOf('HH')>=0||h.indexOf('HORA')>=0)&&h.indexOf('INDICE')<0&&h.indexOf('TOTAL')>=0;});
   if(iHH<0) iHH=hdrC.findIndex(function(h){return h.indexOf('HH')>=0&&h.indexOf('INDICE')<0&&(h.indexOf('CALCULADO')>=0||h.indexOf('COBRADO')>=0||h.indexOf('APONTADO')>=0);});
   if(iHH<0) iHH=hdrC.findIndex(function(h){return (h.indexOf('HH')>=0||h.indexOf('HORA')>=0)&&h.indexOf('INDICE')<0;});
+  // Só existe uma coluna de "apoio" real quando o formato traz as DUAS totais (MOD e combinada) —
+  // formato antigo (só uma coluna "HH TOTAL") não tem como separar, fica null.
+  var temApoioSeparavel=iHHMod>=0&&iHHCombinado>=0;
   // Algumas contratadas já trazem o índice de produtividade PRÓPRIO delas por linha (ex.: coluna
   // "ÍNDICE DE PRODUTIVIDADE") — usado como aproximação quando a NOSSA base não tem essa
   // composição cadastrada, em vez de deixar a atividade sem nenhum comparativo.
@@ -15842,12 +15858,22 @@ function iprodParsePQSheet(data){
       var hhVal=parseFloat(String(row[iHH]==null?'':row[iHH]).replace(',','.'));
       if(isFinite(hhVal)&&hhVal>0) hhDeclarado=hhVal;
     }
+    // Mão de Obra de Apoio (Andaime/Materiais/Topografia/Pintura/Carga e Transporte/Manutenção)
+    // dessa linha — só existe quando o formato traz as duas colunas de total (ver iHHMod acima).
+    // Não entra no comparativo por atividade (hhDeclarado já é só MOD), fica à parte pra não sumir
+    // do relatório.
+    var hhApoioDeclarado=null;
+    if(temApoioSeparavel){
+      var hhComb=parseFloat(String(row[iHHCombinado]==null?'':row[iHHCombinado]).replace(',','.'));
+      var hhMod=parseFloat(String(row[iHHMod]==null?'':row[iHHMod]).replace(',','.'));
+      if(isFinite(hhComb)&&isFinite(hhMod)&&hhComb>hhMod) hhApoioDeclarado=hhComb-hhMod;
+    }
     var indiceContratada=null;
     if(iIndiceContratada>=0){
       var idxVal=parseFloat(String(row[iIndiceContratada]==null?'':row[iIndiceContratada]).replace(',','.'));
       if(isFinite(idxVal)&&idxVal>0) indiceContratada=idxVal;
     }
-    out.push({desc:desc,codCliente:cod,unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd,valorTotal:valorTotal,hhDeclarado:hhDeclarado,indiceContratada:indiceContratada});
+    out.push({desc:desc,codCliente:cod,unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd,valorTotal:valorTotal,hhDeclarado:hhDeclarado,hhApoioDeclarado:hhApoioDeclarado,indiceContratada:indiceContratada});
   });
   return out.length?out:null;
 }
@@ -16071,17 +16097,19 @@ async function iprodHandleContratadaFile(file){
         // A MILPLAN manda um workbook "Plano de Trabalho" com ~18 abas (orçamento, cronograma
         // financeiro, histograma diário, mobilização...) — varrer todas em busca de DESCRIÇÃO+
         // QUANT. dá falso-positivo certeiro (ex.: aba "11.1", mobilização de pessoal, também bate
-        // esse padrão e vem ANTES da aba certa na ordem do workbook). Vai direto na aba "12.0 PQ"
-        // (PQ compacta, já vem com HH UNIT/HH TOTAL por atividade — não precisa ratear pelo
+        // esse padrão e vem ANTES da aba certa na ordem do workbook). Vai direto na aba com a PQ
+        // compacta (já vem com HH UNIT/HH TOTAL por atividade — não precisa ratear pelo
         // histograma). Além disso lê a aba "8.1 - Hist Detalhado" pra pegar o histograma por
         // função de verdade (ver iprodParseHistDetalhadoMilplan) — com isso a seção 4
         // "Comparativo por função" passa a funcionar igual à da APIA.
+        // A MILPLAN renomeou essa aba de "12.0 PQ" pra "PLANILHA Hh" na revisão do LS03_r2
+        // (confirmado 27/08) — mesma estrutura de colunas, só nome diferente. Aceita as duas.
         var nomeAbaPQ=wb.SheetNames.find(function(n){
           var nn=iprodNorm(n);
-          return nn==='12.0 PQ'||(nn.indexOf('PQ')>=0&&nn.indexOf('12')>=0&&nn.length<=12);
+          return nn==='12.0 PQ'||nn==='PLANILHA HH'||(nn.indexOf('PQ')>=0&&nn.indexOf('12')>=0&&nn.length<=12);
         });
         if(!nomeAbaPQ){
-          toast('Não achei uma aba parecida com "12.0 PQ" nesse arquivo — abas encontradas: '+wb.SheetNames.join(', ')+'. Isso parece o arquivo CPU (detalhe por função) — o que precisa aqui é o Plano de Trabalho completo (.xlsm), a mesma pasta que tem a aba "12.0 PQ".','red');
+          toast('Não achei uma aba parecida com "12.0 PQ"/"PLANILHA Hh" nesse arquivo — abas encontradas: '+wb.SheetNames.join(', ')+'. Isso parece o arquivo CPU (detalhe por função) — o que precisa aqui é o Plano de Trabalho completo (.xlsm), a mesma pasta que tem essa aba.','red');
           return;
         }
         var dataMilplan=XLSX.utils.sheet_to_json(wb.Sheets[nomeAbaPQ],{header:1,defval:''});
@@ -16289,6 +16317,11 @@ async function iprodProcessar(){
   // à parte), usa esse HH declarado direto — o rateio proporcional por R$ só faz sentido quando
   // não existe essa informação e precisa ser estimada a partir do histograma.
   var pqTemHHDeclarado=achouPorItem.some(function(x){return x.item.hhDeclarado!=null;});
+  // Mão de Obra de Apoio (Andaime/Materiais/Topografia/Pintura/Carga e Transporte/Manutenção)
+  // que a própria PQ da contratada separa (ver iHHMod/hhApoioDeclarado em iprodParsePQSheet) —
+  // somada de TODOS os itens (matched ou não), pra não sumir do relatório mesmo excluída do
+  // comparativo por atividade/função.
+  var totHhApoioDeclarado=(IPROD_CONTRATADA.pq||[]).reduce(function(s,item){return s+(item.hhApoioDeclarado||0);},0);
   // Soma o valor (R$) de fornecimento de TODOS os itens que bateram com índice — independe do
   // ramo abaixo (rateio ou HH declarado), serve tanto pro rateio quanto pra estimar a taxa R$/HH
   // usada na tradução financeira da Diferença (HH) mais abaixo (ver taxaRSporHH).
@@ -16968,7 +17001,7 @@ async function iprodProcessar(){
   var valorReferencia=taxaRSporHH!=null?totRefAjust*taxaRSporHH:null;
   var valorDif=taxaRSporHH!=null?totDif*taxaRSporHH:null;
 
-  IPROD_RESULT={linhas:linhas,linhasPacote:linhasPacote,linhasExcluidas:linhasExcluidas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,promovidosExcluidos:promovidosExcluidos,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto,totCobradoHistograma:totCobradoHistograma,taxaRSporHH:taxaRSporHH,valorCobrado:valorCobrado,valorReferencia:valorReferencia,valorDif:valorDif};
+  IPROD_RESULT={linhas:linhas,linhasPacote:linhasPacote,linhasExcluidas:linhasExcluidas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,promovidosExcluidos:promovidosExcluidos,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto,totCobradoHistograma:totCobradoHistograma,taxaRSporHH:taxaRSporHH,valorCobrado:valorCobrado,valorReferencia:valorReferencia,valorDif:valorDif,totHhApoioDeclarado:totHhApoioDeclarado};
   toast(temContratada?'Comparativo calculado':'HH com CPU calculado pelo índice do projeto (sem contratada)','green');
   iprodRenderShell();
 }
@@ -17353,8 +17386,18 @@ function iprodRenderShell(){
       +'<div class="iprod-kpi" style="border-top-color:#d97706"><div class="iprod-kpi-val" style="color:#d97706">'+iprodFmt(kpiRef)+'</div><div class="iprod-kpi-lbl">HH com CPU</div><div class="iprod-kpi-sub">PQ × Índice, ajustado por '+Math.round(IPROD_PRAT*100)+'%</div>'+(temRS?'<div class="iprod-kpi-money" style="color:#d97706">≈ '+iprodFmtRS(r.valorReferencia)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiDif>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">'+iprodFmt(kpiDif)+'</div><div class="iprod-kpi-lbl">Diferença (HH)</div><div class="iprod-kpi-sub">Cobrado − Referência ajustada</div>'+(temRS?'<div class="iprod-kpi-money" style="color:'+(kpiDif>0?'#dc2626':'#16a34a')+'">≈ '+iprodFmtRS(r.valorDif)+'</div>':'')+'</div>'
       +'<div class="iprod-kpi" style="border-top-color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'"><div class="iprod-kpi-val" style="color:'+(kpiImprod>0?'#dc2626':'#16a34a')+'">'+Math.round(kpiAderencia*100)+'%</div><div class="iprod-kpi-lbl">Aderência</div><div class="iprod-kpi-sub">HH Orçado: Empresa ÷ HH com CPU</div></div>'
-      +(mostrarIndireto?'<div class="iprod-kpi" style="border-top-color:#7c3aed"><div class="iprod-kpi-val" style="color:#7c3aed">'+Math.round(pctIndireto*100)+'%</div><div class="iprod-kpi-lbl">% de Custo Indireto</div><div class="iprod-kpi-sub">(Mão de Obra Indireta '+iprodFmtRS(indiretosMP.maoObraIndireta)+' + Equipamentos '+iprodFmtRS(indiretosMP.equipamentos)+') ÷ Valor Total Aprovado '+iprodFmtRS(indiretosMP.valorTotalAprovado)+' — da PQ da MILPLAN (aba 12.0 PQ)</div></div>':'')
+      +(mostrarIndireto?'<div class="iprod-kpi" style="border-top-color:#7c3aed"><div class="iprod-kpi-val" style="color:#7c3aed">'+Math.round(pctIndireto*100)+'%</div><div class="iprod-kpi-lbl">% de Custo Indireto</div><div class="iprod-kpi-sub">(Mão de Obra Indireta '+iprodFmtRS(indiretosMP.maoObraIndireta)+' + Equipamentos '+iprodFmtRS(indiretosMP.equipamentos)+') ÷ Valor Total Aprovado '+iprodFmtRS(indiretosMP.valorTotalAprovado)+' — da PQ da MILPLAN</div></div>':'')
       +'</div>';
+
+    // Mão de Obra de Apoio (Andaime/Materiais/Topografia/Pintura/Carga e Transporte/Manutenção)
+    // que a PQ da contratada separa em coluna própria (ver iHHMod em iprodParsePQSheet) — não entra
+    // em nenhum HH acima (Orçado/CPU/Diferença/Aderência): conferido na base de índices da Vale que
+    // insumo de andaime só existe em composições civis/alvenaria, nunca nas de equipamento/elétrica/
+    // mecânica que a MILPLAN está rateando apoio dentro — comparar incluindo apoio infla a
+    // divergência por escopo (o que está na composição), não por produtividade de verdade.
+    if(r.totHhApoioDeclarado>0.5){
+      html+='<div class="iprod-insight" style="margin-bottom:16px">ℹ️ <b>'+iprodFmt(r.totHhApoioDeclarado)+' HH de Mão de Obra de Apoio</b> (Equipe Andaime/Materiais/Topografia/Pintura/Carga e Transporte/Manutenção) foram identificados na PQ da contratada e <b>excluídos</b> dos números acima e do comparativo por atividade/função — a base de índices da Vale não embute apoio de andaime nas composições de equipamento/elétrica/mecânica, só em civil/alvenaria, então incluir aqui infla a diferença por um motivo de escopo, não de produtividade.</div>';
+    }
 
     // "Onde focar primeiro" — só no PDF, top 3 funções mais divergentes (mesmo critério de
     // severidade do resumo executivo acima). Complementa o veredito com o próximo passo prático.
