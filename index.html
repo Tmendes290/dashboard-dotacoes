@@ -15124,6 +15124,20 @@ var IPROD_PALAVRAS_FRACAS={};
 // nesses casos reflete só o tempo do encarregado supervisionando, não o serviço em si — provável
 // subestimação. Sinaliza em vez de aplicar o índice como se fosse completo.
 var IPROD_PALAVRAS_SUPERVISAO=['ENCARREGADO','MESTRE','SUPERVISOR','APONTADOR','TECNICO DE SEGURANCA','ENGENHEIRO'];
+// Funções que compõem a "Mão de Obra Direta de APOIO" na CPU da MILPLAN (bloco "2.00" — Equipe
+// Andaime/Materiais/Topografia/Pintura/Carga e Transporte/Manutenção — ver comentário perto de
+// totHhApoioDeclarado). Curada pelos rótulos reais confirmados no histograma da MILPLAN (LS03) —
+// deliberadamente NÃO inclui operador de escavadeira/trator/rolo compactador etc.: esses aparecem
+// no mesmo pacote "Operação de equipamentos" pra fins de vocabulário, mas são equipamento de
+// execução direta (terraplenagem), não apoio geral de obra — incluir eles aqui inflaria o "excluído"
+// com HH que na real é trabalho direto.
+var IPROD_FUNCOES_APOIO={};
+['MONTADOR ANDAIME','AJUDANTE DE ANDAIME','MONTADOR DE ANDAIME LIDER','ENCARREGADO ANDAIME',
+ 'TOPOGRAFO','AUXILIAR DE TOPOGRAFIA',
+ 'PINTOR INDUSTRIAL','AJUDANTE DE PINTURA','PINTOR','JATISTA',
+ 'MOTORISTA ONIBUS','OPERADOR DE CAMINHAO MUNCK','OPERADOR DE GUINDASTE','SINALEIRO',
+ 'MOTORISTA CARRETEIRO (INSERIR NA PQ)','RIGGER (INSERIR NA PQ)'
+].forEach(function(f){ IPROD_FUNCOES_APOIO[f]=true; });
 function iprodIndiceSoSupervisao(rows){
   var mo=rows.filter(function(r){return r.tipo==='M';});
   if(!mo.length) return false;
@@ -16336,6 +16350,18 @@ async function iprodProcessar(){
   // somada de TODOS os itens (matched ou não), pra não sumir do relatório mesmo excluída do
   // comparativo por atividade/função.
   var totHhApoioDeclarado=(IPROD_CONTRATADA.pq||[]).reduce(function(s,item){return s+(item.hhApoioDeclarado||0);},0);
+  // Quebra por função do HH de apoio acima — vem do HISTOGRAMA (fonte independente da PQ), não é
+  // rateio nem chute: soma cada função do histograma que é reconhecidamente apoio (ver
+  // IPROD_FUNCOES_APOIO). Serve só pra o usuário CONFERIR o que compõe o total excluído — não
+  // entra em nenhum cálculo/comparação, é puramente informativo (pedido do usuário 28/08).
+  var apoioPorFuncaoMap={};
+  (IPROD_CONTRATADA.histograma||[]).forEach(function(h){
+    var hn=iprodNorm(h.funcao);
+    var hnBase=hn.indexOf(' - ')>=0?hn.split(' - ')[0].trim():hn;
+    if(!IPROD_FUNCOES_APOIO[hnBase]) return;
+    apoioPorFuncaoMap[h.funcao]=(apoioPorFuncaoMap[h.funcao]||0)+h.hh;
+  });
+  var apoioPorFuncao=Object.keys(apoioPorFuncaoMap).map(function(f){return {funcao:f,hh:apoioPorFuncaoMap[f]};}).filter(function(x){return x.hh>0.001;}).sort(function(a,b){return b.hh-a.hh;});
   // Soma o valor (R$) de fornecimento de TODOS os itens que bateram com índice — independe do
   // ramo abaixo (rateio ou HH declarado), serve tanto pro rateio quanto pra estimar a taxa R$/HH
   // usada na tradução financeira da Diferença (HH) mais abaixo (ver taxaRSporHH).
@@ -17017,7 +17043,7 @@ async function iprodProcessar(){
   var valorReferencia=taxaRSporHH!=null?totRefAjust*taxaRSporHH:null;
   var valorDif=taxaRSporHH!=null?totDif*taxaRSporHH:null;
 
-  IPROD_RESULT={linhas:linhas,linhasPacote:linhasPacote,linhasExcluidas:linhasExcluidas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,promovidosExcluidos:promovidosExcluidos,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto,totCobradoHistograma:totCobradoHistograma,taxaRSporHH:taxaRSporHH,valorCobrado:valorCobrado,valorReferencia:valorReferencia,valorDif:valorDif,totHhApoioDeclarado:totHhApoioDeclarado};
+  IPROD_RESULT={linhas:linhas,linhasPacote:linhasPacote,linhasExcluidas:linhasExcluidas,totCobrado:totCobrado,totRefAjust:totRefAjust,totDif:totDif,pctImprod:pctImprod,semIndice:semIndice,qtdComp:qtdComp,materiais:materiais,porAtividade:porAtividade,contratadaSemProjeto:contratadaSemProjeto,promovidosExcluidos:promovidosExcluidos,pqTemHHDeclarado:pqTemHHDeclarado,semHistogramaPorFuncao:semHistogramaPorFuncao,temContratada:temContratada,totHhEsperadoProjeto:totHhEsperadoProjeto,totCobradoHistograma:totCobradoHistograma,taxaRSporHH:taxaRSporHH,valorCobrado:valorCobrado,valorReferencia:valorReferencia,valorDif:valorDif,totHhApoioDeclarado:totHhApoioDeclarado,apoioPorFuncao:apoioPorFuncao};
   toast(temContratada?'Comparativo calculado':'HH com CPU calculado pelo índice do projeto (sem contratada)','green');
   iprodRenderShell();
 }
@@ -17412,7 +17438,21 @@ function iprodRenderShell(){
     // mecânica que a MILPLAN está rateando apoio dentro — comparar incluindo apoio infla a
     // divergência por escopo (o que está na composição), não por produtividade de verdade.
     if(r.totHhApoioDeclarado>0.5){
-      html+='<div class="iprod-insight" style="margin-bottom:16px">ℹ️ <b>'+iprodFmt(r.totHhApoioDeclarado)+' HH de Mão de Obra de Apoio</b> (Equipe Andaime/Materiais/Topografia/Pintura/Carga e Transporte/Manutenção) foram identificados na PQ da contratada e <b>excluídos</b> dos números acima e do comparativo por atividade/função — a base de índices da Vale não embute apoio de andaime nas composições de equipamento/elétrica/mecânica, só em civil/alvenaria, então incluir aqui infla a diferença por um motivo de escopo, não de produtividade.</div>';
+      var temApoioPorFuncao=r.apoioPorFuncao&&r.apoioPorFuncao.length;
+      html+='<div class="iprod-insight"'+(temApoioPorFuncao?' style="margin-bottom:0;cursor:pointer;border-radius:8px 8px 0 0" onclick="var e=this.nextElementSibling;e.style.display=e.style.display===\'none\'?\'block\':\'none\';this.querySelector(\'.iprod-toggle-seta\').textContent=e.style.display===\'none\'?\'▸\':\'▾\';"':' style="margin-bottom:16px"')+'>'
+        +(temApoioPorFuncao?'<span class="iprod-toggle-seta" style="margin-right:4px">▸</span>':'')
+        +'ℹ️ <b>'+iprodFmt(r.totHhApoioDeclarado)+' HH de Mão de Obra de Apoio</b> (Equipe Andaime/Materiais/Topografia/Pintura/Carga e Transporte/Manutenção) foram identificados na PQ da contratada e <b>excluídos</b> dos números acima e do comparativo por atividade/função — a base de índices da Vale não embute apoio de andaime nas composições de equipamento/elétrica/mecânica, só em civil/alvenaria, então incluir aqui infla a diferença por um motivo de escopo, não de produtividade.'
+        +(temApoioPorFuncao?' Clique pra ver quais funções, no histograma da contratada, compõem esse total.':'')
+        +'</div>';
+      if(temApoioPorFuncao){
+        var totApoioPorFuncao=r.apoioPorFuncao.reduce(function(s,x){return s+x.hh;},0);
+        html+='<div style="display:none;margin:0 0 16px;background:var(--card);border:1px solid var(--bord);border-top:none;border-radius:0 0 8px 8px;padding:12px 14px">'
+          +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;font-weight:800;color:var(--muted);margin-bottom:8px">Funções do histograma que compõem o apoio (só informativo — não entra em nenhum total)</div>'
+          +r.apoioPorFuncao.map(function(x){return '<div class="iprod-drill-row"><span>'+x.funcao+'</span><span style="font-weight:700">'+iprodFmt(x.hh)+' HH</span></div>';}).join('')
+          +'<div class="iprod-drill-row" style="border-bottom:none;margin-top:4px"><span style="font-weight:800;color:var(--text)">Soma (histograma)</span><span style="font-weight:800">'+iprodFmt(totApoioPorFuncao)+' HH</span></div>'
+          +(Math.abs(totApoioPorFuncao-r.totHhApoioDeclarado)>1?'<div style="font-size:9.5px;color:var(--muted);margin-top:6px">↳ Pequena diferença em relação ao '+iprodFmt(r.totHhApoioDeclarado)+' HH calculado pela PQ é esperada — são duas fontes independentes (histograma por função × PQ por item).</div>':'')
+          +'</div>';
+      }
     }
 
     // "Onde focar primeiro" — só no PDF, top 3 funções mais divergentes (mesmo critério de
