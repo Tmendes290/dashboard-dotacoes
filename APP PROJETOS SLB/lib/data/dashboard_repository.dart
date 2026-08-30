@@ -10,24 +10,40 @@ class DashboardRepository {
   /// Supabase corta select() em 1000 linhas por padrão — pagina com .range()
   /// até esgotar, senão registros (PEPs, itens, etc.) somem silenciosamente
   /// em qualquer tabela que já tenha passado de 1000 linhas.
+  ///
+  /// A 1ª página já vem com o total (`count: exact`, mesma ida e volta), e as
+  /// páginas seguintes são disparadas em paralelo em vez de uma esperar a
+  /// outra — numa rede de obra com latência alta, uma tabela de 3 páginas
+  /// sequenciais podia sozinha custar 3x o round-trip da rede.
   Future<List<Map<String, dynamic>>> _fetchAll(
     String table,
     String select, {
     String? orderBy,
     bool ascending = true,
   }) async {
-    var offset = 0;
-    final all = <Map<String, dynamic>>[];
-    while (true) {
-      var query = _client.from(table).select(select);
-      final ordered = orderBy != null
+    PostgrestTransformBuilder<PostgrestList> baseQuery() {
+      final query = _client.from(table).select(select);
+      return orderBy != null
           ? query.order(orderBy, ascending: ascending)
           : query;
-      final rows = await ordered.range(offset, offset + _pageSize - 1);
-      final list = (rows as List).cast<Map<String, dynamic>>();
-      all.addAll(list);
-      if (list.length < _pageSize) break;
-      offset += _pageSize;
+    }
+
+    final first = await baseQuery()
+        .range(0, _pageSize - 1)
+        .count(CountOption.exact);
+    final all = List<Map<String, dynamic>>.from(first.data);
+    if (all.length >= first.count) return all;
+
+    final pending = <Future<List<Map<String, dynamic>>>>[];
+    for (var offset = _pageSize; offset < first.count; offset += _pageSize) {
+      pending.add(
+        baseQuery()
+            .range(offset, offset + _pageSize - 1)
+            .then((rows) => (rows as List).cast<Map<String, dynamic>>()),
+      );
+    }
+    for (final page in await Future.wait(pending)) {
+      all.addAll(page);
     }
     return all;
   }
