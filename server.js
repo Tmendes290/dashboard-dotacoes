@@ -900,6 +900,11 @@ app.post('/api/pgu-alerta-turno', async (req, res) => {
 // ── MILPLAN FLOW WORK: rotas de SS (numeração, PDF, e-mail, Drive) ──────────
 app.use('/api/milplan', milplanRoutes);
 
+// ── APP PROJETOS SLB (mobile/PWA): build web do Flutter, servido em /app ────
+// Pensado pra "Adicionar à tela inicial" no celular — mesmo backend Supabase
+// do dashboard, sem precisar instalar o .apk.
+app.use('/app', express.static(path.join(__dirname, 'mobile-web')));
+
 // Serve index.html from root (no subfolder needed)
 app.use(express.static(__dirname));
 
