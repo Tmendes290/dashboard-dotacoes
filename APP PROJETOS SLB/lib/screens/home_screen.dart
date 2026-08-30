@@ -253,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             tone: materiaisAtraso > 0
                                 ? StatusTone.warn
                                 : StatusTone.ok,
-                            onTap: () => widget.onNavigateToTab?.call(3),
+                            onTap: () => widget.onNavigateToTab?.call(5),
                           ),
                         ],
                       ),

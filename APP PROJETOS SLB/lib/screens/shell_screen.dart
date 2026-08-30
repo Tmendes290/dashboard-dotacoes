@@ -4,6 +4,8 @@ import '../theme/app_theme.dart';
 import 'home_screen.dart';
 import 'produtividade_screen.dart';
 import 'cji3_screen.dart';
+import 'regularizar_screen.dart';
+import 'checkin_screen.dart';
 import 'materiais_screen.dart';
 import 'perfil_screen.dart';
 
@@ -32,6 +34,8 @@ class _ShellScreenState extends State<ShellScreen> {
     HomeScreen(onNavigateToTab: _goToTab),
     const ProdutividadeScreen(),
     const Cji3Screen(),
+    const RegularizarScreen(),
+    const CheckinScreen(),
     const MateriaisScreen(),
     const PerfilScreen(),
   ];
@@ -47,6 +51,16 @@ class _ShellScreenState extends State<ShellScreen> {
       icon: Icons.fact_check_outlined,
       activeIcon: Icons.fact_check,
       label: 'CJI3',
+    ),
+    (
+      icon: Icons.balance_outlined,
+      activeIcon: Icons.balance,
+      label: 'Regularizar',
+    ),
+    (
+      icon: Icons.schedule_outlined,
+      activeIcon: Icons.schedule,
+      label: 'Check-in',
     ),
     (
       icon: Icons.inventory_2_outlined,

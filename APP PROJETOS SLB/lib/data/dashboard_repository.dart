@@ -131,4 +131,16 @@ class DashboardRepository {
       ascending: false,
     );
   }
+
+  /// Tabela improdutividade: um registro por apontamento de chegada/atraso
+  /// importado da planilha (mesmos dados da aba "Produtividade Projetos
+  /// Salobo" do site).
+  Future<List<Map<String, dynamic>>> fetchImprodutividade() async {
+    return _fetchAll(
+      'improdutividade',
+      'data_sort_key,empresa,sap,fiscal,chegada_min,pts_min,inicio_min,'
+          'alm_ini_min,alm_fim_min,termino_min,acao',
+      orderBy: 'data_sort_key',
+    );
+  }
 }
