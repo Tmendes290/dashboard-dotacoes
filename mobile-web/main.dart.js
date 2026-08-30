@@ -91693,7 +91693,7 @@ s.P$=r
 s.L$=0
 this.aF()},
 I(a){var s,r=this,q=null,p=B.Fn.ta(0.6),o=A.mH($.ce.ta(0.5),1.5),n=A.b([new A.dS(0,B.dL,$.ce.ta(0.35),B.i,24)],t.sq)
-p=A.df(A.cl(q,new A.KT(new A.Av(A.aU5(q,q,new A.yv("assets/images/login_logo.jpg",q,q)),B.CM,q),q),B.r,q,q,new A.bK(p,q,o,q,n,q,B.ca),q,88,q,B.oK,q,q,88),q,q)
+p=A.df(A.cl(q,new A.KT(new A.Av(A.aU5(q,q,new A.yv("assets/images/login_logo.png",q,q)),B.CM,q),q),B.r,q,q,new A.bK(p,q,o,q,n,q,B.ca),q,88,q,B.oK,q,q,88),q,q)
 o=$.ce
 n=t.p
 o=A.b([p,B.fR,A.df(A.ei(A.b([A.cl(q,q,B.r,q,q,new A.bK(o,q,q,q,q,q,B.ca),q,6,B.oI,q,q,q,6),A.am("PROJETOS SLB",q,q,q,A.aEX(o),q,q)],n),B.R,B.v,B.bt),q,q),B.Sd,A.am("Seja bem-vindo",q,q,q,A.dG(B.ac,34,B.P),B.aI,q),B.cS,A.am("Feito por Thiago Mendes Lima",q,q,q,A.aR(B.cJ,13,B.l),B.aI,q),B.Sg,r.Qy("E-mail",r.d,!1),B.j0,r.Qy("Senha",r.e,!0)],n)
