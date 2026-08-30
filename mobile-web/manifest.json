@@ -1,11 +1,11 @@
 {
-    "name": "Projetos SLB",
-    "short_name": "Projetos SLB",
+    "name": "slb_app",
+    "short_name": "slb_app",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#20272C",
-    "theme_color": "#20272C",
-    "description": "Dashboard de Dotações, CAPEX, CJI3 e Produtividade — Vale Base Metals Salobo.",
+    "background_color": "#0175C2",
+    "theme_color": "#0175C2",
+    "description": "A new Flutter project.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
