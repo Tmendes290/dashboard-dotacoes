@@ -6,6 +6,8 @@ import '../widgets/app_header.dart';
 import '../widgets/section_label.dart';
 import '../widgets/filter_picker.dart';
 import '../widgets/touchable_list.dart';
+import 'checkin_empresa_detail_screen.dart';
+import 'checkin_fiscal_detail_screen.dart';
 
 /// Turno pelo horário de Início — mesma janela do site (index.html
 /// `impGetTurno`): Noite 23:00–06:00, Tarde 14:00–22:59, resto (ou sem
@@ -572,7 +574,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
                       const SizedBox(height: 20),
                       _buildEmpresaRanking(stats),
                       const SizedBox(height: 20),
-                      _buildAderenciaFiscais(stats),
+                      _buildAderenciaFiscais(stats, data.refSquads),
                     ],
                   );
                 },
@@ -624,6 +626,21 @@ class _CheckinScreenState extends State<CheckinScreen> {
                         ? 'Ótimo'
                         : (e.pct >= 50 ? 'Atenção' : 'Crítico'),
                     tone: _toneForPct(e.pct),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CheckinEmpresaDetailScreen(
+                          empresa: e.empresa,
+                          registros: stats.validos
+                              .where(
+                                (d) =>
+                                    (d['empresa']?.toString() ?? '').trim() ==
+                                    e.empresa,
+                              )
+                              .toList(),
+                          refMin: _refMin,
+                        ),
+                      ),
+                    ),
                   ),
                 )
                 .toList(),
@@ -632,7 +649,10 @@ class _CheckinScreenState extends State<CheckinScreen> {
     );
   }
 
-  Widget _buildAderenciaFiscais(ImpStats stats) {
+  Widget _buildAderenciaFiscais(
+    ImpStats stats,
+    Map<String, Map<String, String>> refSquads,
+  ) {
     final aderencia = computeFiscalAderencia(stats.validos);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -659,6 +679,15 @@ class _CheckinScreenState extends State<CheckinScreen> {
                         ? 'Em dia'
                         : (f.pct >= 50 ? 'Atenção' : 'Baixa aderência'),
                     tone: _toneForPct(f.pct, okAt: 90, waitAt: 50),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CheckinFiscalDetailScreen(
+                          fiscal: f.fiscal,
+                          validos: stats.validos,
+                          refSquads: refSquads,
+                        ),
+                      ),
+                    ),
                   ),
                 )
                 .toList(),
