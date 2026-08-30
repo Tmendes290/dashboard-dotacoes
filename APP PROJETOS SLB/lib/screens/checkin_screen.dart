@@ -5,6 +5,7 @@ import '../data/dashboard_repository.dart';
 import '../widgets/app_header.dart';
 import '../widgets/section_label.dart';
 import '../widgets/filter_picker.dart';
+import '../widgets/touchable_list.dart';
 
 /// Turno pelo horário de Início — mesma janela do site (index.html
 /// `impGetTurno`): Noite 23:00–06:00, Tarde 14:00–22:59, resto (ou sem
@@ -94,6 +95,10 @@ class ImpStats {
   final int avgProdMinC;
   final int avgImpMinC;
   final int pctProd, pctImp, pctProdC, pctImpC;
+  // Registros do turno promovido já sem os "Desconsiderar" — usado pelos
+  // rankings de empresa e aderência de fiscal, pra ficarem consistentes com
+  // os cards acima em vez de recalcular o filtro de turno do zero.
+  final List<Map<String, dynamic>> validos;
   const ImpStats({
     required this.total,
     required this.comAtraso,
@@ -108,6 +113,7 @@ class ImpStats {
     required this.pctImp,
     required this.pctProdC,
     required this.pctImpC,
+    required this.validos,
   });
 }
 
@@ -201,7 +207,105 @@ ImpStats computeImpStats(
     pctImp: pctImp,
     pctProdC: pctProdC,
     pctImpC: pctImpC,
+    validos: validos,
   );
+}
+
+class EmpresaRank {
+  final String empresa;
+  final int total;
+  final int noPrazo;
+  final int pct;
+  const EmpresaRank({
+    required this.empresa,
+    required this.total,
+    required this.noPrazo,
+    required this.pct,
+  });
+}
+
+/// Ranking por empresa: % de registros sem atraso (mesmo Horário Ref. do
+/// filtro) — equivalente ao `impChartFaixaEmp()` do site, mas usando o
+/// horário configurável em vez do corte fixo de 08:00.
+List<EmpresaRank> computeEmpresaRanking(
+  List<Map<String, dynamic>> validos,
+  int refMin,
+) {
+  final byE = <String, List<int>>{}; // [total, noPrazo]
+  for (final d in validos) {
+    final empresa = (d['empresa']?.toString() ?? '').trim();
+    if (empresa.isEmpty) continue;
+    final base = (d['inicio_min'] as num?)?.toInt() ??
+        (d['chegada_min'] as num?)?.toInt() ??
+        (d['pts_min'] as num?)?.toInt();
+    if (base == null) continue;
+    final e = byE.putIfAbsent(empresa, () => [0, 0]);
+    e[0]++;
+    if (base <= refMin) e[1]++;
+  }
+  final list = byE.entries
+      .map(
+        (e) => EmpresaRank(
+          empresa: e.key,
+          total: e.value[0],
+          noPrazo: e.value[1],
+          pct: e.value[0] > 0 ? (e.value[1] / e.value[0] * 100).round() : 0,
+        ),
+      )
+      .toList()
+    ..sort((a, b) {
+      final byPct = b.pct.compareTo(a.pct);
+      return byPct != 0 ? byPct : b.total.compareTo(a.total);
+    });
+  return list;
+}
+
+class FiscalAderencia {
+  final String fiscal;
+  final int registros;
+  final int diasComRegistro;
+  final int diasUteis;
+  final int pct;
+  const FiscalAderencia({
+    required this.fiscal,
+    required this.registros,
+    required this.diasComRegistro,
+    required this.diasUteis,
+    required this.pct,
+  });
+}
+
+/// Aderência dos fiscais: em quantos dos dias úteis do filtro cada fiscal
+/// efetivamente lançou algum registro — equivalente ao
+/// `impRenderAderenciaFiscais()` do site (versão simplificada: um total só,
+/// sem quebrar por semana/mês, já que a tela é estreita).
+List<FiscalAderencia> computeFiscalAderencia(List<Map<String, dynamic>> validos) {
+  final diasUteis = <String>{};
+  final porFiscal = <String, Set<String>>{};
+  final registrosPorFiscal = <String, int>{};
+  for (final d in validos) {
+    final dsk = d['data_sort_key']?.toString();
+    if (dsk == null || dsk.isEmpty) continue;
+    diasUteis.add(dsk);
+    final fiscal = (d['fiscal']?.toString() ?? '').trim();
+    if (fiscal.isEmpty) continue;
+    porFiscal.putIfAbsent(fiscal, () => {}).add(dsk);
+    registrosPorFiscal[fiscal] = (registrosPorFiscal[fiscal] ?? 0) + 1;
+  }
+  final totalDias = diasUteis.length;
+  final list = porFiscal.entries
+      .map(
+        (e) => FiscalAderencia(
+          fiscal: e.key,
+          registros: registrosPorFiscal[e.key] ?? 0,
+          diasComRegistro: e.value.length,
+          diasUteis: totalDias,
+          pct: totalDias > 0 ? (e.value.length / totalDias * 100).round() : 0,
+        ),
+      )
+      .toList()
+    ..sort((a, b) => b.pct.compareTo(a.pct));
+  return list;
 }
 
 class CheckinScreen extends StatefulWidget {
@@ -465,6 +569,10 @@ class _CheckinScreenState extends State<CheckinScreen> {
                         'Fim de semana não entra no cálculo por padrão. Turno considerado: ADM (07h–14h), ou Tarde/Noite se o Horário Ref. cair nessas janelas.',
                         style: AppText.body(size: 10.5, color: AppColors.muted),
                       ),
+                      const SizedBox(height: 20),
+                      _buildEmpresaRanking(stats),
+                      const SizedBox(height: 20),
+                      _buildAderenciaFiscais(stats),
                     ],
                   );
                 },
@@ -483,6 +591,102 @@ class _CheckinScreenState extends State<CheckinScreen> {
         SizedBox(height: MediaQuery.of(context).size.height * 0.32),
         Center(child: child),
       ],
+    );
+  }
+
+  StatusTone _toneForPct(int pct, {int okAt = 80, int waitAt = 50}) {
+    if (pct >= okAt) return StatusTone.ok;
+    if (pct >= waitAt) return StatusTone.wait;
+    return StatusTone.warn;
+  }
+
+  Widget _buildEmpresaRanking(ImpStats stats) {
+    final ranking = computeEmpresaRanking(stats.validos, _refMin);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionLabel(
+          number: '03',
+          title: 'Ranking de empresas',
+          trailing: '${ranking.length} empresas',
+        ),
+        if (ranking.isEmpty)
+          _emptyNote('Sem empresa preenchida nos registros filtrados.')
+        else
+          TouchableList(
+            rows: ranking
+                .map(
+                  (e) => ListRowData(
+                    name: e.empresa,
+                    sub: '${e.total} registros · ${e.noPrazo} no prazo',
+                    value: '${e.pct}%',
+                    badgeText: e.pct >= 80
+                        ? 'Ótimo'
+                        : (e.pct >= 50 ? 'Atenção' : 'Crítico'),
+                    tone: _toneForPct(e.pct),
+                  ),
+                )
+                .toList(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAderenciaFiscais(ImpStats stats) {
+    final aderencia = computeFiscalAderencia(stats.validos);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionLabel(
+          number: '04',
+          title: 'Aderência dos fiscais',
+          trailing: '${aderencia.length} fiscais',
+        ),
+        if (aderencia.isEmpty)
+          _emptyNote(
+            'Preencha a coluna "Fiscal" na planilha pra ver a aderência.',
+          )
+        else ...[
+          TouchableList(
+            rows: aderencia
+                .map(
+                  (f) => ListRowData(
+                    name: f.fiscal,
+                    sub:
+                        '${f.registros} registros · ${f.diasComRegistro} de ${f.diasUteis} dias úteis',
+                    value: '${f.pct}%',
+                    badgeText: f.pct >= 90
+                        ? 'Em dia'
+                        : (f.pct >= 50 ? 'Atenção' : 'Baixa aderência'),
+                    tone: _toneForPct(f.pct, okAt: 90, waitAt: 50),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '% de dias úteis do filtro em que o fiscal lançou pelo menos um registro.',
+            style: AppText.body(size: 10.5, color: AppColors.muted),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _emptyNote(String text) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        border: Border.all(color: AppColors.line),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: AppText.body(size: 12, color: AppColors.muted),
+      ),
     );
   }
 }
