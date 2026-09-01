@@ -14916,6 +14916,39 @@ function iprodSetFuncFiltro(v){ IPROD_FUNC_FILTRO=v; iprodRenderShell(); }
 // atividades sem HH da Empresa (faltando-empresa), sem tirar do cálculo de referência.
 var IPROD_QTDCOMP_FILTRO='todos';
 function iprodSetQtdCompFiltro(v){ IPROD_QTDCOMP_FILTRO=v; iprodRenderShell(); }
+// Filtro por Unid. na seção 3 (multi-select, ex.: só "m" e "ton") — vazio = todas. Entra no mesmo
+// pipeline de qtdCompFiltrado que o filtro de Status, então também recorta os cards de KPI acima
+// (mesmo comportamento já documentado pro resto dos filtros da seção 3).
+var IPROD_FILTRO_UNIDADES=[];
+function iprodToggleFiltroUnidade(u){
+  var i=IPROD_FILTRO_UNIDADES.indexOf(u);
+  if(i>=0) IPROD_FILTRO_UNIDADES.splice(i,1); else IPROD_FILTRO_UNIDADES.push(u);
+  iprodRenderShell();
+}
+function iprodLimparFiltroUnidade(){ IPROD_FILTRO_UNIDADES=[]; iprodRenderShell(); }
+// Ordenação clicável dos cabeçalhos da tabela 3 — null = ordem padrão (Qtd. Orçada, maior pro
+// menor). Coluna de texto (desc/unidade) começa em ordem alfabética (asc); coluna numérica começa
+// do maior pro menor (desc), mesmo critério que já era o padrão antes de existir esse controle.
+var IPROD_SORT3_COL=null, IPROD_SORT3_DIR='desc';
+function iprodSetSort3(col){
+  if(IPROD_SORT3_COL===col){ IPROD_SORT3_DIR=IPROD_SORT3_DIR==='asc'?'desc':'asc'; }
+  else { IPROD_SORT3_COL=col; IPROD_SORT3_DIR=(col==='desc'||col==='unidade')?'asc':'desc'; }
+  iprodRenderShell();
+}
+function iprodSort3Valor(q,col){
+  if(col==='desc') return iprodNorm(q.desc||'');
+  if(col==='unidade') return String(q.unidade||'');
+  if(col==='difPct') return (q.diffHH!=null&&q.hhEmpresa)?(q.diffHH/q.hhEmpresa*100):null;
+  return q[col];
+}
+// Cabeçalho clicável da tabela 3 — mostra ▲/▼ na coluna ativa. col='qtdEmpresa' é o padrão
+// (nenhuma coluna escolhida ainda), pra já nascer com a seta na coluna certa.
+function iprodTh3(label,col){
+  var colAtivo=IPROD_SORT3_COL||'qtdEmpresa';
+  var dirAtivo=IPROD_SORT3_COL?IPROD_SORT3_DIR:'desc';
+  var ativo=colAtivo===col;
+  return '<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="iprodSetSort3(\''+col+'\')" title="Ordenar por '+label+'">'+label+(ativo?' <span style="font-size:9px">'+(dirAtivo==='asc'?'▲':'▼')+'</span>':' <span style="font-size:9px;opacity:.25">▾</span>')+'</th>';
+}
 // Índice sobrescrito manualmente pelo usuário (seção 3, coluna Índice) — chave é o idxProjeto
 // (índice da linha na PQ do Projeto), valor é o índice em HH/unidade que substitui o achado
 // automaticamente. Ver iprodEditarIndiceProjeto.
@@ -14984,6 +15017,11 @@ var IPROD_MOSTRAR_EXCLUIDAS_ATIV=false, IPROD_MOSTRAR_EXCLUIDAS_FUNC=false, IPRO
 function iprodToggleAjusteReconc(){ IPROD_MOSTRAR_AJUSTE_RECONC=!IPROD_MOSTRAR_AJUSTE_RECONC; iprodRenderShell(); }
 function iprodToggleExcluidasAtiv(){ IPROD_MOSTRAR_EXCLUIDAS_ATIV=!IPROD_MOSTRAR_EXCLUIDAS_ATIV; iprodRenderShell(); }
 function iprodToggleExcluidasFunc(){ IPROD_MOSTRAR_EXCLUIDAS_FUNC=!IPROD_MOSTRAR_EXCLUIDAS_FUNC; iprodRenderShell(); }
+// Lista de itens dentro do card amarelo "cobrados sem atividade correspondente" (seção 2) —
+// começa fechada porque a lista pode ter dezenas de itens e ocupar a tela toda antes do usuário
+// ver o resto do comparativo.
+var IPROD_MOSTRAR_GAP_ITENS=false;
+function iprodToggleGapItens(){ IPROD_MOSTRAR_GAP_ITENS=!IPROD_MOSTRAR_GAP_ITENS; iprodRenderShell(); }
 
 function iprodToggleAtivSelecionada(idxProjeto){
   if(IPROD_ATIV_SELECIONADAS[idxProjeto]) delete IPROD_ATIV_SELECIONADAS[idxProjeto];
@@ -17365,7 +17403,15 @@ function iprodRenderShell(){
       qtdCompCont.todos=qtdCompBase3.length;
       qtdCompBase3.forEach(function(q){ qtdCompCont[q.status]=(qtdCompCont[q.status]||0)+1; });
       if(!qtdCompCont[IPROD_FILTRO_STATUS]&&IPROD_FILTRO_STATUS!=='todos') IPROD_FILTRO_STATUS='todos';
+      // Unidades distintas do recorte atual (Todas/Só cobradas), com contagem — vira os pills de
+      // filtro por Unid. na seção 3. Tira do filtro qualquer unidade que sumiu do recorte, senão o
+      // pill fica marcado apontando pra nada.
+      var qtdUnidades=[], qtdUnidadeCont={};
+      qtdCompBase3.forEach(function(q){ var u=q.unidade||'—'; if(!qtdUnidadeCont[u]){qtdUnidadeCont[u]=0; qtdUnidades.push(u);} qtdUnidadeCont[u]++; });
+      qtdUnidades.sort(function(a,b){return a.localeCompare(b);});
+      IPROD_FILTRO_UNIDADES=IPROD_FILTRO_UNIDADES.filter(function(u){return qtdUnidadeCont[u];});
       qtdCompFiltrado=IPROD_FILTRO_STATUS==='todos'?qtdCompBase3:qtdCompBase3.filter(function(q){return q.status===IPROD_FILTRO_STATUS;});
+      if(IPROD_FILTRO_UNIDADES.length) qtdCompFiltrado=qtdCompFiltrado.filter(function(q){return IPROD_FILTRO_UNIDADES.indexOf(q.unidade||'—')>=0;});
       kpiCobrado=qtdCompFiltrado.reduce(function(s,q){return s+(q.hhEmpresa||0);},0);
       kpiRef=qtdCompFiltrado.reduce(function(s,q){return s+(q.hhEsperado||0);},0);
     }
@@ -17476,10 +17522,12 @@ function iprodRenderShell(){
 
     if(temQtdComp){
       var gapItens=r.promovidosExcluidos||[];
-      html+='<div class="iprod-insight" style="margin-bottom:16px;border-left-color:'+(gapSemProjeto>0.5?'#d97706':'#16a34a')+';background:'+(gapSemProjeto>0.5?'#fffbeb':'#f0fdf4')+';color:'+(gapSemProjeto>0.5?'#78350f':'#14532d')+'">'
-        +(gapSemProjeto>0.5?'⚠️ <b>'+iprodFmt(gapSemProjeto)+' HH</b>, em <b>'+gapItens.length+' item(ns)</b> cobrados pela contratada sem atividade correspondente no projeto, foram excluídos manualmente da análise — não é um item "perdido": todo item sem correspondência já sobe automaticamente pra tabela 3 (status "Incluído pela empresa"), esses aqui é que você tirou de lá.'
+      var gapTemLista=gapSemProjeto>0.5&&gapItens.length>0;
+      html+='<div class="iprod-insight"'+(gapTemLista?' style="margin-bottom:16px;cursor:pointer;border-left-color:#d97706;background:#fffbeb;color:#78350f" onclick="iprodToggleGapItens()"':' style="margin-bottom:16px;border-left-color:'+(gapSemProjeto>0.5?'#d97706':'#16a34a')+';background:'+(gapSemProjeto>0.5?'#fffbeb':'#f0fdf4')+';color:'+(gapSemProjeto>0.5?'#78350f':'#14532d')+'"')+'>'
+        +(gapSemProjeto>0.5?(gapTemLista?'<span style="font-size:9px;margin-right:4px">'+(IPROD_MOSTRAR_GAP_ITENS?'▾':'▸')+'</span>':'')+'⚠️ <b>'+iprodFmt(gapSemProjeto)+' HH</b>, em <b>'+gapItens.length+' item(ns)</b> cobrados pela contratada sem atividade correspondente no projeto, foram excluídos manualmente da análise — não é um item "perdido": todo item sem correspondência já sobe automaticamente pra tabela 3 (status "Incluído pela empresa"), esses aqui é que você tirou de lá.'
           +(recorteAberto?' Contam como divergência total (100% do HH deles) no cálculo de Diferença/Aderência acima.':' Ficam de fora do total geral, mas NÃO entram no card acima porque o recorte atual ("'+recorteLbl+'") só mostra itens reconciliados.')
-          +'<ul style="margin:8px 0 0 18px;padding:0">'+gapItens.map(function(c){return '<li>'+c.desc+'</li>';}).join('')+'</ul>'
+          +(gapTemLista?(IPROD_MOSTRAR_GAP_ITENS?' Clique pra minimizar.':' Clique pra ver a lista.'):'')
+          +(gapTemLista?'<ul style="margin:8px 0 0 18px;padding:0;display:'+(IPROD_MOSTRAR_GAP_ITENS?'block':'none')+'">'+gapItens.map(function(c){return '<li>'+c.desc+'</li>';}).join('')+'</ul>':'')
           :'✅ Todo HH cobrado bateu com alguma atividade do projeto (ou foi incluído automaticamente na tabela 3) — nada ficou de fora.')
         +'</div>';
     }
@@ -17511,16 +17559,34 @@ function iprodRenderShell(){
           return '<span onclick="iprodSetFiltroStatus(\''+f[0]+'\')" style="cursor:pointer;font-size:10.5px;font-weight:800;padding:4px 11px;border-radius:20px;border:1px solid '+(ativo?'#2563eb':'var(--border)')+';background:'+(ativo?'#2563eb':'transparent')+';color:'+(ativo?'#fff':'var(--muted)')+'">'+f[1]+' ('+(qtdCompCont[f[0]]||0)+')</span>';
         }).join('')
         +'</div>'
+        +(qtdUnidades.length>1?'<div class="iprod-print-hide" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:-4px 0 12px">'
+          +'<span style="font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;font-weight:800;color:var(--muted)">Unid.:</span>'
+          +qtdUnidades.map(function(u){
+            var ativo=IPROD_FILTRO_UNIDADES.indexOf(u)>=0;
+            return '<span onclick="iprodToggleFiltroUnidade(\''+u.replace(/\'/g,'')+'\')" style="cursor:pointer;font-size:10.5px;font-weight:800;padding:4px 11px;border-radius:20px;border:1px solid '+(ativo?'#2563eb':'var(--border)')+';background:'+(ativo?'#2563eb':'transparent')+';color:'+(ativo?'#fff':'var(--muted)')+'">'+u+' ('+qtdUnidadeCont[u]+')</span>';
+          }).join('')
+          +(IPROD_FILTRO_UNIDADES.length?'<span onclick="iprodLimparFiltroUnidade()" style="cursor:pointer;font-size:10.5px;font-weight:700;color:#dc2626">✕ limpar</span>':'')
+          +'</div>':'')
         +(Object.keys(IPROD_ATIV_SELECIONADAS).length?'<div class="iprod-insight" style="margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-left-color:#dc2626;background:#fef2f2;color:#7f1d1d">'
           +'<span><b>'+Object.keys(IPROD_ATIV_SELECIONADAS).length+' atividade(s) selecionada(s)</b></span>'
           +'<span style="display:flex;gap:8px"><button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#dc2626;color:#fff" onclick="iprodExcluirAtividadesSelecionadas()">🗑️ Excluir selecionadas</button>'
           +'<button class="iprod-hist-link" style="font-size:10.5px" onclick="iprodLimparSelecaoAtiv()">Limpar seleção</button></span>'
           +'</div>':'')
-        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th style="width:28px">#</th><th>Atividade</th><th>Unid.</th><th>Qtd. PQ</th><th>Qtd. Orçada</th><th>Dif. Qtd.</th><th>HH com CPU (Vale)</th><th>HH CPU (SINAPI)</th><th>HH Orçado</th><th>Dif. HH</th><th>Dif. HH %</th><th>Status</th></tr></thead><tbody>';
-      // Ordenado por Qtd. Orçada, maior pro menor — pedido do usuário pra focar a conferência nas
-      // atividades com maior quantidade orçada primeiro. Cópia do array só pra exibição: não afeta
-      // qtdCompBase3/qtdCompFiltrado (usados nos totais e nos KPIs acima).
-      var qtdCompOrdenado=qtdCompFiltrado.slice().sort(function(a,b){return (b.qtdEmpresa||0)-(a.qtdEmpresa||0);});
+        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th style="width:28px">#</th>'
+          +iprodTh3('Atividade','desc')+iprodTh3('Unid.','unidade')+iprodTh3('Qtd. PQ','qtdProjeto')+iprodTh3('Qtd. Orçada','qtdEmpresa')+iprodTh3('Dif. Qtd.','diffQtd')+iprodTh3('HH com CPU (Vale)','hhEsperado')+iprodTh3('HH CPU (SINAPI)','hhSinapi')+iprodTh3('HH Orçado','hhEmpresa')+iprodTh3('Dif. HH','diffHH')+iprodTh3('Dif. HH %','difPct')
+          +'<th>Status</th></tr></thead><tbody>';
+      // Ordenação padrão (sem coluna escolhida no cabeçalho) continua Qtd. Orçada, maior pro menor
+      // — pedido original do usuário pra focar a conferência nas atividades com maior quantidade
+      // orçada primeiro. Clicar num cabeçalho (iprodSetSort3) troca a coluna/direção. Cópia do
+      // array só pra exibição: não afeta qtdCompBase3/qtdCompFiltrado (usados nos totais e KPIs).
+      var sort3Col=IPROD_SORT3_COL||'qtdEmpresa', sort3Dir=IPROD_SORT3_COL?IPROD_SORT3_DIR:'desc';
+      var qtdCompOrdenado=qtdCompFiltrado.slice().sort(function(a,b){
+        var va=iprodSort3Valor(a,sort3Col), vb=iprodSort3Valor(b,sort3Col);
+        var na=(va==null||va===''), nb=(vb==null||vb==='');
+        if(na&&nb) return 0; if(na) return 1; if(nb) return -1;
+        if(typeof va==='string') return sort3Dir==='asc'?va.localeCompare(vb):vb.localeCompare(va);
+        return sort3Dir==='asc'?(va-vb):(vb-va);
+      });
       qtdCompOrdenado.forEach(function(q,qi){
         var badge=q.status==='bate'?'<span class="iprod-badge iprod-b-verde">Bate</span>'
           :q.status==='divergente'?'<span class="iprod-badge iprod-b-amar">Divergente — conferir</span>'
