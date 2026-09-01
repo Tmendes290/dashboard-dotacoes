@@ -15296,6 +15296,37 @@ function iprodUnitNorm(u){
   Object.keys(IPROD_SOBRESCRITOS).forEach(function(f){ t=t.split(f).join(IPROD_SOBRESCRITOS[f]); });
   return t.toLowerCase().replace(/[^a-z0-9]/g,'');
 }
+// Grupos de unidades METRICAMENTE conversíveis (mesma grandeza), valor = quantas unidades-base
+// cabem numa unidade dessa (ex.: 1 t = 1000 kg). Usado só quando a PQ do projeto bate por código
+// EXATO contra uma composição da base cadastrada numa unidade diferente (ex.: PQ em "Kg", base em
+// "t") — bug real confirmado com dado real (código M7510020005 "Montagem de Estrutura em Perfis
+// Metálicos Médios" cadastrado em "t" na base, mas a PQ do projeto declara a mesma atividade em
+// "Kg"): sem converter, 1050 Kg eram tratados como 1050 TONELADAS no cálculo de HH com CPU,
+// inflando o resultado em ~1000x só nessa linha. Ver iprodUnidFator/iprodCompatUnid, usados em
+// iprodBuscarNaFonte.
+var IPROD_UNID_GRUPOS=[
+  {mg:0.000001,g:0.001,kg:1,t:1000,ton:1000,tonelada:1000,toneladas:1000}, // massa, base kg
+  {mm:0.001,cm:0.01,m:1,km:1000}, // comprimento, base m
+  {mm2:0.000001,cm2:0.0001,m2:1,km2:1000000,ha:10000}, // área, base m²
+  {ml:0.000001,cm3:0.000001,l:0.001,m3:1} // volume, base m³
+];
+function iprodUnidFator(deUnidNorm,paraUnidNorm){
+  for(var i=0;i<IPROD_UNID_GRUPOS.length;i++){
+    var g=IPROD_UNID_GRUPOS[i];
+    if(g[deUnidNorm]!=null&&g[paraUnidNorm]!=null) return g[deUnidNorm]/g[paraUnidNorm];
+  }
+  return null;
+}
+// Unidade da PQ compatível com a da composição achada na base? Mesma unidade (ou uma delas
+// vazia/não informada) = compatível sem conversão. Unidade diferente mas da MESMA grandeza física
+// (ex.: Kg/t, m/km) = compatível COM conversão (fator!=null, aplicado na quantidade antes de
+// multiplicar pelo índice). Unidade diferente e sem conversão conhecida (ex.: "pç" vs "m" — sinal
+// de colisão de código, não de escala) = incompatível: quem chama não deve confiar nesse match.
+function iprodCompatUnid(pqUnid,baseUnidNorm){
+  if(!pqUnid||!baseUnidNorm||pqUnid===baseUnidNorm) return {ok:true,fator:null};
+  var fator=iprodUnidFator(pqUnid,baseUnidNorm);
+  return fator!=null?{ok:true,fator:fator}:{ok:false,fator:null};
+}
 function iprodPad(v,len){
   var s=String(v==null?'':v).trim();
   while(s.length<len) s='0'+s;
@@ -15643,18 +15674,24 @@ function iprodBuscarNaFonte(fonte,codCliente,desc,unidade,minScore,exigirUnidade
       // a composição cadastrada sob esse código (ex.: código de tubo, por erro na planilha fonte
       // do projeto ou coincidência de numeração entre disciplinas, apontando pra uma composição de
       // boca de bueiro), não confia cegamente — cai pra busca por descrição no resto da base.
-      if(!pqTokens.length||iprodTokenScore(pqTokens,pqSet,grupos[0].tokens,pqUnid,grupos[0].unidNorm,pqQualquer,iprodTemQualquer(grupos[0].desc))>0){
-        return {rows:grupos[0].rows,matchTipo:'código',matchCod:cod,matchDesc:grupos[0].desc,score:1};
+      // Unidade incompatível (nem igual, nem conversível — ver iprodCompatUnid) também não confia
+      // no código: mesmo sinal de colisão, só que pego pela unidade em vez do texto.
+      var compat1=iprodCompatUnid(pqUnid,grupos[0].unidNorm);
+      if(compat1.ok&&(!pqTokens.length||iprodTokenScore(pqTokens,pqSet,grupos[0].tokens,pqUnid,grupos[0].unidNorm,pqQualquer,iprodTemQualquer(grupos[0].desc))>0)){
+        return {rows:grupos[0].rows,matchTipo:'código'+(compat1.fator!=null?' — unidade da PQ ('+unidade+') convertida pra '+(grupos[0].rows[0]?grupos[0].rows[0].unidade:grupos[0].unidNorm)+' da base (×'+compat1.fator+')':''),matchCod:cod,matchDesc:grupos[0].desc,score:1,fatorConversaoUnid:compat1.fator};
       }
     } else {
       // esse código tem mais de uma composição diferente cadastrada (colisão entre disciplinas)
-      // — desambigua pela descrição mais parecida em vez de misturar tudo
-      var bestG=null,bestGScore=-1;
+      // — desambigua pela descrição mais parecida em vez de misturar tudo, só entre as que têm
+      // unidade compatível (mesma lógica do ramo de código único acima)
+      var bestG=null,bestGScore=-1,bestGCompat=null;
       grupos.forEach(function(g){
+        var compatG=iprodCompatUnid(pqUnid,g.unidNorm);
+        if(!compatG.ok) return;
         var s=pqTokens.length?iprodTokenScore(pqTokens,pqSet,g.tokens,pqUnid,g.unidNorm,pqQualquer,iprodTemQualquer(g.desc)):0;
-        if(s>bestGScore){bestGScore=s;bestG=g;}
+        if(s>bestGScore){bestGScore=s;bestG=g;bestGCompat=compatG;}
       });
-      if(bestG&&bestGScore>0) return {rows:bestG.rows,matchTipo:'código ('+grupos.length+' composições sob esse código — desambiguado pela descrição)',matchCod:cod,matchDesc:bestG.desc,score:1};
+      if(bestG&&bestGScore>0) return {rows:bestG.rows,matchTipo:'código ('+grupos.length+' composições sob esse código — desambiguado pela descrição)'+(bestGCompat.fator!=null?' — unidade convertida ×'+bestGCompat.fator:''),matchCod:cod,matchDesc:bestG.desc,score:1,fatorConversaoUnid:bestGCompat.fator};
     }
   }
 
@@ -15884,6 +15921,17 @@ function iprodParsePQSheet(data){
   var temAlgumHHPQ=iHH>=0&&linhasDadosPQ.some(function(row){ return !iprodCelVazia(row,iHH); });
   var temAlgumValorPQ=(iTotal>=0&&linhasDadosPQ.some(function(row){ return !iprodCelVazia(row,iTotal); }))
     ||(iUnitario>=0&&linhasDadosPQ.some(function(row){ return !iprodCelVazia(row,iUnitario); }));
+  // PQ hierárquica tipo EAP (ex.: item "1.1.1" com Qtd. preenchida, "1.1.1.1" embaixo repetindo a
+  // MESMA quantidade) — confirmado com dado real (PQ-2317SA-S-00001_Rev_0.xls, abas Montagem_*):
+  // cada nível intermediário da hierarquia carrega a SOMA das quantidades dos filhos (ex.: nível
+  // "1.1" = 2.794 Kg = soma de 390+1050+956+144+254 dos 4 níveis "1.1.x" abaixo dele), só que sem
+  // Unidade preenchida (só o nível-folha, o item de verdade que se compra/monta, tem Unid.). Sem
+  // filtrar isso, cada nível intermediário virava uma "atividade" própria com a quantidade
+  // duplicada em cascata, inflando o HH com CPU várias vezes sobre o mesmo aço. Só ativa quando a
+  // planilha REALMENTE tem uma coluna de Unidade com algum valor preenchido em algum lugar (senão
+  // um formato sem essa coluna perderia toda a PQ) — linha "vb" (verba) nunca cai aqui porque
+  // sempre vem com Unidade preenchida ("VB").
+  var temAlgumUnidPQ=iUnid>=0&&linhasDadosPQ.some(function(row){ return !iprodCelVazia(row,iUnid); });
 
   var out=[];
   linhasDadosPQ.forEach(function(row){
@@ -15899,6 +15947,7 @@ function iprodParsePQSheet(data){
     // mas mantidos visíveis) — o filtro de categoria K só vale pra atividade física de verdade.
     var unidRow=iUnid>=0?String(row[iUnid]||'').trim():'';
     var ehVbRow=iprodNorm(unidRow).indexOf('VB')===0;
+    if(temAlgumUnidPQ && !unidRow) return;
     if(iK>=0 && !ehVbRow){
       var kFiltro=String(row[iK]||'').trim().toUpperCase();
       if(kFiltro && !iprodKValidos[kFiltro]) return;
@@ -16542,7 +16591,11 @@ async function iprodProcessar(){
         // pra bater com o HH com CPU da seção 3 (que também usa quantidade do projeto). Antes a
         // seção 4 rodava sobre a quantidade da PQ da CONTRATADA (achouPorItem, mais abaixo), uma
         // base diferente da seção 3 — os totais das duas seções nunca reconciliavam.
-        var qtdNecProjeto=pItem.quantidade*(Number(r.indice)||0);
+        // Quando achouIndice.fatorConversaoUnid existe (ver iprodCompatUnid), a composição achada
+        // está numa unidade diferente da PQ (ex.: base em "t", PQ em "Kg") — converte a quantidade
+        // pra unidade da base ANTES de multiplicar pelo índice, senão o índice (HH/t) é aplicado
+        // como se fosse HH/Kg e o resultado sai ~1000x maior que o real.
+        var qtdNecProjeto=pItem.quantidade*(achouIndice.fatorConversaoUnid!=null?achouIndice.fatorConversaoUnid:1)*(Number(r.indice)||0);
         var keyProjeto=r.descIns||'(sem nome)';
         if(!porFuncaoProjeto[keyProjeto]) porFuncaoProjeto[keyProjeto]={hhRef:0,atividades:[]};
         porFuncaoProjeto[keyProjeto].hhRef+=qtdNecProjeto;
@@ -16680,7 +16733,10 @@ async function iprodProcessar(){
       var hhEsperado;
       if(temIndiceValido){
         // HH com CPU já com praticabilidade embutida (Referência × (2 − Praticabilidade), igual à seção 5).
-        hhEsperado=pItem.quantidade*indiceTotal*(2-IPROD_PRAT);
+        // Mesma conversão de unidade da quebra por função acima (ver iprodCompatUnid) — indiceTotal
+        // veio das linhas de achouIndice, que estão na unidade DA BASE, não da PQ.
+        var fatorUnidVale=achouIndice&&achouIndice.fatorConversaoUnid!=null?achouIndice.fatorConversaoUnid:1;
+        hhEsperado=pItem.quantidade*fatorUnidVale*indiceTotal*(2-IPROD_PRAT);
       } else if(temIndiceSinapi){
         // Mesmo tratamento da Vale (índice de referência "de catálogo", não empírico da
         // contratada) — aplica a praticabilidade normalmente.
