@@ -926,6 +926,13 @@ const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 let supa = null;
 let CURRENT_USER = null;
 let CURRENT_PERFIL = null;
+// Captura ANTES de criar o client Supabase (linha seguinte) — o supabase-js processa e LIMPA
+// esse hash da URL assim que o client é criado (detectSessionInUrl, ligado por padrão), então
+// reler window.location.hash mais tarde (ex.: dentro de checkAuthSession, que só roda depois do
+// Chart.js terminar de carregar) pode já vir vazio. Bug real confirmado: o link de "Esqueci a
+// senha" caía na tela de login normal em vez de abrir a tela de trocar senha — corrida entre esse
+// processamento automático do supabase-js e o checkAuthSession, que dependia de reler o hash.
+const IS_PASSWORD_RECOVERY_LINK = window.location.hash.indexOf('type=recovery') >= 0;
 
 function initSupabase(){
   if(typeof supabase !== 'undefined'){
@@ -4635,9 +4642,12 @@ async function saveNewPassword(){
 // ── VERIFICAR SESSÃO AO CARREGAR ─────────────────────────────────
 async function checkAuthSession(){
   if(!supa){ setTimeout(checkAuthSession, 300); return; }
-  // Detecta link de recuperação de senha no hash da URL
-  var hash = window.location.hash;
-  if(hash && hash.indexOf('type=recovery') >= 0){
+  // Detecta link de recuperação de senha — usa a constante capturada no carregamento da página
+  // (IS_PASSWORD_RECOVERY_LINK, ver declaração), não window.location.hash aqui: o supabase-js já
+  // pode ter limpado o hash da URL nesse ponto, fazendo esse check falhar silenciosamente e cair
+  // pro fluxo normal de getSession() — que então loga o usuário direto (a sessão da recuperação já
+  // é válida) e pula a tela de trocar senha, ou o joga de volta pro login se loadPerfil() falhar.
+  if(IS_PASSWORD_RECOVERY_LINK){
     var ls = document.getElementById('login-screen');
     if(ls) ls.style.display='flex';
     ['login-form','register-form','forgot-form'].forEach(function(id){ document.getElementById(id).style.display='none'; });
