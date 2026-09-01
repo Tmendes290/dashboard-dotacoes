@@ -17568,24 +17568,6 @@ function iprodRenderShell(){
       }
     }
 
-    // "Onde focar primeiro" — só no PDF, top 3 funções mais divergentes (mesmo critério de
-    // severidade do resumo executivo acima). Complementa o veredito com o próximo passo prático.
-    // Nota: uma função isolada pode divergir muito só por vocabulário diferente entre a Vale e a
-    // contratada pro mesmo ofício (ver iprodPacoteDe) — o bloco "📦 Pacote de ofício" que aparece
-    // ao expandir a linha na seção 4 ajuda a distinguir isso de um desvio de produtividade de
-    // verdade antes de sair cobrando a contratada.
-    if(temQtdComp){
-      var focoPrint=r.linhas.filter(function(l){return l.status==='vermelho'||l.status==='amarelo';}).slice().sort(function(a,b){return (b.dif||0)-(a.dif||0);}).slice(0,3);
-      if(focoPrint.length){
-        html+='<div class="iprod-panel iprod-print-only">'
-          +'<div class="iprod-panel-title">Onde focar primeiro</div>'
-          +'<div class="iprod-panel-note">As '+focoPrint.length+' função(ões) com maior divergência — por aqui que a conferência com a contratada deveria começar.</div>'
-          +'<table class="iprod-tbl"><thead><tr><th>#</th><th>Função</th><th>HH Orçado</th><th>HH CPU (Vale)</th><th>Diferença</th><th>Status</th></tr></thead><tbody>'
-          +focoPrint.map(function(l,i){return '<tr><td>'+(i+1)+'</td><td>'+l.funcao+'</td><td>'+iprodFmt(l.hhCobrado)+'</td><td>'+(l.hhRef>0?iprodFmt(l.hhAjust):'—')+'</td><td>'+iprodFmt(l.dif)+'</td><td>'+iprodBadge(l.status)+'</td></tr>';}).join('')
-          +'</tbody></table></div>';
-      }
-    }
-
     if(temQtdComp){
       var gapItens=r.promovidosExcluidos||[];
       var gapTemLista=gapSemProjeto>0.5&&gapItens.length>0;
