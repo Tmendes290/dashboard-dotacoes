@@ -15029,6 +15029,16 @@ function iprodToggleAtivSelecionada(idxProjeto){
   iprodRenderShell();
 }
 function iprodLimparSelecaoAtiv(){ IPROD_ATIV_SELECIONADAS={}; iprodRenderShell(); }
+// Checkbox "selecionar todos" no cabeçalho da tabela 3 — pega só as linhas VISÍVEIS no recorte
+// atual (Unid./Status/busca já filtrados, ver iprodTh3Checkbox), pedido do usuário pra não ter que
+// clicar atividade por atividade quando filtra, por exemplo, "Faltando" + Unid. "PÇ" e quer marcar
+// as 120 de uma vez. Alterna: se todas as visíveis já estão selecionadas, desmarca todas; senão,
+// marca todas (mesmo comportamento padrão de um "selecionar tudo" de tabela).
+function iprodSelecionarTodosVisiveis(idxs){
+  var todasSelecionadas=idxs.length>0&&idxs.every(function(i){return IPROD_ATIV_SELECIONADAS[i];});
+  idxs.forEach(function(i){ if(todasSelecionadas) delete IPROD_ATIV_SELECIONADAS[i]; else IPROD_ATIV_SELECIONADAS[i]=true; });
+  iprodRenderShell();
+}
 function iprodExcluirAtividadesSelecionadas(){
   var idxs=Object.keys(IPROD_ATIV_SELECIONADAS);
   if(!idxs.length) return;
@@ -17628,7 +17638,9 @@ function iprodRenderShell(){
           +'<span style="display:flex;gap:8px"><button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#dc2626;color:#fff" onclick="iprodExcluirAtividadesSelecionadas()">🗑️ Excluir selecionadas</button>'
           +'<button class="iprod-hist-link" style="font-size:10.5px" onclick="iprodLimparSelecaoAtiv()">Limpar seleção</button></span>'
           +'</div>':'')
-        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px"></th><th style="width:28px">#</th>'
+        +'<table class="iprod-tbl" id="iprod-tbl-3"><thead><tr><th style="width:20px">'
+          +(qtdCompFiltrado.length?'<input type="checkbox" title="Selecionar todas as '+qtdCompFiltrado.length+' atividade(s) visível(is) nesse filtro" '+(qtdCompFiltrado.every(function(q){return IPROD_ATIV_SELECIONADAS[q.idxProjeto];})?'checked':'')+' onclick="iprodSelecionarTodosVisiveis(['+qtdCompFiltrado.map(function(q){return q.idxProjeto;}).join(',')+'])">':'')
+          +'</th><th style="width:28px">#</th>'
           +iprodTh3('Atividade','desc')+iprodTh3('Unid.','unidade')+iprodTh3('Qtd. PQ','qtdProjeto')+iprodTh3('Qtd. Orçada','qtdEmpresa')+iprodTh3('Dif. Qtd.','diffQtd')+iprodTh3('HH com CPU (Vale)','hhEsperado')+iprodTh3('HH CPU (SINAPI)','hhSinapi')+iprodTh3('HH Orçado','hhEmpresa')+iprodTh3('Dif. HH','diffHH')+iprodTh3('Dif. HH %','difPct')
           +'<th>Status</th></tr></thead><tbody>';
       // Ordenação padrão (sem coluna escolhida no cabeçalho) continua Qtd. Orçada, maior pro menor
