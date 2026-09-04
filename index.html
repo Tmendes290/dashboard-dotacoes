@@ -16537,68 +16537,34 @@ async function iprodProcessar(){
   var totHHComValor=achouPorItem.reduce(function(s,x){return s+(x.item.valorTotal>0?(x.item.hhAlocado||0):0);},0);
   var taxaRSporHH=(somaValorFornecimento>0&&totHHComValor>0)?(somaValorFornecimento/totHHComValor):null;
 
-  // Consolida a PQ da contratada só por MESMO CÓDIGO — quando duas linhas trazem o mesmo código
-  // K/TT/UU/VVV/WWW só com a descrição escrita em sinônimo diferente (ex.: "TUBO..." numa linha e
-  // "TUBULAÇÃO..." noutra, ambas com o mesmo código), é seguro somar: é o mesmo registro oficial
-  // repetido. Cada item cru guarda uma referência de volta pro seu grupo (_iprodGrupo) — usado
-  // logo abaixo tanto pra comparar com o projeto quanto pra mostrar, no detalhamento por linha, a
-  // quantidade/diferença do TOTAL da atividade (não só dessa linha isolada).
+  // NÃO soma mais linhas cruas da contratada antes de comparar com o projeto — nem por descrição
+  // igual, nem por código igual. Cada linha da PQ da contratada vira seu próprio candidato de
+  // match, do jeito que ela foi lançada. Bug real confirmado com duas empresas: LUK repete a
+  // descrição "Montagem de bandejas" 24x (uma por ponto de suporte, sem código nenhum) e a APIA
+  // repete o MESMO código de catálogo toda vez que cota o mesmo item em locais diferentes do
+  // mesmo projeto (confirmado pelo usuário, 03/09) — nos dois casos, somar tudo num único total
+  // (ex.: 115 unidades) só conseguia "casar" com UMA das várias atividades do projeto com aquela
+  // descrição/código (cada uma com seu próprio local e quantidade oficial); as demais ficavam com
+  // "Qtd. Orçada = —" mesmo a contratada tendo composto cada uma individualmente. Pedido explícito
+  // do usuário: não acumular repetidas — comparar conforme está na PQ e no HH da empresa, linha a
+  // linha, no que ela está realmente compondo em cada local.
   //
-  // NÃO soma mais só por descrição igual sem código (ex.: várias linhas "Montagem de bandejas",
-  // uma pra cada ponto/local de suporte, sem código que as diferencie) — bug real confirmado:
-  // isso juntava TODAS as ocorrências da contratada num único total (ex.: 115 unidades), que só
-  // conseguia "casar" com UMA das várias atividades do projeto com essa mesma descrição genérica
-  // (cada uma com seu próprio local/quantidade oficial, ex.: 8, 1, 1, 1, 8, 86...) — as demais
-  // ficavam com "Qtd. Orçada = —" mesmo a contratada tendo composto elas individualmente. Pedido
-  // explícito do usuário (03/09): não acumular repetidas, comparar conforme cada linha da PQ e do
-  // HH da empresa — cada linha crua vira seu próprio candidato, e o casamento 1-a-1 por atividade
-  // do projeto (3 passagens abaixo, com "usadosEmp" garantindo que cada candidato só é reivindicado
-  // uma vez) já cuida de parear cada local individualmente, na ordem em que aparecem nas duas PQs.
+  // O casamento 1-a-1 por atividade do projeto (3 passagens abaixo, "usadosEmp" garante que cada
+  // linha só é reivindicada uma vez) já resolve isso sozinho a partir daqui — só precisa que cada
+  // linha crua entre como seu próprio candidato, com os mesmos campos que o resto do código espera
+  // (codigos/descs/_iprodGrupo, olhando só pra si mesma).
   var contratadaAgrupada={}, contratadaAgrupadaList=[];
-  (function(){
-    var itens=achouPorItem.map(function(x){return x.item;});
-    var pai=itens.map(function(_,i){return i;});
-    function acha(i){ while(pai[i]!==i){ pai[i]=pai[pai[i]]; i=pai[i]; } return i; }
-    function une(i,j){ var ri=acha(i), rj=acha(j); if(ri!==rj) pai[ri]=rj; }
-    var porCod={};
-    itens.forEach(function(it,i){
-      if(!it.codCliente) return; // sem código: cada linha crua fica no seu próprio grupo (ver comentário acima)
-      var jCod=porCod[it.codCliente];
-      if(jCod!=null){
-        // Mesmo código, descrição diferente — só une se for parecido o bastante (sinônimo/
-        // mudança de redação da MESMA atividade). Sem essa checagem, código reaproveitado por
-        // engano pra atividade DIFERENTE (confirmado real: a PQ "12.0 PQ" da MILPLAN reinicia a
-        // numeração "ITEM" por seção, e itens de seções diferentes acabam com o mesmo número —
-        // ex.: item "17" é ao mesmo tempo "Lançamento de cabo de potência...6,0mm²" E "Montagem
-        // de medidor de nível", duas atividades sem nenhuma relação) juntava as duas na força,
-        // fazendo uma delas desaparecer do comparativo (a que sobrava virava "Faltando na PQ da
-        // empresa" mesmo estando lá, porque a busca por descrição exata caía no grupo errado).
-        if(iprodNorm(itens[jCod].desc)===iprodNorm(it.desc)){
-          une(i,jCod);
-        } else {
-          var itTok=iprodTokens(it.desc), itSet={}; itTok.forEach(function(t){itSet[t]=true;});
-          var scCod=iprodTokenScore(itTok,itSet,iprodTokens(itens[jCod].desc),iprodUnitNorm(it.unidade),iprodUnitNorm(itens[jCod].unidade),iprodTemQualquer(it.desc),iprodTemQualquer(itens[jCod].desc));
-          if(scCod>=0.35) une(i,jCod);
-          // score baixo = código reaproveitado por engano — não une, cada um vira seu próprio grupo
-        }
-      } else {
-        porCod[it.codCliente]=i;
-      }
-    });
-    var porRaiz={};
-    itens.forEach(function(it,i){
-      var r=acha(i), g=porRaiz[r];
-      if(!g){ g=porRaiz[r]={desc:it.desc,unidade:it.unidade,quantidade:0,hhAlocado:0,hhViaIndiceContratada:0,valorTotal:0,codigos:{},descs:{}}; contratadaAgrupadaList.push(g); }
-      g.quantidade+=it.quantidade;
-      g.hhAlocado+=(it.hhAlocado||0);
-      g.valorTotal+=(it.valorTotal||0);
-      if(it.indiceContratada!=null) g.hhViaIndiceContratada+=it.quantidade*it.indiceContratada;
-      if(it.codCliente) g.codigos[it.codCliente]=true;
-      g.descs[iprodNorm(it.desc)]=true;
-      it._iprodGrupo=g;
-    });
-    contratadaAgrupadaList.forEach(function(g){ Object.keys(g.descs).forEach(function(dk){ contratadaAgrupada[dk]=g; }); });
-  })();
+  achouPorItem.forEach(function(x){
+    var it=x.item;
+    it.codigos=it.codCliente?{}:{};
+    if(it.codCliente) it.codigos[it.codCliente]=true;
+    it.descs={};
+    it.descs[iprodNorm(it.desc)]=true;
+    it.hhViaIndiceContratada=it.indiceContratada!=null?it.quantidade*it.indiceContratada:0;
+    it._iprodGrupo=it;
+    contratadaAgrupadaList.push(it);
+    contratadaAgrupada[iprodNorm(it.desc)]=it;
+  });
 
   // Comparação PQ do Projeto → PQ da Contratada (não o inverso): parte de cada atividade
   // OFICIAL do projeto e checa se a contratada cobriu com a quantidade certa. Isso também
