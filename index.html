@@ -14963,6 +14963,12 @@ function iprodTh3(label,col){
 // (índice da linha na PQ do Projeto), valor é o índice em HH/unidade que substitui o achado
 // automaticamente. Ver iprodEditarIndiceProjeto.
 var IPROD_INDICE_OVERRIDES={};
+// Quantidade oficial (Qtd. Projeto) corrigida manualmente pelo usuário — chave é o idxProjeto,
+// valor é a quantidade ORIGINAL que veio da planilha (só pra mostrar o selo "ajustado
+// manualmente" e permitir conferência); o valor em uso já fica direto em
+// IPROD_PROJETO.pq[idxProjeto].quantidade (mesmo padrão de iprodEditarCodigoProjeto, que também
+// sobrescreve o campo direto no array). Ver iprodEditarQtdProjeto.
+var IPROD_QTD_PROJETO_ORIGINAL={};
 var IPROD_SHOW_AJUDA=false;
 function iprodToggleAjuda(){ IPROD_SHOW_AJUDA=!IPROD_SHOW_AJUDA; iprodRenderShell(); }
 // Card "% de Custo Indireto" — pediram pra tirar, mas o usuário quer manter e só ocultar quando
@@ -15125,6 +15131,22 @@ function iprodEditarIndiceProjeto(idxProjeto,input){
     IPROD_INDICE_OVERRIDES[idxProjeto]=v;
     toast('Índice ajustado — recalculando...','blue');
   }
+  iprodProcessar();
+}
+// Corrige a Quantidade (Qtd. Projeto) de uma atividade da PQ do Projeto direto pela tela — pra
+// quando a planilha oficial foi lida errado (célula mesclada, coluna trocada, etc.) e o usuário
+// confere e digita o valor correto. Guarda a quantidade ORIGINAL (só na primeira edição) pra
+// poder mostrar "ajustado manualmente" e o valor de antes; sobrescreve o campo direto no array,
+// igual iprodEditarCodigoProjeto — o recálculo usa esse valor normalmente, sem tratamento especial.
+function iprodEditarQtdProjeto(idxProjeto,input){
+  if(!IPROD_PROJETO||!IPROD_PROJETO.pq[idxProjeto]) return;
+  var raw=String(input.value||'').trim();
+  var s=raw.indexOf(',')>raw.indexOf('.')&&raw.indexOf(',')>0?raw.replace(/\./g,'').replace(',','.'):raw.replace(',','.');
+  var v=parseFloat(s);
+  if(isNaN(v)||v<=0){ toast('Quantidade inválida','red'); return; }
+  if(IPROD_QTD_PROJETO_ORIGINAL[idxProjeto]==null) IPROD_QTD_PROJETO_ORIGINAL[idxProjeto]=IPROD_PROJETO.pq[idxProjeto].quantidade;
+  IPROD_PROJETO.pq[idxProjeto].quantidade=v;
+  toast('Quantidade ajustada — recalculando...','blue');
   iprodProcessar();
 }
 
@@ -16384,6 +16406,7 @@ async function iprodHandlePQProjetoFile(files){
       // PQ nova = os índices de linha (idxProjeto) apontam pra atividades diferentes agora —
       // sobrescritas manuais e exclusões da PQ anterior não fazem mais sentido aqui.
       IPROD_INDICE_OVERRIDES={};
+      IPROD_QTD_PROJETO_ORIGINAL={};
       IPROD_LINHAS_EXCLUIDAS={};
       IPROD_ATIV_SELECIONADAS={};
       IPROD_BUSCA_PQPROJETO='';
@@ -17702,6 +17725,13 @@ function iprodRenderShell(){
             +'</div>'
           ):(
             '<div style="display:flex;gap:6px;align-items:center;margin-top:10px" onclick="event.stopPropagation()">'
+            +'<span style="font-size:9.5px;color:var(--muted);font-weight:700">Qtd. Projeto (oficial):</span>'
+            +'<input value="'+iprodFmtQtd(q.qtdProjeto)+'" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;width:110px" '
+            +'onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\') iprodEditarQtdProjeto('+q.idxProjeto+',this)">'
+            +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px" onclick="event.stopPropagation();iprodEditarQtdProjeto('+q.idxProjeto+',this.previousElementSibling)">Salvar e recalcular</button>'
+            +(IPROD_QTD_PROJETO_ORIGINAL[q.idxProjeto]!=null?'<span style="font-size:9px;color:#d97706;font-weight:700">⚙️ ajustado manualmente (original: '+iprodFmtQtd(IPROD_QTD_PROJETO_ORIGINAL[q.idxProjeto])+')</span>':'')
+            +'</div>'
+            +'<div style="display:flex;gap:6px;align-items:center;margin-top:8px" onclick="event.stopPropagation()">'
             +'<span style="font-size:9.5px;color:var(--muted);font-weight:700">Cód. Cliente (projeto):</span>'
             +'<input value="'+(q.codCliente||'')+'" placeholder="sem código" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;width:140px;text-transform:uppercase" '
             +'onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\') iprodEditarCodigoProjeto('+q.idxProjeto+',this)">'
