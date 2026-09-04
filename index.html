@@ -15315,21 +15315,31 @@ function iprodTokens(s){
   // grudam num token só e a busca por tamanho/seção não reconhece o número. Só separa nesse
   // sentido (dígito seguido de letra); não mexe em letra seguida de dígito (ex.: "B36","A53"),
   // que são códigos de norma/material e devem continuar colados.
-  // Exceção: dígito seguido de V/A/W sozinho no fim do número (voltagem/amperagem/potência —
-  // "250V", "10A", "500W") NÃO separa — mantém colado. Letra solta de 1 char sempre foi
-  // descartada como ruído no filtro final (w.length>1), então "250V" virava só o token "250",
-  // indistinguível de QUALQUER outro número de 3 dígitos solto em descrições sem relação
-  // nenhuma — bug real confirmado: "Conjunto com 01 interruptor Simples...250V" bateu com "BOCA
-  // NORMAL DE BUEIRO SIMPLES...2,50 X 2,50 M" (o "2,50" vira "250" pelo merge decimal acima) só
-  // por causa de "SIMPLES" + esse "250" coincidente — o HH saiu 144x maior que o real. Primeiro
-  // separa normalmente quando o dígito é seguido de MAIS de uma letra (unidade de verdade tipo
-  // "16MM"/"10M2"), só depois protege o caso de exatamente 1 letra V/A/W no fim do número.
-  n=n.replace(/([0-9])([A-Z])(?=[A-Z])/g,'$1 $2');
-  n=n.replace(/([0-9])([A-Z])(?![A-Z])/g,function(m,d,l){ return (l==='V'||l==='A'||l==='W')?(d+l):(d+' '+l); });
+  n=n.replace(/([0-9])([A-Z])/g,'$1 $2');
   // Números de 1 dígito (diâmetro de tubo tipo 4",6",8", fck, etc.) são mantidos — costumam ser
   // o principal jeito de desambiguar entre composições quase idênticas (ex.: mesmo tubo em
-  // diâmetros diferentes). Só descarta letra solta (ruído tipo "P", "B" cortado por pontuação).
-  return n.split(/[^A-Z0-9]+/).filter(function(w){return (w.length>1||/^[0-9]$/.test(w)) && !IPROD_STOPWORDS[w];});
+  // diâmetros diferentes). Letra solta (ruído tipo "P", "B" cortado por pontuação) normalmente é
+  // descartada — EXCETO exatamente V/A/W (voltagem/amperagem/potência: "250V", "10A", "400W"),
+  // fundidas de volta no número logo abaixo antes do filtro.
+  var bruto=n.split(/[^A-Z0-9]+/);
+  var fundido=[];
+  for(var bi=0;bi<bruto.length;bi++){
+    var w=bruto[bi];
+    // Funde número + V/A/W adjacentes (com OU sem espaço no texto original — "250V" e "400 W"
+    // chegam aqui do mesmo jeito, como dois tokens separados) num token só, tipo "250V"/"400W".
+    // Sem isso, a letra solta some no filtro (1 char) e sobra só o número puro, indistinguível de
+    // QUALQUER outro número de mesma grandeza vindo de descrição sem relação nenhuma. Bug real
+    // confirmado 2x: "interruptor...250V" batendo com "boca de bueiro...2,50 X 2,50 M" (HH saiu
+    // 144x maior); e na base oficial, "Montagem de eletrocalha...400 MM" batendo com "Montagem de
+    // projetores...400 W" só pelo "400" coincidente (dimensão x potência, nada a ver).
+    if(/^[0-9]+$/.test(w)&&bi+1<bruto.length&&(bruto[bi+1]==='V'||bruto[bi+1]==='A'||bruto[bi+1]==='W')){
+      fundido.push(w+bruto[bi+1]);
+      bi++;
+    } else {
+      fundido.push(w);
+    }
+  }
+  return fundido.filter(function(w){return (w.length>1||/^[0-9]$/.test(w)) && !IPROD_STOPWORDS[w];});
 }
 function iprodTokenPeso(t){ return /^[0-9]+$/.test(t)?2:1; }
 // Assinatura só dos números da descrição (bitola, comprimento, grau...), ordenados — usada pra
