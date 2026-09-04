@@ -16463,7 +16463,21 @@ async function iprodProcessar(){
     // Mobilização, Aluguel de Equipamentos, Fornecimento de mão de obra, Reajuste...) — não são
     // uma composição física, então nunca tentam casar índice (evita falso-positivo por descrição
     // que inflaria a base de rateio da alocação proporcional).
-    if(iprodNorm(item.unidade).indexOf('VB')===0){ semIndice.push(item); return; }
+    if(iprodNorm(item.unidade).indexOf('VB')===0){
+      // Verba com HH declarado de VERDADE (ex.: a LUK cotou "Retirada de Infra Elétrica" e
+      // "Desmontagem de interferências" em lump-sum, mas com HH real na coluna própria) não é
+      // custo administrativo puro (Mobilização/Administração Local/Mão de Obra Indireta nunca têm
+      // HH próprio, só R$) — sumia do HH Orçado: Empresa sem deixar rastro nenhum. Bug real
+      // confirmado: PQ da LUK declara 16.517,61 HH no total, mas o card mostrava 16.444,77 —
+      // 72,84 HH de 2 atividades verba com HH real, descartadas silenciosamente (nem apareciam
+      // como "excluído manualmente", porque nunca chegavam a entrar em achouPorItem). Não tenta
+      // achar composição pra elas aqui (verba não tem quantidade física pra multiplicar por
+      // índice), só deixa entrar no mesmo fallback "sem índice mas declarado" já usado pra
+      // qualquer atividade sem match — garante que o HH declarado conte no total, sem inflar o
+      // rateio de R$ (só entra quem tem HH>0, não qualquer verba com valor total).
+      if(item.hhDeclarado>0){ item.semIndiceMasDeclarado=true; achouPorItem.push({item:item,achou:null}); return; }
+      semIndice.push(item); return;
+    }
     var achou=iprodFindIndice(item.codCliente,item.desc,item.unidade);
     if(!achou){
       // Não achamos índice na nossa base — mas se a contratada já declarou um HH pra essa
