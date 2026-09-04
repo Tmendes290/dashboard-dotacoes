@@ -15315,7 +15315,17 @@ function iprodTokens(s){
   // grudam num token só e a busca por tamanho/seção não reconhece o número. Só separa nesse
   // sentido (dígito seguido de letra); não mexe em letra seguida de dígito (ex.: "B36","A53"),
   // que são códigos de norma/material e devem continuar colados.
-  n=n.replace(/([0-9])([A-Z])/g,'$1 $2');
+  // Exceção: dígito seguido de V/A/W sozinho no fim do número (voltagem/amperagem/potência —
+  // "250V", "10A", "500W") NÃO separa — mantém colado. Letra solta de 1 char sempre foi
+  // descartada como ruído no filtro final (w.length>1), então "250V" virava só o token "250",
+  // indistinguível de QUALQUER outro número de 3 dígitos solto em descrições sem relação
+  // nenhuma — bug real confirmado: "Conjunto com 01 interruptor Simples...250V" bateu com "BOCA
+  // NORMAL DE BUEIRO SIMPLES...2,50 X 2,50 M" (o "2,50" vira "250" pelo merge decimal acima) só
+  // por causa de "SIMPLES" + esse "250" coincidente — o HH saiu 144x maior que o real. Primeiro
+  // separa normalmente quando o dígito é seguido de MAIS de uma letra (unidade de verdade tipo
+  // "16MM"/"10M2"), só depois protege o caso de exatamente 1 letra V/A/W no fim do número.
+  n=n.replace(/([0-9])([A-Z])(?=[A-Z])/g,'$1 $2');
+  n=n.replace(/([0-9])([A-Z])(?![A-Z])/g,function(m,d,l){ return (l==='V'||l==='A'||l==='W')?(d+l):(d+' '+l); });
   // Números de 1 dígito (diâmetro de tubo tipo 4",6",8", fck, etc.) são mantidos — costumam ser
   // o principal jeito de desambiguar entre composições quase idênticas (ex.: mesmo tubo em
   // diâmetros diferentes). Só descarta letra solta (ruído tipo "P", "B" cortado por pontuação).
