@@ -15985,7 +15985,10 @@ function iprodParsePQSheet(data){
   var temAlgumUnidPQ=iUnid>=0&&linhasDadosPQ.some(function(row){ return !iprodCelVazia(row,iUnid); });
 
   var out=[];
-  linhasDadosPQ.forEach(function(row){
+  linhasDadosPQ.forEach(function(row,ri){
+    // Linha real da planilha Excel (1-based) — só pra referência em mensagens ao usuário (ex.:
+    // "empresa repetiu essa atividade nas linhas 89 e 111 da PQ dela"), não usada em cálculo.
+    var linhaExcel=hdrIdx+2+ri;
     var desc=String(row[iDesc]||'').trim();
     var qtd=parseFloat(String(row[iQtd]==null?'':row[iQtd]).replace(',','.'));
     if(!desc||!isFinite(qtd)||qtd===0) return;
@@ -16035,7 +16038,7 @@ function iprodParsePQSheet(data){
       var idxVal=parseFloat(String(row[iIndiceContratada]==null?'':row[iIndiceContratada]).replace(',','.'));
       if(isFinite(idxVal)&&idxVal>0) indiceContratada=idxVal;
     }
-    out.push({desc:desc,codCliente:cod,unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd,valorTotal:valorTotal,hhDeclarado:hhDeclarado,hhApoioDeclarado:hhApoioDeclarado,indiceContratada:indiceContratada});
+    out.push({desc:desc,codCliente:cod,unidade:iUnid>=0?String(row[iUnid]||'').trim():'',quantidade:qtd,valorTotal:valorTotal,hhDeclarado:hhDeclarado,hhApoioDeclarado:hhApoioDeclarado,indiceContratada:indiceContratada,linhaExcel:linhaExcel});
   });
   return out.length?out:null;
 }
@@ -16828,8 +16831,31 @@ async function iprodProcessar(){
     // Qtd. Projeto = Qtd. Empresa (Dif. Qtd. sempre 0). Dá pra excluir uma linha individual (ou em
     // lote, pelo checkbox) se algum item não for uma atividade de verdade — reaproveita
     // IPROD_LINHAS_EXCLUIDAS, mesmo mecanismo das atividades do projeto.
-    var promovidos=contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;})
-      .map(function(g){return {desc:g.desc,unidade:g.unidade,quantidade:g.quantidade,hhAlocado:g.hhAlocado||0,valorTotal:g.valorTotal||0};});
+    // Entre os itens que sobraram sem casar com NENHUMA atividade do projeto, alguns podem ser a
+    // MESMA linha da PQ da contratada literalmente repetida (mesma descrição, unidade, quantidade
+    // E HH — ex.: "Desmontagem dos suportes" copiada 2x com valor idêntico) — sem código nenhum
+    // pra saber se isso é intencional (duas ocorrências reais) ou um copy-paste por engano, subir
+    // uma linha própria PRA CADA ocorrência idêntica só polui a tabela sem agregar informação
+    // nenhuma (pedido do usuário, 03/09). Funde só quando é duplicata EXATA (mesmo valor) — quando
+    // o valor difere entre ocorrências da mesma descrição (ex.: "Montagem de bandejas" em locais
+    // diferentes, cada um com sua própria quantidade), são atividades DIFERENTES com o mesmo nome
+    // e cada uma continua sua própria linha (ver comentário no bloco de agrupamento, mais acima) —
+    // o HH nunca some: some fundido numa linha só, com uma nota dizendo o que foi fundido.
+    var porDupExataSobrando={}, promovidosBrutos=[];
+    contratadaAgrupadaList.filter(function(g){return usadosEmp.indexOf(g)<0;}).forEach(function(g){
+      var keyDup=iprodNorm(g.desc)+'‖'+iprodUnitNorm(g.unidade)+'‖'+g.quantidade+'‖'+(g.hhAlocado||0);
+      var d=porDupExataSobrando[keyDup];
+      if(!d){ d={desc:g.desc,unidade:g.unidade,quantidade:0,hhAlocado:0,valorTotal:0,codigos:{},linhas:[]}; porDupExataSobrando[keyDup]=d; promovidosBrutos.push(d); }
+      d.quantidade+=g.quantidade;
+      d.hhAlocado+=(g.hhAlocado||0);
+      d.valorTotal+=(g.valorTotal||0);
+      Object.keys(g.codigos||{}).forEach(function(c){ d.codigos[c]=true; });
+      if(g.linhaExcel!=null) d.linhas.push(g.linhaExcel);
+    });
+    var promovidos=promovidosBrutos.map(function(d){
+      return {desc:d.desc,unidade:d.unidade,quantidade:d.quantidade,hhAlocado:d.hhAlocado,valorTotal:d.valorTotal,codigos:d.codigos,
+        notaDuplicata:d.linhas.length>1?('⚠️ A contratada repetiu esta atividade '+d.linhas.length+'x na PQ dela com o mesmo valor (mesma quantidade e HH) — linha'+(d.linhas.length>1?'s':'')+' '+d.linhas.join(', ')+' do Excel, somadas aqui numa linha só pra não poluir a tabela com repetições idênticas.'):null};
+    });
     contratadaSemProjeto=[];
     promovidosExcluidos=[];
     promovidos.forEach(function(g,pi){
@@ -16891,6 +16917,7 @@ async function iprodProcessar(){
         indiceTotal:indiceTotalG,hhEsperado:hhEsperadoG,hhSinapi:hhSinapiG,hhEmpresa:g.hhAlocado||0,
         diffHH:(g.hhAlocado||0)-hhEsperadoG,
         status:'sem-projeto',matchTipo:'sem correspondência no projeto — incluído automaticamente',specDiff:null,semIndiceProjeto:!temIndiceValidoG&&!temIndiceSinapiG,
+        notaDuplicata:g.notaDuplicata||null,
         indiceOrigem:indiceOrigemG,indiceSoSupervisao:!!indiceSoSupervisaoG,
         indiceSinapi:indiceSinapiTotalG>0?indiceSinapiTotalG:null,
         matchDescSinapi:achouSinapiG?achouSinapiG.matchDesc:null,matchCodSinapi:achouSinapiG?achouSinapiG.matchCod:null,
@@ -17703,6 +17730,7 @@ function iprodRenderShell(){
             +'</div>'):'<div style="font-size:9.5px;color:var(--muted);margin-top:4px">↳ Base SINAPI: sem composição correspondente encontrada.</div>')
           +(q.status==='sem-projeto'?(
             '<div class="iprod-insight" style="margin-top:10px">📦 Essa linha não é uma atividade oficial da PQ do Projeto — é um item que a contratada cobrou sem correspondência no projeto, incluído aqui automaticamente pra fechar 100% do HH cobrado. Qtd. PQ = Qtd. Orçada (não existe quantidade oficial pra comparar).</div>'
+            +(q.notaDuplicata?'<div class="iprod-insight" style="margin-top:8px;border-left-color:#d97706;background:#fffbeb;color:#78350f">'+q.notaDuplicata+'</div>':'')
             +'<div style="margin-top:10px" onclick="event.stopPropagation()">'
             +'<button class="iprod-btn" style="margin-top:0;padding:4px 10px;font-size:10.5px;background:#fef2f2;color:#dc2626" onclick="event.stopPropagation();iprodExcluirItemPromovido('+q.idxProjeto+',\''+q.desc.replace(/\'/g,'').replace(/"/g,'')+'\')">🗑️ Excluir essa atividade da análise</button>'
             +'</div>'
