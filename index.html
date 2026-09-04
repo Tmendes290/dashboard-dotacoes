@@ -15724,7 +15724,7 @@ function iprodBuscarNaFonte(fonte,codCliente,desc,unidade,minScore,exigirUnidade
   // diferente (isso já é resolvido pelo resto do score).
   var kQuery=/^[MD]/.test(cod)?cod[0]:null;
   var pesoK=iprodPesoLetraK(desc);
-  var best=null, bestScore=0, bestDmtKm=null;
+  var best=null, bestScore=0, bestDmtKm=null, bestFator=null;
   fonte.descIdx.forEach(function(d){
     // Unidade diferente = filtro RÍGIDO, não só bônus — usado quando quem chama passa
     // exigirUnidadeIgual (ver IPROD_SINAPI_MINSCORE/iprodBuscarNaFonte no comparativo SINAPI).
@@ -15754,9 +15754,18 @@ function iprodBuscarNaFonte(fonte,codCliente,desc,unidade,minScore,exigirUnidade
       if(kQuery) score+=(kBase===kQuery)?0.05:-0.3;
       else if(pesoK) score+=(kBase===pesoK)?0.05:-0.3;
     }
-    if(score>bestScore){ bestScore=score; best=d; bestDmtKm=dmtKmCandidato; }
+    if(score>bestScore){ bestScore=score; best=d; bestDmtKm=dmtKmCandidato;
+      // Mesma conversão de unidade já aplicada no match por CÓDIGO (ver iprodCompatUnid acima) —
+      // faltava aqui no match por DESCRIÇÃO (o caminho principal pra PQ sem código de cliente, ex.:
+      // LUK). Bug real confirmado: "Desmontagem das calhas" (PQ em Kg) batendo com composição da
+      // base cadastrada em "t" sem converter tratava 587,75 Kg como 587,75 TONELADAS, inflando o HH
+      // de referência em ~1000x só nessa linha (2 dessas linhas sozinhas somavam 95% do HH CPU
+      // total calculado pra um comparativo real da LUK — aderência saía 5% em vez de ~108%).
+      var compatD=iprodCompatUnid(pqUnid,d.unidNorm);
+      bestFator=compatD.ok?compatD.fator:null;
+    }
   });
-  if(best && bestScore>=minScore) return {rows:best.rows,matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)'+(bestDmtKm!=null?' — índice ajustado pela DMT ('+iprodFmt(bestDmtKm)+' km) informada na própria PQ':''),matchCod:best.codCliente,matchDesc:best.desc,score:bestScore,dmtKm:bestDmtKm};
+  if(best && bestScore>=minScore) return {rows:best.rows,matchTipo:'descrição ('+Math.min(100,Math.round(bestScore*100))+'% similar)'+(bestDmtKm!=null?' — índice ajustado pela DMT ('+iprodFmt(bestDmtKm)+' km) informada na própria PQ':'')+(bestFator!=null?' — unidade da PQ ('+unidade+') convertida pra '+(best.rows[0]?best.rows[0].unidade:best.unidNorm)+' da base (×'+bestFator+')':''),matchCod:best.codCliente,matchDesc:best.desc,score:bestScore,dmtKm:bestDmtKm,fatorConversaoUnid:bestFator};
   return null;
 }
 function iprodFindIndiceCru(codCliente,desc,unidade){
@@ -16823,6 +16832,10 @@ async function iprodProcessar(){
       var achouIndiceG=iprodFindIndice(codHintG,g.desc,g.unidade);
       var indiceTotalG=0, detalhePartesG=[];
       var indiceSoSupervisaoG=achouIndiceG&&iprodIndiceSoSupervisao(achouIndiceG.rows);
+      // Mesma conversão de unidade do restante do arquivo (ver iprodCompatUnid/fatorConversaoUnid)
+      // — sem isso, uma composição achada numa unidade diferente da da contratada (ex.: base em
+      // "t", grupo em "Kg") inflava o HH em ~1000x só aqui.
+      var fatorUnidG=achouIndiceG&&achouIndiceG.fatorConversaoUnid!=null?achouIndiceG.fatorConversaoUnid:1;
       if(achouIndiceG) achouIndiceG.rows.forEach(function(rr){
         if(rr.tipo!=='M') return;
         indiceTotalG+=Number(rr.indice)||0;
@@ -16830,7 +16843,7 @@ async function iprodProcessar(){
         // Item sem correspondência no projeto (status "Incluído pela empresa", seção 3) entra na
         // quebra por função da seção 4 igual a qualquer atividade do projeto — senão o HH dele
         // conta no total da seção 3 mas nunca aparece na seção 4, e os dois totais nunca batem.
-        var qtdNecG=g.quantidade*(Number(rr.indice)||0);
+        var qtdNecG=g.quantidade*fatorUnidG*(Number(rr.indice)||0);
         var keyG=rr.descIns||'(sem nome)';
         if(!porFuncaoProjeto[keyG]) porFuncaoProjeto[keyG]={hhRef:0,atividades:[]};
         porFuncaoProjeto[keyG].hhRef+=qtdNecG;
@@ -16855,7 +16868,7 @@ async function iprodProcessar(){
       var indiceOrigemG=temIndiceValidoG?'base':(temIndiceSinapiG?'sinapi':null);
       var hhEsperadoG;
       if(temIndiceValidoG){
-        hhEsperadoG=g.quantidade*indiceTotalG*(2-IPROD_PRAT);
+        hhEsperadoG=g.quantidade*fatorUnidG*indiceTotalG*(2-IPROD_PRAT);
       } else if(temIndiceSinapiG){
         indiceTotalG=indiceSinapiTotalG;
         hhEsperadoG=g.quantidade*indiceSinapiTotalG*(2-IPROD_PRAT);
@@ -16888,8 +16901,14 @@ async function iprodProcessar(){
   achouPorItem.forEach(function(x){
     var item=x.item, achou=x.achou;
     var indiceHHTotal=0, detalhePartes=[];
+    // Unidade da composição achada pode ser diferente da PQ (ex.: base em "t", PQ em "Kg") — sem
+    // converter a quantidade antes de multiplicar pelo índice, o resultado sai ~1000x maior que o
+    // real (mesma correção já aplicada no ramo com PQ do Projeto, ver iprodCompatUnid/
+    // fatorConversaoUnid). Faltava aqui, no ramo "sem PQ do Projeto" (Arquivo da Contratada
+    // sozinho) — bug real confirmado com a PQ da LUK.
+    var fatorUnidAchou=achou&&achou.fatorConversaoUnid!=null?achou.fatorConversaoUnid:1;
     if(achou) achou.rows.forEach(function(r){
-      var qtdNec=item.quantidade*(Number(r.indice)||0);
+      var qtdNec=item.quantidade*fatorUnidAchou*(Number(r.indice)||0);
       if(r.tipo==='M'){ // mão de obra (insumo IH*) — vira HH, entra no comparativo por função
         indiceHHTotal+=Number(r.indice)||0;
         detalhePartes.push(r.insumo+'-'+(r.descIns||'?')+'('+iprodFmt(r.indice)+')');
@@ -16946,7 +16965,7 @@ async function iprodProcessar(){
     var diffQtdProjeto=grupo&&grupo._diffQtdTotal!=null?grupo._diffQtdTotal:null;
     // Sem índice na base mas com HH declarado pela contratada: HH Calculado = o próprio declarado
     // (considerado igual — sem índice pra calcular por conta própria, sem penalizar a contratada)
-    var hhCalc=achou?(item.quantidade*indiceHHTotal):(item.hhDeclarado||item.hhAlocado||0);
+    var hhCalc=achou?(item.quantidade*fatorUnidAchou*indiceHHTotal):(item.hhDeclarado||item.hhAlocado||0);
     porAtividade.push({
       desc:item.desc,unidade:item.unidade,quantidade:item.quantidade,
       codCliente:achou?achou.matchCod:null,matchDesc:achou?achou.matchDesc:null,matchTipo:achou?achou.matchTipo:null,
