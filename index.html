@@ -16537,50 +16537,53 @@ async function iprodProcessar(){
   var totHHComValor=achouPorItem.reduce(function(s,x){return s+(x.item.valorTotal>0?(x.item.hhAlocado||0):0);},0);
   var taxaRSporHH=(somaValorFornecimento>0&&totHHComValor>0)?(somaValorFornecimento/totHHComValor):null;
 
-  // Consolida a PQ da contratada por "mesmo código OU mesma descrição" — a mesma atividade real
-  // aparece espalhada em várias linhas cruas por dois motivos que não se resolvem com uma chave
-  // única: (1) Área/SubÁrea diferentes, e também Montagem (K=M) x Desmontagem (K=D) do mesmo
-  // item, com código K/TT/UU/VVV/WWW diferente mas descrição idêntica; (2) o MESMO código
-  // aparecendo com descrição em sinônimo diferente entre linhas (ex.: "TUBO..." numa linha e
-  // "TUBULAÇÃO..." noutra, ambas com o mesmo código). Une tudo por componentes conectados
-  // (union-find): dois itens entram no mesmo grupo se compartilham código OU descrição
-  // normalizada, de forma transitiva. Cada item cru guarda uma referência de volta pro seu
-  // grupo (_iprodGrupo) — usado logo abaixo tanto pra comparar com o projeto quanto pra
-  // mostrar, no detalhamento por linha, a quantidade e diferença do TOTAL da atividade (não só
-  // dessa linha isolada, que sozinha não é comparável com o total oficial do projeto).
+  // Consolida a PQ da contratada só por MESMO CÓDIGO — quando duas linhas trazem o mesmo código
+  // K/TT/UU/VVV/WWW só com a descrição escrita em sinônimo diferente (ex.: "TUBO..." numa linha e
+  // "TUBULAÇÃO..." noutra, ambas com o mesmo código), é seguro somar: é o mesmo registro oficial
+  // repetido. Cada item cru guarda uma referência de volta pro seu grupo (_iprodGrupo) — usado
+  // logo abaixo tanto pra comparar com o projeto quanto pra mostrar, no detalhamento por linha, a
+  // quantidade/diferença do TOTAL da atividade (não só dessa linha isolada).
+  //
+  // NÃO soma mais só por descrição igual sem código (ex.: várias linhas "Montagem de bandejas",
+  // uma pra cada ponto/local de suporte, sem código que as diferencie) — bug real confirmado:
+  // isso juntava TODAS as ocorrências da contratada num único total (ex.: 115 unidades), que só
+  // conseguia "casar" com UMA das várias atividades do projeto com essa mesma descrição genérica
+  // (cada uma com seu próprio local/quantidade oficial, ex.: 8, 1, 1, 1, 8, 86...) — as demais
+  // ficavam com "Qtd. Orçada = —" mesmo a contratada tendo composto elas individualmente. Pedido
+  // explícito do usuário (03/09): não acumular repetidas, comparar conforme cada linha da PQ e do
+  // HH da empresa — cada linha crua vira seu próprio candidato, e o casamento 1-a-1 por atividade
+  // do projeto (3 passagens abaixo, com "usadosEmp" garantindo que cada candidato só é reivindicado
+  // uma vez) já cuida de parear cada local individualmente, na ordem em que aparecem nas duas PQs.
   var contratadaAgrupada={}, contratadaAgrupadaList=[];
   (function(){
     var itens=achouPorItem.map(function(x){return x.item;});
     var pai=itens.map(function(_,i){return i;});
     function acha(i){ while(pai[i]!==i){ pai[i]=pai[pai[i]]; i=pai[i]; } return i; }
     function une(i,j){ var ri=acha(i), rj=acha(j); if(ri!==rj) pai[ri]=rj; }
-    var porCod={}, porDesc={};
+    var porCod={};
     itens.forEach(function(it,i){
-      if(it.codCliente){
-        var jCod=porCod[it.codCliente];
-        if(jCod!=null){
-          // Mesmo código, descrição diferente — só une se for parecido o bastante (sinônimo/
-          // mudança de redação da MESMA atividade). Sem essa checagem, código reaproveitado por
-          // engano pra atividade DIFERENTE (confirmado real: a PQ "12.0 PQ" da MILPLAN reinicia a
-          // numeração "ITEM" por seção, e itens de seções diferentes acabam com o mesmo número —
-          // ex.: item "17" é ao mesmo tempo "Lançamento de cabo de potência...6,0mm²" E "Montagem
-          // de medidor de nível", duas atividades sem nenhuma relação) juntava as duas na força,
-          // fazendo uma delas desaparecer do comparativo (a que sobrava virava "Faltando na PQ da
-          // empresa" mesmo estando lá, porque a busca por descrição exata caía no grupo errado).
-          if(iprodNorm(itens[jCod].desc)===iprodNorm(it.desc)){
-            une(i,jCod);
-          } else {
-            var itTok=iprodTokens(it.desc), itSet={}; itTok.forEach(function(t){itSet[t]=true;});
-            var scCod=iprodTokenScore(itTok,itSet,iprodTokens(itens[jCod].desc),iprodUnitNorm(it.unidade),iprodUnitNorm(itens[jCod].unidade),iprodTemQualquer(it.desc),iprodTemQualquer(itens[jCod].desc));
-            if(scCod>=0.35) une(i,jCod);
-            // score baixo = código reaproveitado por engano — não une, cada um vira seu próprio grupo
-          }
+      if(!it.codCliente) return; // sem código: cada linha crua fica no seu próprio grupo (ver comentário acima)
+      var jCod=porCod[it.codCliente];
+      if(jCod!=null){
+        // Mesmo código, descrição diferente — só une se for parecido o bastante (sinônimo/
+        // mudança de redação da MESMA atividade). Sem essa checagem, código reaproveitado por
+        // engano pra atividade DIFERENTE (confirmado real: a PQ "12.0 PQ" da MILPLAN reinicia a
+        // numeração "ITEM" por seção, e itens de seções diferentes acabam com o mesmo número —
+        // ex.: item "17" é ao mesmo tempo "Lançamento de cabo de potência...6,0mm²" E "Montagem
+        // de medidor de nível", duas atividades sem nenhuma relação) juntava as duas na força,
+        // fazendo uma delas desaparecer do comparativo (a que sobrava virava "Faltando na PQ da
+        // empresa" mesmo estando lá, porque a busca por descrição exata caía no grupo errado).
+        if(iprodNorm(itens[jCod].desc)===iprodNorm(it.desc)){
+          une(i,jCod);
         } else {
-          porCod[it.codCliente]=i;
+          var itTok=iprodTokens(it.desc), itSet={}; itTok.forEach(function(t){itSet[t]=true;});
+          var scCod=iprodTokenScore(itTok,itSet,iprodTokens(itens[jCod].desc),iprodUnitNorm(it.unidade),iprodUnitNorm(itens[jCod].unidade),iprodTemQualquer(it.desc),iprodTemQualquer(itens[jCod].desc));
+          if(scCod>=0.35) une(i,jCod);
+          // score baixo = código reaproveitado por engano — não une, cada um vira seu próprio grupo
         }
+      } else {
+        porCod[it.codCliente]=i;
       }
-      var dkey=iprodNorm(it.desc);
-      if(porDesc[dkey]!=null) une(i,porDesc[dkey]); else porDesc[dkey]=i;
     });
     var porRaiz={};
     itens.forEach(function(it,i){
