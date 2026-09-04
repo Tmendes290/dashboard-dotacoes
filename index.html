@@ -16372,38 +16372,20 @@ async function iprodHandlePQProjetoFile(files){
       var resultadosPorArquivo=await Promise.all(listaArquivos.map(iprodLerArquivoProjeto));
       var brutas=[].concat.apply([],resultadosPorArquivo);
       if(!brutas.length){ toast('Não encontrei quantidades nessa(s) planilha(s) — confere os cabeçalhos (Descrição/Atividade + Quantidade)','red'); return; }
-      var agrupado={};
-      brutas.forEach(function(item){
-        var key=item.codCliente||('desc:'+iprodNorm(item.desc));
-        var g=agrupado[key];
-        // Mesmo código mas descrição sem relação nenhuma = colisão de código na planilha-fonte
-        // (código K/TT/UU/VVV/WWW reaproveitado por engano pra duas atividades diferentes), não a
-        // MESMA atividade repetida — confirmado com dados reais: "Armadura CA-25" e "Armadura em
-        // tela de aço soldada" caíram sob o mesmo código C6510010010 numa PQ real, e sem esse
-        // check as quantidades das duas iam pro mesmo total (score de similaridade só 29%, abaixo
-        // do limiar de 35% já usado no resto do matching). Nesse caso trata como atividade
-        // separada (chave por descrição) em vez de somar.
-        if(g&&iprodNorm(g.desc)!==iprodNorm(item.desc)){
-          var itTok=iprodTokens(item.desc), itSet={}; itTok.forEach(function(t){itSet[t]=true;});
-          var sc=iprodTokenScore(itTok,itSet,iprodTokens(g.desc),iprodUnitNorm(item.unidade),iprodUnitNorm(g.unidade),iprodTemQualquer(item.desc),iprodTemQualquer(g.desc));
-          // Mesmo quando o score de texto passa do limiar, dois itens com números DIFERENTES na
-          // descrição nunca são a mesma atividade — confirmado com dado real: código M7510080005
-          // ("Miscelâneas de Peças") é reaproveitado pra TODO parafuso/porca da estrutura, e
-          // "PARAFUSO...5/8"x1.1/2", ASTM A-325" batia 40%+ com "PARAFUSO...5/8"x1.3/4", ASTM
-          // A-325" (e até com "PORCA 3/4", ASTM A-325") só porque os dois terminam em "A-325" —
-          // o bônus de "último número igual" do score genérico compara o grau do material (325),
-          // não a bitola real (1.1/2" x 1.3/4"), que fica no meio do texto. Isso inflava a
-          // quantidade oficial de UM parafuso (deveria ser 1.766) somando 5 itens diferentes até
-          // 4.602. Exige que TODOS os números da descrição batam (não só o score geral) antes de
-          // aceitar como a mesma atividade repetida.
-          var mesmosNumeros=iprodTokensNumericos(item.desc)===iprodTokensNumericos(g.desc);
-          if(sc<0.35||!mesmosNumeros){ key='desc:'+iprodNorm(item.desc); g=agrupado[key]; }
-        }
-        if(!g){ g=agrupado[key]={desc:item.desc,codCliente:item.codCliente,unidade:item.unidade,quantidade:0,porAba:[]}; }
-        g.quantidade+=item.quantidade;
-        g.porAba.push({aba:item.aba,quantidade:item.quantidade});
-      });
-      var pq=Object.values(agrupado);
+      // NÃO agrupa mais linhas da PQ do Projeto por código nem por descrição — cada linha crua
+      // (cada item da EAP) vira sua própria atividade, do jeito que a Vale lançou. Bug real
+      // confirmado com o arquivo oficial da Vale (PQ-2306SA-E-00003, projeto CALHAS): o "CÓD.
+      // ATIVIDADE" (K/TT/UU/VVV/WWW) é só uma referência de COMPOSIÇÃO/preço padrão — a MESMA
+      // Vale reaproveita esse código em dezenas de itens de EAP genuinamente diferentes (ex.:
+      // "Içamento de bandejas" do item 1.6 e "Desmontagem do chuveiro tipo tubulação" do item
+      // 2.6.1.1 compartilham o código M7035000000; "Montagem de bandejas" se repete em 13 itens
+      // de EAP diferentes, todos com o código M7060005000). Agrupar por esse código somava
+      // atividades sem relação nenhuma (877,75 + 787,75 = 1.575,50 pra "Desmontagem do chuveiro",
+      // quando cada ocorrência real tem sua própria quantidade oficial). O identificador de
+      // verdade de cada linha na PQ da Vale é o item da EAP (coluna "ITEM"), não o código de
+      // composição — e cada linha já sobe individualmente pro comparativo (seção 3), que casa
+      // 1-a-1 contra a PQ da contratada (ver bf50d09/1c4dfe0, mesmo princípio aplicado aqui).
+      var pq=brutas;
       IPROD_PROJETO={pq:pq,nomeArquivo:listaArquivos.map(function(f){return f.name;}).join(', ')};
       IPROD_RESULT=null;
       // PQ nova = os índices de linha (idxProjeto) apontam pra atividades diferentes agora —
