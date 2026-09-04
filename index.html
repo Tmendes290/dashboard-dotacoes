@@ -14969,6 +14969,14 @@ var IPROD_INDICE_OVERRIDES={};
 // IPROD_PROJETO.pq[idxProjeto].quantidade (mesmo padrão de iprodEditarCodigoProjeto, que também
 // sobrescreve o campo direto no array). Ver iprodEditarQtdProjeto.
 var IPROD_QTD_PROJETO_ORIGINAL={};
+// Marca as linhas cujo Cód. Cliente foi digitado manualmente (chave idxProjeto, valor true) — ver
+// iprodEditarCodigoProjeto. Faz iprodProcessar confiar no código direto (sem exigir que a
+// descrição bata nada com a composição achada), diferente do fluxo automático normal, que sempre
+// exige um mínimo de relação de texto além do código bater — proteção contra código reaproveitado
+// por engano (ver comentário em iprodBuscarNaFonte). Mas se o USUÁRIO digitou o código à mão, é
+// uma confirmação deliberada, não deve ser vetada por relevância de texto: nesse caso o índice E a
+// descrição oficial daquele código passam a vir automáticos, sem precisar digitar nada a mais.
+var IPROD_COD_PROJETO_MANUAL={};
 var IPROD_SHOW_AJUDA=false;
 function iprodToggleAjuda(){ IPROD_SHOW_AJUDA=!IPROD_SHOW_AJUDA; iprodRenderShell(); }
 // Card "% de Custo Indireto" — pediram pra tirar, mas o usuário quer manter e só ocultar quando
@@ -15110,6 +15118,11 @@ function iprodEditarCodigoProjeto(idxProjeto,input){
   if(!IPROD_PROJETO||!IPROD_PROJETO.pq[idxProjeto]) return;
   var novo=String(input.value||'').trim().toUpperCase();
   IPROD_PROJETO.pq[idxProjeto].codCliente=novo||null;
+  // Código digitado à mão = confirmação deliberada do usuário — o índice E a descrição oficial
+  // daquele código passam a vir automáticos no recálculo (iprodProcessar confia direto, sem exigir
+  // que o texto da PQ bata nada com a composição achada). Campo vazio volta ao fluxo automático
+  // normal (com a proteção de relevância de texto).
+  if(novo) IPROD_COD_PROJETO_MANUAL[idxProjeto]=true; else delete IPROD_COD_PROJETO_MANUAL[idxProjeto];
   toast('Código atualizado — recalculando...','blue');
   iprodProcessar();
 }
@@ -15826,6 +15839,34 @@ function iprodFindIndiceCru(codCliente,desc,unidade){
   }
   return null;
 }
+// Busca direta por código, SEM exigir relação nenhuma de texto — usada só quando o Cód. Cliente foi
+// digitado manualmente pelo usuário (ver IPROD_COD_PROJETO_MANUAL/iprodEditarCodigoProjeto). O
+// fluxo automático (iprodBuscarNaFonte) exige um mínimo de relevância de texto além do código bater
+// — proteção contra código reaproveitado por engano pra atividade sem relação nenhuma (comum na
+// base, ver comentário no agrupamento por código). Essa proteção não faz sentido aqui: é o próprio
+// usuário confirmando deliberadamente que aquele código é o certo pra essa atividade — pedido
+// explícito (04/09): "quando eu colocar o código, quero que o índice já venha automático". Quando o
+// código bate em mais de uma composição diferente (colisão real), desambigua pela mais parecida com
+// a descrição da PQ, sem limiar mínimo — é só ranking, nunca rejeita.
+function iprodFindIndicePorCodigoForcado(cod,desc,unidade){
+  if(!IPROD_INDICE||!cod) return null;
+  var grupos=IPROD_INDICE.byCod[cod];
+  if(!grupos||!grupos.length) return null;
+  if(grupos.length===1){
+    var compat=iprodCompatUnid(iprodUnitNorm(unidade),grupos[0].unidNorm);
+    return {rows:grupos[0].rows,matchTipo:'código (confirmado manualmente)'+(compat.fator!=null?' — unidade da PQ ('+unidade+') convertida pra '+(grupos[0].rows[0]?grupos[0].rows[0].unidade:grupos[0].unidNorm)+' da base (×'+compat.fator+')':''),matchCod:cod,matchDesc:grupos[0].desc,score:1,fatorConversaoUnid:compat.fator};
+  }
+  var pqTokens=iprodTokens(desc), pqSet={}; pqTokens.forEach(function(t){pqSet[t]=true;});
+  var pqUnid=iprodUnitNorm(unidade), pqQualquer=iprodTemQualquer(desc);
+  var bestG=null,bestScore=-Infinity,bestCompat=null;
+  grupos.forEach(function(g){
+    var compatG=iprodCompatUnid(pqUnid,g.unidNorm);
+    var s=pqTokens.length?iprodTokenScore(pqTokens,pqSet,g.tokens,pqUnid,g.unidNorm,pqQualquer,iprodTemQualquer(g.desc)):0;
+    if(!compatG.ok) s-=10; // desempata pra unidade compatível primeiro — ainda escolhe algo mesmo assim
+    if(s>bestScore){bestScore=s;bestG=g;bestCompat=compatG;}
+  });
+  return {rows:bestG.rows,matchTipo:'código (confirmado manualmente — '+grupos.length+' composições sob esse código, desambiguado pela descrição mais parecida)',matchCod:cod,matchDesc:bestG.desc,score:1,fatorConversaoUnid:bestCompat.fator};
+}
 // Quando a PQ não tem código próprio (a maioria), tenta inferir Montagem x Desmontagem pelo
 // verbo típico da descrição — mesma discriminação usada acima, só que pela palavra em vez do código.
 var IPROD_VERBOS_M=['MONTAGEM','LANCAMENTO','INSTALACAO','FORNECIMENTO'],IPROD_VERBOS_D=['DESMONTAGEM','RECOLHIMENTO','REMOCAO','RETIRADA'];
@@ -16412,6 +16453,7 @@ async function iprodHandlePQProjetoFile(files){
       // sobrescritas manuais e exclusões da PQ anterior não fazem mais sentido aqui.
       IPROD_INDICE_OVERRIDES={};
       IPROD_QTD_PROJETO_ORIGINAL={};
+      IPROD_COD_PROJETO_MANUAL={};
       IPROD_LINHAS_EXCLUIDAS={};
       IPROD_ATIV_SELECIONADAS={};
       IPROD_BUSCA_PQPROJETO='';
@@ -16605,7 +16647,9 @@ async function iprodProcessar(){
       var ehMaoDeObraHoras=unidProjNorm==='H'||unidProjNorm==='HH'||unidProjNorm==='HORAS'||unidProjNorm==='HORA';
       var kProjeto=pItem.codCliente&&/^[A-Z]/.test(pItem.codCliente)?pItem.codCliente[0]:null;
       if(ehVerbaProjeto||kProjeto==='F'||ehMaoDeObraHoras) return;
-      var achouIndice=iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade);
+      var achouIndice=IPROD_COD_PROJETO_MANUAL[idxProjeto]
+        ?(iprodFindIndicePorCodigoForcado(pItem.codCliente,pItem.desc,pItem.unidade)||iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade))
+        :iprodFindIndice(pItem.codCliente,pItem.desc,pItem.unidade);
       var indiceTotal=0, detalhePartes=[];
       var indiceSoSupervisao=achouIndice&&iprodIndiceSoSupervisao(achouIndice.rows);
       // Índice ajustado manualmente pelo usuário (coluna Índice editável na seção 3) — substitui
