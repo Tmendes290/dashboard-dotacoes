@@ -8946,10 +8946,140 @@ function _cji3AggregateCacheRecords(fields,xml){
   });
   return {months:months,rows:Object.values(map)};
 }
-// Método preferido: lê a memória interna (cache) da tabela dinâmica direto do zip do .xlsx,
+// Método primário: lê linha a linha a aba "Export rev01" (extrato bruto do CJI3/SAP, sem
+// passar por tabela dinâmica nenhuma) — essa é a aba que o usuário atualiza diretamente, então
+// nunca fica desatualizada por causa de uma pivot table que não foi (ou não conseguiu ser)
+// atualizada no Excel antes de salvar. A aba tem ~250 mil linhas e o XML dela descompactado
+// passa de 600MB — maior que o limite de string do V8 (~536 milhões de caracteres), então NÃO
+// dá pra usar zip.file(...).async('string') como nos outros métodos. Em vez disso, usa o
+// internalStream do JSZip pra processar em pedaços (chunks), nunca guardando o arquivo inteiro
+// como uma única string — só um pequeno "carry" (sobra) entre chunks pra não cortar uma célula
+// ao meio. Validado contra o arquivo real de produção: valores mês a mês idênticos ao que já
+// estava importado (inclusive negativos) e cobre o mês mais recente mesmo com a pivot quebrada.
+function _cji3PeekZipText(entry, maxChars){
+  return new Promise(function(resolve,reject){
+    var decoder=new TextDecoder('utf-8');
+    var text='';
+    var s=entry.internalStream('uint8array');
+    s.on('data', function(chunk){
+      text+=decoder.decode(chunk,{stream:true});
+      if(text.length>=maxChars){ s.pause(); resolve(text); }
+    });
+    s.on('error', reject);
+    s.on('end', function(){ resolve(text); });
+    s.resume();
+  });
+}
+function _cji3StreamAggregate(entry, letterToKey, cellRe, shared, CJI3_MO){
+  return new Promise(function(resolve,reject){
+    var decoder=new TextDecoder('utf-8');
+    var carry='', map={}, months=[], curRow=-1, cur={};
+    function flush(){
+      if(curRow<0) return;
+      var v=parseFloat(cur.val)||0;
+      if(cur.proj&&cur.wbs&&cur.year&&CJI3_MO[cur.month]&&v){
+        var fornRaw=(cur.forn||'').trim();
+        var fornKey=(!fornRaw||/^#/.test(fornRaw)||/^\d+$/.test(fornRaw))?'(Sem fornecedor)':fornRaw;
+        var key=cur.proj+'|'+cur.wbs+'|'+fornKey;
+        if(!map[key]) map[key]={proj:cur.proj,pname:cur.pname,wbs:cur.wbs,forn:fornKey,ger:'',site:'',wname:'',v:{}};
+        var mk=cur.year+'-'+cur.month;
+        if(!months.includes(mk)) months.push(mk);
+        map[key].v[mk]=(map[key].v[mk]||0)+v;
+      }
+    }
+    var s=entry.internalStream('uint8array');
+    s.on('data', function(chunk){
+      var text=carry+decoder.decode(chunk,{stream:true});
+      var lastEnd=0; cellRe.lastIndex=0; var m;
+      while((m=cellRe.exec(text))){
+        var letter=m[1], rowNum=parseInt(m[2],10), attrs=m[3];
+        var val=m[4]!==undefined?m[4]:'';
+        val=/\bt="s"/.test(attrs)?(shared[parseInt(val,10)]||''):_cji3XmlUnescape(val);
+        if(rowNum!==curRow){ flush(); curRow=rowNum; cur={}; }
+        cur[letterToKey[letter]]=val;
+        lastEnd=m.index+m[0].length;
+      }
+      carry=text.slice(lastEnd);
+      if(carry.length>5*1024*1024){ s.pause(); reject(new Error('carry cresceu demais lendo Export rev01')); }
+    });
+    s.on('error', reject);
+    s.on('end', function(){
+      flush();
+      months.sort(function(a,b){
+        var ya=a.split('-')[0],ma=a.split('-')[1],yb=b.split('-')[0],mb=b.split('-')[1];
+        return ya!==yb?parseInt(ya)-parseInt(yb):(CJI3_MO[ma]||0)-(CJI3_MO[mb]||0);
+      });
+      resolve({months:months,rows:Object.values(map)});
+    });
+    s.resume();
+  });
+}
+async function _cji3ParseExportRaw(zip){
+  var wbEntry=zip.file('xl/workbook.xml');
+  var relsEntry=zip.file('xl/_rels/workbook.xml.rels');
+  if(!wbEntry||!relsEntry) return null;
+  var wbXml=await wbEntry.async('string');
+  var sheetTags=wbXml.match(/<sheet\b[^>]*\/>/g)||[];
+  var targetRid=null;
+  sheetTags.forEach(function(tag){
+    var nameM=tag.match(/name="((?:[^"]|"")*)"/);
+    var ridM=tag.match(/r:id="(rId\d+)"/);
+    if(!nameM||!ridM) return;
+    var nm=_cji3XmlUnescape(nameM[1]).trim().toLowerCase();
+    if(/^export\s*rev\s*0?1$/.test(nm)) targetRid=ridM[1];
+  });
+  if(!targetRid) return null;
+  var relsXml=await relsEntry.async('string');
+  var relM=relsXml.match(new RegExp('Id="'+targetRid+'"[^>]*Target="([^"]+)"'));
+  if(!relM) return null;
+  var target=relM[1].replace(/^\.?\//,'');
+  var sheetPath=target.indexOf('xl/')===0?target:'xl/'+target;
+  var sheetEntry=zip.file(sheetPath);
+  var ssEntry=zip.file('xl/sharedStrings.xml');
+  if(!sheetEntry||!ssEntry) return null;
+
+  var ssXml=await ssEntry.async('string');
+  var shared=[];
+  var siRe=/<si>([\s\S]*?)<\/si>/g, m;
+  while((m=siRe.exec(ssXml))){
+    var inner=m[1], text='', tRe=/<t[^>]*>([\s\S]*?)<\/t>/g, tm;
+    while((tm=tRe.exec(inner))) text+=tm[1];
+    shared.push(_cji3XmlUnescape(text));
+  }
+
+  // Acha a linha de cabeçalho varrendo só o início do arquivo (não precisa ler tudo pra isso):
+  // é a primeira linha cujas células de texto resolvem pra incluir "Fiscal Year" e "WBS Element".
+  var headText=await _cji3PeekZipText(sheetEntry, 400000);
+  var rowRe=/<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g, rm, letterToName=null;
+  while((rm=rowRe.exec(headText))){
+    var cand={};
+    var cellRe0=/<c r="([A-Z]+)\d+"[^>]*t="s"[^>]*><v>(\d+)<\/v><\/c>/g, cm;
+    while((cm=cellRe0.exec(rm[2]))) cand[cm[1]]=shared[parseInt(cm[2],10)];
+    var vals=Object.values(cand);
+    if(vals.includes('Fiscal Year')&&vals.includes('WBS Element')){ letterToName=cand; break; }
+  }
+  if(!letterToName) return null;
+
+  var NEED={year:'Fiscal Year',month:'Month',proj:'Project',pname:'Project Name',wbs:'WBS Element',val:'Value In Object Currency',forn:'FORNECEDOR'};
+  var nameToLetter={};
+  Object.keys(letterToName).forEach(function(l){ nameToLetter[letterToName[l]]=l; });
+  var letterToKey={}, missing=[];
+  Object.keys(NEED).forEach(function(k){
+    var l=nameToLetter[NEED[k]];
+    if(!l) missing.push(NEED[k]); else letterToKey[l]=k;
+  });
+  if(missing.length){ console.warn('[CJI3] aba "Export rev01" sem colunas:',missing); return null; }
+
+  var letters=Object.keys(letterToKey).sort(function(a,b){return b.length-a.length;});
+  var cellRe=new RegExp('<c r="('+letters.join('|')+')(\\d+)"([^>]*)>(?:<f[^>]*>[\\s\\S]*?<\\/f>)?(?:<v>([^<]*)<\\/v>)?<\\/c>','g');
+
+  return _cji3StreamAggregate(sheetEntry, letterToKey, cellRe, shared, CJI3_MO);
+}
+// Método de reserva: lê a memória interna (cache) da tabela dinâmica direto do zip do .xlsx,
 // sem passar pelo Excel. Varre todo pivotCacheDefinition*.xml procurando o que tem os campos
 // que precisamos (não depende de qual aba/pivot table é, nem de nomes/ids que podem mudar entre
 // exportações) e resolve o pivotCacheRecords correspondente pela própria relação interna do zip.
+// Só entra em ação se a aba "Export rev01" não existir ou não tiver as colunas esperadas.
 async function _cji3ParsePivotCache(buf){
   if(typeof JSZip==='undefined') return null;
   var zip=await JSZip.loadAsync(buf);
@@ -9063,8 +9193,14 @@ function handleCji3Upload(file){
         console.time('[CJI3] parse');
         var buf=e.target.result;
         var parsed=null;
-        try{ parsed=await _cji3ParsePivotCache(buf); }
-        catch(pcErr){ console.warn('[CJI3] pivot cache indisponível, tentando aba "RESUMO EXECUÇÕES":',pcErr); }
+        try{
+          var _cji3Zip=await JSZip.loadAsync(buf);
+          parsed=await _cji3ParseExportRaw(_cji3Zip);
+        }catch(rawErr){ console.warn('[CJI3] leitura direta da aba "Export rev01" falhou, tentando cache da pivot:',rawErr); }
+        if(!parsed){
+          try{ parsed=await _cji3ParsePivotCache(buf); }
+          catch(pcErr){ console.warn('[CJI3] pivot cache indisponível, tentando aba "RESUMO EXECUÇÕES":',pcErr); }
+        }
 
         if(!parsed){
           var wb=XLSX.read(buf,{type:'array',sheets:['RESUMO EXECUÇÕES']});
