@@ -18194,16 +18194,20 @@ function iprodRenderShell(){
     if(pqFiltrada.length){
       html+='<table class="iprod-tbl"><thead><tr><th>Cód. Cliente</th><th>Descrição da Atividade</th><th>Unid.</th><th>Qtd. Oficial (Projeto)</th></tr></thead><tbody>';
       pqFiltrada.forEach(function(row){
-        var temAbas=row.porAba&&row.porAba.length>0;
-        html+='<tr'+(temAbas?' class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')"':'')+'>'
+        // Desde que a PQ do Projeto parou de agrupar linhas por código/descrição (cada linha crua
+        // vira sua própria atividade, ver b5d7c8f), quem carrega de qual aba a linha veio é o
+        // campo singular "aba" (setado linha a linha em iprodLerArquivoProjeto), não mais o array
+        // "porAba" de quando várias linhas eram somadas numa atividade só — esse array nunca mais
+        // era preenchido, então o clique parou de mostrar a origem (bug real reportado pelo
+        // usuário: "antes mostrava, agora não aparece mais").
+        var temAba=!!row.aba;
+        html+='<tr'+(temAba?' class="iprod-tr-expand" onclick="this.nextElementSibling.classList.toggle(\'show\');this.classList.toggle(\'open\')"':'')+'>'
           +'<td>'+(row.codCliente||'—')+'</td><td>'+row.desc+'</td><td>'+row.unidade+'</td><td>'+iprodFmtQtd(row.quantidade)+'</td></tr>';
-        if(temAbas){
+        if(temAba){
           html+='<tr class="iprod-drill"><td colspan="4">'
-            +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">'+(row.porAba.length>1?'Somado a partir de '+row.porAba.length+' aba(s)':'Vem da aba')+'</div>';
-          row.porAba.forEach(function(a){
-            html+='<div class="iprod-drill-row"><span>'+a.aba+'</span><span>'+iprodFmtQtd(a.quantidade)+' '+row.unidade+'</span></div>';
-          });
-          html+='</td></tr>';
+            +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;color:var(--muted);margin-bottom:8px">Vem da aba</div>'
+            +'<div class="iprod-drill-row"><span>'+row.aba+'</span><span>'+iprodFmtQtd(row.quantidade)+' '+row.unidade+'</span></div>'
+            +'</td></tr>';
         }
       });
       html+='</tbody></table>';
