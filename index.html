@@ -16142,6 +16142,13 @@ function iprodParsePQSheet(data){
   // "ÍNDICE DE PRODUTIVIDADE") — usado como aproximação quando a NOSSA base não tem essa
   // composição cadastrada, em vez de deixar a atividade sem nenhum comparativo.
   var iIndiceContratada=hdrC.findIndex(function(h){return h.indexOf('INDICE')>=0&&h.indexOf('PRODUTIV')>=0;});
+  // A LUK chama essa mesma coluna só de "PRODUTIVIDADE" (sem a palavra "ÍNDICE" junto) — mesma
+  // métrica (HH por unidade): confirmado batendo exato, linha a linha, contra a Composição de
+  // Preços Unitária dela (ex.: 11,65 HH/m pro tubo de 4", 12,48 HH/m pro de 6", 6,01 HH/und pro de
+  // 2" — os 3 valores da coluna "PRODUTIVIDADE" do orçamento reaparecem literais como "PRODUTIVIDADE"
+  // na tabelinha "HH TRABALHADAS/PRODUTIVIDADE" de cada aba de composição). Sem esse fallback essa
+  // coluna inteira era ignorada — a contratada declara o índice dela e o dashboard não usava.
+  if(iIndiceContratada<0) iIndiceContratada=hdrC.findIndex(function(h){return h.indexOf('PRODUTIV')>=0;});
   if(iDesc<0||iQtd<0) return null;
 
   // Código hierárquico "CÓD. ATIVIDADE" da Vale (K/TT/UU/VVV/WWW) — muitas PQs reais não têm
@@ -16328,6 +16335,22 @@ async function iprodHandleCatalogoFile(file){
 // só "Descrição/.../Total" por função sem quebra por dia — usado como fallback (ver
 // iprodHandleContratadaFile) só em abas que já foram descartadas como PQ, pra não reabrir o
 // mesmo problema de falso-positivo.
+// Cabeçalho de histograma às vezes vem em 2 linhas: "TOTAL" na linha de cima (junto do ano, ex.:
+// "2026"/"2027"), nomes de mês em TEXTO (ex.: "SET"/"OUT"/"DEZEM"...) só na linha de baixo — mesmo
+// problema estrutural que o cabeçalho de 2 linhas da PQ (ver iprodParsePQSheet), só que aqui o
+// sinal de "é mesmo cabeçalho" não é numérico (datas-serial), é texto. Bug real confirmado com
+// arquivo oficial da LUK (ORÇAMENTO LUK.xlsx, aba "RESUMO HISTOGRAMA"): sem juntar as 2 linhas, a
+// linha de baixo (só nomes de mês, função em branco) era lida como se fosse a 1ª linha de DADO,
+// achava função vazia e parava ali mesmo — 0 funções lidas de um histograma com 20+ funções reais.
+function iprodEhLinhaDeMeses(row){
+  var MESES=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+  var achou=0;
+  (row||[]).forEach(function(v){
+    var n=iprodNorm(v);
+    if(n && MESES.some(function(m){return n.indexOf(m)===0&&n.length<=6;})) achou++;
+  });
+  return achou>=2;
+}
 function iprodParseHistSheet(data,lenient){
   var hdrIdx=-1, iFunc=-1, iHH=-1;
   for(var ri=0;ri<Math.min(data.length,20);ri++){
@@ -16340,20 +16363,25 @@ function iprodParseHistSheet(data,lenient){
         var v=Number(rawRow[dc]);
         if(isFinite(v)&&v>=40000&&v<=60000){ temDatas=true; break; }
       }
-      if(temDatas||lenient){
+      var proxLinhaEhMeses=iprodEhLinhaDeMeses(data[ri+1]);
+      if(temDatas||proxLinhaEhMeses||lenient){
         var fCol=-1;
         for(var cc=0;cc<iTot;cc++){ if(cand[cc]){ fCol=cc; break; } }
-        if(fCol>=0){ hdrIdx=ri; iFunc=fCol; iHH=iTot; break; }
+        if(fCol>=0){ hdrIdx=proxLinhaEhMeses?ri+1:ri; iFunc=fCol; iHH=iTot; break; }
       }
     }
   }
   if(hdrIdx<0) return null;
-  var out=[];
+  var out=[], brancosSeguidos=0;
   for(var i=hdrIdx+1;i<data.length;i++){
     var r=data[i]||[];
     var func=String(r[iFunc]||'').trim();
-    if(!func) break;
-    if(iprodNorm(func)==='TOTAL') break;
+    // Linha em branco isolada (ex.: separador visual entre grupos) não é necessariamente o fim da
+    // tabela — só desiste depois de várias em sequência (sinal real de que saiu da tabela).
+    if(!func){ brancosSeguidos++; if(brancosSeguidos>=3) break; continue; }
+    brancosSeguidos=0;
+    // "TOTAL" sozinho ou como parte do rótulo (ex.: "TOTAL GERAL", usado pela LUK) fecha a tabela.
+    if(iprodNorm(func).indexOf('TOTAL')>=0) break;
     var hh=Number(r[iHH]);
     if(!isFinite(hh)) continue;
     out.push({funcao:func,hh:hh});
