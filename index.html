@@ -16199,7 +16199,13 @@ function iprodParsePQSheet(data){
     var unidRow=iUnid>=0?String(row[iUnid]||'').trim():'';
     var ehVbRow=iprodNorm(unidRow).indexOf('VB')===0;
     if(temAlgumUnidPQ && !unidRow) return;
-    if(iK>=0 && !ehVbRow){
+    // O filtro C/M/D só vale quando a planilha REALMENTE tem coluna de HH/Valor pra confirmar que
+    // a letra fora desse trio é placeholder (empiricamente, "Horas Total = 0" no arquivo T.31 que
+    // motivou esse filtro — ver a04acbe). Bug real confirmado com PQ oficial da Vale sem NENHUMA
+    // coluna de HH/preço (PQ-5102SA-T-00001, projeto LUK/Salobo III): ela usa a letra "F" pra TODO
+    // item físico (fornecimento E montagem), inclusive linhas com quantidade real (ex.: 1.845 m de
+    // tubo) — sem HH/Valor pra provar que é placeholder, o filtro zerava a PQ inteira (9 ativ. → 0).
+    if(iK>=0 && !ehVbRow && (temAlgumHHPQ||temAlgumValorPQ)){
       var kFiltro=String(row[iK]||'').trim().toUpperCase();
       if(kFiltro && !iprodKValidos[kFiltro]) return;
     }
