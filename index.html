@@ -1081,6 +1081,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <!-- FP&A -->
     <div class="sb-nav-sec">FP&amp;A</div>
     <div class="sb-item" data-view="fpa" data-label="FP&A"><span class="ico">📈</span><span class="sb-label">FP&amp;A</span></div>
+    <div class="sb-item" data-view="projecao" data-label="Projeção de Faturamento"><span class="ico">📅</span><span class="sb-label">Projeção de Faturamento</span></div>
     <!-- IMPRODUTIVIDADE -->
     <div class="sb-nav-sec">Fiscalização</div>
     <div class="sb-item" data-view="improdutividade" data-label="Improdutividade"><span class="ico">⏱</span><span class="sb-label">Produtividade</span></div>
@@ -1399,6 +1400,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="v-milplan" class="hidden"></div>
     <div id="v-pipe" class="hidden"></div>
     <div id="v-fpa" class="hidden"></div>
+    <div id="v-projecao" class="hidden"></div>
     <div id="v-rac" class="hidden"></div>
     <div id="v-improdutividade" class="hidden"></div>
     <div id="v-indice-produtividade" class="hidden"></div>
@@ -1933,6 +1935,14 @@ function startRealtime(){
       var quemJ=(payload.payload&&payload.payload.uploadedBy)||'admin';
       toast('📋 CJI3 atualizado por '+quemJ+' — dados recarregados','blue');
     })
+    .on('broadcast', {event: 'projecao-updated'}, function(payload){
+      if(typeof prjLoad==='function' && PRJ.loaded){ prjLoad(true); }
+      var quemP=(payload.payload&&payload.payload.uploadedBy)||'admin';
+      toast('📅 Projeção (CJI5/CJI3) atualizada por '+quemP+' — dados recarregados','blue');
+    })
+    .on('broadcast', {event: 'projecao-forn-updated'}, function(payload){
+      if(typeof prjLoad==='function' && PRJ.loaded){ prjLoad(true); }
+    })
     .on('broadcast', {event: 'mat-updated'}, function(payload){
       (async function(){
         try{
@@ -1955,6 +1965,7 @@ function startRealtime(){
             if(nbMat&&STATE_MATERIAIS.length){nbMat.textContent=STATE_MATERIAIS.length;nbMat.style.display='inline-flex';}
             var vMat=document.getElementById('v-materiais');
             if(vMat&&!vMat.classList.contains('hidden')) renderMateriais();
+            if(currentView==='projecao'&&typeof renderProjecao==='function') renderProjecao();
           }
         }catch(e){console.warn('[Realtime] mat-updated:',e);}
       })();
@@ -2468,6 +2479,7 @@ const VIEW_META={
   'saude-pep':{title:'Saúde do PEP',sub:'Visão financeira consolidada por projeto'},
   materiais:{title:'Materiais',sub:'Acompanhamento de pedidos, RCs e diligenciamento'},
   fpa:{title:'FP&A',sub:'Orçamento x Executado x Forecast por projeto'},
+  projecao:{title:'Projeção de Faturamento',sub:'CJI5 (compromisso) × CJI3 (realizado) por pedido — previsão mês a mês'},
   analytics:{title:'Dashboard',sub:'Dotado vs Medido por empresa e PEP'},
   improdutividade:{title:'Produtividade Projetos Salobo',sub:'Registro de chegada e atraso das equipes'},
   'indice-produtividade':{title:'Índice de Produtividade',sub:'Comparativo de HH cobrado pela contratada vs índice de produtividade do projeto'},
@@ -2503,14 +2515,14 @@ function _syncBnav(id){
 function setView(id){
   currentView=id;
   _syncBnav(id);
-  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-fpa','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma','v-milplan','v-pipe','v-rac'].forEach(v=>document.getElementById(v).classList.add('hidden'));
+  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-fpa','v-projecao','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma','v-milplan','v-pipe','v-rac'].forEach(v=>document.getElementById(v).classList.add('hidden'));
   document.getElementById('v-'+id).classList.remove('hidden');
   // Lazy-load histograma iframe on first visit
   if(id==='histograma'){
     const fr=document.getElementById('histograma-frame');
     if(!fr.src||fr.src==='about:blank')fr.src='/histograma-eletro.html?embed=1';
   }
-  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','fpa','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios','milplan','pipe','rac'].includes(id));
+  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','fpa','projecao','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios','milplan','pipe','rac'].includes(id));
   if(id==='produtividade-rev2'){
     var _mRev2=VIEW_META['produtividade-rev2'];
     var _ptRev2=document.getElementById('page-title');if(_ptRev2)_ptRev2.textContent=_mRev2.title;
@@ -2577,6 +2589,7 @@ function _renderNow(){
   if(currentView==='upload') renderUpload();
   if(currentView==='materiais') renderMateriais();
   if(currentView==='fpa') renderFpa();
+  if(currentView==='projecao') renderProjecao();
   if(currentView==='milplan') renderMilplan();
   if(currentView==='pipe') renderPipe();
   if(currentView==='cji3') renderCji3();
@@ -4570,7 +4583,7 @@ function updateUserBadge(){
   document.body.classList.toggle("is-lider", isLider);
   var _perms = (CURRENT_PERFIL.permissoes && CURRENT_PERFIL.permissoes.length) ? CURRENT_PERFIL.permissoes : ['overview'];
   if(!isAdmin){
-    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','fpa','velocidade','cji3','improdutividade','indice-produtividade','histograma','milplan','pipe','rac'];
+    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','fpa','projecao','velocidade','cji3','improdutividade','indice-produtividade','histograma','milplan','pipe','rac'];
     document.querySelectorAll('.sb-nav .sb-item').forEach(function(item){
       if(item.classList.contains('admin-only')) return;
       var v=item.dataset.view; if(!v||_permViews.indexOf(v)<0) return;
@@ -4879,6 +4892,7 @@ function getMsSelected(id){
 }
 
 function onMsChange(id){
+  if(id.startsWith('ms-prj-')){ prjOnMs(id); return; }
   if(id.startsWith('ms-imp-')){ impOnMs(id); return; }
   var selected = getMsSelected(id);
   updateMsLabel(id, selected);
@@ -6627,7 +6641,7 @@ function renderUsuariosHTML(el, usuarios, bloqueados){
         {v:'overview',l:'Visão Geral'},{v:'resumo',l:'Resumo Sub PEP'},{v:'dotacoes',l:'Dotações'},
         {v:'alertas',l:'Capex Projetos'},{v:'nova',l:'Nova Dotação'},{v:'regularizar',l:'Regularizar Saldo'},
         {v:'analytics',l:'Dashboard'},{v:'saude-pep',l:'Saúde do PEP'},{v:'materiais',l:'Materiais'},
-        {v:'fpa',l:'FP&A'},
+        {v:'fpa',l:'FP&A'},{v:'projecao',l:'Projeção de Faturamento'},
         {v:'improdutividade',l:'Produtividade'},{v:'indice-produtividade',l:'Índice de Produtividade'},
         {v:'velocidade',l:'Telemetria'},{v:'cji3',l:'CJI3 Tabela'},{v:'histograma',l:'Histograma CTT'},
         {v:'milplan',l:'SS Milplan'},{v:'pipe',l:'Pipeline de Materiais'},
@@ -9562,6 +9576,688 @@ async function matMesclarDuplicados(){
     console.error('[matMesclarDuplicados]', e);
     toast('Erro ao mesclar: '+e.message,'red');
   }
+}
+
+// ═══════════════════════ PROJEÇÃO DE FATURAMENTO — CJI5 (compromisso) + CJI3 (realizado) ═══════════════════════
+// Uso mensal: escolher mês(es) e ver quanto está previsto cair + lista de pedidos com RC, faturamento e entrega.
+// - CJI5: saldo em aberto ("Value In Object Currency") de pedidos/RCs no mês de débito previsto (Month/Debit Date).
+//   "Planned Value" é ignorado: vem inflado (bilhões) em contratos de outra moeda.
+// - CJI3: realizado por pedido ("Purchasing Document"). Linhas sem pedido = rateios/apropriações (só no total).
+// - Granularidade = pedido × sub-PEP (WBS Element): o mesmo pedido/RC pode estar rateado em vários sub-PEPs
+//   (ex.: RC 21639305 em 21 sub-PEPs de 10 projetos) — agregar só por documento jogava tudo no primeiro PEP.
+// - Upload dos dois arquivos de uma vez; cada um é reconhecido pelas colunas. Lidos em streaming (o XML da CJI3
+//   descompactado passa de 150MB) e filtrados pela carteira (base de WBS + Squads) antes de salvar.
+// - Salvo em cji3_dados (chave 'projecao'); fornecedor informado à mão em cji3_dados (chave 'projecao_forn'),
+//   ambos via servidor (service key) — não precisa de tabela nova.
+var PRJ = { loaded:false, loading:false, payload:null, forn:{}, rows:[], byId:{}, docO:{}, matSig:null, mat:null, err:'' };
+var PRJ_ST = { months:null, year:null, q:'', grp:'ped', sort:'o', dir:-1, cmode:'year',
+  f:{projeto:[],squad:[],lider:[],planejador:[],fornecedor:[],pedido:[],rc:[],tipo:[],natureza:[],situacao:[]} };
+var PRJ_FILTERS=[['projeto','Projeto',230,'Todos os Projetos...'],['squad','Squad',150,'Todos os Squads'],['lider','Líder',140,'Todos'],['planejador','Planejador',140,'Todos'],
+  ['fornecedor','Fornecedor',200,'Todos os Fornecedores...'],['pedido','Pedido',140,'Todos os Pedidos...'],['rc','RC',130,'Todas as RCs...'],
+  ['tipo','Documento',130,'Pedidos + RCs'],['natureza','Natureza',120,'Todas'],['situacao','Situação',150,'Todas as Situações']];
+var PRJ_MO=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+var PRJ_SAP_MO={JAN:1,FEV:2,MAR:3,ABR:4,MAI:5,JUN:6,JUL:7,AGO:8,SET:9,OUT:10,NOV:11,DEZ:12,FEB:2,APR:4,MAY:5,AUG:8,SEP:9,OCT:10,DEC:12};
+var _prjChart=null, _prjMsT=null;
+
+function prjCurK(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function prjMk(y,m){ return y+'-'+String(m+1).padStart(2,'0'); }
+function prjAddM(k,n){ var p=k.split('-'),y=+p[0],m=+p[1]-1+n; y+=Math.floor(m/12); m=((m%12)+12)%12; return prjMk(y,m); }
+function prjMLbl(k){ var p=k.split('-'); return PRJ_MO[+p[1]-1]+'/'+p[0].slice(2); }
+// Valor completo com centavos — o usuário não quer abreviação (nada de "41,8M")
+function prjBrl(v){ return 'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function prjBrl0(v){ return 'R$ '+Math.round(Number(v)||0).toLocaleString('pt-BR'); }
+function prjEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function prjSerialStr(s){ if(!s) return ''; var d=new Date(Math.round((s-25569)*864e5)); return isNaN(d)?'':d.toLocaleDateString('pt-BR',{timeZone:'UTC'}); }
+// datas de Materiais vêm como texto dd/mm/aaaa (fmtMatDate) ou '—'
+function prjParseBr(s){ var m=String(s||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m? Date.UTC(+m[3],+m[2]-1,+m[1]) : 0; }
+function prjFmtTs(t){ return t? new Date(t).toLocaleDateString('pt-BR',{timeZone:'UTC'}) : ''; }
+
+// ── carteira: raízes de PEP da base de WBS + Squads ──
+function prjPortfolioRoots(){
+  var s={};
+  (REF_PEPS||[]).forEach(function(r){ var rt=String(r[0]||'').split('.')[0]; if(rt) s[rt]=1; });
+  Object.keys(REF_SQUADS||{}).forEach(function(k){ var rt=String(k).split('.')[0]; if(rt) s[rt]=1; });
+  return s;
+}
+// squad/líder/planejador do sub-PEP mais específico cadastrado (sub-PEP pode ter squad diferente do PEP pai)
+function prjSquadInfo(w){
+  var p=String(w||'');
+  while(p){ if(REF_SQUADS[p]) return REF_SQUADS[p]; var i=p.lastIndexOf('.'); if(i<0) break; p=p.slice(0,i); }
+  return {squad:'',lider:'',planejador:''};
+}
+var _prjWbsIdx=null, _prjWbsSig=null;
+function prjWbsIdx(){
+  if(_prjWbsSig===REF_PEPS && _prjWbsIdx) return _prjWbsIdx;
+  var ix={}; (REF_PEPS||[]).forEach(function(r){ ix[r[0]]=r; }); _prjWbsIdx=ix; _prjWbsSig=REF_PEPS; return ix;
+}
+function prjSubDesc(w){ var ix=prjWbsIdx(), p=String(w||''); while(p.indexOf('.')>0){ if(ix[p]&&ix[p][1]) return ix[p][1]; p=p.slice(0,p.lastIndexOf('.')); } return ''; }
+function prjTitle(root){ var r=prjWbsIdx()[root]; return (r&&r[1])||''; }
+
+// ── índice de Materiais (reconstruído só quando STATE_MATERIAIS muda) ──
+function prjMatIdx(){
+  var sig=STATE_MATERIAIS; if(PRJ.mat && PRJ.matSig===sig && PRJ.matLen===(sig||[]).length) return PRJ.mat;
+  var byPed={}, byRc={}, vcode={};
+  function first(o,k,v){ if(v&&v!=='—'&&!o[k]) o[k]=v; }
+  (STATE_MATERIAIS||[]).forEach(function(it){
+    var forn=String(it.fornecedor||'').trim(), mm=forn.match(/^(\d{5,})\s+(.+)$/), fn=mm?mm[2].trim():forn;
+    if(mm) vcode[mm[1]]=fn;
+    var ped=String(it.pedido||'').trim(), rc=String(it.rc||'').trim();
+    if(ped){ var o=byPed[ped]=byPed[ped]||{};
+      first(o,'rc',rc); first(o,'forn',fn); first(o,'fat',it.dataFaturamento); first(o,'prev',it.prevEntrega); first(o,'bl',it.baselineEntrega);
+      first(o,'rem',it.dataRemessa); first(o,'rec',it.dataEntregaReal); first(o,'sit',it.situacao); first(o,'stEnt',it.statusEntrega); first(o,'obs',it.observacao); }
+    if(rc){ var r=byRc[rc]=byRc[rc]||{}; first(r,'ped',ped); first(r,'sit',it.situacao); first(r,'forn',fn); }
+  });
+  PRJ.mat={byPed:byPed,byRc:byRc,vcode:vcode}; PRJ.matSig=sig; PRJ.matLen=(sig||[]).length;
+  return PRJ.mat;
+}
+
+// ── monta as linhas (pedido × sub-PEP) a partir do payload salvo + Materiais + fornecedores informados ──
+function prjBuildRows(){
+  var p=PRJ.payload||{}, c5=(p.cji5&&p.cji5.rows)||[], c3=(p.cji3&&p.cji3.rows)||[];
+  var map={};
+  function R(id,w){ var k=id+'|'+w; return map[k]=map[k]||{id:id,w:w,t:'',ds:'',vc:'',mg:'',due:{},dueD:{},ex:{},last:0,dd:0}; }
+  // cji5: [id, tipo('PED'|'RC'), descrição, wbs, códFornecedor, grupoMaterial('S'|'M'), {mês:valor}, {mês:dataDébitoSerial}, dataDocSerial]
+  c5.forEach(function(a){ var d=R(a[0],a[3]); d.t=a[1]; d.ds=d.ds||a[2]; d.vc=d.vc||a[4]; d.mg=d.mg||a[5]; d.due=a[6]||{}; d.dueD=a[7]||{}; d.dd=a[8]||0; });
+  // cji3: [pedido, wbs, códFornecedor, descrição, {mês:valor}, últimoLançamentoSerial]
+  c3.forEach(function(a){ var d=R(a[0],a[1]); if(!d.t) d.t='PED'; d.vc=d.vc||a[2]; d.ds=d.ds||a[3]; d.ex=a[4]||{}; d.last=a[5]||0; });
+  var mat=prjMatIdx(), rows=[], byId={}, docO={};
+  Object.keys(map).forEach(function(k,i){
+    var d=map[k]; d.r=String(d.w).split('.')[0]; d.k=rows.length;
+    d.o=0; for(var m in d.due) d.o+=d.due[m];
+    // resíduo de centavos do SAP (ex.: R$ 0,02 sobrando num pedido já medido) conta como zero
+    if(Math.abs(d.o)<1){ d.o=0; d.due={}; d.dueD={}; }
+    d.exT=0; for(var e in d.ex) d.exT+=d.ex[e];
+    var sq=prjSquadInfo(d.w); d.sq=sq.squad||'(sem squad)'; d.ld=sq.lider||'(sem líder)'; d.pl=sq.planejador||'(sem planejador)';
+    d.pt=prjTitle(d.r); d.sd=prjSubDesc(d.w);
+    var mp=d.t==='RC'?null:mat.byPed[d.id], mr=d.t==='RC'?mat.byRc[d.id]:null;
+    d.m=mp||null; d.rcN=d.t==='RC'?d.id:((mp&&mp.rc)||''); d.rcPed=(mr&&mr.ped)||'';
+    d.fat=mp?prjParseBr(mp.fat):0; d.prev=mp?prjParseBr(mp.prev):0; d.bl=mp?prjParseBr(mp.bl):0;
+    d.recv=!!(mp&&(prjParseBr(mp.rec)||/ENTREGUE|RECEBID/i.test((mp.sit||'')+' '+(mp.stEnt||''))));
+    d.vMat=(mp&&mp.forn)||(mr&&mr.forn)||mat.vcode[d.vc]||'';
+    d.prjLbl=d.r+' — '+(d.pt||'(sem título)'); d.tipoLbl=d.t==='PED'?'Pedido':'RC (sem pedido)'; d.natLbl=d.mg==='S'?'Serviço':'Material';
+    prjApplyVendor(d);
+    rows.push(d); (byId[d.id]=byId[d.id]||[]).push(d); docO[d.id]=(docO[d.id]||0)+d.o;
+  });
+  PRJ.rows=rows; PRJ.byId=byId; PRJ.docO=docO;
+}
+function prjVendKey(d){ return (d.vc&&d.vc!=='0')?'cod:'+d.vc:'doc:'+d.id; }
+function prjApplyVendor(d){
+  var o=PRJ.forn['doc:'+d.id]||PRJ.forn[prjVendKey(d)], nm=o&&o.nome;
+  d.vEd=!!nm; d.vUnk=!nm&&!d.vMat;
+  d.vn=nm||d.vMat||(d.vc&&d.vc!=='0'?'Fornecedor '+d.vc:(d.t==='RC'?'(RC — ainda sem fornecedor)':'(sem fornecedor)'));
+}
+function prjSituKey(d){
+  if(!d.o) return 'Concluído (sem saldo)';
+  if(d.t==='RC') return 'RC sem pedido';
+  if(d.recv) return 'Entregue';
+  if(d.fat) return d.fat>Date.now()?'Fatura prevista':'Faturado';
+  return 'Aguardando entrega';
+}
+function prjSitu(d){
+  var k=prjSituKey(d);
+  if(k==='RC sem pedido') return ['pill-blue',d.rcPed?'RC → ped. '+d.rcPed:k];
+  if(k==='Entregue') return ['pill-green',k];
+  if(k==='Fatura prevista') return ['pill-blue','Fatura prevista '+prjFmtTs(d.fat).slice(0,5)];
+  if(k==='Faturado') return ['pill-yellow',k];
+  if(k==='Concluído (sem saldo)') return ['prj-pill-gray','Sem saldo'];
+  return ['prj-pill-gray',k];
+}
+function prjFval(d,k){
+  switch(k){
+    case 'projeto':return d.prjLbl; case 'squad':return d.sq; case 'lider':return d.ld; case 'planejador':return d.pl;
+    case 'fornecedor':return d.vn; case 'pedido':return d.t==='PED'?d.id:''; case 'rc':return d.rcN||'';
+    case 'tipo':return d.tipoLbl; case 'natureza':return d.natLbl; case 'situacao':return prjSituKey(d);
+  }
+}
+function prjBase(){
+  var q=PRJ_ST.q.toLowerCase(), sets={};
+  Object.keys(PRJ_ST.f).forEach(function(k){ if(PRJ_ST.f[k].length) sets[k]=new Set(PRJ_ST.f[k]); });
+  var keys=Object.keys(sets);
+  return PRJ.rows.filter(function(d){
+    for(var i=0;i<keys.length;i++){ if(!sets[keys[i]].has(prjFval(d,keys[i]))) return false; }
+    if(q && (d.id+' '+d.rcN+' '+d.ds+' '+d.vn+' '+d.w+' '+d.sd+' '+d.pt).toLowerCase().indexOf(q)<0) return false;
+    return true;
+  });
+}
+function prjMonthAgg(rows){
+  var agg={};
+  rows.forEach(function(d){
+    var ks={}; for(var a in d.due) ks[a]=1; for(var b in d.ex) ks[b]=1;
+    Object.keys(ks).forEach(function(k){ var g=agg[k]=agg[k]||{o:0,r:0,n:0,ids:{}}; g.o+=d.due[k]||0; g.r+=d.ex[k]||0; g.n++; g.ids[d.id]=1; });
+  });
+  return agg;
+}
+function prjYears(){
+  var ys={}, cy=+prjCurK().slice(0,4); ys[cy]=1;
+  PRJ.rows.forEach(function(d){ for(var a in d.due) ys[+a.slice(0,4)]=1; for(var b in d.ex) ys[+b.slice(0,4)]=1; });
+  var arr=Object.keys(ys).map(Number); var mx=Math.max.apply(null,arr); ys[mx+1]=1; // sempre mostra o próximo ano (ex.: 2027)
+  return Object.keys(ys).map(Number).sort();
+}
+
+// ── carga ──
+async function prjLoad(force){
+  if(PRJ.loading || (PRJ.loaded && !force)) return;
+  PRJ.loading=true;
+  try{
+    var r=await supa.from('cji3_dados').select('chave,payload,atualizado_em').in('chave',['projecao','projecao_forn']);
+    if(r.error) throw r.error;
+    (r.data||[]).forEach(function(x){ if(x.chave==='projecao') PRJ.payload=x.payload; if(x.chave==='projecao_forn') PRJ.forn=(x.payload&&x.payload.map)||{}; });
+    PRJ.err='';
+  }catch(e){ console.warn('[Projeção] carga:',e); PRJ.err=e.message||String(e); }
+  PRJ.loading=false; PRJ.loaded=true;
+  prjBuildRows();
+  if(currentView==='projecao') renderProjecao();
+}
+
+// ── UPLOAD: um ou dois arquivos (CJI5 e/ou CJI3), reconhecidos pelas colunas ──
+function prjEnsureLib(test,url,cb){ if(test()) return cb(); var s=document.createElement('script'); s.src=url; s.onload=cb; s.onerror=function(){toast('Falha ao carregar biblioteca: '+url,'red');}; document.head.appendChild(s); }
+function prjPickFiles(){ var i=document.getElementById('prj-upload-input'); if(i){ i.value=''; i.click(); } }
+function prjHandleUpload(fileList){
+  var files=Array.prototype.slice.call(fileList||[]);
+  if(!files.length) return;
+  if(!CURRENT_USER){ toast('Você precisa estar logado','red'); return; }
+  if(files.length>2){ toast('Selecione no máximo 2 arquivos (CJI5 e CJI3)','red'); return; }
+  prjEnsureLib(function(){return typeof JSZip!=='undefined';},'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',function(){ prjDoUpload(files); });
+}
+function prjSetProgress(msg){ var el=document.getElementById('prj-progress'); if(el){ el.style.display=msg?'block':'none'; el.innerHTML=msg||''; } }
+async function prjDoUpload(files){
+  var res={}, errs=[];
+  var portfolio=prjPortfolioRoots();
+  for(var i=0;i<files.length;i++){
+    var f=files[i];
+    try{
+      prjSetProgress('⏳ Lendo <b>'+prjEsc(f.name)+'</b> ('+Math.round(f.size/1024/1024)+'MB)… pode levar alguns segundos, não feche a aba.');
+      var buf=await f.arrayBuffer();
+      var out=await _prjParseSapExport(buf, portfolio, function(n){ prjSetProgress('⏳ Lendo <b>'+prjEsc(f.name)+'</b>… '+n.toLocaleString('pt-BR')+' linhas'); });
+      if(!out){ errs.push(f.name+': não parece ser CJI5 nem CJI3 (colunas esperadas não encontradas)'); continue; }
+      if(res[out.tipo]){ errs.push('Dois arquivos de '+out.tipo.toUpperCase()+' selecionados'); continue; }
+      out.data.arquivo=f.name; out.data.enviado_em=new Date().toISOString(); out.data.enviado_por=(CURRENT_USER&&CURRENT_USER.email)||'';
+      res[out.tipo]=out.data;
+    }catch(e){ console.error('[Projeção] upload',f.name,e); errs.push(f.name+': '+(e.message||e)); }
+  }
+  if(!res.cji5 && !res.cji3){ prjSetProgress(''); toast(errs.join(' · ')||'Nada importado','red'); return; }
+  // mantém a parte que não veio neste upload (dá pra atualizar só a CJI5 ou só a CJI3)
+  var prev=PRJ.payload||{};
+  var payload={v:1, cji5:res.cji5||prev.cji5||null, cji3:res.cji3||prev.cji3||null};
+  prjSetProgress('💾 Salvando no servidor…');
+  try{
+    var sess=await supa.auth.getSession(), tok=sess.data&&sess.data.session?sess.data.session.access_token:null;
+    if(!tok) throw new Error('Sessão inválida. Faça login novamente.');
+    var resp=await fetch('/api/save-projecao',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({payload:payload})});
+    var j=await resp.json().catch(function(){return {};});
+    if(!resp.ok||j.error) throw new Error(j.error||('HTTP '+resp.status));
+  }catch(e){ prjSetProgress(''); toast('Erro ao salvar: '+(e.message||e),'red'); return; }
+  PRJ.payload=payload; PRJ.loaded=true; prjBuildRows();
+  prjSetProgress('');
+  var msg=[]; if(res.cji5) msg.push('CJI5: '+res.cji5.rows.length+' linhas'); if(res.cji3) msg.push('CJI3: '+res.cji3.rows.length+' linhas');
+  toast('✔ Projeção atualizada — '+msg.join(' · ')+(errs.length?' · avisos: '+errs.join('; '):''),'green');
+  if(_medidoSyncChannel&&CURRENT_USER){ _medidoSyncChannel.send({type:'broadcast',event:'projecao-updated',payload:{uploadedBy:CURRENT_USER.email}}).catch(function(){}); }
+  renderProjecao();
+}
+function _prjXmlUnesc(s){ return String(s).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,function(m,n){return String.fromCharCode(+n);}).replace(/&amp;/g,'&'); }
+// Lê a 1ª aba do export SAP em streaming (sem montar o XML inteiro numa string) e agrega por pedido × sub-PEP.
+async function _prjParseSapExport(buf, portfolio, onProgress){
+  var zip=await JSZip.loadAsync(buf);
+  var wbXml=await zip.file('xl/workbook.xml').async('string');
+  var relsXml=await zip.file('xl/_rels/workbook.xml.rels').async('string');
+  var sheetTag=(wbXml.match(/<sheet\b[^>]*\/>/g)||[])[0]; if(!sheetTag) return null;
+  var rid=(sheetTag.match(/r:id="(rId\d+)"/)||[])[1];
+  var relM=relsXml.match(new RegExp('Id="'+rid+'"[^>]*Target="([^"]+)"'))||relsXml.match(new RegExp('Target="([^"]+)"[^>]*Id="'+rid+'"'));
+  if(!relM) return null;
+  var target=relM[1].replace(/^\/?(xl\/)?/,''); var sheetEntry=zip.file('xl/'+target); if(!sheetEntry) return null;
+  var shared=[]; var ssEntry=zip.file('xl/sharedStrings.xml');
+  if(ssEntry){ var ssXml=await ssEntry.async('string'); var siRe=/<si>([\s\S]*?)<\/si>/g,m; while((m=siRe.exec(ssXml))){ var t='',tRe=/<t[^>]*>([\s\S]*?)<\/t>/g,tm; while((tm=tRe.exec(m[1]))) t+=tm[1]; shared.push(_prjXmlUnesc(t)); } ssXml=null; }
+  // cabeçalho: 1ª linha com "WBS Element"
+  var head=await _cji3PeekZipText(sheetEntry, 300000);
+  var rowRe=/<row [^>]*>([\s\S]*?)<\/row>/g, rm, hdr=null;
+  while((rm=rowRe.exec(head))){
+    var cand={}, cRe=/<c r="([A-Z]+)\d+"([^>]*)>(?:<v>([^<]*)<\/v>|<is><t[^>]*>([^<]*)<\/t><\/is>)<\/c>/g, cm;
+    while((cm=cRe.exec(rm[1]))){ cand[cm[1]]=/t="s"/.test(cm[2])?shared[+cm[3]]:_prjXmlUnesc(cm[3]!==undefined?cm[3]:cm[4]); }
+    if(Object.values(cand).indexOf('WBS Element')>=0){ hdr=cand; break; }
+  }
+  if(!hdr) return null;
+  var byName={}; Object.keys(hdr).forEach(function(l){ byName[String(hdr[l]).trim()]=l; });
+  var tipo = byName['Ref. Document'] && byName['Debit Date'] ? 'cji5' : (byName['Purchasing Document'] && byName['Posting Date'] ? 'cji3' : null);
+  if(!tipo) return null;
+  var NEED = tipo==='cji5'
+    ? {yr:'Fiscal Year',mo:'Month',wbs:'WBS Element',val:'Value In Object Currency',doc:'Ref. Document',dt:'Document Type',vend:'Vendor',name:'Name',mg:'Material Group',deb:'Debit Date',ddoc:'Document Date'}
+    : {yr:'Fiscal Year',mo:'Month',wbs:'WBS Element',val:'Value In Object Currency',po:'Purchasing Document',vend:'Vendor',name:'Name',post:'Posting Date',pot:'* Purchase Order Text'};
+  var letterToKey={}, missing=[];
+  Object.keys(NEED).forEach(function(k){ var l=byName[NEED[k]]; if(l) letterToKey[l]=k; else if(k!=='pot'&&k!=='ddoc'&&k!=='mg') missing.push(NEED[k]); });
+  if(missing.length) throw new Error(tipo.toUpperCase()+' sem as colunas: '+missing.join(', '));
+  var letters=Object.keys(letterToKey).sort(function(a,b){return b.length-a.length;});
+  var cellRe=new RegExp('<c r="('+letters.join('|')+')(\\d+)"([^>/]*)>(?:<f[^>]*>[\\s\\S]*?<\\/f>)?(?:<v>([^<]*)<\\/v>|<is><t[^>]*>([^<]*)<\\/t><\\/is>)?<\\/c>','g');
+  var agg={}, noPO={}, nRows=0;
+  function mkKey(r){ var mo=PRJ_SAP_MO[String(r.mo||'').trim().toUpperCase()]; var yr=parseInt(r.yr,10); return (mo&&yr)? yr+'-'+String(mo).padStart(2,'0') : null; }
+  function onRow(r){
+    nRows++; if(onProgress && nRows%20000===0) onProgress(nRows);
+    var w=String(r.wbs||'').trim(); if(!w) return; var root=w.split('.')[0]; if(!portfolio[root]) return;
+    var v=parseFloat(r.val)||0, k=mkKey(r); if(!k) return;
+    if(tipo==='cji5'){
+      if(!v) return; // só saldo em aberto
+      var id=String(r.doc||'').trim(); if(!id) return;
+      var key=id+'|'+w, a=agg[key]=agg[key]||[id,/pedido|order|^po$/i.test(String(r.dt||''))?'PED':'RC','',w,'','',{},{},0];
+      if(!a[2]&&r.name) a[2]=String(r.name).slice(0,80); if(!a[4]&&r.vend&&r.vend!=='0') a[4]=String(r.vend).trim(); if(!a[5]&&r.mg) a[5]=String(r.mg).trim()==='SV'?'S':'M';
+      a[6][k]=Math.round(((a[6][k]||0)+v)*100)/100;
+      var db=parseFloat(r.deb)||0; if(db&&(!a[7][k]||db<a[7][k])) a[7][k]=db;
+      var dd=parseFloat(r.ddoc)||0; if(dd>a[8]) a[8]=dd;
+    } else {
+      var po=String(r.po||'').trim();
+      if(!po){ var o=noPO[root]=noPO[root]||{}; o[k]=Math.round(((o[k]||0)+v)*100)/100; return; }
+      var key3=po+'|'+w, b=agg[key3]=agg[key3]||[po,w,'','',{},0];
+      if(!b[2]&&r.vend&&r.vend!=='0') b[2]=String(r.vend).trim(); if(!b[3]&&(r.pot||r.name)) b[3]=String(r.pot||r.name).slice(0,80);
+      b[4][k]=Math.round(((b[4][k]||0)+v)*100)/100;
+      var pd=parseFloat(r.post)||0; if(pd>b[5]) b[5]=pd;
+    }
+  }
+  await new Promise(function(resolve,reject){
+    var dec=new TextDecoder('utf-8'), carry='', curRow=-1, cur={};
+    var s=sheetEntry.internalStream('uint8array');
+    s.on('data',function(chunk){
+      var text=carry+dec.decode(chunk,{stream:true}), lastEnd=0, m; cellRe.lastIndex=0;
+      while((m=cellRe.exec(text))){
+        var rn=+m[2]; if(rn!==curRow){ if(curRow>0) onRow(cur); curRow=rn; cur={}; }
+        var raw=m[4]!==undefined?m[4]:(m[5]!==undefined?m[5]:'');
+        cur[letterToKey[m[1]]]=/t="s"/.test(m[3])?(shared[+raw]||''):_prjXmlUnesc(raw);
+        lastEnd=m.index+m[0].length;
+      }
+      carry=text.slice(lastEnd);
+      if(carry.length>4*1024*1024){ s.pause(); reject(new Error('arquivo em formato inesperado (sobra de leitura grande demais)')); }
+    });
+    s.on('error',reject);
+    s.on('end',function(){ if(curRow>0) onRow(cur); resolve(); });
+    s.resume();
+  });
+  var rows=Object.values(agg);
+  return {tipo:tipo, data: tipo==='cji5'?{rows:rows,linhas_lidas:nRows}:{rows:rows,noPO:noPO,linhas_lidas:nRows}};
+}
+
+// ── fornecedor informado manualmente ──
+async function prjSaveVendor(chave,nome){
+  try{
+    var sess=await supa.auth.getSession(), tok=sess.data&&sess.data.session?sess.data.session.access_token:null;
+    if(!tok) throw new Error('Sessão inválida. Faça login novamente.');
+    var resp=await fetch('/api/save-projecao-forn',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({chave:chave,nome:nome})});
+    var j=await resp.json().catch(function(){return {};});
+    if(!resp.ok||j.error) throw new Error(j.error||('HTTP '+resp.status));
+    PRJ.forn=j.map||PRJ.forn;
+    toast(nome?'✔ Fornecedor salvo':'Fornecedor removido','green');
+    if(_medidoSyncChannel&&CURRENT_USER){ _medidoSyncChannel.send({type:'broadcast',event:'projecao-forn-updated',payload:{uploadedBy:CURRENT_USER.email}}).catch(function(){}); }
+  }catch(e){ toast('Erro ao salvar fornecedor: '+(e.message||e),'red'); }
+  PRJ.rows.forEach(prjApplyVendor); prjBuildMs(); renderProjecao();
+  var dr=document.getElementById('prj-drawer'); if(dr&&dr.classList.contains('open')&&dr.dataset.id) prjOpenDrawer(dr.dataset.id);
+}
+function prjStartVendEdit(i,td){
+  var d=PRJ.rows[i]; if(!d) return;
+  var byCode=d.vc&&d.vc!=='0';
+  td.innerHTML='<div class="prj-vinp"><input type="text" list="prj-dl-vend" value="'+prjEsc((d.vEd||d.vMat)?d.vn:'')+'" placeholder="Nome do fornecedor"><button class="ok">✓</button><button class="no">✕</button></div>'
+    +'<div class="prj-hint">'+(byCode?'Vale pra todos os pedidos do código '+prjEsc(d.vc):'Vale pra '+(d.t==='RC'?'esta RC':'este pedido'))+(d.vEd?' · <a href="#" class="rm">remover</a>':'')+'</div>';
+  var inp=td.querySelector('input'); inp.focus(); inp.select();
+  var chave=byCode?'cod:'+d.vc:'doc:'+d.id;
+  function save(){ var v=inp.value.trim(); if(!v){ renderProjecao(); return; } prjSaveVendor(chave,v); }
+  td.querySelector('.ok').onclick=function(e){e.stopPropagation();save();};
+  td.querySelector('.no').onclick=function(e){e.stopPropagation();renderProjecao();};
+  var rm=td.querySelector('.rm'); if(rm) rm.onclick=function(e){e.preventDefault();e.stopPropagation();prjSaveVendor(PRJ.forn['doc:'+d.id]?'doc:'+d.id:prjVendKey(d),'');};
+  inp.onkeydown=function(e){ if(e.key==='Enter') save(); if(e.key==='Escape') renderProjecao(); };
+}
+
+// ── multi-select (mesmo componente dos outros filtros do site: buildMsDrop/toggleMs) ──
+function prjBuildMs(){
+  Object.keys(PRJ_ST.f).forEach(function(k){
+    var set={}; PRJ.rows.forEach(function(d){ var v=prjFval(d,k); if(v) set[v]=1; });
+    PRJ_ST.f[k]=PRJ_ST.f[k].filter(function(v){return set[v];});
+    var opts=Object.keys(set).sort(function(a,b){return a.localeCompare(b,'pt-BR',{numeric:true});});
+    buildMsDrop('ms-prj-'+k,opts,PRJ_ST.f[k]); prjMsLabel('ms-prj-'+k,PRJ_ST.f[k]);
+  });
+}
+function prjMsLabel(id,sel){
+  var el=document.getElementById(id+'-label'); if(!el) return;
+  var def=''; PRJ_FILTERS.forEach(function(x){ if('ms-prj-'+x[0]===id) def=x[3]; });
+  if(!sel.length){ el.textContent=def; el.style.color=''; } else if(sel.length===1){ el.textContent=sel[0]; el.style.color='var(--acc)'; } else { el.textContent=sel.length+' selecionados'; el.style.color='var(--acc)'; }
+}
+// chamado pelo onMsChange do site quando o id começa com 'ms-prj-'
+function prjOnMs(id){
+  var sel=getMsSelected(id);
+  document.querySelectorAll('#'+id+'-drop .ms-opt').forEach(function(l){ var c=l.querySelector('input'); l.classList.toggle('selected',c.checked); });
+  prjMsLabel(id,sel);
+  PRJ_ST.f[id.replace('ms-prj-','')]=sel;
+  clearTimeout(_prjMsT); _prjMsT=setTimeout(renderProjecao,150);
+}
+function prjSetFilter(k,vals){ PRJ_ST.f[k]=vals; prjBuildMs(); }
+
+function prjEnsureCss(){
+  if(document.getElementById('prj-css')) return;
+  var st=document.createElement('style'); st.id='prj-css';
+  st.textContent=''
+  +'.prj-sec{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}'
+  +'.prj-sec .t{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;display:flex;align-items:center;gap:8px}'
+  +'.prj-sec .t i{display:block;width:3px;height:14px;background:#002F6C;border-radius:2px}'
+  +'.prj-sec .s{font-size:10px;color:#94a3b8}'
+  +'.prj-months{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:8px}'
+  +'@media(max-width:1200px){.prj-months{grid-template-columns:repeat(6,minmax(0,1fr))}}@media(max-width:560px){.prj-months{grid-template-columns:repeat(3,minmax(0,1fr))}}'
+  +'.prj-mc{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:9px 9px 8px;cursor:pointer;text-align:left;font-family:inherit;transition:all .15s;min-width:0}'
+  +'.prj-mc:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.08)}'
+  +'.prj-mc .m{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#64748b;display:flex;justify-content:space-between;align-items:center}'
+  +'.prj-mc .lb{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin-top:5px}'
+  +'.prj-mc .v{font-family:"Share Tech Mono",monospace;font-size:12.5px;font-weight:700;margin-top:2px;color:#0f172a}'
+  +'.prj-mc .v2{font-family:"Share Tech Mono",monospace;font-size:10.5px;margin-top:2px}'
+  +'.prj-mc .v2,.prj-mc .n,.prj-mc .lb,.prj-mc .v{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+  +'.prj-mc .n{font-size:9.5px;color:#94a3b8;margin-top:2px}'
+  +'.prj-mc .b{height:3px;background:#f1f5f9;border-radius:2px;margin-top:6px;overflow:hidden}.prj-mc .b i{display:block;height:100%;background:var(--acc)}'
+  +'.prj-mc.past{background:#fafbfc}.prj-mc.past .v{color:#0f6fb8}.prj-mc.empty{opacity:.55}'
+  +'.prj-mc.cur .m::after{content:"atual";font-size:8.5px;background:#fef3c7;color:#b45309;border-radius:4px;padding:0 5px;letter-spacing:.5px}'
+  +'.prj-mc.on{border-color:#002F6C;box-shadow:0 0 0 2px #002F6C inset;background:#f0f7ff}.prj-mc.on .b i{background:#002F6C}'
+  +'.prj-yr{border:1px solid #cbd5e1;background:#fff;border-radius:6px;padding:4px 12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;color:#475569}'
+  +'.prj-yr.on{background:#002F6C;color:#fff;border-color:#002F6C}'
+  +'.prj-qb{border:1px dashed #cbd5e1;background:#fff;border-radius:6px;padding:4px 10px;font:inherit;font-size:11px;font-weight:600;cursor:pointer;color:#334155}.prj-qb:hover{border-color:#002F6C;color:#002F6C}'
+  +'.prj-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}@media(max-width:1200px){.prj-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:700px){.prj-kpis{grid-template-columns:1fr 1fr}}'
+  +'.prj-kc{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;box-shadow:0 1px 3px rgba(15,23,42,.06);min-width:0}'
+  +'.prj-kc .hd{display:flex;align-items:center;justify-content:space-between;gap:6px}.prj-kc .l{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b}'
+  +'.prj-kc .ic{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}'
+  +'.prj-kc .v{font-size:19px;font-weight:900;line-height:1.1;letter-spacing:-.5px;font-family:"Share Tech Mono",monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+  +'.prj-kc .bar{height:3px;background:#e2e8f0;border-radius:2px;overflow:hidden;margin:6px 0 4px}.prj-kc .bar i{display:block;height:100%}'
+  +'.prj-seg{display:inline-flex;border:1px solid #cbd5e1;border-radius:6px;overflow:hidden}'
+  +'.prj-seg button{border:0;background:#fff;padding:5px 10px;font:inherit;font-size:11px;font-weight:600;cursor:pointer;border-right:1px solid #e2e8f0;color:#475569}.prj-seg button:last-child{border-right:0}.prj-seg button.on{background:#002F6C;color:#fff}'
+  +'.prj-card{background:#fff;border:1px solid var(--bord);border-radius:6px}'
+  +'.prj-tw{overflow:auto;max-height:640px}'
+  +'.prj-tw table thead th{cursor:pointer;user-select:none}.prj-tw th.r,.prj-tw td.r{text-align:right}'
+  +'.prj-tw tbody tr.clk{cursor:pointer}'
+  +'.prj-tw tfoot td{position:sticky;bottom:0;background:#f8fafc;border-top:2px solid var(--bord);font-weight:800;padding:8px 11px}'
+  +'.prj-full{font-family:"JetBrains Mono",monospace;font-size:11px;white-space:nowrap}'
+  +'.prj-sm{font-size:10px;color:#94a3b8}.prj-ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+  +'.prj-mtag{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:#e0ecf8;color:#002F6C;margin:1px 3px 1px 0}.prj-mtag.late{background:#fee2e2;color:#b91c1c}'
+  +'.prj-pill-gray{background:#f1f5f9;color:#64748b}'
+  +'.prj-ed{border:0;background:none;color:#0f6fb8;cursor:pointer;font:inherit;font-size:10.5px;font-weight:700;padding:0}.prj-ed:hover{text-decoration:underline}'
+  +'.prj-vn-unk{color:#94a3b8;font-style:italic}.prj-vn-ed{color:#15803d}'
+  +'.prj-vinp{display:flex;gap:4px;align-items:center}.prj-vinp input{min-width:180px;padding:4px 7px;font-size:11.5px;cursor:text}'
+  +'.prj-vinp button{padding:4px 8px;font-size:11px;border-radius:4px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-weight:700}.prj-vinp button.ok{background:#15803d;border-color:#15803d;color:#fff}'
+  +'.prj-hint{font-size:10px;color:#64748b;margin-top:3px}'
+  +'.prj-empty-yr{grid-column:1/-1;background:#fff;border:1px dashed #cbd5e1;border-radius:10px;padding:10px 14px;font-size:11.5px;color:#64748b}'
+  +'.prj-leg{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px}.prj-leg span{display:flex;align-items:center;gap:5px;font-size:10.5px;color:#64748b}.prj-leg i{display:inline-block;width:12px;height:8px;border-radius:2px}'
+  +'#prj-drawer{position:fixed;top:0;right:0;height:100vh;width:min(480px,100vw);background:#fff;box-shadow:-8px 0 30px rgba(0,0,0,.15);transform:translateX(105%);transition:transform .2s;z-index:9000;overflow:auto;padding:20px}'
+  +'#prj-drawer.open{transform:none}#prj-drawer .x{position:absolute;right:14px;top:12px;border:0;background:#f1f5f9;border-radius:8px;width:30px;height:30px;cursor:pointer}'
+  +'.prj-dl{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;font-size:12px;margin-top:14px}.prj-dl dt{color:#64748b;font-size:9.5px;text-transform:uppercase;letter-spacing:1px;padding-top:2px;font-weight:700}.prj-dl dd{margin:0;font-weight:600}'
+  +'.prj-note{font-size:11px;color:#64748b;background:#f8fafc;border:1px solid var(--bord);border-radius:6px;padding:10px 12px;line-height:1.55}'
+  +'#prj-progress{display:none;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:6px;padding:9px 12px;font-size:12px}';
+  document.head.appendChild(st);
+}
+
+// ── render ──
+function renderProjecao(){
+  var el=document.getElementById('v-projecao'); if(!el) return;
+  prjEnsureCss();
+  if(!PRJ.loaded){ el.innerHTML='<div style="padding:60px;text-align:center;color:#64748b">⏳ Carregando projeção…</div>'; prjLoad(); return; }
+  if(!document.getElementById('prj-root')) prjShell(el);
+  // Materiais mudou (upload novo / sync de outro usuário) → refaz o cruzamento (RC, faturamento, entrega, fornecedor)
+  if(PRJ.payload && (PRJ.matSig!==STATE_MATERIAIS || PRJ.matLen!==(STATE_MATERIAIS||[]).length)) prjBuildRows();
+  // opções dos filtros/lista de fornecedores dependem dos dados — refaz quando as linhas mudam (upload, sync, Materiais novo)
+  if(PRJ.msSig!==PRJ.rows){ PRJ.msSig=PRJ.rows; prjBuildMs(); prjFillVendList(); }
+  var hasData=PRJ.rows.length>0;
+  document.getElementById('prj-empty').style.display=hasData?'none':'block';
+  document.getElementById('prj-body').style.display=hasData?'':'none';
+  prjRenderSrc();
+  if(!hasData) return;
+  if(!PRJ_ST.months){ PRJ_ST.months=[prjAddM(prjCurK(),1)]; }
+  if(!PRJ_ST.year) PRJ_ST.year=+PRJ_ST.months[0].slice(0,4);
+  var rows=prjBase(), agg=prjMonthAgg(rows);
+  prjRenderYears(agg); prjRenderMonths(agg); prjRenderChart(agg);
+  var sel=[];
+  rows.forEach(function(d){ var o=0,r=0,ms=[],late=false; PRJ_ST.months.forEach(function(k){ var a=d.due[k]||0,b=d.ex[k]||0; if(a||b){o+=a;r+=b;ms.push(k); if(a&&k<prjCurK()) late=true;} }); if(o||r) sel.push({d:d,o:o,r:r,ms:ms,late:late}); });
+  prjRenderKpis(sel);
+  PRJ.cur=sel;
+  if(PRJ_ST.grp==='ped') prjRenderPed(sel); else prjRenderGrp(sel);
+}
+function prjShell(el){
+  el.innerHTML='<div id="prj-root" style="display:flex;flex-direction:column;gap:14px">'
+    +'<div class="prj-sec"><span class="t"><i></i>Projeção de faturamento</span>'
+      +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="s" id="prj-src"></span>'
+      +'<input type="file" id="prj-upload-input" accept=".xlsx" multiple style="display:none" onchange="prjHandleUpload(this.files)">'
+      +'<button onclick="prjPickFiles()" title="Selecione os dois arquivos juntos (Ctrl+clique): CJI5 e CJI3. Dá pra mandar só um — o outro continua o último carregado." style="padding:8px 14px;border-radius:7px;border:1px solid #cbd5e1;background:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">⬆ Importar CJI5 + CJI3</button></div></div>'
+    +'<div id="prj-progress"></div>'
+    +'<div id="prj-empty" class="prj-note" style="display:none;font-size:12.5px;padding:18px">Nenhuma projeção carregada ainda. Clique em <b>⬆ Importar CJI5 + CJI3</b> e selecione os dois exports do SAP juntos (Ctrl+clique). '
+      +'A <b>CJI5</b> (Compromisso Econômico) traz o que ainda vai cair; a <b>CJI3</b> (Execução Econômica) traz o que já foi realizado. Exporte a CJI5 cobrindo também o ano seguinte pra ver o que já está indo pra lá.</div>'
+    +'<div id="prj-body" style="display:flex;flex-direction:column;gap:14px">'
+      +'<div class="filters" id="prj-filters">'
+        +PRJ_FILTERS.map(function(x){ return '<div class="fg" style="min-width:'+x[2]+'px"><label>'+x[1]+'</label><div class="ms-wrap" id="ms-prj-'+x[0]+'"><div class="ms-input" onclick="toggleMs(\'ms-prj-'+x[0]+'\')"><span class="ms-label" id="ms-prj-'+x[0]+'-label">'+x[3]+'</span><span style="color:var(--muted);font-size:10px">▾</span></div><div class="ms-drop" id="ms-prj-'+x[0]+'-drop" style="display:none"></div></div></div>'; }).join('')
+        +'<div class="fg"><label>Buscar</label><input type="text" id="prj-q" placeholder="nº, descrição, sub-PEP…" style="min-width:170px;cursor:text"></div>'
+        +'<button onclick="prjClear()" style="padding:7px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#fff;cursor:pointer;height:fit-content;font-family:inherit">↺ Limpar</button>'
+        +'<datalist id="prj-dl-vend"></datalist>'
+      +'</div>'
+      +'<div class="prj-sec"><span class="t"><i></i>Escolha os meses <span style="text-transform:none;letter-spacing:0;font-weight:500;color:#94a3b8">— clique pra marcar/desmarcar, dá pra marcar vários</span></span>'
+        +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+          +[['next','Próximo mês'],['next3','Próximos 3 meses'],['rest','Até o fim do ano'],['year','Ano inteiro'],['late','Atrasados (pendentes)']].map(function(q){return '<button class="prj-qb" onclick="prjQuick(\''+q[0]+'\')">'+q[1]+'</button>';}).join('')
+        +'</div></div>'
+      +'<div id="prj-yrs" style="display:flex;gap:6px;flex-wrap:wrap"></div>'
+      +'<div class="prj-months" id="prj-months"></div>'
+      +'<div class="prj-kpis" id="prj-kpis"></div>'
+      +'<div class="prj-card" style="padding:16px 18px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+          +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="tbl-title" id="prj-ch-title">Curva de desembolso</span><span class="tbl-badge" id="prj-ch-badge"></span></div>'
+          +'<div style="display:flex;align-items:center;gap:8px"><span class="prj-sm" style="font-weight:700;text-transform:uppercase;letter-spacing:1px">Curva</span>'
+          +'<div class="prj-seg" id="prj-cmode"><button data-v="year" class="on" onclick="prjSetCmode(\'year\')">Ano todo</button><button data-v="sel" onclick="prjSetCmode(\'sel\')">Só meses marcados</button></div></div></div>'
+        +'<div style="position:relative;height:320px"><canvas id="prj-ch"></canvas></div>'
+        +'<div class="prj-leg"><span><i style="background:#0f6fb8"></i>Realizado (CJI3)</span><span><i style="background:#f97316"></i>Previsto em aberto (CJI5)</span><span><i style="background:#dc2626"></i>Pendente de mês que já passou</span><span><i style="background:#002F6C;height:3px"></i>Acumulado (realizado + previsto)</span><span><i style="background:#0f6fb8;height:2px"></i>Acumulado realizado</span><span style="color:#94a3b8">Meses não marcados ficam mais claros</span></div>'
+      +'</div>'
+      +'<div class="prj-card" style="overflow:hidden">'
+        +'<div class="tbl-hdr" style="flex-wrap:wrap;gap:10px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="tbl-title" id="prj-t-title"></span><span class="tbl-badge" id="prj-t-badge"></span></div>'
+          +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="prj-sm" style="font-weight:700;text-transform:uppercase;letter-spacing:1px">Ver por</span>'
+          +'<div class="prj-seg" id="prj-grp"><button data-v="ped" class="on" onclick="prjSetGrp(\'ped\')">Pedido</button><button data-v="pep" onclick="prjSetGrp(\'pep\')">Projeto</button><button data-v="vend" onclick="prjSetGrp(\'vend\')">Fornecedor</button></div>'
+          +'<button onclick="prjExportXls()" style="padding:7px 12px;border-radius:6px;border:1px solid #15803d;background:#15803d;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">⬇ Exportar Excel</button></div></div>'
+        +'<div class="prj-tw"><table id="prj-tbl"></table></div>'
+      +'</div>'
+      +'<div class="prj-note">Cada linha = um pedido (ou RC) em um sub-PEP — o mesmo pedido aparece em mais de uma linha quando está rateado. <b>Em aberto</b> = saldo da CJI5 no mês de débito previsto pelo SAP; <b>Realizado</b> = lançado na CJI3 no mês. Faturamento e entrega vêm do diligenciamento da aba Materiais (* = baseline). Fornecedor sem nome: clique em <b>✎ informar</b> — fica salvo pra todos.</div>'
+    +'</div></div>';
+  if(!document.getElementById('prj-drawer')){ var dr=document.createElement('aside'); dr.id='prj-drawer'; dr.innerHTML='<button class="x" onclick="prjCloseDrawer()">✕</button><div id="prj-dr"></div>'; document.body.appendChild(dr); }
+  var tq; document.getElementById('prj-q').oninput=function(e){ clearTimeout(tq); tq=setTimeout(function(){ PRJ_ST.q=e.target.value.trim(); renderProjecao(); },200); };
+  document.getElementById('prj-tbl').addEventListener('click',prjTblClick);
+}
+function prjFillVendList(){
+  var el=document.getElementById('prj-dl-vend'); if(!el) return;
+  var dl={}, vc=prjMatIdx().vcode; PRJ.rows.forEach(function(d){ if(d.vMat) dl[d.vMat]=1; }); Object.keys(vc).forEach(function(c){ dl[vc[c]]=1; });
+  el.innerHTML=Object.keys(dl).sort().map(function(v){return '<option value="'+prjEsc(v)+'">';}).join('');
+}
+function prjRenderSrc(){
+  var p=PRJ.payload||{}, parts=[];
+  function one(lbl,x){ if(!x) return lbl+': não carregada'; var dt=x.enviado_em?new Date(x.enviado_em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):''; return lbl+' '+dt+(x.enviado_por?' · '+x.enviado_por.split('@')[0]:''); }
+  parts.push(one('CJI5',p.cji5)); parts.push(one('CJI3',p.cji3));
+  var el=document.getElementById('prj-src'); if(el) el.textContent=parts.join('  ·  ')+(PRJ.err?'  ·  erro: '+PRJ.err:'');
+}
+function prjRenderYears(agg){
+  var h='';
+  prjYears().forEach(function(y){
+    var has=Object.keys(agg).some(function(k){return +k.slice(0,4)===y;});
+    var nSel=PRJ_ST.months.filter(function(k){return +k.slice(0,4)===y;}).length;
+    h+='<button class="prj-yr'+(PRJ_ST.year===y?' on':'')+'" onclick="PRJ_ST.year='+y+';renderProjecao()">'+y+(nSel?' · '+nSel+' mês'+(nSel>1?'es':''):'')+(has?'':' <span style="font-weight:500;opacity:.7">(sem dados)</span>')+'</button>';
+  });
+  document.getElementById('prj-yrs').innerHTML=h;
+}
+function prjRenderMonths(agg){
+  var y=PRJ_ST.year, cur=prjCurK(), h='', has=false, mx=1;
+  for(var i=0;i<12;i++){ var a0=agg[prjMk(y,i)]; if(a0) mx=Math.max(mx,a0.o+a0.r); }
+  for(var m=0;m<12;m++){
+    var k=prjMk(y,m), a=agg[k]||{o:0,r:0,n:0,ids:{}}, on=PRJ_ST.months.indexOf(k)>=0, past=k<cur, isCur=k===cur;
+    if(a.o||a.r) has=true;
+    var nd=Object.keys(a.ids).length, body;
+    if(past) body='<div class="lb">Realizado</div><div class="v" title="'+prjBrl(a.r)+'">'+(a.r?prjBrl0(a.r):'—')+'</div>'+(a.o?'<div class="v2" style="color:#dc2626" title="Pendente: '+prjBrl(a.o)+'">pend. '+prjBrl0(a.o)+'</div>':'<div class="v2">&nbsp;</div>');
+    else if(isCur) body='<div class="lb">Realiz. · Aberto</div><div class="v" style="color:#0f6fb8" title="Realizado: '+prjBrl(a.r)+'">'+(a.r?prjBrl0(a.r):'—')+'</div><div class="v2" style="color:#ea580c" title="Em aberto: '+prjBrl(a.o)+'">'+(a.o?prjBrl0(a.o):'—')+'</div>';
+    else body='<div class="lb">Previsto</div><div class="v" title="'+prjBrl(a.o)+'">'+(a.o?prjBrl0(a.o):'—')+'</div><div class="v2">&nbsp;</div>';
+    h+='<button class="prj-mc'+(past?' past':'')+(isCur?' cur':'')+(on?' on':'')+(!(a.o||a.r)?' empty':'')+'" onclick="prjToggleMonth(\''+k+'\')">'
+      +'<div class="m"><span>'+PRJ_MO[m]+'/'+String(y).slice(2)+'</span></div>'+body
+      +'<div class="n" title="'+a.n+' linhas (pedido × sub-PEP)">'+(nd?nd+' doc'+(nd>1?'s':''):'&nbsp;')+'</div>'
+      +'<div class="b"><i style="width:'+Math.min(100,(a.o+a.r)/mx*100)+'%"></i></div></button>';
+  }
+  if(!has) h+='<div class="prj-empty-yr">Nenhum valor em <b>'+y+'</b> na CJI5/CJI3 carregadas. Pra enxergar '+y+', exporte a CJI5 no SAP com o período incluindo '+y+' e importe de novo.</div>';
+  document.getElementById('prj-months').innerHTML=h;
+}
+function prjToggleMonth(k){ var i=PRJ_ST.months.indexOf(k); if(i>=0){ if(PRJ_ST.months.length>1) PRJ_ST.months.splice(i,1); } else PRJ_ST.months.push(k); PRJ_ST.months.sort(); renderProjecao(); }
+function prjPeriodLabel(){ var ms=PRJ_ST.months.slice().sort(); return ms.length>3? prjMLbl(ms[0])+' a '+prjMLbl(ms[ms.length-1])+' ('+ms.length+' meses)' : ms.map(prjMLbl).join(' + '); }
+function prjQuick(q){
+  var cur=prjCurK(), nx=prjAddM(cur,1), y=PRJ_ST.year||+cur.slice(0,4);
+  if(q==='next') PRJ_ST.months=[nx];
+  if(q==='next3') PRJ_ST.months=[nx,prjAddM(nx,1),prjAddM(nx,2)];
+  if(q==='rest'){ PRJ_ST.months=[]; for(var k=cur;k<=cur.slice(0,4)+'-12';k=prjAddM(k,1)) PRJ_ST.months.push(k); }
+  if(q==='year'){ PRJ_ST.months=[]; for(var m=0;m<12;m++) PRJ_ST.months.push(prjMk(y,m)); }
+  if(q==='late'){ var agg=prjMonthAgg(prjBase()); PRJ_ST.months=Object.keys(agg).filter(function(k){return k<cur&&agg[k].o;}).sort(); if(!PRJ_ST.months.length){ toast('Nenhum saldo atrasado com os filtros atuais','blue'); PRJ_ST.months=[nx]; } }
+  PRJ_ST.year=+PRJ_ST.months[0].slice(0,4);
+  renderProjecao();
+}
+function prjKcard(l,ic,icBg,v,col,pct,pill,pillStyle){
+  return '<div class="prj-kc"><div class="hd"><span class="l">'+l+'</span><div class="ic" style="background:'+icBg+'">'+ic+'</div></div>'
+    +'<div class="v" style="color:'+col+'" title="'+v+'">'+v+'</div><div class="bar"><i style="width:'+Math.max(0,Math.min(100,pct))+'%;background:'+col+'"></i></div>'
+    +'<div><span class="pill" style="'+pillStyle+'">'+pill+'</span></div></div>';
+}
+function prjRenderKpis(sel){
+  var tO=0,tR=0,oPed=0,oRc=0,nPed={},nRc={},dated=0,nDated={};
+  sel.forEach(function(x){ tO+=x.o; tR+=x.r; if(x.d.t==='PED'){ oPed+=x.o; if(x.o) nPed[x.d.id]=1; if(x.o&&(x.d.fat||x.d.prev||x.d.recv)){ dated+=x.o; nDated[x.d.id]=1; } } else { oRc+=x.o; if(x.o) nRc[x.d.id]=1; } });
+  var nDocs=new Set(sel.map(function(x){return x.d.id;})).size, np=Object.keys(nPed).length, nr=Object.keys(nRc).length;
+  PRJ.tot={o:tO,r:tR,nDocs:nDocs};
+  document.getElementById('prj-kpis').innerHTML=
+     prjKcard('Em aberto · '+prjPeriodLabel(),'📅','#fff7ed',prjBrl(tO),'#ea580c',tO+tR?tO/(tO+tR)*100:0,np+' pedidos · '+nr+' RCs','background:#fef9c3;color:#a16207')
+    +prjKcard('Realizado no período (CJI3)','✅','#e0f2fe',prjBrl(tR),'#0f6fb8',tO+tR?tR/(tO+tR)*100:0,tR?'já lançado no SAP':'meses futuros ainda sem realizado','background:#dbeafe;color:#1e40af')
+    +prjKcard('Total do período','Σ','#eef2ff',prjBrl(tO+tR),'#002F6C',100,nDocs+' documentos · '+sel.length+' linhas','background:#dbeafe;color:#1e40af')
+    +prjKcard('RCs ainda sem pedido','📝','#eef2ff',prjBrl(oRc),'#4f46e5',tO?oRc/tO*100:0,nr+' RCs · podem atrasar','background:#e0e7ff;color:#3730a3')
+    +prjKcard('Pedidos com data no diligenciamento','🚚','#f0fdf4',prjBrl(dated),'#16a34a',oPed?dated/oPed*100:0,Object.keys(nDated).length+' de '+np+' pedidos','background:#dcfce7;color:#15803d');
+}
+function prjSetCmode(v){ PRJ_ST.cmode=v; document.querySelectorAll('#prj-cmode button').forEach(function(b){b.classList.toggle('on',b.dataset.v===v);}); renderProjecao(); }
+function prjRenderChart(agg){
+  if(typeof Chart==='undefined'){ setTimeout(renderProjecao,500); return; }
+  var y=PRJ_ST.year, cur=prjCurK(), keys=[];
+  if(PRJ_ST.cmode==='sel') keys=PRJ_ST.months.slice().sort(); else for(var m=0;m<12;m++) keys.push(prjMk(y,m));
+  var sel={}; PRJ_ST.months.forEach(function(k){sel[k]=1;});
+  var R=keys.map(function(k){return (agg[k]||{}).r||0;}), O=keys.map(function(k){return (agg[k]||{}).o||0;});
+  var acc=[],accR=[],t=0,tr=0; keys.forEach(function(k,i){ t+=R[i]+O[i]; tr+=R[i]; acc.push(Math.round(t*100)/100); accR.push(k<=cur?Math.round(tr*100)/100:null); });
+  var fade=function(c,k){ return PRJ_ST.cmode==='year'&&!sel[k]?c+'55':c; };
+  if(_prjChart){ try{_prjChart.destroy();}catch(e){} _prjChart=null; }
+  var cv=document.getElementById('prj-ch'); if(!cv) return;
+  _prjChart=new Chart(cv,{data:{labels:keys.map(prjMLbl),datasets:[
+    {type:'bar',label:'Realizado (CJI3)',data:R,backgroundColor:keys.map(function(k){return fade('#0f6fb8',k);}),stack:'s',order:3,borderRadius:3},
+    {type:'bar',label:'Em aberto (CJI5)',data:O,backgroundColor:keys.map(function(k){return fade(k<cur?'#dc2626':'#f97316',k);}),stack:'s',order:3,borderRadius:3},
+    {type:'line',label:'Acumulado (realizado + previsto)',data:acc,borderColor:'#002F6C',backgroundColor:'#002F6C',yAxisID:'y2',tension:.25,pointRadius:3,borderWidth:2.5,order:1},
+    {type:'line',label:'Acumulado realizado',data:accR,borderColor:'#0f6fb8',backgroundColor:'#0f6fb8',yAxisID:'y2',tension:.25,pointRadius:0,borderWidth:1.5,borderDash:[4,3],order:2}
+  ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
+    plugins:{legend:{display:false},datalabels:{display:false},tooltip:{callbacks:{label:function(x){return ' '+x.dataset.label+': '+prjBrl(x.raw||0);},footer:function(it){var i=it[0].dataIndex;return 'Total do mês: '+prjBrl(R[i]+O[i]);}}}},
+    scales:{x:{stacked:true,grid:{display:false}},
+      y:{stacked:true,grid:{color:'#f1f5f9'},ticks:{callback:function(v){return prjBrl0(v);},font:{size:10}},title:{display:true,text:'por mês',color:'#94a3b8',font:{size:10}}},
+      y2:{position:'right',grid:{display:false},ticks:{callback:function(v){return prjBrl0(v);},font:{size:10}},title:{display:true,text:'acumulado',color:'#94a3b8',font:{size:10}}}}}});
+  document.getElementById('prj-ch-title').textContent='Curva de desembolso — '+(PRJ_ST.cmode==='sel'?prjPeriodLabel():y);
+  document.getElementById('prj-ch-badge').textContent='acumulado '+prjBrl(acc.length?acc[acc.length-1]:0)+' · segue os filtros';
+}
+function prjSort(rows,get){ var k=PRJ_ST.sort,dir=PRJ_ST.dir; return rows.sort(function(a,b){ var va=get(a,k),vb=get(b,k); if(typeof va==='string'||typeof vb==='string') return String(va||'').localeCompare(String(vb||''),'pt-BR',{numeric:true})*dir; return ((va||0)-(vb||0))*dir; }); }
+function prjTh(cols){ return '<thead><tr>'+cols.map(function(c){return '<th class="'+(c[2]||'')+'" data-k="'+c[0]+'">'+c[1]+(PRJ_ST.sort===c[0]?(PRJ_ST.dir<0?' ↓':' ↑'):'')+'</th>';}).join('')+'</tr></thead>'; }
+function prjVendCell(d){
+  var cls=d.vUnk?'prj-vn-unk':(d.vEd?'prj-vn-ed':'');
+  return '<td style="max-width:230px"><div class="prj-ell '+cls+'" title="'+prjEsc(d.vn)+(d.vEd?' (informado manualmente)':'')+'">'+prjEsc(d.vn)+(d.vEd?' ✎':'')+'</div>'
+    +'<button class="prj-ed" data-edv="'+d.k+'"'+(d.vUnk?'':' style="opacity:.55"')+'>'+(d.vUnk?'✎ informar':'editar')+'</button></td>';
+}
+function prjRenderPed(sel){
+  var cur=prjCurK(), T=PRJ.tot;
+  var get=function(x,k){ var d=x.d; return k==='o'?x.o:k==='r'?x.r:k==='mes'?(x.ms[0]||''):k==='fat'?d.fat:k==='prev'?(d.prev||d.bl):k==='deb'?(d.dueD[x.ms[0]]||0):k==='sal'?PRJ.docO[d.id]:k==='sit'?prjSituKey(d):d[k]; };
+  if(['mes','id','rcN','ds','w','vn','r','o','deb','sal','fat','prev','sit'].indexOf(PRJ_ST.sort)<0){ PRJ_ST.sort='o'; PRJ_ST.dir=-1; }
+  prjSort(sel,get);
+  var cols=[['mes','Mês'],['id','Pedido'],['rcN','RC'],['ds','Descrição'],['w','Projeto / sub-PEP'],['vn','Fornecedor'],['r','Realizado no período','r'],['o','Em aberto no período','r'],['deb','Débito previsto'],['sal','Saldo total do doc.','r'],['fat','Faturamento'],['prev','Entrega prevista'],['sit','Situação']];
+  var h=prjTh(cols)+'<tbody>';
+  if(!sel.length) h+='<tr><td colspan="13" style="padding:40px;text-align:center;color:#94a3b8">Nada nesses meses com os filtros atuais.</td></tr>';
+  var MAXR=1500; // a tabela mostra até 1500 linhas; os totais e o Excel usam tudo
+  sel.slice(0,MAXR).forEach(function(x){
+    var d=x.d, s=prjSitu(d), nsp=PRJ.byId[d.id].length;
+    h+='<tr class="clk" data-id="'+prjEsc(d.id)+'">'
+      +'<td>'+x.ms.map(function(k){return '<span class="prj-mtag'+(k<cur&&d.due[k]?' late':'')+'">'+prjMLbl(k)+'</span>';}).join('')+'</td>'
+      +'<td class="mono"><b>'+(d.t==='PED'?prjEsc(d.id):'—')+'</b>'+(nsp>1?'<div class="prj-sm" title="Documento rateado em '+nsp+' sub-PEPs">rateado · '+nsp+' sub-PEPs</div>':'')+'</td>'
+      +'<td class="mono">'+(d.rcN?prjEsc(d.rcN):'<span class="prj-sm">—</span>')+'</td>'
+      +'<td class="prj-ell" style="max-width:240px" title="'+prjEsc(d.ds)+'">'+prjEsc(d.ds)+'<div class="prj-sm">'+d.natLbl+'</div></td>'
+      +'<td style="max-width:230px"><div class="mono" style="font-weight:700">'+prjEsc(d.w)+'</div><div class="prj-sm prj-ell" title="'+prjEsc(d.sd||d.pt)+'">'+prjEsc(d.sd||d.pt)+'</div></td>'
+      +prjVendCell(d)
+      +'<td class="r prj-full" style="color:#0f6fb8">'+(x.r?prjBrl(x.r):'<span class="prj-sm">—</span>')+'</td>'
+      +'<td class="r prj-full" style="font-weight:700;color:'+(x.late?'#b91c1c':'#c2410c')+'">'+(x.o?prjBrl(x.o):'<span class="prj-sm">—</span>')+'</td>'
+      +'<td class="mono">'+(x.ms.filter(function(k){return d.due[k];}).map(function(k){return prjSerialStr(d.dueD[k]);}).join(', ')||'<span class="prj-sm">—</span>')+'</td>'
+      +'<td class="r prj-full">'+prjBrl(PRJ.docO[d.id]||0)+'</td>'
+      +'<td class="mono">'+(d.fat?prjFmtTs(d.fat):'<span class="prj-sm">—</span>')+'</td>'
+      +'<td class="mono">'+(d.prev?prjFmtTs(d.prev):(d.bl?'<span title="Baseline de entrega">'+prjFmtTs(d.bl)+'*</span>':'<span class="prj-sm">—</span>'))+'</td>'
+      +'<td><span class="pill '+s[0]+'">'+prjEsc(s[1])+'</span></td></tr>';
+  });
+  if(sel.length>MAXR) h+='<tr><td colspan="13" style="padding:12px;text-align:center;color:#64748b">Mostrando '+MAXR+' de '+sel.length+' linhas — use os filtros ou o Excel pra ver tudo.</td></tr>';
+  h+='</tbody><tfoot><tr><td colspan="6">Total · '+T.nDocs+' documentos · '+sel.length+' linhas</td><td class="r prj-full">'+prjBrl(T.r)+'</td><td class="r prj-full">'+prjBrl(T.o)+'</td><td colspan="5"></td></tr></tfoot>';
+  document.getElementById('prj-tbl').innerHTML=h;
+  document.getElementById('prj-t-title').textContent='Pedidos e RCs — '+prjPeriodLabel();
+  document.getElementById('prj-t-badge').textContent=T.nDocs+' documentos · '+sel.length+' linhas · '+prjBrl(T.o+T.r);
+}
+function prjRenderGrp(sel){
+  var T=PRJ.tot, isPep=PRJ_ST.grp==='pep', g={};
+  sel.forEach(function(x){ var k=isPep?x.d.r:x.d.vn; var a=g[k]=g[k]||{k:k,o:0,r:0,ids:{},byM:{}}; a.o+=x.o; a.r+=x.r; a.ids[x.d.id]=1; x.ms.forEach(function(m){ a.byM[m]=(a.byM[m]||0)+(x.d.due[m]||0)+(x.d.ex[m]||0); }); });
+  var arr=Object.values(g); arr.forEach(function(a){ a.tot=a.o+a.r; a.n=Object.keys(a.ids).length; a.nome=isPep?prjTitle(a.k):a.k; });
+  if(['o','r','tot','n','nome','k'].indexOf(PRJ_ST.sort)<0 && !/^m\d/.test(PRJ_ST.sort)){ PRJ_ST.sort='tot'; PRJ_ST.dir=-1; }
+  prjSort(arr,function(a,k){ return /^m\d/.test(k)?(a.byM[k.slice(1)]||0):a[k]; });
+  var ms=PRJ_ST.months.slice().sort();
+  var cols=(isPep?[['k','PEP'],['nome','Projeto']]:[['k','Fornecedor']]).concat(ms.map(function(m){return ['m'+m,prjMLbl(m),'r'];})).concat([['r','Realizado','r'],['o','Em aberto','r'],['tot','Total','r'],['n','Docs','r']]);
+  var h=prjTh(cols)+'<tbody>';
+  arr.forEach(function(a){
+    var sq=isPep?prjSquadInfo(a.k).squad:'';
+    h+='<tr class="clk" data-g="'+prjEsc(a.k)+'">'
+      +(isPep?'<td class="mono"><b>'+prjEsc(a.k)+'</b></td><td class="prj-ell" style="max-width:300px" title="'+prjEsc(a.nome)+'">'+prjEsc(a.nome||'—')+'<div class="prj-sm">'+prjEsc(sq)+'</div></td>':'<td class="prj-ell" style="max-width:320px" title="'+prjEsc(a.k)+'">'+prjEsc(a.k)+'</td>')
+      +ms.map(function(m){return '<td class="r prj-full">'+(a.byM[m]?prjBrl(a.byM[m]):'<span class="prj-sm">—</span>')+'</td>';}).join('')
+      +'<td class="r prj-full" style="color:#0f6fb8">'+(a.r?prjBrl(a.r):'<span class="prj-sm">—</span>')+'</td><td class="r prj-full" style="color:#c2410c">'+(a.o?prjBrl(a.o):'<span class="prj-sm">—</span>')+'</td>'
+      +'<td class="r prj-full" style="font-weight:700;color:#002F6C">'+prjBrl(a.tot)+'</td><td class="r mono">'+a.n+'</td></tr>';
+  });
+  h+='</tbody><tfoot><tr><td colspan="'+(isPep?2:1)+'">Total · '+arr.length+(isPep?' projetos':' fornecedores')+'</td>'
+    +ms.map(function(m){ return '<td class="r prj-full">'+prjBrl(arr.reduce(function(s,a){return s+(a.byM[m]||0);},0))+'</td>'; }).join('')
+    +'<td class="r prj-full">'+prjBrl(T.r)+'</td><td class="r prj-full">'+prjBrl(T.o)+'</td><td class="r prj-full">'+prjBrl(T.o+T.r)+'</td><td></td></tr></tfoot>';
+  document.getElementById('prj-tbl').innerHTML=h;
+  document.getElementById('prj-t-title').textContent=(isPep?'Por projeto':'Por fornecedor')+' — '+prjPeriodLabel();
+  document.getElementById('prj-t-badge').textContent=arr.length+(isPep?' projetos':' fornecedores')+' · clique pra ver os pedidos';
+}
+function prjTblClick(e){
+  var th=e.target.closest('th[data-k]');
+  if(th){ var k=th.dataset.k; if(PRJ_ST.sort===k) PRJ_ST.dir*=-1; else { PRJ_ST.sort=k; PRJ_ST.dir=(['o','r','tot','sal','n'].indexOf(k)>=0||/^m\d/.test(k))?-1:1; } renderProjecao(); return; }
+  var b=e.target.closest('[data-edv]'); if(b){ e.stopPropagation(); prjStartVendEdit(+b.dataset.edv,b.closest('td')); return; }
+  if(e.target.closest('.prj-vinp')||e.target.closest('.prj-hint')) return;
+  var tr=e.target.closest('tr.clk'); if(!tr) return;
+  if(tr.dataset.id) prjOpenDrawer(tr.dataset.id);
+  else if(tr.dataset.g){ var g=tr.dataset.g; if(PRJ_ST.grp==='pep') prjSetFilter('projeto',[g+' — '+(prjTitle(g)||'(sem título)')]); else prjSetFilter('fornecedor',[g]); prjSetGrp('ped'); }
+}
+function prjSetGrp(v){ PRJ_ST.grp=v; PRJ_ST.sort=v==='ped'?'o':'tot'; PRJ_ST.dir=-1; document.querySelectorAll('#prj-grp button').forEach(function(b){b.classList.toggle('on',b.dataset.v===v);}); renderProjecao(); }
+function prjClear(){ Object.keys(PRJ_ST.f).forEach(function(k){PRJ_ST.f[k]=[];}); PRJ_ST.q=''; var q=document.getElementById('prj-q'); if(q) q.value=''; prjBuildMs(); renderProjecao(); }
+function prjOpenDrawer(id){
+  var rs=PRJ.byId[id]; if(!rs) return; var d=rs[0], m=d.m||{}, s=prjSitu(d), cur=prjCurK();
+  var byK={}; rs.forEach(function(r){ Object.keys(r.due).forEach(function(k){ var a=byK[k]=byK[k]||{o:0,r:0,dt:0}; a.o+=r.due[k]; if(r.dueD[k]&&(!a.dt||r.dueD[k]<a.dt)) a.dt=r.dueD[k]; }); Object.keys(r.ex).forEach(function(k){ (byK[k]=byK[k]||{o:0,r:0,dt:0}).r+=r.ex[k]; }); });
+  var mrows=Object.keys(byK).sort().map(function(k){ var a=byK[k]; return '<tr><td>'+prjMLbl(k)+(a.o&&k<cur?' <span class="pill pill-red">pendente</span>':'')+'</td><td class="r prj-full" style="color:#0f6fb8">'+(a.r?prjBrl(a.r):'—')+'</td><td class="r prj-full" style="color:#c2410c">'+(a.o?prjBrl(a.o):'—')+'</td><td class="mono">'+(a.dt?prjSerialStr(a.dt):'')+'</td></tr>'; }).join('');
+  // Rateio: o mesmo pedido pode ser apropriado em vários sub-PEPs (ex.: BM de contrato de serviço compartilhado
+  // lançado pelo SAP dividido entre dezenas de sub-PEPs). Mostra realizado + em aberto de cada um, maior primeiro.
+  var nProj=new Set(rs.map(function(r){return r.r;})).size;
+  var rsS=rs.slice().filter(function(r){return r.o||r.exT;}).sort(function(a,b){return (Math.abs(b.o)+Math.abs(b.exT))-(Math.abs(a.o)+Math.abs(a.exT));});
+  var totEx=rs.reduce(function(s,r){return s+r.exT;},0);
+  var wrows=rsS.map(function(r){ return '<tr><td><span class="mono">'+prjEsc(r.w)+'</span><div class="prj-sm">'+prjEsc(r.sd||r.pt)+' · '+prjEsc(r.sq)+'</div></td><td class="r prj-full" style="color:#0f6fb8">'+(r.exT?prjBrl(r.exT):'—')+'</td><td class="r prj-full" style="color:#c2410c">'+(r.o?prjBrl(r.o):'—')+'</td></tr>'; }).join('');
+  var steps=[['RC',d.rcN],['Pedido',d.t==='PED'?d.id:(d.rcPed?'ped. '+d.rcPed+' (no SAP ainda como RC)':'')],['Remessa',m.rem&&m.rem!=='—'?m.rem:''],['Faturamento',d.fat?prjFmtTs(d.fat):''],['Entrega prevista',d.prev?prjFmtTs(d.prev):(d.bl?'baseline '+prjFmtTs(d.bl):'')],['Recebido',d.recv?(m.rec&&m.rec!=='—'?m.rec:'sim'):'']];
+  var tl=steps.map(function(x){ var ok=!!x[1]; return '<div style="position:relative;padding:4px 0"><span style="position:absolute;left:-21px;top:8px;width:10px;height:10px;border-radius:50%;background:'+(ok?'#16a34a':'#fff')+';border:2px solid '+(ok?'#16a34a':'#cbd5e1')+'"></span><b style="font-size:11px;color:'+(ok?'#0f172a':'#94a3b8')+'">'+x[0]+'</b> <span class="mono" style="color:#64748b">'+prjEsc(x[1]||'—')+'</span></div>'; }).join('');
+  var dr=document.getElementById('prj-drawer'); dr.dataset.id=id;
+  document.getElementById('prj-dr').innerHTML=
+    '<div class="prj-sm" style="font-weight:800;letter-spacing:1.5px;text-transform:uppercase">'+(d.t==='PED'?'Pedido':'Requisição (RC)')+'</div>'
+    +'<div class="mono" style="font-size:20px;font-weight:700;margin-top:2px">'+prjEsc(id)+'</div>'
+    +'<div style="font-weight:600;margin-top:4px">'+prjEsc(d.ds)+'</div>'
+    +'<div style="margin-top:8px"><span class="pill '+s[0]+'">'+prjEsc(s[1])+'</span></div>'
+    +'<dl class="prj-dl"><dt>Fornecedor</dt><dd><span class="'+(d.vUnk?'prj-vn-unk':(d.vEd?'prj-vn-ed':''))+'">'+prjEsc(d.vn)+'</span>'+(d.vc&&d.vc!=='0'?' <span class="prj-sm">cód. '+prjEsc(d.vc)+'</span>':'')+(d.vEd?'<div class="prj-sm" style="color:#15803d">informado manualmente'+(function(){var o=PRJ.forn['doc:'+d.id]||PRJ.forn[prjVendKey(d)];return o&&o.por?' por '+prjEsc(String(o.por).split('@')[0]):'';})()+'</div>':'')+'</dd>'
+    +'<dt>Squad / Líder</dt><dd>'+(function(){ var sqs=new Set(rs.map(function(r){return r.sq;})); return sqs.size>1?'vários ('+sqs.size+' squads)':prjEsc(d.sq+' · '+d.ld); })()+'</dd>'
+    +(m.obs&&m.obs!=='—'?'<dt>Observação</dt><dd style="font-weight:500">'+prjEsc(m.obs)+'</dd>':'')+'</dl>'
+    +'<div style="margin-top:16px" class="prj-sm"><b style="letter-spacing:1.5px;text-transform:uppercase">Mês a mês</b></div>'
+    +'<table style="margin-top:4px"><thead><tr><th>Mês</th><th style="text-align:right">Realizado</th><th style="text-align:right">Em aberto</th><th>Débito prev.</th></tr></thead><tbody>'+mrows+'</tbody></table>'
+    +'<div style="margin-top:16px" class="prj-sm"><b style="letter-spacing:1.5px;text-transform:uppercase">Distribuição por sub-PEP ('+rsS.length+(nProj>1?' · '+nProj+' projetos':'')+')</b></div>'
+    +(rs.length>1?'<div class="prj-sm" style="color:#475569;margin-top:3px">Pedido <b>rateado</b>: o SAP apropria o valor dividido entre os sub-PEPs abaixo — cada linha da tabela principal é a parte de um sub-PEP.</div>':'')
+    +'<table style="margin-top:4px"><thead><tr><th>Sub-PEP</th><th style="text-align:right">Realizado</th><th style="text-align:right">Em aberto</th></tr></thead><tbody>'+wrows+'</tbody><tfoot><tr><td style="font-weight:800;padding:6px 11px">Total</td><td class="r prj-full" style="font-weight:800;padding:6px 11px;color:#0f6fb8">'+prjBrl(totEx)+'</td><td class="r prj-full" style="font-weight:800;padding:6px 11px;color:#c2410c">'+prjBrl(PRJ.docO[id])+'</td></tr></tfoot></table>'
+    +'<div style="margin-top:16px" class="prj-sm"><b style="letter-spacing:1.5px;text-transform:uppercase">Andamento (Materiais)</b></div>'
+    +'<div style="margin-top:6px;border-left:2px solid #e2e8f0;padding-left:14px;margin-left:5px">'+tl+'</div>'
+    +(!d.m&&d.t==='PED'?'<div class="prj-sm" style="color:#b45309;margin-top:4px">Pedido não está na base de Materiais do site.</div>':'');
+  dr.classList.add('open');
+}
+function prjCloseDrawer(){ var dr=document.getElementById('prj-drawer'); if(dr){ dr.classList.remove('open'); dr.dataset.id=''; } }
+function prjExportXls(){
+  prjEnsureLib(function(){return typeof XLSX!=='undefined';},'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',function(){
+    var aoa=[['Mês(es)','Pedido','RC','Descrição','Natureza','Projeto (PEP)','Nome do projeto','Sub-PEP','Descrição sub-PEP','Squad','Líder','Planejador','Fornecedor','Cód. fornecedor','Realizado no período (R$)','Em aberto no período (R$)','Débito previsto','Saldo total do doc. (R$)','Faturamento','Entrega prevista','Situação']];
+    (PRJ.cur||[]).forEach(function(x){ var d=x.d; aoa.push([x.ms.map(prjMLbl).join(', '),d.t==='PED'?d.id:'',d.rcN,d.ds,d.natLbl,d.r,d.pt,d.w,d.sd,d.sq,d.ld,d.pl,d.vn,d.vc&&d.vc!=='0'?d.vc:'',x.r,x.o,x.ms.filter(function(k){return d.due[k];}).map(function(k){return prjSerialStr(d.dueD[k]);}).join(', '),PRJ.docO[d.id],prjFmtTs(d.fat),prjFmtTs(d.prev||d.bl),prjSitu(d)[1]]); });
+    var wb=XLSX.utils.book_new(), ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols']=[14,12,10,40,9,10,34,20,34,20,20,20,30,12,18,18,14,18,12,14,18].map(function(w){return {wch:w};});
+    for(var r=1;r<aoa.length;r++){ [14,15,17].forEach(function(c){ var ref=XLSX.utils.encode_cell({r:r,c:c}); if(ws[ref]) ws[ref].z='#,##0.00'; }); }
+    XLSX.utils.book_append_sheet(wb,ws,'Projeção');
+    XLSX.writeFile(wb,'Projecao_'+PRJ_ST.months.map(prjMLbl).join('_').replace(/\//g,'-')+'.xlsx');
+  });
 }
 
 // ═══════════════════════ FP&A — Orçamento x Executado x Forecast ═══════════════════════

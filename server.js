@@ -540,6 +540,45 @@ app.post('/api/save-cji3', requireAuth, async (req, res) => {
   }
 });
 
+// ── PROJEÇÃO DE FATURAMENTO (CJI5 + CJI3 por pedido) ──────────────────────────
+// Guarda na própria cji3_dados, em outras chaves ('projecao' e 'projecao_forn'), pra não
+// precisar de tabela nova. Gravação via service key igual ao /api/save-cji3.
+async function _cji3DadosUpsert(chave, payload) {
+  const r = await fetch(`${SUPA_URL}/rest/v1/cji3_dados`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${SUPA_SERVICE_KEY}`, 'apikey': SUPA_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+    body: JSON.stringify([{ chave, payload, atualizado_em: new Date().toISOString() }])
+  });
+  if (!r.ok) throw new Error('Supabase: ' + await r.text());
+}
+app.post('/api/save-projecao', requireAuth, async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  const { payload } = req.body;
+  if (!payload || (!payload.cji5 && !payload.cji3)) return res.status(400).json({ error: 'payload inválido' });
+  try {
+    await _cji3DadosUpsert('projecao', payload);
+    console.log(`[save-projecao] cji5=${payload.cji5 ? payload.cji5.rows.length : 0} cji3=${payload.cji3 ? payload.cji3.rows.length : 0} por ${(req.callerUser && req.callerUser.email) || '?'}`);
+    res.json({ ok: true });
+  } catch (e) { console.error('[save-projecao]', e); res.status(500).json({ error: e.message }); }
+});
+// Fornecedor informado à mão na aba Projeção: chave 'cod:<código SAP>' (vale pra todos os pedidos
+// do código) ou 'doc:<nº pedido/RC>'. Lê-mescla-grava no servidor pra dois usuários não se sobrescreverem.
+app.post('/api/save-projecao-forn', requireAuth, async (req, res) => {
+  if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
+  const chave = String((req.body && req.body.chave) || '').trim();
+  const nome = String((req.body && req.body.nome) || '').trim().slice(0, 120);
+  if (!/^(cod|doc):[\w.-]{1,30}$/.test(chave)) return res.status(400).json({ error: 'chave inválida' });
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/cji3_dados?chave=eq.projecao_forn&select=payload`, { headers: { 'Authorization': `Bearer ${SUPA_SERVICE_KEY}`, 'apikey': SUPA_SERVICE_KEY } });
+    const cur = r.ok ? await r.json() : [];
+    const map = (cur[0] && cur[0].payload && cur[0].payload.map) || {};
+    if (nome) map[chave] = { nome, por: (req.callerUser && req.callerUser.email) || '', em: new Date().toISOString() };
+    else delete map[chave];
+    await _cji3DadosUpsert('projecao_forn', { map });
+    res.json({ ok: true, map });
+  } catch (e) { console.error('[save-projecao-forn]', e); res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/cji3', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
   try {
