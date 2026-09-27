@@ -1081,7 +1081,6 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <!-- FP&A -->
     <div class="sb-nav-sec">FP&amp;A</div>
     <div class="sb-item" data-view="fpa" data-label="FP&A"><span class="ico">📈</span><span class="sb-label">FP&amp;A</span></div>
-    <div class="sb-item" data-view="projecao" data-label="Projeção de Faturamento"><span class="ico">📅</span><span class="sb-label">Projeção de Faturamento</span></div>
     <!-- IMPRODUTIVIDADE -->
     <div class="sb-nav-sec">Fiscalização</div>
     <div class="sb-item" data-view="improdutividade" data-label="Improdutividade"><span class="ico">⏱</span><span class="sb-label">Produtividade</span></div>
@@ -1400,7 +1399,6 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <div id="v-milplan" class="hidden"></div>
     <div id="v-pipe" class="hidden"></div>
     <div id="v-fpa" class="hidden"></div>
-    <div id="v-projecao" class="hidden"></div>
     <div id="v-rac" class="hidden"></div>
     <div id="v-improdutividade" class="hidden"></div>
     <div id="v-indice-produtividade" class="hidden"></div>
@@ -1965,7 +1963,6 @@ function startRealtime(){
             if(nbMat&&STATE_MATERIAIS.length){nbMat.textContent=STATE_MATERIAIS.length;nbMat.style.display='inline-flex';}
             var vMat=document.getElementById('v-materiais');
             if(vMat&&!vMat.classList.contains('hidden')) renderMateriais();
-            if(currentView==='projecao'&&typeof renderProjecao==='function') renderProjecao();
           }
         }catch(e){console.warn('[Realtime] mat-updated:',e);}
       })();
@@ -2479,7 +2476,6 @@ const VIEW_META={
   'saude-pep':{title:'Saúde do PEP',sub:'Visão financeira consolidada por projeto'},
   materiais:{title:'Materiais',sub:'Acompanhamento de pedidos, RCs e diligenciamento'},
   fpa:{title:'FP&A',sub:'Orçamento x Executado x Forecast por projeto'},
-  projecao:{title:'Projeção de Faturamento',sub:'CJI5 (compromisso) × CJI3 (realizado) por pedido — previsão mês a mês'},
   analytics:{title:'Dashboard',sub:'Dotado vs Medido por empresa e PEP'},
   improdutividade:{title:'Produtividade Projetos Salobo',sub:'Registro de chegada e atraso das equipes'},
   'indice-produtividade':{title:'Índice de Produtividade',sub:'Comparativo de HH cobrado pela contratada vs índice de produtividade do projeto'},
@@ -2515,14 +2511,14 @@ function _syncBnav(id){
 function setView(id){
   currentView=id;
   _syncBnav(id);
-  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-fpa','v-projecao','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma','v-milplan','v-pipe','v-rac'].forEach(v=>document.getElementById(v).classList.add('hidden'));
+  ['v-overview','v-resumo','v-dotacoes','v-alertas','v-cji3','v-regularizar','v-nova','v-upload','v-saude-pep','v-analytics','v-usuarios','v-materiais','v-fpa','v-improdutividade','v-indice-produtividade','v-produtividade-rev2','v-velocidade','v-histograma','v-milplan','v-pipe','v-rac'].forEach(v=>document.getElementById(v).classList.add('hidden'));
   document.getElementById('v-'+id).classList.remove('hidden');
   // Lazy-load histograma iframe on first visit
   if(id==='histograma'){
     const fr=document.getElementById('histograma-frame');
     if(!fr.src||fr.src==='about:blank')fr.src='/histograma-eletro.html?embed=1';
   }
-  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','fpa','projecao','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios','milplan','pipe','rac'].includes(id));
+  document.getElementById('filter-bar').classList.toggle('hidden',['nova','upload','regularizar','saude-pep','materiais','fpa','improdutividade','indice-produtividade','produtividade-rev2','velocidade','histograma','cji3','usuarios','milplan','pipe','rac'].includes(id));
   if(id==='produtividade-rev2'){
     var _mRev2=VIEW_META['produtividade-rev2'];
     var _ptRev2=document.getElementById('page-title');if(_ptRev2)_ptRev2.textContent=_mRev2.title;
@@ -2589,7 +2585,6 @@ function _renderNow(){
   if(currentView==='upload') renderUpload();
   if(currentView==='materiais') renderMateriais();
   if(currentView==='fpa') renderFpa();
-  if(currentView==='projecao') renderProjecao();
   if(currentView==='milplan') renderMilplan();
   if(currentView==='pipe') renderPipe();
   if(currentView==='cji3') renderCji3();
@@ -4583,7 +4578,7 @@ function updateUserBadge(){
   document.body.classList.toggle("is-lider", isLider);
   var _perms = (CURRENT_PERFIL.permissoes && CURRENT_PERFIL.permissoes.length) ? CURRENT_PERFIL.permissoes : ['overview'];
   if(!isAdmin){
-    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','fpa','projecao','velocidade','cji3','improdutividade','indice-produtividade','histograma','milplan','pipe','rac'];
+    var _permViews=['overview','resumo','dotacoes','alertas','nova','regularizar','analytics','saude-pep','materiais','fpa','velocidade','cji3','improdutividade','indice-produtividade','histograma','milplan','pipe','rac'];
     document.querySelectorAll('.sb-nav .sb-item').forEach(function(item){
       if(item.classList.contains('admin-only')) return;
       var v=item.dataset.view; if(!v||_permViews.indexOf(v)<0) return;
@@ -6641,7 +6636,7 @@ function renderUsuariosHTML(el, usuarios, bloqueados){
         {v:'overview',l:'Visão Geral'},{v:'resumo',l:'Resumo Sub PEP'},{v:'dotacoes',l:'Dotações'},
         {v:'alertas',l:'Capex Projetos'},{v:'nova',l:'Nova Dotação'},{v:'regularizar',l:'Regularizar Saldo'},
         {v:'analytics',l:'Dashboard'},{v:'saude-pep',l:'Saúde do PEP'},{v:'materiais',l:'Materiais'},
-        {v:'fpa',l:'FP&A'},{v:'projecao',l:'Projeção de Faturamento'},
+        {v:'fpa',l:'FP&A'},
         {v:'improdutividade',l:'Produtividade'},{v:'indice-produtividade',l:'Índice de Produtividade'},
         {v:'velocidade',l:'Telemetria'},{v:'cji3',l:'CJI3 Tabela'},{v:'histograma',l:'Histograma CTT'},
         {v:'milplan',l:'SS Milplan'},{v:'pipe',l:'Pipeline de Materiais'},
@@ -9578,7 +9573,7 @@ async function matMesclarDuplicados(){
   }
 }
 
-// ═══════════════════════ PROJEÇÃO DE FATURAMENTO — CJI5 (compromisso) + CJI3 (realizado) ═══════════════════════
+// ═══════════════════════ PROJEÇÃO DE ORÇAMENTO (subaba de Materiais) — CJI5 (compromisso) + CJI3 (realizado) ═══════════════════════
 // Uso mensal: escolher mês(es) e ver quanto está previsto cair + lista de pedidos com RC, faturamento e entrega.
 // - CJI5: saldo em aberto ("Value In Object Currency") de pedidos/RCs no mês de débito previsto (Month/Debit Date).
 //   "Planned Value" é ignorado: vem inflado (bilhões) em contratos de outra moeda.
@@ -9746,11 +9741,29 @@ async function prjLoad(force){
   }catch(e){ console.warn('[Projeção] carga:',e); PRJ.err=e.message||String(e); }
   PRJ.loading=false; PRJ.loaded=true;
   prjBuildRows();
-  if(currentView==='projecao') renderProjecao();
+  if(prjIsVisible()) renderProjecao();
 }
 
 // ── UPLOAD: um ou dois arquivos (CJI5 e/ou CJI3), reconhecidos pelas colunas ──
 function prjEnsureLib(test,url,cb){ if(test()) return cb(); var s=document.createElement('script'); s.src=url; s.onload=cb; s.onerror=function(){toast('Falha ao carregar biblioteca: '+url,'red');}; document.head.appendChild(s); }
+// "Atualizar" de Materiais: aceita MATERIAIS.xlsx, CJI3 e CJI5 juntos (Ctrl+clique) e manda cada um pro importador certo.
+function matUploadMulti(fileList){
+  var files=Array.prototype.slice.call(fileList||[]); if(!files.length) return;
+  if(files.length===1 && /\.xls$/i.test(files[0].name)) return handleMateriaisUpload(files[0]);
+  prjEnsureLib(function(){return typeof JSZip!=='undefined';},'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',async function(){
+    var mat=[], sap=[];
+    for(var i=0;i<files.length;i++){
+      var f=files[i], isMat=true;
+      try{ var z=await JSZip.loadAsync(await f.arrayBuffer()); var wb=z.file('xl/workbook.xml'); isMat = !wb || /name="BD_MATRIZ"/.test(await wb.async('string')); }
+      catch(e){ isMat=true; } // .xls antigo (não é zip) → importador de Materiais trata
+      (isMat?mat:sap).push(f);
+    }
+    if(mat.length>1){ toast('Selecione só um arquivo de Materiais (com as abas BD_MATRIZ/BD_DILIG)','red'); return; }
+    if(sap.length>2){ toast('No máximo 2 arquivos do SAP (CJI3 e CJI5)','red'); return; }
+    if(mat.length) handleMateriaisUpload(mat[0]);
+    if(sap.length){ if(!PRJ.loaded) await prjLoad(); prjHandleUpload(sap); }
+  });
+}
 function prjPickFiles(){ var i=document.getElementById('prj-upload-input'); if(i){ i.value=''; i.click(); } }
 function prjHandleUpload(fileList){
   var files=Array.prototype.slice.call(fileList||[]);
@@ -9790,7 +9803,7 @@ async function prjDoUpload(files){
   PRJ.payload=payload; PRJ.loaded=true; prjBuildRows();
   prjSetProgress('');
   var msg=[]; if(res.cji5) msg.push('CJI5: '+res.cji5.rows.length+' linhas'); if(res.cji3) msg.push('CJI3: '+res.cji3.rows.length+' linhas');
-  toast('✔ Projeção atualizada — '+msg.join(' · ')+(errs.length?' · avisos: '+errs.join('; '):''),'green');
+  toast('✔ Projeção de orçamento atualizada — '+msg.join(' · ')+(errs.length?' · avisos: '+errs.join('; '):''),'green');
   if(_medidoSyncChannel&&CURRENT_USER){ _medidoSyncChannel.send({type:'broadcast',event:'projecao-updated',payload:{uploadedBy:CURRENT_USER.email}}).catch(function(){}); }
   renderProjecao();
 }
@@ -9983,8 +9996,9 @@ function prjEnsureCss(){
 }
 
 // ── render ──
+function prjIsVisible(){ return currentView==='materiais' && MAT_TAB==='projecao' && !!document.getElementById('prj-host'); }
 function renderProjecao(){
-  var el=document.getElementById('v-projecao'); if(!el) return;
+  var el=document.getElementById('prj-host'); if(!el) return; // só existe com Materiais › Projeção de Orçamento aberta
   prjEnsureCss();
   if(!PRJ.loaded){ el.innerHTML='<div style="padding:60px;text-align:center;color:#64748b">⏳ Carregando projeção…</div>'; prjLoad(); return; }
   if(!document.getElementById('prj-root')) prjShell(el);
@@ -10008,8 +10022,9 @@ function renderProjecao(){
   if(PRJ_ST.grp==='ped') prjRenderPed(sel); else prjRenderGrp(sel);
 }
 function prjShell(el){
+  PRJ.msSig=null; // renderMateriais recria o HTML inteiro — força refazer as listas dos filtros
   el.innerHTML='<div id="prj-root" style="display:flex;flex-direction:column;gap:14px">'
-    +'<div class="prj-sec"><span class="t"><i></i>Projeção de faturamento</span>'
+    +'<div class="prj-sec"><span class="t"><i></i>Projeção de orçamento</span>'
       +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="s" id="prj-src"></span>'
       +'<input type="file" id="prj-upload-input" accept=".xlsx" multiple style="display:none" onchange="prjHandleUpload(this.files)">'
       +'<button onclick="prjPickFiles()" title="Selecione os dois arquivos juntos (Ctrl+clique): CJI5 e CJI3. Dá pra mandar só um — o outro continua o último carregado." style="padding:8px 14px;border-radius:7px;border:1px solid #cbd5e1;background:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">⬆ Importar CJI5 + CJI3</button></div></div>'
@@ -10019,7 +10034,7 @@ function prjShell(el){
     +'<div id="prj-body" style="display:flex;flex-direction:column;gap:14px">'
       +'<div class="filters" id="prj-filters">'
         +PRJ_FILTERS.map(function(x){ return '<div class="fg" style="min-width:'+x[2]+'px"><label>'+x[1]+'</label><div class="ms-wrap" id="ms-prj-'+x[0]+'"><div class="ms-input" onclick="toggleMs(\'ms-prj-'+x[0]+'\')"><span class="ms-label" id="ms-prj-'+x[0]+'-label">'+x[3]+'</span><span style="color:var(--muted);font-size:10px">▾</span></div><div class="ms-drop" id="ms-prj-'+x[0]+'-drop" style="display:none"></div></div></div>'; }).join('')
-        +'<div class="fg"><label>Buscar</label><input type="text" id="prj-q" placeholder="nº, descrição, sub-PEP…" style="min-width:170px;cursor:text"></div>'
+        +'<div class="fg"><label>Buscar</label><input type="text" id="prj-q" value="'+prjEsc(PRJ_ST.q)+'" placeholder="nº, descrição, sub-PEP…" style="min-width:170px;cursor:text"></div>'
         +'<button onclick="prjClear()" style="padding:7px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#fff;cursor:pointer;height:fit-content;font-family:inherit">↺ Limpar</button>'
         +'<datalist id="prj-dl-vend"></datalist>'
       +'</div>'
@@ -10785,8 +10800,8 @@ function renderMateriais(){
       + (_isAdmEmpty
           ? '<div style="font-size:13px;color:#64748b;margin-bottom:24px">Importe o arquivo MATERIAIS.xlsx com as abas BD_MATRIZ e BD_DILIG.</div>'
             + '<label style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:#7c3aed;color:#fff;border-radius:8px;font-size:13px;font-weight:700">'
-            + '<input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleMateriaisUpload(this.files[0])">'
-            + '📂 Importar MATERIAIS.xlsx</label>'
+            + '<input type="file" accept=".xlsx,.xls" multiple title="Selecione juntos (Ctrl+clique): MATERIAIS.xlsx, CJI3 e CJI5" style="display:none" onchange="matUploadMulti(this.files)">'
+            + '📂 Importar MATERIAIS.xlsx (+ CJI3 e CJI5)</label>'
           : '<div style="font-size:13px;color:#64748b">Aguardando importação pelo administrador.</div>'
         )
       + '</div></div>';
@@ -10870,9 +10885,9 @@ function renderMateriais(){
 
   var subTabs =
     '<div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid #e2e8f0">'
-    + ['dashboard','tabela'].map(function(t){
+    + ['dashboard','tabela','projecao'].map(function(t){
         var active = MAT_TAB === t;
-        var label = t === 'dashboard' ? '📊 Dashboard' : '📋 Tabela';
+        var label = t === 'dashboard' ? '📊 Dashboard' : (t === 'tabela' ? '📋 Tabela' : '💰 Projeção de Orçamento');
         return '<button onclick="setMatTab(\''+t+'\')" style="padding:10px 20px;border:none;border-bottom:'+(active?'2px solid #7c3aed':'2px solid transparent')+';background:transparent;font-size:13px;font-weight:'+(active?'700':'500')+';color:'+(active?'#7c3aed':'#64748b')+';cursor:pointer;font-family:inherit;margin-bottom:-2px">'+label+'</button>';
       }).join('')
     + '</div>';
@@ -10884,14 +10899,15 @@ function renderMateriais(){
       + '<span>Importado em: '+importInfo.date+'</span>'
       + (_isAdmBadge
           ? '<label style="cursor:pointer;margin-left:auto;background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:600;color:#374151;display:flex;align-items:center;gap:4px">'
-            + '<input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleMateriaisUpload(this.files[0])">🔄 Atualizar</label>'
+            + '<input type="file" accept=".xlsx,.xls" multiple title="Selecione juntos (Ctrl+clique): MATERIAIS.xlsx, CJI3 e CJI5" style="display:none" onchange="matUploadMulti(this.files)">🔄 Atualizar (Materiais + CJI3 + CJI5)</label>'
           : '')
       + '</div>'
     : '';
 
-  var content = MAT_TAB === 'dashboard' ? _matDashHtml(data) : _matTabelaHtml(data);
+  // Projeção de Orçamento tem filtros próprios (CJI5/CJI3 × pedido) — os de Materiais não se aplicam a ela
+  var content = MAT_TAB === 'dashboard' ? _matDashHtml(data) : (MAT_TAB === 'projecao' ? '<div id="prj-host"></div>' : _matTabelaHtml(data));
 
-  el.innerHTML = '<div style="padding:24px">' + importBadge + filterBar + subTabs + content + '</div>';
+  el.innerHTML = '<div style="padding:24px">' + importBadge + (MAT_TAB === 'projecao' ? '' : filterBar) + subTabs + content + '</div>';
 
   buildMsDrop('ms-mat-mes', MAT_MESES_NOMES, MAT_FILTERS.mes, null);
   buildMsDrop('ms-mat-pedido', pedidos, MAT_FILTERS.pedido, null);
@@ -10915,6 +10931,7 @@ function renderMateriais(){
 
   if(MAT_TAB === 'dashboard') setTimeout(function(){ buildMatCharts(data); }, 50);
   else if(MAT_TAB === 'tabela') setTimeout(_matInitTopScroll, 50);
+  else if(MAT_TAB === 'projecao') renderProjecao();
 }
 
 function _matDashHtml(data){
@@ -11444,7 +11461,7 @@ function _matTabelaHtml(data){
     +(CURRENT_PERFIL && CURRENT_PERFIL.role === 'admin'
       ? '<div style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px">'
         +'<button class="btn btn-outline" style="font-size:11px" onclick="matMesclarDuplicados()">🧹 Mesclar duplicados</button>'
-        +'<label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#7c3aed;color:#fff;border-radius:7px;font-size:11px;font-weight:700"><input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleMateriaisUpload(this.files[0])">📂 Importar novo arquivo</label>'
+        +'<label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#7c3aed;color:#fff;border-radius:7px;font-size:11px;font-weight:700"><input type="file" accept=".xlsx,.xls" multiple title="Selecione juntos (Ctrl+clique): MATERIAIS.xlsx, CJI3 e CJI5" style="display:none" onchange="matUploadMulti(this.files)">📂 Importar novo arquivo</label>'
         +'</div>'
       : '');
 }
