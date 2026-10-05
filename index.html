@@ -9335,6 +9335,21 @@ function handleMateriaisUpload(file){
       // BD_DILIG) -- pular o pedido inteiro perdia os outros itens.
       var diligPedidoSet = {};
       function _matItemNorm(v){ return String(v||'').trim().replace(/^0+/,''); }
+      // Pedido SAP tem 10 dígitos. Valor curto ("1", "10") ou texto = colunas
+      // deslocadas na planilha; uma importação antiga gravou 2.681 linhas assim
+      // (limpas em 05/10/2026). Não entra na base, e o usuário é avisado.
+      var _pedidoInvalido = [];
+      diligRows = diligRows.filter(function(r){
+        var p = String(r['PEDIDO']||'').trim();
+        if(p && !/^\d{8,}$/.test(p)){ _pedidoInvalido.push(p); return false; }
+        return true;
+      });
+      if(_pedidoInvalido.length){
+        console.error('[MATERIAIS] Linhas do BD_DILIG com PEDIDO inválido (colunas deslocadas?):', _pedidoInvalido);
+        alert('Atenção: '+_pedidoInvalido.length+' linha(s) do BD_DILIG têm um PEDIDO que não parece número de pedido ('
+          +_pedidoInvalido.slice(0,10).join(', ')+(_pedidoInvalido.length>10?' …':'')
+          +'). Normalmente é coluna fora do lugar na planilha. Essas linhas NÃO foram importadas.');
+      }
       diligRows.forEach(function(r){
         var pedido = String(r['PEDIDO']||'').trim();
         var desc = String(r['DESCRIÇÃO BREVE']||'').trim();
