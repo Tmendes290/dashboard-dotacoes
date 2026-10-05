@@ -1942,22 +1942,24 @@ function startRealtime(){
       if(typeof prjLoad==='function' && PRJ.loaded){ prjLoad(true); }
     })
     .on('broadcast', {event: 'mat-updated'}, function(payload){
+      // Recarrega pela mesma rota do servidor (/api/materiais) do carregamento inicial.
+      // Antes lia direto do navegador (supa.from('materiais')), que estoura o
+      // statement_timeout no meio da paginação (lista parcial) ou volta vazio pela
+      // RLS sem erro -- e aí zerava STATE_MATERIAIS ("Nenhum dado de materiais").
+      // Falha ou resposta vazia nunca substitui o que já está carregado.
       (async function(){
         try{
-          var matArr=[],matOffset=0,matBatch=1000,matPages=0,matSyncOk=false;
-          while(matPages<300){
-            var matRes=await supa.from('materiais').select('item').order('chave').range(matOffset,matOffset+matBatch-1);
-            if(matRes.error||!matRes.data) break;
-            matSyncOk=true;
-            if(matRes.data.length===0) break;
-            matArr=matArr.concat(matRes.data.map(function(r){return r.item;}));
-            if(matRes.data.length<matBatch) break;
-            matOffset+=matBatch; matPages++;
-          }
-          if(matSyncOk){
+          var _sRes=await supa.auth.getSession();
+          var _tk=_sRes.data&&_sRes.data.session?_sRes.data.session.access_token:null;
+          if(!_tk) return;
+          var _r=await fetch('/api/materiais',{headers:{'Authorization':'Bearer '+_tk}});
+          var _b=await _r.json();
+          if(!_r.ok||_b.error){ console.warn('[Realtime] mat-updated: falhou, mantendo dado atual:',_b.error||_r.status); return; }
+          var matArr=_b.items||[];
+          if(matArr.length){
             STATE_MATERIAIS=matArr;
             try{localStorage.setItem('mat_data',JSON.stringify(matArr));}catch(e){}
-            var {data:matMeta}=await supa.from('mat_meta').select('*').eq('id',1).maybeSingle();
+            var matMeta=_b.meta;
             if(matMeta){ try{localStorage.setItem('mat_import',JSON.stringify({file:matMeta.import_file||'',date:matMeta.import_date||''}));}catch(e){} }
             var nbMat=document.getElementById('nb-mat');
             if(nbMat&&STATE_MATERIAIS.length){nbMat.textContent=STATE_MATERIAIS.length;nbMat.style.display='inline-flex';}
@@ -9281,11 +9283,15 @@ function handleMateriaisUpload(file){
       // Pedidos cobertos pelo BD_DILIG — usado depois pra saber quais pedidos do
       // BD_MATRIZ (que tem TODOS os pedidos, incluindo já entregues/fechados) ainda
       // faltam adicionar, já que o BD_DILIG só traz o que está em diligenciamento ativo.
+      // Por pedido+item, não só por pedido: o BD_DILIG pode trazer só parte dos
+      // itens de um pedido (ex.: 4513475047 tem 48 itens no BD_MATRIZ e 4 no
+      // BD_DILIG) -- pular o pedido inteiro perdia os outros itens.
       var diligPedidoSet = {};
+      function _matItemNorm(v){ return String(v||'').trim().replace(/^0+/,''); }
       diligRows.forEach(function(r){
         var pedido = String(r['PEDIDO']||'').trim();
         var desc = String(r['DESCRIÇÃO BREVE']||'').trim();
-        if(pedido) diligPedidoSet[pedido] = true;
+        if(pedido) diligPedidoSet[pedido+'|'+_matItemNorm(r['ITEM REFERENCIA'])] = true;
         if(!pedido && !desc) return;
 
         // Tentar join por IDFerramenta, depois por Pedido
@@ -9364,13 +9370,14 @@ function handleMateriaisUpload(file){
       var semPedidoCount = 0;
 
       // Adiciona linhas do BD_MATRIZ que o BD_DILIG não cobre:
-      // (a) RC sem pedido gerado ainda, ou (b) pedido já existe mas não está mais no
+      // (a) RC sem pedido gerado ainda, ou (b) item de pedido que não está no
       //     BD_DILIG — normalmente porque já foi totalmente entregue e saiu da lista
-      //     de diligenciamento ativo (o BD_MATRIZ é o histórico completo).
+      //     de diligenciamento ativo (o BD_MATRIZ é o histórico completo), ou porque
+      //     o BD_DILIG só traz parte dos itens daquele pedido.
       var semDiligCount = 0;
       matrizRows.forEach(function(mx){
         var pedido = String(mx['Pedido']||'').trim();
-        if(pedido && diligPedidoSet[pedido]) return; // já coberto pelo BD_DILIG
+        if(pedido && diligPedidoSet[pedido+'|'+_matItemNorm(mx['Item do pedido'])]) return; // item já coberto pelo BD_DILIG
         var rc = String(mx['RC']||'').trim();
         if(!pedido && !rc) return;
         var pepCode = String(mx['Elemento PEP']||'').trim();
