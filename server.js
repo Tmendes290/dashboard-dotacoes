@@ -607,6 +607,15 @@ app.get('/api/cji3', requireAuth, async (req, res) => {
 // mostrando "Nenhum dado" mesmo com o dado intacto no banco (ver revisão de
 // 05/08/2026). A gravação já usava a service key por esse mesmo motivo; agora
 // a leitura também.
+// Conta as linhas de "materiais" no banco (null se a contagem falhar).
+async function contarMateriais(headers) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/materiais?select=chave&limit=1`, { headers: { ...headers, 'Prefer': 'count=exact' } });
+    const m = String(r.headers.get('content-range') || '').match(/\/(\d+)$/);
+    return m ? parseInt(m[1], 10) : null;
+  } catch (e) { return null; }
+}
+
 app.get('/api/materiais', requireAuth, async (req, res) => {
   if (!SUPA_SERVICE_KEY) return res.status(500).json({ error: 'no service key' });
   const headers = { 'Authorization': `Bearer ${SUPA_SERVICE_KEY}`, 'apikey': SUPA_SERVICE_KEY };
@@ -623,7 +632,10 @@ app.get('/api/materiais', requireAuth, async (req, res) => {
     }
     const metaRes = await fetch(`${SUPA_URL}/rest/v1/mat_meta?id=eq.1&select=*`, { headers });
     const metaRows = metaRes.ok ? await metaRes.json() : [];
-    res.json({ items, meta: metaRows[0] || null });
+    // Total real da tabela: o site compara com items.length e avisa se a leitura
+    // veio incompleta, em vez de mostrar menos pedidos em silêncio.
+    const total = await contarMateriais(headers);
+    res.json({ items, meta: metaRows[0] || null, total });
   } catch (e) {
     console.error('[GET /api/materiais]', e);
     res.status(500).json({ error: e.message });
@@ -674,7 +686,9 @@ app.post('/api/save-materiais', requireAuth, async (req, res) => {
     }
 
     console.log(`[save-materiais] ${saved} itens salvos`);
-    res.json({ ok: true, count: saved });
+    // Total no banco depois de gravar: o site confere que nada ficou de fora.
+    const total = await contarMateriais({ 'Authorization': `Bearer ${SUPA_SERVICE_KEY}`, 'apikey': SUPA_SERVICE_KEY });
+    res.json({ ok: true, count: saved, total });
   } catch (e) {
     console.error('[save-materiais]', e);
     res.status(500).json({ error: e.message });

@@ -1808,6 +1808,10 @@ async function loadFromSupabase(){
         if(!matBody){
           MAT_LOAD_ERROR = true;
           console.error('[Sync] materiais: sincronização falhou após retries, mantendo dado anterior ('+STATE_MATERIAIS.length+' itens em cache).');
+        } else if(!_matRespostaConfere(matBody)){
+          // Leitura incompleta (menos itens que o banco tem) ou vazia com cache cheio:
+          // mantém o que já tinha em vez de mostrar uma lista faltando pedidos.
+          MAT_LOAD_ERROR = !STATE_MATERIAIS.length;
         } else {
           MAT_LOAD_ERROR = false;
           STATE_MATERIAIS = matBody.items||[];
@@ -1958,7 +1962,7 @@ function startRealtime(){
           var _b=await _r.json();
           if(!_r.ok||_b.error){ console.warn('[Realtime] mat-updated: falhou, mantendo dado atual:',_b.error||_r.status); return; }
           var matArr=_b.items||[];
-          if(matArr.length){
+          if(matArr.length && _matRespostaConfere(_b)){
             STATE_MATERIAIS=matArr;
             try{localStorage.setItem('mat_data',JSON.stringify(matArr));}catch(e){}
             var matMeta=_b.meta;
@@ -9247,6 +9251,37 @@ function handleCji3Upload(file){
   },100);
 }
 
+// Confere a resposta de /api/materiais antes de substituir a lista: o servidor
+// manda o total de linhas do banco; se vieram menos itens que isso (leitura
+// cortada) ou zero itens com a lista atual cheia, avisa e NÃO substitui.
+function _matRespostaConfere(body){
+  var n = (body.items||[]).length;
+  if(typeof body.total === 'number' && n < body.total){
+    console.error('[Materiais] leitura incompleta: '+n+' de '+body.total+' itens.');
+    toast('⚠ Materiais: só '+n+' de '+body.total+' itens carregaram. Mantendo a lista anterior; recarregue a página.','red');
+    return false;
+  }
+  if(!n && STATE_MATERIAIS && STATE_MATERIAIS.length){
+    console.error('[Materiais] servidor respondeu 0 itens com '+STATE_MATERIAIS.length+' em cache; mantendo cache.');
+    return false;
+  }
+  return true;
+}
+
+// Confere que todo pedido/RC da planilha entrou na lista importada. Devolve os faltantes.
+function _matConferePlanilha(matrizRows, diligRows, merged){
+  var tem = {};
+  merged.forEach(function(r){ if(r.pedido) tem['P'+r.pedido]=1; if(r.rc) tem['R'+r.rc]=1; });
+  var falta = {};
+  matrizRows.forEach(function(mx){
+    var p = String(mx['Pedido']||'').trim(), rc = String(mx['RC']||'').trim();
+    if(p){ if(!tem['P'+p]) falta[p]=1; }
+    else if(rc && !tem['R'+rc]) falta['RC '+rc]=1;
+  });
+  diligRows.forEach(function(r){ var p = String(r['PEDIDO']||'').trim(); if(p && !tem['P'+p]) falta[p]=1; });
+  return Object.keys(falta);
+}
+
 function handleMateriaisUpload(file){
   if(!file) return;
   var reader = new FileReader();
@@ -9434,6 +9469,14 @@ function handleMateriaisUpload(file){
       console.log('[MATRIZ] RCs sem pedido encontradas:', semPedidoCount);
       console.log('[MATRIZ] Pedidos fora do BD_DILIG (já entregues/fechados) encontrados:', semDiligCount);
 
+      var _faltando = _matConferePlanilha(matrizRows, diligRows, merged);
+      if(_faltando.length){
+        console.error('[MATERIAIS] Pedidos/RCs da planilha que não entraram na importação:', _faltando);
+        alert('Atenção: '+_faltando.length+' pedido(s)/RC(s) da planilha não entraram na importação:\n\n'
+          +_faltando.slice(0,30).join(', ')+(_faltando.length>30?' …':'')
+          +'\n\nA importação continua com o restante. Avise o suporte com essa lista.');
+      }
+
       // Nunca substitui a base inteira: atualiza itens já conhecidos (pela chave
       // Pedido/RC+Item) com o dado mais recente e adiciona os novos, mas mantém
       // qualquer item antigo que não veio nesta importação (histórico nunca é apagado).
@@ -9482,6 +9525,9 @@ function handleMateriaisUpload(file){
             });
             var _matResult = await _matResp.json();
             if(!_matResp.ok||_matResult.error) _matSaveErr = {message:_matResult.error||'falha desconhecida'};
+            // O banco guarda histórico, então tem que ter pelo menos tudo que foi enviado.
+            else if(typeof _matResult.total==='number' && _matResult.total < merged2.length)
+              _matSaveErr = {message:'banco ficou com '+_matResult.total+' itens, mas foram enviados '+merged2.length+'. Importe de novo.'};
           }
         }catch(eNet){
           _matSaveErr = eNet;
@@ -10926,7 +10972,20 @@ function renderMateriais(){
   // Projeção de Orçamento tem filtros próprios (CJI5/CJI3 × pedido) — os de Materiais não se aplicam a ela
   var content = MAT_TAB === 'dashboard' ? _matDashHtml(data) : (MAT_TAB === 'projecao' ? '<div id="prj-host"></div>' : _matTabelaHtml(data));
 
-  el.innerHTML = '<div style="padding:24px">' + importBadge + (MAT_TAB === 'projecao' ? '' : filterBar) + subTabs + content + '</div>';
+  // Nunca esconder pedido em silêncio: com filtro ativo, mostra quantos ficaram de fora.
+  var _pedTot = {}, _pedVis = {};
+  all.forEach(function(r){ if(r.pedido) _pedTot[r.pedido]=1; });
+  data.forEach(function(r){ if(r.pedido) _pedVis[r.pedido]=1; });
+  var _nTot = Object.keys(_pedTot).length, _nVis = Object.keys(_pedVis).length;
+  var filtroAviso = (hasFilters && _nVis < _nTot)
+    ? '<div style="display:flex;align-items:center;gap:10px;margin:-6px 0 14px;padding:8px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:12px;color:#92400e">'
+      + '<span>Mostrando <b>'+_nVis.toLocaleString('pt-BR')+'</b> de <b>'+_nTot.toLocaleString('pt-BR')+'</b> pedidos. '
+      + (_nTot-_nVis).toLocaleString('pt-BR')+' estão ocultos pelos filtros.</span>'
+      + '<button onclick="clearMatFilters()" style="margin-left:auto;padding:4px 10px;border:1px solid #f59e0b;background:#fff;color:#92400e;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Limpar filtros</button>'
+      + '</div>'
+    : '';
+
+  el.innerHTML = '<div style="padding:24px">' + importBadge + (MAT_TAB === 'projecao' ? '' : filterBar + filtroAviso) + subTabs + content + '</div>';
 
   buildMsDrop('ms-mat-mes', MAT_MESES_NOMES, MAT_FILTERS.mes, null);
   buildMsDrop('ms-mat-pedido', pedidos, MAT_FILTERS.pedido, null);
