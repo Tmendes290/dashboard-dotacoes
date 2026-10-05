@@ -2,3 +2,8 @@ node_modules/
 .env
 .DS_Store
 *.log
+
+# prints do tutorial têm dados reais e o repo é público: ficam no Supabase, nunca no git
+tutorial/img/
+.playwright-mcp/
+materiais/

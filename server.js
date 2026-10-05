@@ -967,12 +967,53 @@ app.use('/app', express.static(path.join(__dirname, 'mobile-web')));
 // ── TUTORIAL: prints das telas têm dados reais, então só saem com login ──────
 // A pasta tutorial/img fica bloqueada no static público; o site busca cada imagem
 // por esta rota com o token da sessão (tutorial/tutorial.js).
-app.use('/tutorial/img', (req, res) => res.status(404).end());
-app.get('/api/tutorial-img/:arq', requireAuth, (req, res) => {
+// Confere o caminho já decodificado e normalizado (cobre /tutorial/./img, %2F, maiúsculas...).
+app.use((req, res, next) => {
+  let p = req.path;
+  try { p = decodeURIComponent(p); } catch (e) { return res.status(400).end(); }
+  p = path.posix.normalize(p.replace(/\\/g, '/')).toLowerCase();
+  if (p.startsWith('/tutorial/img')) return res.status(404).end();
+  next();
+});
+// As imagens NÃO vão pro git (o repositório do GitHub é público): ficam em
+// cji3_dados, chave 'tutorial_img:<arquivo>' (anon não lê essa tabela). Só admin
+// sobe/troca; qualquer usuário logado lê. Cache em memória pra não ir ao banco a cada abertura.
+const _tutImgCache = new Map();
+const _tutImgNomeOk = arq => /^[a-z0-9_-]{1,40}\.jpg$/i.test(arq);
+app.get('/api/tutorial-img/:arq', requireAuth, async (req, res) => {
   const arq = String(req.params.arq || '');
-  if (!/^[a-z0-9_-]+\.jpg$/i.test(arq)) return res.status(400).end();
-  res.set('Cache-Control', 'private, max-age=3600');
-  res.sendFile(path.join(__dirname, 'tutorial', 'img', arq), err => { if (err && !res.headersSent) res.status(404).end(); });
+  if (!_tutImgNomeOk(arq)) return res.status(400).end();
+  try {
+    let buf = _tutImgCache.get(arq);
+    if (!buf) {
+      const r = await fetch(`${SUPA_URL}/rest/v1/cji3_dados?chave=eq.${encodeURIComponent('tutorial_img:' + arq)}&select=payload`, {
+        headers: { 'Authorization': `Bearer ${SUPA_SERVICE_KEY}`, 'apikey': SUPA_SERVICE_KEY }
+      });
+      const rows = r.ok ? await r.json() : [];
+      if (!rows[0] || !rows[0].payload || !rows[0].payload.b64) return res.status(404).end();
+      buf = Buffer.from(rows[0].payload.b64, 'base64');
+      _tutImgCache.set(arq, buf);
+    }
+    res.set('Content-Type', 'image/jpeg');
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.send(buf);
+  } catch (e) { console.error('[tutorial-img]', e); res.status(500).end(); }
+});
+app.post('/api/tutorial-img', requireAuth, async (req, res) => {
+  const arq = String((req.body && req.body.arq) || '');
+  const b64 = String((req.body && req.body.b64) || '');
+  if (!_tutImgNomeOk(arq)) return res.status(400).json({ error: 'nome inválido' });
+  if (!b64 || b64.length > 2 * 1024 * 1024) return res.status(400).json({ error: 'imagem vazia ou grande demais' });
+  try {
+    const pr = await fetch(`${SUPA_URL}/rest/v1/perfis?id=eq.${req.callerUser.id}&select=role`, {
+      headers: { 'Authorization': `Bearer ${SUPA_SERVICE_KEY}`, 'apikey': SUPA_SERVICE_KEY }
+    });
+    const pd = pr.ok ? await pr.json() : [];
+    if (!pd[0] || pd[0].role !== 'admin') return res.status(403).json({ error: 'Apenas administradores.' });
+    await _cji3DadosUpsert('tutorial_img:' + arq, { b64, por: req.callerUser.email || '' });
+    _tutImgCache.delete(arq);
+    res.json({ ok: true, arq, bytes: Buffer.from(b64, 'base64').length });
+  } catch (e) { console.error('[tutorial-img upload]', e); res.status(500).json({ error: e.message }); }
 });
 
 // Serve index.html from root (no subfolder needed)

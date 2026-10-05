@@ -1130,6 +1130,7 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     </div>
     <div class="topbar-actions">
       <div class="topbar-online-mobile" id="s-online-wrap-m" style="position:relative;cursor:pointer;align-items:center;gap:4px;font-size:11px;color:var(--muted)" onclick="toggleOnlinePanel(event)" title="Quem está conectado agora">🟢 <strong id="s-online-count-m">1</strong></div>
+      <button class="btn btn-outline" id="btn-tutorial" onclick="abrirTutorial()" title="Tutorial do site, passo a passo" style="display:inline-flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14"/><circle cx="12" cy="17.5" r=".6" fill="currentColor"/></svg>Tutorial</button>
       <button class="btn btn-outline" id="btn-theme" onclick="toggleTheme()" title="Alternar tema escuro/claro" style="font-size:15px;padding:5px 9px">🌙</button>
       <button class="btn btn-dark" onclick="pdfAction()">🖨 PDF</button>
       <button class="btn btn-orange" onclick="exportCSV()">⬇ Exportar CSV</button>
@@ -1827,6 +1828,7 @@ async function loadFromSupabase(){
   _buildMedidoNormIdx(); // garante que "medido" reflita a CJI3 já carregada, independente da ordem das promises acima
   try { populateFilters(); render(); } catch(eRender){ console.warn('[Sync] render:',eRender); }
   if(CURRENT_PERFIL) updateUserBadge();
+  if(typeof _tutAuto==='function') _tutAuto();
   _syncInProgress = false;
   toast('✔ Dados sincronizados!','green');
   if(!_realtimeStarted){ _realtimeStarted=true; try{ startRealtime(); }catch(eRT){ console.warn('[Sync] realtime:',eRT); } }
@@ -2491,7 +2493,8 @@ const VIEW_META={
   usuarios:{title:'Usuários',sub:'Gestão de acesso e permissões da equipe'},
   milplan:{title:'SS Milplan',sub:'Solicitações de Serviço enviadas à Milplan Engenharia'},
   pipe:{title:'Pipeline de Materiais',sub:'Engenharia → Cotação → RC → Aprovação → Pedido'},
-  rac:{title:'Interdições RAC',sub:'Interdições e desvios de segurança — horário, RAC (PNR-000069) e gravidade (VBM-PNR-000070)'}
+  rac:{title:'Interdições RAC',sub:'Interdições e desvios de segurança — horário, RAC (PNR-000069) e gravidade (VBM-PNR-000070)'},
+  histograma:{title:'Histograma CTT',sub:'Efetivo mensal das contratadas por disciplina e obras ativas'}
 };
 function pdfAction(){
   if(currentView==='velocidade'){
@@ -2554,7 +2557,8 @@ function setView(id){
     return;
   }
   document.querySelectorAll('.sb-item').forEach(el=>{el.classList.toggle('active',el.dataset.view===id);});
-  const m=VIEW_META[id];
+  // Aba sem entrada em VIEW_META não pode quebrar a troca de tela (Histograma CTT quebrava)
+  const m=VIEW_META[id]||{title:(document.querySelector('.sb-item[data-view="'+id+'"]')||{}).textContent||'',sub:''};
   var _pt=document.getElementById('page-title');if(_pt)_pt.textContent=m.title;
   var _ps=document.getElementById('page-sub');if(_ps)_ps.textContent=m.sub;
   populateFilters(); // ensure dropdowns always reflect current data
@@ -21144,4 +21148,27 @@ table.rdo-tbl{width:100%;border-collapse:collapse}
 
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
+<script src="tutorial/tutorial-data.js"></script>
+<script src="tutorial/tutorial.js"></script>
+<script>
+// TUTORIAL GERAL: abre sozinho na 1ª visita (depois do login, pra ter o token que
+// libera as imagens); o botão "Tutorial" do topo reabre. Passos de telas que a
+// pessoa não tem permissão de ver são pulados. Textos/imagens: tutorial/.
+function _tutPassos(){
+  return (window.TUT_DATA||[]).filter(function(p){
+    if(!p.view) return true;
+    var it=document.querySelector('.sb-item[data-view="'+p.view+'"]');
+    return !!it && getComputedStyle(it).display!=='none';
+  });
+}
+function abrirTutorial(){
+  if(!window.Tutorial) return;
+  Tutorial.open(_tutPassos(),{eyebrow:'Tutorial',titulo:'Como usar o dashboard'});
+}
+function _tutAuto(){
+  if(!window.Tutorial||!CURRENT_PERFIL||window._tutAutoFeito) return;
+  window._tutAutoFeito=true;
+  Tutorial.auto(_tutPassos(),{eyebrow:'Bem-vindo',titulo:'Como usar o dashboard'});
+}
+</script>
 </body></html>
