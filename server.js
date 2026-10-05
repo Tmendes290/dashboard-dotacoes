@@ -710,24 +710,30 @@ app.post('/api/materiais-remover-chaves', requireAuth, async (req, res) => {
   const headers = {
     'Authorization': `Bearer ${SUPA_SERVICE_KEY}`,
     'apikey': SUPA_SERVICE_KEY,
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'Prefer': 'return=minimal,count=exact'
   };
   try {
     const batchSize = 200;
     let removed = 0;
     for (let i = 0; i < chaves.length; i += batchSize) {
       const batch = chaves.slice(i, i + batchSize);
-      const filter = batch.map(function (c) { return encodeURIComponent(c); }).join(',');
+      // Cada valor entre aspas: chave com vírgula ou parênteses (descrição antiga
+      // dentro da chave) quebrava o filtro in.(...) do PostgREST sem dar erro.
+      const filter = batch.map(function (c) { return encodeURIComponent('"' + String(c).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'); }).join(',');
       const r = await fetch(`${SUPA_URL}/rest/v1/materiais?chave=in.(${filter})`, { method: 'DELETE', headers });
       if (!r.ok) {
         const err = await r.text();
         console.error(`[materiais-remover-chaves] lote a partir do item ${i} falhou:`, err);
         return res.status(500).json({ error: `Erro no lote a partir do item ${i}: ` + err, removed });
       }
-      removed += batch.length;
+      // Conta o que o banco realmente apagou (não o que foi pedido)
+      const m = String(r.headers.get('content-range') || '').match(/\/(\d+)$/);
+      removed += m ? parseInt(m[1], 10) : 0;
     }
-    console.log(`[materiais-remover-chaves] ${removed} chaves removidas`);
-    res.json({ ok: true, removed });
+    console.log(`[materiais-remover-chaves] ${removed} de ${chaves.length} chaves removidas`);
+    const total = await contarMateriais({ 'Authorization': `Bearer ${SUPA_SERVICE_KEY}`, 'apikey': SUPA_SERVICE_KEY });
+    res.json({ ok: true, removed, pedidas: chaves.length, total });
   } catch (e) {
     console.error('[materiais-remover-chaves]', e);
     res.status(500).json({ error: e.message });
@@ -957,6 +963,17 @@ app.use('/api/milplan', milplanRoutes);
 // Pensado pra "Adicionar à tela inicial" no celular — mesmo backend Supabase
 // do dashboard, sem precisar instalar o .apk.
 app.use('/app', express.static(path.join(__dirname, 'mobile-web')));
+
+// ── TUTORIAL: prints das telas têm dados reais, então só saem com login ──────
+// A pasta tutorial/img fica bloqueada no static público; o site busca cada imagem
+// por esta rota com o token da sessão (tutorial/tutorial.js).
+app.use('/tutorial/img', (req, res) => res.status(404).end());
+app.get('/api/tutorial-img/:arq', requireAuth, (req, res) => {
+  const arq = String(req.params.arq || '');
+  if (!/^[a-z0-9_-]+\.jpg$/i.test(arq)) return res.status(400).end();
+  res.set('Cache-Control', 'private, max-age=3600');
+  res.sendFile(path.join(__dirname, 'tutorial', 'img', arq), err => { if (err && !res.headersSent) res.status(404).end(); });
+});
 
 // Serve index.html from root (no subfolder needed)
 app.use(express.static(__dirname));
