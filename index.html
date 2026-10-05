@@ -21165,10 +21165,20 @@ function abrirTutorial(){
   if(!window.Tutorial) return;
   Tutorial.open(_tutPassos(),{eyebrow:'Tutorial',titulo:'Como usar o dashboard'});
 }
+// Só abre DEPOIS do login: mesmo com sessão salva o site mostra a tela de login
+// enquanto carrega, então espera ela sumir (pessoa clicou em Acessar) antes de abrir.
+function _tutLoginVisivel(){
+  var ls=document.getElementById('login-screen');
+  return !!ls && getComputedStyle(ls).display!=='none';
+}
 function _tutAuto(){
   if(!window.Tutorial||!CURRENT_PERFIL||window._tutAutoFeito) return;
   window._tutAutoFeito=true;
-  Tutorial.auto(_tutPassos(),{eyebrow:'Bem-vindo',titulo:'Como usar o dashboard'});
+  (function espera(){
+    if(!CURRENT_PERFIL){ window._tutAutoFeito=false; return; }
+    if(_tutLoginVisivel()){ setTimeout(espera,500); return; }
+    Tutorial.auto(_tutPassos(),{eyebrow:'Bem-vindo',titulo:'Como usar o dashboard'});
+  })();
 }
 </script>
 </body></html>
