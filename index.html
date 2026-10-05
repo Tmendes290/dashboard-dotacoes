@@ -4498,6 +4498,7 @@ async function loginUser(){
     hideLoginScreen();
     updateUserBadge();
     setTimeout(updateUserBadge, 300);
+    setTimeout(function(){ if(typeof _tutAuto==='function') _tutAuto(); }, 800); // tutorial logo após o login
       loadFromSupabase();
       startPresence();
     }
@@ -4692,6 +4693,7 @@ async function checkAuthSession(){
       if(ls) ls.style.display='none';
       updateUserBadge();
       setTimeout(updateUserBadge, 500); // garante que DOM está pronto
+      setTimeout(function(){ if(typeof _tutAuto==='function') _tutAuto(); }, 800); // espera o login sumir
       loadFromSupabase();
       startPresence();
     } else {
