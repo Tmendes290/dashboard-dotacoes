@@ -1602,7 +1602,9 @@ var REF_FISCAIS = {}; // fiscal nome -> squad (carregado do Supabase)
 var REF_WBS_NEC = {}; // wbs -> data_necessidade 'YYYY-MM-DD' (carregado do Supabase)
 var _cji3F = { years: [], months: [], gers: [], sites: [], projs: [], forns: [] }; // empty array = todos
 var _cji3Open = {}; // proj|wbs -> expanded bool
-var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:String(new Date().getFullYear()), mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[], statusEntrega:[]};
+// Ano começa em "Todos": filtrar pelo ano atual da previsão de entrega por padrão
+// escondia ~96% dos pedidos (anos anteriores e itens sem previsão) já ao abrir a aba.
+var MAT_FILTERS = {pedido:[], rc:[], descricao:[], ano:'', mes:[], projeto:[], projetoSearch:'', fornecedor:[], squad:[], situacao:[], statusEntrega:[]};
 var MAT_MESES_NOMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 var FPA_DATA = []; // linhas cruas da tabela fpa_dados (previsto/executado/forecast por pep/mes/ano)
 var FPA_OBS = {}; // pep -> {texto, atualizado_por, atualizado_em} (carregado do Supabase, tabela fpa_observacoes)
@@ -9266,8 +9268,18 @@ function handleMateriaisUpload(file){
       var wsDilig = wb.Sheets['BD_DILIG'];
       if(!wsDilig){ alert('Aba BD_DILIG não encontrada no arquivo.'); return; }
       var rawDilig = XLSX.utils.sheet_to_json(wsDilig, {header:1, defval:''});
-      var diligHeaders = rawDilig[1] || [];
-      var diligRows = rawDilig.slice(2).map(function(row){
+      // Cabeçalho normalmente na linha 2; procura nas primeiras linhas caso mude de
+      // lugar, e descarta linhas que repetem o cabeçalho (o arquivo de 05/10 trazia
+      // o cabeçalho de novo na linha 3, que virava um item com pedido "PEDIDO").
+      var _hdrIdx = 1;
+      for(var _hi=0; _hi<Math.min(6, rawDilig.length); _hi++){
+        if((rawDilig[_hi]||[]).some(function(c){ return String(c).trim()==='PEDIDO'; })){ _hdrIdx = _hi; break; }
+      }
+      var diligHeaders = rawDilig[_hdrIdx] || [];
+      var _pedCol = diligHeaders.findIndex(function(h){ return String(h).trim()==='PEDIDO'; });
+      var diligRows = rawDilig.slice(_hdrIdx+1).filter(function(row){
+        return _pedCol < 0 || String(row[_pedCol]).trim() !== 'PEDIDO';
+      }).map(function(row){
         var obj = {};
         diligHeaders.forEach(function(h, i){ if(h) obj[String(h).trim()] = row[i] !== undefined ? row[i] : ''; });
         return obj;
