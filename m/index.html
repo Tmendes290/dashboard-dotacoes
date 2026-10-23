@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Materiais SLB</title>
+<meta name="theme-color" content="#001529">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Materiais SLB">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <!-- login -->
+  <section id="tela-login" class="login" hidden>
+    <div class="login-box">
+      <div class="login-marca"><span class="login-ico"></span><div><b>Materiais SLB</b><small>Salobo e Igarapé Bahia</small></div></div>
+      <p class="login-sub">Entre com o mesmo e-mail e senha do Dashboard de Dotações.</p>
+      <form id="form-login">
+        <label>E-mail<input type="email" id="lg-email" autocomplete="username" required></label>
+        <label>Senha<input type="password" id="lg-senha" autocomplete="current-password" required></label>
+        <div id="lg-erro" class="erro" hidden></div>
+        <button class="btn btn-pri" id="lg-btn" type="submit">Entrar</button>
+      </form>
+      <a class="link" href="/" target="_blank" rel="noopener">Esqueci a senha (abre o site)</a>
+    </div>
+  </section>
+
+  <!-- aplicativo -->
+  <section id="tela-app" hidden>
+    <header class="topo">
+      <div class="topo-tit"><span id="topo-titulo">Painel</span><small id="topo-sub"></small></div>
+      <div class="topo-acoes">
+        <span id="st-rede" class="st"></span>
+        <button class="ico-btn" id="bt-olho" title="Mostrar ou ocultar valores" aria-label="Mostrar ou ocultar valores"></button>
+        <button class="ico-btn" id="bt-atualizar" title="Atualizar" aria-label="Atualizar"></button>
+        <button class="ico-btn" id="bt-perfil" title="Conta" aria-label="Conta"></button>
+      </div>
+    </header>
+    <nav class="menu" id="menu"></nav>
+    <main id="conteudo" class="conteudo"></main>
+    <aside id="painel-detalhe" class="detalhe" hidden></aside>
+  </section>
+
+  <div id="folha" class="folha" hidden><div class="folha-fundo" data-fecha></div><div class="folha-caixa" id="folha-caixa"></div></div>
+  <div id="aviso" class="aviso" hidden></div>
+  <div id="carregando" class="carregando"><span class="giro"></span></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
