@@ -964,6 +964,12 @@ app.use('/api/milplan', milplanRoutes);
 // do dashboard, sem precisar instalar o .apk.
 app.use('/app', express.static(path.join(__dirname, 'mobile-web')));
 
+// ── APP SLB (/m): o celular às vezes digita "/M" com maiúscula, e aí caía no site normal ──
+app.use((req, res, next) => {
+  if (/^\/m\/?$/i.test(req.path) && req.path !== '/m/') return res.redirect(301, '/m/');
+  next();
+});
+
 // ── TUTORIAL: prints das telas têm dados reais, então só saem com login ──────
 // A pasta tutorial/img fica bloqueada no static público; o site busca cada imagem
 // por esta rota com o token da sessão (tutorial/tutorial.js).
