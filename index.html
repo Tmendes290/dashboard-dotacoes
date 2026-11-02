@@ -1096,6 +1096,9 @@ if(window.location.pathname==='/confirmado'||window.location.hash.includes('type
     <!-- FROTA -->
     <div class="sb-nav-sec">Frota</div>
     <div class="sb-item" data-view="velocidade"><span class="ico">🚗</span><span class="sb-label">Telemetria <span class="sb-badge" style="background:#ef4444">!</span></span></div>
+    <!-- MODELOS 3D: so para o dono e para quem tiver a permissao "3d" (ver _ver3d em updateUserBadge) -->
+    <div class="sb-nav-sec" id="nav-3d-sec" style="display:none">Modelos 3D</div>
+    <div class="sb-item" id="nav-3d-cpf" style="display:none" data-label="3D CPF" onclick="window.open('https://cpf-3d.onrender.com/','_blank','noopener')"><span class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="m21 8-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/></svg></span><span class="sb-label">3D CPF</span></div>
     <!-- CONFIGURAÇÕES (admin only) -->
     <div class="sb-nav-sec admin-only" id="nav-admin-sec">Configurações</div>
     <div class="sb-item admin-only" data-view="upload" data-label="Atualizar Medido" onclick="event.stopPropagation();openPwModal()"><span class="ico">🔒</span><span class="sb-label">Atualizar Medido</span></div>
@@ -4611,6 +4614,9 @@ function updateUserBadge(){
       sec.style.display=anyVis?'':'none';
     });
   }
+  // Modelos 3D: so o dono do sistema e quem receber a permissao "3d" (admin NAO ve automaticamente)
+  var _ver3d = String((CURRENT_USER&&CURRENT_USER.email)||CURRENT_PERFIL.email||'').toLowerCase()==='tm0133929@gmail.com' || _perms.indexOf('3d')>=0;
+  ['nav-3d-sec','nav-3d-cpf'].forEach(function(id){ var e=document.getElementById(id); if(e) e.style.display=_ver3d?(id==='nav-3d-sec'?'':'flex'):'none'; });
   var nome = CURRENT_PERFIL.nome || CURRENT_PERFIL.email || 'Usuário';
   var inicial = nome.charAt(0).toUpperCase();
   var roleLabel = isAdmin ? 'Administrador' : isLider ? 'Líder' : 'Planejador';
@@ -6659,7 +6665,7 @@ function renderUsuariosHTML(el, usuarios, bloqueados){
         {v:'improdutividade',l:'Produtividade'},{v:'indice-produtividade',l:'Índice de Produtividade'},
         {v:'velocidade',l:'Telemetria'},{v:'cji3',l:'CJI3 Tabela'},{v:'histograma',l:'Histograma CTT'},
         {v:'milplan',l:'SS Milplan'},{v:'pipe',l:'Pipeline de Materiais'},
-        {v:'rac',l:'Interdições RAC'}
+        {v:'rac',l:'Interdições RAC'},{v:'3d',l:'Modelos 3D'}
       ];
       var _uPerms = u.permissoes || ['overview'];
       html += '<div style="margin-top:10px;border-top:1px solid #f1f5f9;padding-top:10px">';

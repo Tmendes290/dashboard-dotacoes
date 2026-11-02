@@ -94,6 +94,7 @@ const IC = {
   olhoOff: '<path d="M3 3l18 18M10.6 5.1A10.8 10.8 0 0112 5c7 0 11 7 11 7a18 18 0 01-3 3.7M6.2 6.2A18.3 18.3 0 001 12s4 7 11 7a10.6 10.6 0 005.8-1.8M9.9 9.9a3 3 0 004.2 4.2"/>',
   atualizar: '<path d="M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5"/>',
   pessoa: '<path d="M12 12a4 4 0 100-8 4 4 0 000 8zm-7 9a7 7 0 0114 0"/>',
+  cubo: '<path d="M12 2l9 5v10l-9 5-9-5V7zM3 7l9 5 9-5M12 12v10"/>',
   mais: '<path d="M12 5v14M5 12h14"/>',
   seta: '<path d="M5 12h14M13 6l6 6-6 6"/>', voltar: '<path d="M19 12H5M11 18l-6-6 6-6"/>',
   lapis: '<path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/>', lixo: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
@@ -148,6 +149,8 @@ async function entra(user) {
   S.podeCji3 = S.admin || perms.includes('cji3');
   S.podeCapex = S.admin || perms.includes('alertas');
   S.podeProj = S.admin || perms.includes('saude-pep');
+  // Modelos 3D: só o dono e quem tiver a permissão "3d" (administrador não ganha automaticamente)
+  S.pode3d = String(user.email || '').toLowerCase() === 'tm0133929@gmail.com' || perms.includes('3d');
   $('#tela-login').hidden = true; $('#tela-app').hidden = false;
   if (!S.podeMat && !S.podeCji3 && !S.podeCapex && !S.podeProj) { carregando(false); $('#menu').innerHTML = ''; $('#conteudo').innerHTML = '<div class="vazio">Seu perfil não tem acesso a nenhuma tela do app.<br>Peça a liberação ao administrador do Dashboard.</div>'; return; }
   montaTopo(); montaMenu();
@@ -400,13 +403,14 @@ function abasDisponiveis() {
   if (S.podeCji3) a.push(['cji3', 'CJI3', 'tabela']);
   if (S.podeProj) a.push(['saude', 'Saúde PEP', 'pasta']);
   if (S.admin) a.push(['usuarios', 'Usuários', 'pessoa']);
+  if (S.pode3d) a.push(['3d', '3D CPF', 'cubo']); // abre o visor em tela cheia, não é uma tela do app
   return a;
 }
 function montaMenu() {
   const abas = abasDisponiveis(); if (!abas.some(a => a[0] === S.aba)) S.aba = abas.length ? abas[0][0] : 'materiais';
   const pend = S.admin && S.usuarios ? S.usuarios.filter(aguardando).length : 0;
   $('#menu').innerHTML = abas.map(([id, l, ic]) => '<button data-aba="' + id + '" class="' + (S.aba === id ? 'ativo' : '') + '">' + svg(ic) + l + (id === 'usuarios' && pend ? '<i class="bolinha">' + pend + '</i>' : '') + '</button>').join('');
-  $('#menu').onclick = e => { const b = e.target.closest('[data-aba]'); if (b) vaiPara(b.dataset.aba); };
+  $('#menu').onclick = e => { const b = e.target.closest('[data-aba]'); if (!b) return; if (b.dataset.aba === '3d') { window.open('https://cpf-3d.onrender.com/', '_blank', 'noopener'); return; } vaiPara(b.dataset.aba); };
 }
 function vaiPara(aba) {
   S.aba = aba; S.limite = 60; S.sel = null; $('#painel-detalhe').hidden = true; document.body.classList.remove('com-detalhe');
@@ -809,7 +813,7 @@ function detalheSaude(pep) {
 // ---------- Usuários (só administrador; mesmas gravações da aba Usuários do site) ----------
 const PERMS = [['overview', 'Visão Geral'], ['resumo', 'Resumo Sub PEP'], ['dotacoes', 'Dotações'], ['alertas', 'Capex Projetos'], ['nova', 'Nova Dotação'], ['regularizar', 'Regularizar Saldo'],
   ['analytics', 'Dashboard'], ['saude-pep', 'Saúde do PEP'], ['materiais', 'Materiais'], ['fpa', 'FP&A'], ['improdutividade', 'Produtividade'], ['indice-produtividade', 'Índice de Produtividade'],
-  ['velocidade', 'Telemetria'], ['cji3', 'CJI3 Tabela'], ['histograma', 'Histograma CTT'], ['milplan', 'SS Milplan'], ['pipe', 'Pipeline de Materiais'], ['rac', 'Interdições RAC']];
+  ['velocidade', 'Telemetria'], ['cji3', 'CJI3 Tabela'], ['histograma', 'Histograma CTT'], ['milplan', 'SS Milplan'], ['pipe', 'Pipeline de Materiais'], ['rac', 'Interdições RAC'], ['3d', 'Modelos 3D']];
 const ROLES = [['admin', 'Administrador'], ['lider', 'Líder'], ['planejador', 'Planejador']];
 const SQUADS = ['USINAS I E II', 'BRT+FILTRAGEM', 'GEOTECNIA', 'MINA', 'SLB III', 'CPF', 'BARRAGEM E DIQUES', 'PAULO FONTELES', 'IGARAPÉ BAHIA'];
 // sem estado "pendente" no banco: quem se cadastra entra só com Visão Geral, até o administrador liberar as abas
