@@ -1775,6 +1775,9 @@ async function loadFromSupabase(){
         const {data:cji3d,error:eCji3}=await supa.from('cji3_dados').select('payload').eq('chave','main').maybeSingle();
         if(!eCji3&&cji3d&&cji3d.payload&&cji3d.payload.rows&&cji3d.payload.rows.length){
           STATE_CJI3=cji3d.payload;
+          // Medido vem da CJI3: recalcula e mostra já, sem esperar os materiais (que levam ~30 s)
+          _buildMedidoNormIdx();
+          try { render(); } catch(eRenderCji3){ console.warn('[Sync] render cji3:',eRenderCji3); }
         }
       } catch(eCji3){console.warn('[Sync] cji3:',eCji3);}
     })(),
@@ -2741,9 +2744,9 @@ function renderOverview(dot,res){
     +'<div class="g5" style="gap:10px;margin-bottom:16px">'
       +kpi('Dota&ccedil;&otilde;es','&#x1F4CB;','#e0f2fe',fmtK(tAprov),'#002F6C',pctM,'#0ea5e9',pctM+'% medido','#e0f2fe','#0369a1')
       +kpi('CAPEX Contratado','&#x1F3D7;','#eef2ff',fmtCapex(tCont),'#4f46e5',pctPago,'#4f46e5',fmtCapex(tPago)+' pago','#eef2ff','#4f46e5')
-      +kpi('Medido Total','&#x1F4C8;','#f0fdf4',fmtK(tMedido),'#16a34a',pctM,'#16a34a',pctM+'% dotado','#f0fdf4','#16a34a')
+      +kpi('Medido Total','&#x1F4C8;','#f0fdf4',(_syncInProgress&&!(STATE_CJI3.rows||[]).length)?'Carregando...':fmtK(tMedido),'#16a34a',pctM,'#16a34a',pctM+'% dotado','#f0fdf4','#16a34a')
       +kpi('Irregularidades','&#x26A0;','#fef2f2',(nOver+nCpxAlerta)+'','#dc2626',Math.min((nOver+nCpxAlerta)*3,100),'#dc2626',nOver+' dot. &middot; '+nCpxAlerta+' CAPEX','#fef2f2','#dc2626',(nOver>0||nCpxAlerta>0)?'#fca5a5':undefined)
-      +kpi('Materiais','&#x1F4E6;','#fffbeb',mats.length.toLocaleString('pt-BR'),'#d97706',80,'#d97706',matPeps+' PEPs &middot; '+matFornecs+' fornec.','#fffbeb','#d97706')
+      +kpi('Materiais','&#x1F4E6;','#fffbeb',(_syncInProgress&&!mats.length)?'Carregando...':mats.length.toLocaleString('pt-BR'),'#d97706',80,'#d97706',(_syncInProgress&&!mats.length)?'buscando os pedidos':matPeps+' PEPs &middot; '+matFornecs+' fornec.','#fffbeb','#d97706')
     +'</div>'
     // ── ALERT STRIP ──
     +'<div style="background:#fff;border:1px solid #e2e8f0;border-left:3px solid #d97706;border-radius:0 12px 12px 0;padding:12px 18px;margin-bottom:20px;display:flex;align-items:center;gap:14px;box-shadow:0 1px 4px rgba(0,0,0,.04)">'
