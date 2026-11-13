@@ -171,7 +171,7 @@ async function versaoServidor() {
 }
 async function carregaTudo(forcar) {
   const pv = versaoServidor();
-  pv.then(v => { if (v && v.capex) S.verCapex = v.capex; });
+  pv.then(v => { if (v && v.capex) S.verCapex = v.capex; if (v && v.capexEm) S.capexEmSrv = v.capexEm; });
   const tarefas = [carregaWbs(), carregaSquads()];
   if (S.podeMat || S.podeProj) tarefas.push(carregaMats(forcar, pv));
   if (S.podeCapex || S.podeProj) tarefas.push(carregaCapex());
@@ -180,6 +180,7 @@ async function carregaTudo(forcar) {
   if (S.podePipe) tarefas.push(carregaPipe(), carregaCfg());
   // cada parte aparece assim que chega (os materiais demoram mais e não travam o resto)
   await Promise.all(tarefas.map(t => t.then(() => { render(true); carregando(false); })));
+  if (navigator.onLine && await pv) S.conferidoEm = Date.now();
   render(true);
 }
 async function carregaWbs() {
@@ -242,6 +243,9 @@ async function carregaCapex() {
   const M = 1e6; // a planilha de CAPEX vem em milhões de reais (o site mostra "R$ 643,58M")
   S.capex = cpx.map(c => ({ pep: c.pep, empresa: c.empresa || '', grupo: c.grupo || 'SEM GRUPO', capex: (+c.capex || 0) * M, contratado: (+c.contratado || 0) * M, pago: (+c.pago || 0) * M, a_contratar: (+c.a_contratar || 0) * M, a_pagar: (+c.a_pagar || 0) * M }));
   const m = {}; cpp.forEach(c => { m[c.pep] = (+c.valor || 0) * M; }); S.capexPep = m;
+  // data da última subida do CAPEX no site: a planilha é regravada inteira, então vale a linha mais nova
+  const datas = cpx.map(c => c.created_at || c.criado_em || c.updated_at || c.atualizado_em).filter(Boolean).sort((a, b) => msData(b) - msData(a));
+  S.capexEm = datas[0] || null;
 }
 async function carregaCji3() {
   const { data } = await supa.from('cji3_dados').select('payload,atualizado_em').eq('chave', 'main').maybeSingle();
@@ -301,6 +305,7 @@ async function confereVersao(agora) {
   _conferindo = true; _confEm = Date.now();
   try {
     const v = await versaoServidor(); if (!v) return;
+    S.conferidoEm = Date.now(); if (v.capexEm) S.capexEmSrv = v.capexEm;
     const t = [];
     if ((S.podeMat || S.podeProj) && v.mat && v.mat !== S.matVer) t.push(carregaMats(true, Promise.resolve(v)).then(() => 'materiais'));
     if ((S.podeCji3 || S.podeProj) && v.cji3 && v.cji3 !== S.cji3Em) t.push(carregaCji3().then(() => 'CJI3'));
@@ -308,7 +313,7 @@ async function confereVersao(agora) {
       if (S.verCapex && v.capex !== S.verCapex) t.push(carregaCapex().then(() => { S.verCapex = v.capex; return 'CAPEX'; }));
       else S.verCapex = v.capex;
     }
-    if (!t.length) return;
+    if (!t.length) { const ea = $('#topo-atu'); if (ea) ea.textContent = textoAtualizacao().txt; return; }
     const feitos = await Promise.all(t); render(true);
     aviso('Atualizado com o site: ' + feitos.join(', ') + '.', 'verd');
   } finally { _conferindo = false; }
@@ -468,12 +473,39 @@ function rede() { const s = $('#st-rede'); const on = navigator.onLine; s.classN
 window.addEventListener('online', () => { rede(); carregaTudo(); });
 window.addEventListener('offline', rede);
 
+// ---------- data da última atualização (linha abaixo do título de cada aba) ----------
+function dataHora(v) { // ISO, número ou "dd/mm/aaaa hh:mm" -> "dd/mm/aaaa hh:mm"
+  if (!v) return '';
+  if (typeof v === 'string' && /^\d{2}\/\d{2}\/\d{4}/.test(v)) return v.slice(0, 16);
+  const d = new Date(v); if (isNaN(d)) return '';
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+}
+const msData = v => { const d = new Date(v); return isNaN(d) ? 0 : d.getTime(); };
+function textoAtualizacao() {
+  const mat = S.matMeta ? (S.matMeta.updated_at || S.matMeta.import_date) : null;
+  let quando = null;
+  if (S.aba === 'materiais') quando = mat;
+  else if (S.aba === 'cji3') quando = S.cji3Em;
+  else if (S.aba === 'capex') quando = S.capexEm || S.capexEmSrv;
+  else if (S.aba === 'saude') quando = [S.capexEm || S.capexEmSrv, S.cji3Em, S.matMeta && S.matMeta.updated_at].filter(Boolean).sort((a, b) => msData(b) - msData(a))[0];
+  if (S.aba === 'materiais' && S.matDoCache) {
+    const em = S.matCacheEm ? dataHora(S.matCacheEm) : '';
+    return { txt: 'Cópia do aparelho' + (em ? ' de ' + em : '') + ' · sem conferir com o site', velho: true };
+  }
+  const conf = S.conferidoEm ? ' · conferido ' + new Date(S.conferidoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+  if (quando && dataHora(quando)) return { txt: 'Atualizado no site em ' + dataHora(quando) + conf };
+  if (S.aba === 'usuarios' && S.usuariosEm) return { txt: 'Lista lida em ' + dataHora(S.usuariosEm) + ' · ao vivo' };
+  return { txt: S.conferidoEm ? 'Conferido com o site às ' + new Date(S.conferidoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '' };
+}
+
 // ---------- telas ----------
 function render(manterRolagem) {
   rede();
   const y = window.scrollY;
   const t = { cji3: ['CJI3 Tabela', 'Execuções mensais (SAP)'], capex: ['Capex Projetos', 'Contratado, pago e desvios'], saude: ['Saúde do PEP', 'Comprometimento do CAPEX por projeto'], usuarios: ['Usuários', 'Liberar acesso e permissões'], materiais: ['Materiais', S.mats.length.toLocaleString('pt-BR') + ' itens' + (S.matDoCache ? ' · cópia do aparelho' : '')] }[S.aba] || ['App SLB', ''];
   $('#topo-titulo').textContent = t[0]; $('#topo-sub').textContent = t[1];
+  const atu = textoAtualizacao(); const ea = $('#topo-atu');
+  if (ea) { ea.textContent = atu.txt; ea.classList.toggle('velho', !!atu.velho); }
   const c = $('#conteudo');
   const telas = { materiais: telaMateriais, cji3: telaCji3, capex: telaCapex, saude: telaSaude, usuarios: telaUsuarios };
   c.innerHTML = (telas[S.aba] || telaMateriais)();
@@ -867,7 +899,7 @@ const SQUADS = ['USINAS I E II', 'BRT+FILTRAGEM', 'GEOTECNIA', 'MINA', 'SLB III'
 const aguardando = u => u.ativo !== false && u.role !== 'admin' && (u.permissoes || []).filter(p => p !== 'overview').length === 0;
 async function carregaUsuarios() {
   const { data, error } = await supa.from('perfis').select('*').order('criado_em', { ascending: false });
-  if (!error && data) S.usuarios = data;
+  if (!error && data) { S.usuarios = data; S.usuariosEm = Date.now(); }
 }
 function telaUsuarios() {
   if (!S.usuarios) return '<div class="vazio">Carregando usuários...</div>';

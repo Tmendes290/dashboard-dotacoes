@@ -656,13 +656,14 @@ app.get('/api/sync-versao', requireAuth, async (req, res) => {
       j('mat_meta?id=eq.1&select=updated_at,import_date'),
       contarMateriais(headers),
       j('cji3_dados?chave=eq.main&select=atualizado_em'),
-      (async () => { try { const r = await fetch(`${SUPA_URL}/rest/v1/capex?select=id&order=id.desc&limit=1`, { headers: { ...headers, 'Prefer': 'count=exact' } }); const rows = r.ok ? await r.json() : []; const m = String(r.headers.get('content-range') || '').match(/\/(\d+)$/); return (rows[0] ? rows[0].id : 0) + '/' + (m ? m[1] : '?'); } catch (e) { return null; } })(),
+      (async () => { try { const r = await fetch(`${SUPA_URL}/rest/v1/capex?select=*&order=id.desc&limit=1`, { headers: { ...headers, 'Prefer': 'count=exact' } }); const rows = r.ok ? await r.json() : []; const m = String(r.headers.get('content-range') || '').match(/\/(\d+)$/); const x = rows[0] || {}; return { ver: (x.id || 0) + '/' + (m ? m[1] : '?'), em: x.created_at || x.criado_em || x.updated_at || x.atualizado_em || null }; } catch (e) { return null; } })(),
     ]);
     res.set('Cache-Control', 'no-store');
     res.json({
       mat: meta && meta[0] ? (meta[0].updated_at || meta[0].import_date || '') + '|' + total : (total == null ? null : '|' + total),
       cji3: cji3 && cji3[0] ? cji3[0].atualizado_em : null,
-      capex: cpx,
+      capex: cpx ? cpx.ver : null,
+      capexEm: cpx ? cpx.em : null,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
