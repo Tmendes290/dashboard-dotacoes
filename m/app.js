@@ -161,9 +161,19 @@ async function entra(user) {
 
 // ---------- dados ----------
 async function token() { const { data } = await supa.auth.getSession(); return data.session ? data.session.access_token : ''; }
+// Versão atual de cada dado no servidor (consulta leve). Serve para o app saber se ficou para trás
+// mesmo quando perdeu o aviso em tempo real do site (celular dormindo, sem sinal, app em segundo plano).
+async function versaoServidor() {
+  try {
+    const r = await fetch('/api/sync-versao', { headers: { Authorization: 'Bearer ' + await token() }, cache: 'no-store' });
+    return r.ok ? await r.json() : null;
+  } catch (e) { return null; }
+}
 async function carregaTudo(forcar) {
+  const pv = versaoServidor();
+  pv.then(v => { if (v && v.capex) S.verCapex = v.capex; });
   const tarefas = [carregaWbs(), carregaSquads()];
-  if (S.podeMat || S.podeProj) tarefas.push(carregaMats(forcar));
+  if (S.podeMat || S.podeProj) tarefas.push(carregaMats(forcar, pv));
   if (S.podeCapex || S.podeProj) tarefas.push(carregaCapex());
   if (S.podeCji3 || S.podeProj) tarefas.push(carregaCji3());
   if (S.admin) tarefas.push(carregaUsuarios());
@@ -182,20 +192,33 @@ async function carregaWbs() {
   }
   if (Object.keys(out).length) S.wbs = out;
 }
-async function carregaMats(forcar) {
+async function carregaMats(forcar, pv) {
   if (!S.mats.length) { // abre rápido com o que está guardado no aparelho
     const c = await IDB.get('mats');
-    if (c && c.items) { S.mats = c.items; S.mats.forEach((r, i) => { r.__i = i; }); S.matMeta = c.meta; S.matDoCache = true; render(); }
+    if (c && c.items) { S.mats = c.items; S.mats.forEach((r, i) => { r.__i = i; }); S.matMeta = c.meta; S.matDoCache = true; S.matVer = c.ver || null; S.matCacheEm = c.em || 0; render(); }
   }
   if (!navigator.onLine && S.mats.length) return;
-  try {
-    const r = await fetch('/api/materiais', { headers: { Authorization: 'Bearer ' + await token() } });
-    if (r.status === 401) return sair();
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const j = await r.json();
-    S.mats = (j.items || []).filter(Boolean); S.mats.forEach((r, i) => { r.__i = i; }); S.matMeta = j.meta || null; S.matDoCache = false;
-    IDB.set('mats', { items: S.mats, meta: S.matMeta, em: Date.now() });
-  } catch (e) { if (forcar || !S.mats.length) aviso('Não foi possível atualizar os materiais' + (S.mats.length ? ' (mostrando a última cópia)' : '') + '.', 'verm'); }
+  const v = pv ? await pv : await versaoServidor();
+  const ver = v && v.mat ? v.mat : null;
+  // a cópia do aparelho já é a mesma versão do site: não precisa baixar tudo de novo
+  if (!forcar && ver && S.mats.length && S.matVer === ver) { if (S.matDoCache) { S.matDoCache = false; render(true); } return; }
+  let erro = null;
+  for (let t = 1; t <= 3; t++) { // a lista é grande: no 4G a primeira tentativa às vezes cai
+    try {
+      const r = await fetch('/api/materiais', { headers: { Authorization: 'Bearer ' + await token() }, cache: 'no-store' });
+      if (r.status === 401) return sair();
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      const itens = (j.items || []).filter(Boolean);
+      if (!itens.length && S.mats.length) throw new Error('resposta vazia'); // nunca troca a lista por uma vazia
+      S.mats = itens; S.mats.forEach((r, i) => { r.__i = i; }); S.matMeta = j.meta || null; S.matDoCache = false; S.matVer = ver; S.matCacheEm = Date.now();
+      IDB.set('mats', { items: S.mats, meta: S.matMeta, em: S.matCacheEm, ver });
+      return;
+    } catch (e) { erro = e; if (t < 3) await new Promise(ok => setTimeout(ok, 1500 * t)); }
+  }
+  console.warn('[materiais]', erro);
+  const quando = S.matCacheEm ? ' de ' + new Date(S.matCacheEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+  aviso(S.mats.length ? 'Sem conexão com o servidor: mostrando a cópia do aparelho' + quando + '. Toque em atualizar.' : 'Não foi possível carregar os materiais.', 'verm');
 }
 // Supabase corta em 1000 linhas: pagina com ordem fixa (sem ordem, páginas podem repetir ou pular linhas).
 // Se alguma página falhar, devolve null e quem chamou mantém os dados que já tinha.
@@ -261,10 +284,34 @@ function sincroniza() {
     const novos = (S.usuarios || []).filter(u => aguardando(u) && !antes.has(u.id)); if (novos.length) aviso('Novo usuário aguardando liberação: ' + (novos[0].nome || novos[0].email), 'verd');
     montaMenu();
   })).subscribe();
+  // Sempre que o app volta para a frente, confere a versão no servidor (o aviso em tempo real
+  // se perde com o celular dormindo). Depois de 3 min fora, recarrega também referências e usuários.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') { _ocultoEm = Date.now(); return; }
-    if (_ocultoEm && Date.now() - _ocultoEm > 180000 && navigator.onLine) carregaTudo();
+    if (!navigator.onLine) return;
+    if (_ocultoEm && Date.now() - _ocultoEm > 180000) carregaTudo(); else confereVersao();
   });
+  window.addEventListener('online', () => confereVersao(true));
+  window.addEventListener('pageshow', ev => { if (ev.persisted) confereVersao(true); });
+  setInterval(() => { if (document.visibilityState === 'visible') confereVersao(); }, 60000);
+}
+let _confEm = 0, _conferindo = false;
+async function confereVersao(agora) {
+  if (_conferindo || !S.user || !navigator.onLine || (!agora && Date.now() - _confEm < 15000)) return;
+  _conferindo = true; _confEm = Date.now();
+  try {
+    const v = await versaoServidor(); if (!v) return;
+    const t = [];
+    if ((S.podeMat || S.podeProj) && v.mat && v.mat !== S.matVer) t.push(carregaMats(true, Promise.resolve(v)).then(() => 'materiais'));
+    if ((S.podeCji3 || S.podeProj) && v.cji3 && v.cji3 !== S.cji3Em) t.push(carregaCji3().then(() => 'CJI3'));
+    if ((S.podeCapex || S.podeProj) && v.capex) {
+      if (S.verCapex && v.capex !== S.verCapex) t.push(carregaCapex().then(() => { S.verCapex = v.capex; return 'CAPEX'; }));
+      else S.verCapex = v.capex;
+    }
+    if (!t.length) return;
+    const feitos = await Promise.all(t); render(true);
+    aviso('Atualizado com o site: ' + feitos.join(', ') + '.', 'verd');
+  } finally { _conferindo = false; }
 }
 let _rtT;
 function tempoReal() {
