@@ -478,7 +478,7 @@ function dataHora(v) { // ISO, número ou "dd/mm/aaaa hh:mm" -> "dd/mm/aaaa hh:m
   if (!v) return '';
   if (typeof v === 'string' && /^\d{2}\/\d{2}\/\d{4}/.test(v)) return v.slice(0, 16);
   const d = new Date(v); if (isNaN(d)) return '';
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
 }
 const msData = v => { const d = new Date(v); return isNaN(d) ? 0 : d.getTime(); };
 function textoAtualizacao() {
@@ -490,10 +490,10 @@ function textoAtualizacao() {
   else if (S.aba === 'saude') quando = [S.capexEm || S.capexEmSrv, S.cji3Em, S.matMeta && S.matMeta.updated_at].filter(Boolean).sort((a, b) => msData(b) - msData(a))[0];
   if (S.aba === 'materiais' && S.matDoCache) {
     const em = S.matCacheEm ? dataHora(S.matCacheEm) : '';
-    return { txt: 'Cópia do aparelho' + (em ? ' de ' + em : '') + ' · sem conferir com o site', velho: true };
+    return { txt: 'Cópia do aparelho' + (em ? ' de ' + em : '') + ' · sem conferir', velho: true };
   }
   const conf = S.conferidoEm ? ' · conferido ' + new Date(S.conferidoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
-  if (quando && dataHora(quando)) return { txt: 'Atualizado no site em ' + dataHora(quando) + conf };
+  if (quando && dataHora(quando)) return { txt: 'Atualizado ' + dataHora(quando) + conf };
   if (S.aba === 'usuarios' && S.usuariosEm) return { txt: 'Lista lida em ' + dataHora(S.usuariosEm) + ' · ao vivo' };
   return { txt: S.conferidoEm ? 'Conferido com o site às ' + new Date(S.conferidoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '' };
 }
